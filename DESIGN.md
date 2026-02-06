@@ -1,6 +1,6 @@
 # Synix Design Document
 
-**Memory architectures that evolve with your agent**
+**A build system for agent memory**
 
 ---
 
@@ -29,6 +29,10 @@ That's when I realized I'd been circling the same problem for almost a year. The
 The interface is declarative pipelines. You describe the memory architecture you want — the transforms, the hierarchy, the search surfaces — and the system handles the execution, the incrementality, the provenance tracking, and the ability to change your mind without starting over.
 
 Because after a year of trying to design the "right" memory architecture, the thing I actually learned is that there might not be one. It depends on what you're building, what your data looks like, and what questions you need to answer. The tool that matters isn't the architecture. **It's the workbench that lets you iterate on architectures.**
+
+That's when the build system analogy clicked. This is the same problem software had before Make, before Bazel, before dbt. Without a build system, changing your compiler flags means recompiling everything. Without a build system, you can't trace which source files produced which binary. Without a build system, experimenting with a different optimization strategy is terrifying because you might break what's working.
+
+Synix is a build system for memory. Your chat logs and conversation exports are source files. Your prompts for summarization, aggregation, and synthesis are build rules. Your searchable indexes and world models are build artifacts. Change a rule, get an incremental rebuild. Trace any artifact back to its sources. Experiment on a branch without breaking main.
 
 That's Synix.
 
@@ -60,17 +64,28 @@ You don't pick an architecture on day one and leave it. You need to evolve the p
 
 ### 1.2 The Vision
 
-**Synix is a memory workbench, not a memory system.**
+**Synix is a build system for agent memory.**
 
 The pitch isn't "our pipeline is better than RAG." It's: "Nobody knows what the right memory architecture is for your domain yet — including you. Synix lets you find out."
 
+| Build System | Synix |
+|--------------|-------|
+| Source files | Chat logs, notes, transcripts |
+| Build rules | Transform, aggregate, fold, merge |
+| Build artifacts | Summaries, reflections, world models |
+| Dependency graph | Provenance DAG |
+| Cache keys | Materialization keys |
+| Incremental rebuild | Skip-if-unchanged |
+| Clean build | `full=True` |
+| Branch builds | Branch experiments + promote |
+
 What if you could:
 
-- **Define memory architectures in Python** — composable, testable, versionable
-- **Branch and experiment** — try different prompts or processing strategies in isolation
-- **Measure and compare** — run benchmarks against different architectures
-- **Evolve without data loss** — change the architecture, keep the source data
-- **Track full provenance** — trace any memory back to its origin
+- **Declare your sources and build rules in Python** — composable, testable, versionable
+- **Branch and experiment** — try different build rules in isolation
+- **Incremental rebuild** — change a rule, only rebuild what's affected
+- **Evolve without data loss** — change the architecture, keep the sources
+- **Full lineage** — trace any artifact back through the dependency graph to its sources
 
 ### 1.3 The Killer Feature: Architecture Migration
 
@@ -87,35 +102,45 @@ Synix gives you: edit the pipeline definition, run it again, and your same raw d
 
 ### 1.4 Tagline
 
-**"Memory architectures that evolve with your agent"**
+**"A build system for agent memory"**
 
-The name "Synix" comes from **synthesis** — the core action of transforming raw information into processed understanding. In chip design, synthesis turns high-level descriptions into gate-level implementations. Synix does the same for agent memory.
+The name "Synix" comes from **synthesis** — the core action of transforming raw information into processed understanding. In chip design, synthesis turns high-level descriptions into gate-level implementations. In software, build systems turn source files into artifacts. Synix does the same for agent memory: sources become artifacts through declared build rules, with full lineage tracking and incremental rebuilds.
 
 ---
 
 ## Part II: Conceptual Grounding
 
-### 2.1 Design Inspirations
+### 2.1 The Build System Lineage
+
+Synix is a build system. It inherits ideas from the same family tree as Make, Bazel, and dbt.
 
 #### dbt (data build tool)
 
-**What we take:**
+dbt is a build system for SQL transforms. Synix is a build system for LLM-based knowledge transforms.
+
+**What we share:**
 - DAG-based processing with explicit dependencies
-- Incremental materialization
-- Layered architecture (staging → marts)
+- Incremental materialization (skip-if-unchanged)
+- Layered architecture (raw → staging → marts / sources → summaries → world model)
+
+**Key differences:**
+- LLM transforms are **non-deterministic** — same inputs can produce different outputs. Caching matters more.
+- LLM transforms are **expensive** — $0.01-$1.00 per call vs. milliseconds of SQL. Incremental rebuild matters more.
+- LLM transforms produce **unstructured output** — provenance matters more because you can't just re-run a query to verify.
+- Memory architecture is **unsettled** — experimentation matters more. You need branches to try different build rules safely.
 
 #### CDK vs. CloudFormation
 
 CloudFormation (YAML/JSON) came first, but CDK (imperative code that generates infrastructure) won with developers. Real infrastructure is conditional, looped, parameterized, and composed — all things painful in config and natural in code.
 
-**Key decision:** Python-first, not config-first. Experimentation is a code activity, not a config activity.
+**Key decision:** Python-first, not config-first. Build rules are code, not config.
 
-#### lakeFS / DVC
+#### lakeFS / DVC / Bazel
 
 **What we take:**
-- Branching for experiments
-- Copy-on-write semantics
-- Reproducible pipelines
+- Branching for experiments (branch builds)
+- Copy-on-write semantics (efficient forking)
+- Reproducible builds (or in our case: audit determinism — explain what produced what, even if not perfectly reproducible)
 
 ### 2.2 Competitive Landscape
 
@@ -165,6 +190,17 @@ Capture winning patterns as templates before that happens.
 
 ## Part III: Domain Model
 
+The domain model maps directly to build system concepts:
+
+| Build System | Synix | Description |
+|--------------|-------|-------------|
+| Build definition | Pipeline | Container for sources, rules, and artifacts |
+| Source files | Sources | Chat logs, notes, transcripts |
+| Build rules | Steps | Transform, aggregate, fold, merge |
+| Build artifacts | Records | The actual content produced at each step |
+| Targets/outputs | Artifacts | Queryable surfaces (search index, projection) |
+| Dependency graph | Provenance DAG | Which records depend on which sources |
+
 ### 3.1 Core Entities
 
 ```
@@ -182,10 +218,10 @@ Capture winning patterns as templates before that happens.
          ├─────────────────┬─────────────────┬─────────────────┐
          ▼                 ▼                 ▼                 ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  SOURCE         │ │  STEP           │ │  OUTPUT         │ │  BRANCH         │
+│  SOURCE         │ │  STEP           │ │  ARTIFACT       │ │  BRANCH         │
 │                 │ │                 │ │                 │ │                 │
 │  Input that     │ │  Processing     │ │  Queryable      │ │  Variant for    │
-│  brings data    │ │  operation      │ │  projection     │ │  experiments    │
+│  brings data    │ │  operation      │ │  target         │ │  experiments    │
 │  into pipeline  │ │                 │ │                 │ │                 │
 │                 │ │  Types:         │ │  Types:         │ │                 │
 │  Types:         │ │  - transform    │ │  - projection   │ │                 │
@@ -237,13 +273,15 @@ Capture winning patterns as templates before that happens.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 Materialization Keys (Incremental Processing)
+### 3.3 Cache Keys (Materialization Keys)
 
-The original Cursor design ("last_processed_id") is broken — UUIDs have no natural ordering, and time-ordered IDs break on late-arriving data and backfills.
+Every build system needs cache keys to determine whether a rebuild is needed. Bazel uses content hashes. Make uses timestamps. Synix uses **materialization keys**.
 
-**Solution:** Materialization keys + step version hashing.
+The original Cursor design ("last_processed_id") was broken — UUIDs have no natural ordering, and time-ordered IDs break on late-arriving data and backfills.
 
-Every output record has a **materialization key**:
+**Solution:** Materialization keys = cache keys that capture everything affecting what gets produced.
+
+Every record has a **materialization key**:
 ```
 (branch, step_name, step_version_hash, input_fingerprints, group_key)
 ```
@@ -302,18 +340,20 @@ meta.step.sequence        # for folds: position in sequence
 
 User-defined metadata goes in `meta.custom.*` to avoid collisions.
 
-### 3.5 Processing Types
+### 3.5 Build Rule Types
 
-| Type | Input | Output | Description |
-|------|-------|--------|-------------|
-| **transform** | 1 record | 1 record | Map operation (summarize, extract, enrich) |
-| **aggregate** | N records | 1 record | Group by period/key, then reduce |
-| **fold** | N records (ordered) | 1 record | Sequential accumulation with state |
-| **merge** | N records | N records | Combine sources, deduplicate |
+Synix has four build rule types. Each defines how source artifacts become output artifacts.
+
+| Rule Type | Input | Output | Build Analogy |
+|-----------|-------|--------|---------------|
+| **transform** | 1 artifact | 1 artifact | Compiling `.c` → `.o` |
+| **aggregate** | N artifacts (grouped) | 1 artifact | Linking `.o` files into a library |
+| **fold** | N artifacts (ordered) | 1 artifact | Rolling build with accumulated state |
+| **merge** | N artifacts (from multiple sources) | N artifacts (deduplicated) | Deduplicating objects from different build paths |
 
 #### Transform (1:1)
 
-The workhorse. Strictly one record in, one record out.
+The workhorse build rule. One source artifact in, one output artifact out.
 
 **V1 decision:** No `batch_size`. Batching transforms multiple inputs into a parsing problem — if the LLM doesn't return aligned output, you get silent corruption. Keep it simple.
 
@@ -369,7 +409,7 @@ The `from_` parameter accepts either a string or list, with validity depending o
 | **aggregate** | string only | Groups records from one upstream step |
 | **fold** | string only | Sequential ordering requires single source |
 | **merge** | list only | Combining sources is the point |
-| **output** | string or list | Single step or union of multiple |
+| **artifact** | string or list | Single step or union of multiple |
 
 ```python
 # Transform — single source
@@ -384,9 +424,9 @@ pipeline.fold("world-model", from_="monthly", ...)
 # Merge — list required
 pipeline.merge("unified", from_=["chatgpt", "claude"])
 
-# Output — either works
-pipeline.output("context", from_="world-model", ...)
-pipeline.output("search", from_=["summaries", "monthly"], ...)
+# Artifact — either works
+pipeline.artifact("context", from_="world-model", ...)
+pipeline.artifact("memory-index", from_=["summaries", "monthly"], ...)
 ```
 
 ### 3.8 Fold Contract and Invalidation Rules
@@ -502,13 +542,13 @@ pipeline.fold("world-model",
     prompt=world_model_prompt
 )
 
-# Outputs — queryable projections
-pipeline.output("context",
+# Artifacts — queryable targets
+pipeline.artifact("context",
     from_="world-model",
     surface="projection"
 )
 
-pipeline.output("memory-index",
+pipeline.artifact("memory-index",
     from_=["summaries", "monthly"],
     surface="search"
 )
@@ -823,7 +863,7 @@ synix branch delete <name>
 # QUERY
 # ============================================
 
-synix search <query>                 # Search across outputs
+synix search <query>                 # Search across artifacts
 synix search <query> --step <step>   # Search specific step
 synix lineage <record-id>            # Show provenance tree
 synix get <record-id>                # Get single record
@@ -847,16 +887,16 @@ synix runs <run-id>                  # Run details
 
 ---
 
-## Part VI: Output Semantics
+## Part VI: Artifact Semantics
 
-### 6.1 Two Output Types
+### 6.1 Two Artifact Types
 
-#### Projection Output
+#### Projection Artifact
 
 A single record (e.g., the latest world-model) formatted and pushed somewhere.
 
 ```python
-pipeline.output("context",
+pipeline.artifact("context",
     from_="world-model",
     surface="projection",
     on_update=webhook_url  # optional: trigger on change
@@ -868,12 +908,12 @@ Use cases:
 - Export to file
 - Webhook notification
 
-#### Search Output
+#### Search Artifact
 
 A queryable index over one or more steps' records.
 
 ```python
-pipeline.output("memory-index",
+pipeline.artifact("memory-index",
     from_=["summaries", "monthly"],
     surface="search"
 )
@@ -889,48 +929,55 @@ pipeline.output("memory-index",
 | `meta.time.period` | exact | filter | For aggregates: "2024-03" |
 | `meta.chat.conversation_id` | exact | filter | Group by conversation |
 
-The `step` field becomes a first-class facet — this is what enables surface search at different altitudes. When you call `pipeline.search("Rust", step="monthly")`, the step filter restricts results to records produced by the `monthly` step.
+The `step` field becomes a first-class facet — this is what enables searching build artifacts at different levels of the dependency graph. When you call `pipeline.search("Rust", step="monthly")`, the step filter restricts results to artifacts produced by the `monthly` build rule.
 
-### 6.2 DAG-Aware Query Model
+### 6.2 Searching the Dependency Graph
 
-The search system is DAG-aware, supporting three query modes:
+The search system is DAG-aware. This is like searching compiled artifacts vs. source files — same underlying information, different level of processing.
 
-#### Surface Search
+**Altitude = distance from sources in the dependency graph.** Monthly summaries are higher altitude than individual conversation summaries, which are higher altitude than raw transcripts.
 
-Search within a specific step's outputs at a chosen level of abstraction.
+Three query modes:
+
+#### Search at a Specific Level
+
+Search build artifacts at a chosen level of the dependency graph.
 
 ```python
-# "Show me monthly summaries mentioning Rust"
+# Search high-altitude artifacts (monthly summaries)
 results = pipeline.search("Rust", step="monthly")
+
+# Search low-altitude artifacts (individual summaries)
+results = pipeline.search("Rust", step="summaries")
 ```
 
-The user picks their altitude in the processing hierarchy.
+Like searching compiled documentation vs. source comments — different granularity, different context.
 
-#### Provenance Drill-Down
+#### Walk the Dependency Graph
 
-From any search hit, follow the DAG downward through sources.
+From any artifact, walk the dependency graph back to its sources. Every build system has this — "what source files went into this binary?"
 
 ```python
 for hit in results:
-    # This monthly summary mentions Rust
-    sources = hit.sources()     # → conversation summaries
-    leaves = hit.leaves()       # → raw transcripts
+    # This monthly summary mentions Rust — what produced it?
+    sources = hit.sources()     # → conversation summaries (direct dependencies)
+    leaves = hit.leaves()       # → raw transcripts (original sources)
 ```
 
 The drill-down path is determined by the pipeline structure, not hardcoded.
 
-#### Leaf Search
+#### Search Sources Directly
 
-Skip the hierarchy, search raw source records directly.
+Skip the derived artifacts, search original sources.
 
 ```python
 # Find every transcript containing literal "FastAPI"
 raw = pipeline.search("FastAPI", step="transcripts", exact=True)
 ```
 
-Full-text search at the bottom of the DAG.
+Full-text search at the bottom of the dependency graph — the original source files.
 
-**This is novel.** Mem0 gives flat search. Zep gives temporal search. Nobody gives "search at an abstraction level, then drill through the processing hierarchy." And it falls out naturally from the provenance model.
+**This is novel.** Mem0 gives flat search. Zep gives temporal search. Nobody gives "search build artifacts at different levels of the dependency graph, then walk the graph back to sources." And it falls out naturally from treating memory as a build system.
 
 ---
 
@@ -1100,9 +1147,9 @@ pipeline.fold("world-model",
     prompt=world_model_prompt
 )
 
-# Outputs
-pipeline.output("context", from_="world-model", surface="projection")
-pipeline.output("search", from_=["summaries", "monthly"], surface="search")
+# Artifacts
+pipeline.artifact("context", from_="world-model", surface="projection")
+pipeline.artifact("memory-index", from_=["summaries", "monthly"], surface="search")
 ```
 
 ### 8.3 Execution
@@ -1436,7 +1483,7 @@ Could be as simple as local FastAPI + htmx. The drill-down is the hard part visu
 | **Pipeline** | Named container for memory processing |
 | **Source** | Input that brings data into the system |
 | **Step** | Processing operation (transform, aggregate, fold, merge) |
-| **Output** | Queryable projection (search or projection) |
+| **Artifact** | Queryable target (search index or projection) |
 | **Record** | Single piece of content with provenance |
 | **Run** | One execution of steps |
 | **Branch** | Isolated variant for experimentation |
