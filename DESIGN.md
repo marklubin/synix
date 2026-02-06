@@ -8,17 +8,29 @@
 
 ### 1.0 Origin Story
 
-I was trying to build memory for Kairix, my AI assistant. I kept designing these elegant architectures — hierarchical memory, cognitive engines, world models. And each time I'd get partway in, realize my assumptions were wrong, and want to try a different approach.
+In May 2025, I was deep in a rabbit hole about knowledge provenance. I'd been building voice AI agents and kept running into the same problem: the agent would say something, and I had no idea where it came from. Was it grounded in something real? Was it hallucinated? Was it something I told it three weeks ago that got compressed and mutated through layers of summarization?
 
-But tearing out one memory design and replacing it with another was painful. Painful enough that I'd either stick with the wrong one too long or start from scratch and lose everything.
+So I started sketching what I called an "epistemic framework" — a system where every piece of knowledge carries traceable provenance back to its source. Derivation chains. DERIVED_FROM relationships between memory blocks. A hierarchical structure where raw chunks roll up into conversations, conversations into parent nodes, parent nodes into a root. I was calling it "an operating system for perspective itself," which tells you how deep in the weeds I was.
 
-Synix exists because **I needed a way to iterate on memory architectures without it being a rewrite every time.**
+The ideas were real. The architecture made sense — dual-layer memory with a vector store for fuzzy recall and a knowledge graph for precise derivation tracking, specialized extractors feeding structured data into both. I demoed pieces of it at Noisebridge. I explored building it on top of Letta. I had names for things — Kairix for the cognitive engine, Apiana for the memory infrastructure.
 
-The pipeline is the experiment harness. The primitives are the building blocks I wished I had. Branching is literally "what if I tried a different prompt for summarization without blowing up what I already have."
+But every implementation was bespoke. The extraction pipeline was hand-wired. The hierarchy was hardcoded into the graph schema. When I wanted to change how summarization worked, I was rewriting plumbing. When I wanted to try a different memory architecture — and I kept wanting to try different memory architectures — it was a teardown.
 
-And the honest framing — *what do I actually know about how memory should work?* — is the entire thesis of the workbench approach. Nobody knows. The field doesn't know. Letta doesn't know, LangChain doesn't know, the research papers don't know. Everyone's guessing.
+I moved on to other things. Built more agent experiments. Kept bumping into the same friction from different angles. Eventually started working on KP3, which was an attempt at programmable knowledge processing — closer to the right abstraction, but still hard to reason about. The pipeline concepts were there, branching was there, incremental processing was there in embryonic form. But it hadn't clicked yet.
 
-The tool that wins is the one that makes it cheap to guess wrong and try again.
+Then in early 2026, I was doing something completely unrelated. I had my ChatGPT and Claude exports and I wanted to search through them — honestly, I was trying to prove to myself that I'd come up with certain ideas before someone else had. Petty, but real. And I realized I kept doing this. Kept wanting to look back across months of conversations and find patterns, trace how ideas evolved, see what I'd actually said versus what I remembered saying.
+
+I thought: I already have KP3. Maybe I can use it for this. Upload the exports incrementally, skip what's already processed, build up a searchable history. But as I started mapping it out, I realized KP3's model was wrong for this. Too imperative. Too much plumbing exposed. What I actually wanted was to just *declare* the pipeline — here are my sources, here's how I want them transformed, here's how I want them grouped and summarized, here's what I want to be searchable. Like writing a CloudFormation template or a Step Functions definition, but for knowledge processing.
+
+And then I wanted to be able to change my mind. Try a different summarization prompt without reprocessing everything. Try a different grouping strategy on a branch without blowing up what I already had. And trace any piece of the output — any monthly summary, any evolving world model — back through exactly which conversations and which transforms produced it.
+
+That's when I realized I'd been circling the same problem for almost a year. The epistemic framework from May 2025 was the same system. The DERIVED_FROM chains were the same provenance model. The hierarchical chunks-to-conversations-to-parent-nodes structure was the same altitude concept. I just hadn't found the right interface for it.
+
+The interface is declarative pipelines. You describe the memory architecture you want — the transforms, the hierarchy, the search surfaces — and the system handles the execution, the incrementality, the provenance tracking, and the ability to change your mind without starting over.
+
+Because after a year of trying to design the "right" memory architecture, the thing I actually learned is that there might not be one. It depends on what you're building, what your data looks like, and what questions you need to answer. The tool that matters isn't the architecture. **It's the workbench that lets you iterate on architectures.**
+
+That's Synix.
 
 ### 1.1 The Three Hypotheses
 
