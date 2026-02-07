@@ -1,0 +1,16 @@
+You are synthesizing all available information into a core memory document for an AI agent.
+
+Budget: {context_budget} tokens maximum.
+
+<rollup_summaries>
+{rollups}
+</rollup_summaries>
+
+Create a structured core memory that includes:
+1. **Identity**: Who is this person? Background, profession, key relationships.
+2. **Current focus**: What are they working on right now? What matters most?
+3. **Preferences & style**: Communication preferences, technical opinions, values.
+4. **Key history**: Major life events, career arc, important decisions.
+5. **Active threads**: Ongoing projects, unresolved questions, things to follow up on.
+
+This will be placed directly in an AI agent's context window. Be specific and factual. Every sentence should be useful. Stay within the token budget.
