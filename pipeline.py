@@ -9,7 +9,7 @@ pipeline.source_dir = "./exports"
 pipeline.build_dir = "./build"
 
 pipeline.llm_config = {
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-haiku-4-5-20251001",
     "temperature": 0.3,
     "max_tokens": 1024,
 }

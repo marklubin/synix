@@ -21,7 +21,7 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
 
     artifacts: list[Artifact] = []
     for conv in data:
-        conv_id = conv["id"]
+        conv_id = conv.get("conversation_id", conv.get("id"))
         title = conv.get("title", "Untitled")
         create_time = conv.get("create_time", 0)
         mapping = conv.get("mapping", {})

@@ -157,12 +157,26 @@ def search(query: str, layers: str | None, build_dir: str, limit: int):
         )
         console.print(panel)
 
-        # Provenance chain
+        # Provenance chain — build a proper tree from the chain records
         if result.provenance_chain:
-            tree = Tree("[dim]Provenance[/dim]")
-            current = tree
-            for pid in result.provenance_chain:
-                current = current.add(f"[dim]{pid}[/dim]")
+            from synix.artifacts.provenance import ProvenanceTracker as _PT
+            _prov = _PT(build_dir)
+
+            tree = Tree(f"[dim]{result.artifact_id}[/dim]")
+
+            def _add_parents(node, aid, visited=None):
+                if visited is None:
+                    visited = set()
+                if aid in visited:
+                    return
+                visited.add(aid)
+                rec = _prov.get_record(aid)
+                if rec:
+                    for parent_id in rec.parent_artifact_ids:
+                        child = node.add(f"[dim]{parent_id}[/dim]")
+                        _add_parents(child, parent_id, visited)
+
+            _add_parents(tree, result.artifact_id)
             console.print(tree)
 
         console.print()

@@ -20,10 +20,7 @@ class ParseTransform(BaseTransform):
         source_dir = Path(config["source_dir"])
         artifacts: list[Artifact] = []
 
-        for filepath in sorted(source_dir.iterdir()):
-            if not filepath.suffix == ".json":
-                continue
-
+        for filepath in sorted(source_dir.rglob("*.json")):
             artifacts.extend(self._parse_file(filepath))
 
         return artifacts

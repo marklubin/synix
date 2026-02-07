@@ -22,7 +22,7 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
 
     for conv in conversations:
         uuid = conv["uuid"]
-        title = conv.get("title", "Untitled")
+        title = conv.get("name", conv.get("title", "Untitled"))
         created_at = conv.get("created_at", "")
         chat_messages = conv.get("chat_messages", [])
 
@@ -33,7 +33,20 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
         parts: list[str] = []
         for msg in chat_messages:
             sender = msg.get("sender", "unknown")
-            text = msg.get("text", "")
+            text = msg.get("text")
+            if text is None:
+                # Fallback: try "content" field (nested content blocks)
+                raw_content = msg.get("content")
+                if isinstance(raw_content, str):
+                    text = raw_content
+                elif isinstance(raw_content, list):
+                    # List of content blocks — extract text from each
+                    text = " ".join(
+                        block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in raw_content
+                    )
+                else:
+                    text = ""
             if text.strip():
                 parts.append(f"{sender}: {text}")
 

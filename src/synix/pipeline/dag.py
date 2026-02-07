@@ -38,7 +38,7 @@ def resolve_build_order(pipeline: Pipeline) -> list[Layer]:
 
     if len(order) != len(layer_map):
         remaining = set(layer_map.keys()) - set(order)
-        raise ValueError(f"Circular dependency detected involving: {sorted(remaining)}")
+        raise ValueError(f"Pipeline has circular dependencies involving: {sorted(remaining)}")
 
     return [layer_map[name] for name in order]
 
@@ -48,8 +48,14 @@ def needs_rebuild(
     current_input_hashes: list[str],
     current_prompt_id: str | None,
     store,
+    current_model_config: dict | None = None,
+    current_transform_cache_key: str = "",
 ) -> bool:
-    """Check if an artifact needs to be rebuilt."""
+    """Check if an artifact needs to be rebuilt.
+
+    Compares input hashes, prompt_id, model_config, and transform-specific
+    cache key against the stored artifact.
+    """
     existing = store.load_artifact(artifact_id)
     if existing is None:
         return True
@@ -57,4 +63,14 @@ def needs_rebuild(
         return True
     if existing.prompt_id != current_prompt_id:
         return True
+    # Check model config (model name, temperature, etc.)
+    if current_model_config is not None:
+        existing_mc = existing.model_config or {}
+        if existing_mc != current_model_config:
+            return True
+    # Check transform-specific cache key stored in metadata
+    if current_transform_cache_key:
+        existing_key = (existing.metadata or {}).get("transform_cache_key", "")
+        if existing_key != current_transform_cache_key:
+            return True
     return False

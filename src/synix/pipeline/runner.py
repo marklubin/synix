@@ -85,13 +85,19 @@ def run(pipeline: Pipeline, source_dir: str | None = None) -> RunResult:
                 inputs.extend(dep_artifacts)
 
         # Build config for the transform
-        transform_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
-        transform_config["llm_config"] = dict(pipeline.llm_config) if pipeline.llm_config else {}
+        base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
+        transform_config: dict = {}
+        transform_config["llm_config"] = dict(base_llm_config)
         transform_config["source_dir"] = src_dir
         if layer.context_budget is not None:
             transform_config["context_budget"] = layer.context_budget
         if layer.config:
-            transform_config.update(layer.config)
+            # Deep-merge llm_config from layer config over pipeline defaults
+            layer_llm = layer.config.get("llm_config")
+            layer_rest = {k: v for k, v in layer.config.items() if k != "llm_config"}
+            transform_config.update(layer_rest)
+            if layer_llm:
+                transform_config["llm_config"].update(layer_llm)
 
         # For topical rollup, pass the search index path
         transform_config["search_db_path"] = str(build_dir / "search.db")
@@ -107,13 +113,19 @@ def run(pipeline: Pipeline, source_dir: str | None = None) -> RunResult:
             except (FileNotFoundError, OSError):
                 prompt_id = layer.transform
 
+        # Compute transform-specific cache key
+        transform_cache_key = transform.get_cache_key(transform_config)
+        # Only use model_config for cache comparison on LLM layers (level > 0).
+        # Parse transforms (level 0) don't use LLM and store model_config=None.
+        model_config = transform_config.get("llm_config", {}) if layer.level > 0 else None
+
         # For non-parse layers, check if we can skip the transform entirely.
-        # If existing artifacts have matching input hashes and prompt_id,
-        # reuse them without calling the LLM.
+        # If existing artifacts have matching input hashes, prompt_id, model_config,
+        # and transform cache key, reuse them without calling the LLM.
         layer_built: list[Artifact] = []
 
         if layer.level > 0 and _layer_fully_cached(
-            layer, inputs, prompt_id, store
+            layer, inputs, prompt_id, model_config, transform_cache_key, store
         ):
             # All cached — load existing artifacts
             existing = store.list_artifacts(layer.name)
@@ -128,10 +140,16 @@ def run(pipeline: Pipeline, source_dir: str | None = None) -> RunResult:
 
             # Check rebuild for each artifact
             for artifact in new_artifacts:
-                if needs_rebuild(artifact.artifact_id, artifact.input_hashes, prompt_id, store):
+                if needs_rebuild(
+                    artifact.artifact_id, artifact.input_hashes, prompt_id, store,
+                    current_model_config=model_config,
+                    current_transform_cache_key=transform_cache_key,
+                ):
                     # Set layer metadata
                     artifact.metadata["layer_name"] = layer.name
                     artifact.metadata["layer_level"] = layer.level
+                    if transform_cache_key:
+                        artifact.metadata["transform_cache_key"] = transform_cache_key
 
                     # Save and record provenance
                     store.save_artifact(artifact, layer.name, layer.level)
@@ -181,30 +199,46 @@ def _layer_fully_cached(
     layer: Layer,
     inputs: list[Artifact],
     prompt_id: str | None,
+    model_config: dict | None,
+    transform_cache_key: str,
     store: ArtifactStore,
 ) -> bool:
     """Check if a layer can be entirely skipped (all artifacts cached).
 
-    Returns True when existing artifacts match the current inputs and prompt,
-    so we can skip executing the (potentially expensive LLM) transform.
+    Returns True when existing artifacts match the current inputs, prompt,
+    model_config, and transform cache key, so we can skip executing the
+    (potentially expensive LLM) transform.
+
+    Uses per-input validation: every input content hash must appear in at
+    least one existing artifact's input_hashes. This correctly handles
+    topical rollups where each artifact only stores a subset of inputs.
     """
     existing = store.list_artifacts(layer.name)
     if not existing:
         return False
 
-    # Check prompt_id matches on all existing artifacts
     for art in existing:
+        # Check prompt_id matches
         if art.prompt_id != prompt_id:
             return False
+        # Check model_config matches
+        if model_config is not None and (art.model_config or {}) != model_config:
+            return False
+        # Check transform cache key matches
+        if transform_cache_key:
+            if art.metadata.get("transform_cache_key", "") != transform_cache_key:
+                return False
 
-    # Check that the set of input content hashes matches
-    # what the existing artifacts were built from
-    current_input_hashes = set(a.content_hash for a in inputs)
-    existing_input_hashes: set[str] = set()
+    # Check that every current input hash is covered by at least one
+    # existing artifact. This handles both full-set transforms (monthly
+    # rollup where each artifact covers a subset by month) and partial-set
+    # transforms (topical rollup where each artifact covers relevant episodes).
+    covered_input_hashes: set[str] = set()
     for art in existing:
-        existing_input_hashes.update(art.input_hashes)
+        covered_input_hashes.update(art.input_hashes)
 
-    if current_input_hashes != existing_input_hashes:
+    current_input_hashes = {a.content_hash for a in inputs}
+    if not current_input_hashes.issubset(covered_input_hashes):
         return False
 
     return True

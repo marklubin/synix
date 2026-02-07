@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from collections import deque
 from pathlib import Path
 
 from synix import Pipeline
+from synix.pipeline.dag import resolve_build_order
 
 
 def load_pipeline(path: str) -> Pipeline:
@@ -61,40 +61,5 @@ def validate_pipeline(pipeline: Pipeline) -> None:
             f"Pipeline must have exactly one level-0 (source) layer, found {len(root_layers)}: {names}"
         )
 
-    # Check DAG is acyclic via topological sort
-    _topological_sort(pipeline)
-
-
-def _topological_sort(pipeline: Pipeline) -> list[str]:
-    """Kahn's algorithm — raises ValueError on cycles."""
-    layer_map = {layer.name: layer for layer in pipeline.layers}
-
-    # Build adjacency and in-degree
-    in_degree: dict[str, int] = {name: 0 for name in layer_map}
-    children: dict[str, list[str]] = {name: [] for name in layer_map}
-
-    for layer in pipeline.layers:
-        for dep in layer.depends_on:
-            children[dep].append(layer.name)
-            in_degree[layer.name] += 1
-
-    # Start with nodes that have no dependencies
-    queue: deque[str] = deque()
-    for name, degree in in_degree.items():
-        if degree == 0:
-            queue.append(name)
-
-    order: list[str] = []
-    while queue:
-        name = queue.popleft()
-        order.append(name)
-        for child in children[name]:
-            in_degree[child] -= 1
-            if in_degree[child] == 0:
-                queue.append(child)
-
-    if len(order) != len(layer_map):
-        remaining = set(layer_map.keys()) - set(order)
-        raise ValueError(f"Pipeline has circular dependencies involving: {sorted(remaining)}")
-
-    return order
+    # Check DAG is acyclic — resolve_build_order raises ValueError on cycles
+    resolve_build_order(pipeline)

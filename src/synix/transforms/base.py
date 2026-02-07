@@ -34,6 +34,15 @@ class BaseTransform(ABC):
         hash_prefix = hashlib.sha256(content.encode()).hexdigest()[:8]
         return f"{template_name}_v{hash_prefix}"
 
+    def get_cache_key(self, config: dict) -> str:
+        """Return a hash of transform-specific config that affects output.
+
+        Override in subclasses to include config values that should
+        invalidate the cache when changed (e.g., topics list, context_budget).
+        Default returns empty string (no extra cache key).
+        """
+        return ""
+
 
 # Transform registry
 _TRANSFORMS: dict[str, type[BaseTransform]] = {}
