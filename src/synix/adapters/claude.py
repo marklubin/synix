@@ -73,6 +73,21 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
         else:
             date_str = ""
 
+        # Derive last_message_date from individual message timestamps
+        last_message_date = ""
+        last_dt = None
+        for msg in chat_messages:
+            msg_ts = msg.get("created_at", "")
+            if msg_ts:
+                try:
+                    msg_dt = datetime.fromisoformat(msg_ts.replace("Z", "+00:00"))
+                    if last_dt is None or msg_dt > last_dt:
+                        last_dt = msg_dt
+                except (ValueError, TypeError):
+                    pass
+        if last_dt is not None:
+            last_message_date = last_dt.strftime("%Y-%m-%d")
+
         artifacts.append(Artifact(
             artifact_id=f"t-claude-{uuid}",
             artifact_type="transcript",
@@ -82,6 +97,7 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
                 "source_conversation_id": uuid,
                 "title": title,
                 "date": date_str,
+                "last_message_date": last_message_date,
                 "message_count": len(chat_messages),
             },
         ))

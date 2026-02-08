@@ -62,11 +62,22 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
         content = "\n\n".join(parts) + "\n"
         date_str = datetime.fromtimestamp(create_time).strftime("%Y-%m-%d") if create_time else ""
 
+        # Derive last_message_date from individual message timestamps
+        last_message_date = ""
+        max_ts = 0.0
+        for msg in messages:
+            ts = msg.get("create_time")
+            if ts and ts > max_ts:
+                max_ts = ts
+        if max_ts:
+            last_message_date = datetime.fromtimestamp(max_ts).strftime("%Y-%m-%d")
+
         metadata = {
                 "source": "chatgpt",
                 "source_conversation_id": conv_id,
                 "title": title,
                 "date": date_str,
+                "last_message_date": last_message_date,
                 "message_count": len(parts),
         }
         # Forward optional top-level fields (e.g., customer_id)

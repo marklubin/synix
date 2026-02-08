@@ -31,6 +31,17 @@ class TestChatGPTParsing:
         assert first.metadata["date"]  # non-empty date string
         assert first.metadata["message_count"] == 4  # 2 user + 2 assistant
 
+    def test_chatgpt_last_message_date(self, chatgpt_fixture_path):
+        """last_message_date derived from max per-message create_time."""
+        artifacts = parse_chatgpt(chatgpt_fixture_path)
+        first = artifacts[0]
+        # conv-gpt-001 last message create_time is 1710500004
+        assert first.metadata["last_message_date"]
+        # date and last_message_date may differ for long conversations
+        assert "last_message_date" in first.metadata
+        # All artifacts should have the field
+        assert all("last_message_date" in a.metadata for a in artifacts)
+
     def test_chatgpt_message_ordering(self, chatgpt_fixture_path):
         """Messages in chronological order — user question before assistant answer."""
         artifacts = parse_chatgpt(chatgpt_fixture_path)
@@ -235,6 +246,15 @@ class TestClaudeParsing:
         assert first.metadata["title"] == "Rust ownership discussion"
         assert first.metadata["date"] == "2024-03-15"
         assert first.metadata["message_count"] == 4
+
+    def test_claude_last_message_date(self, claude_fixture_path):
+        """last_message_date derived from max per-message created_at."""
+        artifacts = parse_claude(claude_fixture_path)
+        first = artifacts[0]
+        # conv-001 last message is 2024-03-15T10:03:00Z
+        assert first.metadata["last_message_date"] == "2024-03-15"
+        # All artifacts should have the field
+        assert all("last_message_date" in a.metadata for a in artifacts)
 
     def test_claude_artifact_ids_prefixed(self, claude_fixture_path):
         """All artifact IDs have t-claude- prefix."""
