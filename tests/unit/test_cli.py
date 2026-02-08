@@ -98,3 +98,53 @@ def test_search_help_shows_options(runner):
     assert "--layers" in result.output
     assert "--build-dir" in result.output
     assert "--limit" in result.output
+
+
+def test_build_command_exists(runner):
+    """synix build --help succeeds (renamed from 'run')."""
+    result = runner.invoke(main, ["build", "--help"])
+    assert result.exit_code == 0
+    assert "PIPELINE_PATH" in result.output
+
+
+def test_build_does_not_import_search():
+    """The build module must not directly import search — uses projection registry instead.
+
+    FR-2.3: Build pipeline should not depend on the search module. The search
+    projection registers itself via @register_projection and the runner looks
+    it up via get_projection(). Direct imports from synix.search in synix.build
+    would violate this decoupling.
+    """
+    import importlib
+    import sys
+
+    # Clear any cached imports of the build modules
+    build_modules = [k for k in sys.modules if k.startswith("synix.build")]
+    search_modules = [k for k in sys.modules if k.startswith("synix.search")]
+    saved = {}
+    for mod in build_modules + search_modules:
+        saved[mod] = sys.modules.pop(mod)
+
+    try:
+        # Read source files directly to check for search imports
+        from pathlib import Path
+        build_dir = Path(__file__).parent.parent.parent / "src" / "synix" / "build"
+        for py_file in build_dir.glob("*.py"):
+            source = py_file.read_text()
+            lines = source.split("\n")
+            for i, line in enumerate(lines, 1):
+                # Skip comments
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                # Check for direct imports from synix.search
+                if "from synix.search" in stripped or "import synix.search" in stripped:
+                    # Allow the lazy import in llm_transforms (topical rollup needs SearchIndex at runtime)
+                    if "llm_transforms" in py_file.name and "SearchIndex" in stripped:
+                        continue
+                    raise AssertionError(
+                        f"Build module {py_file.name}:{i} directly imports search: {stripped!r}"
+                    )
+    finally:
+        # Restore modules
+        sys.modules.update(saved)

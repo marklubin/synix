@@ -1,0 +1,123 @@
+{
+  "_description": "Deterministic episode summary responses keyed by conversation ID. Used by mock server and tests.",
+  "conv_d01": {
+    "content": "Mark is planning a migration from PostgreSQL to CockroachDB for his fintech company's main database (50 tables, heavy read traffic). Key considerations discussed: schema compatibility (SERIAL columns, stored procedures), distributed SQL tradeoffs, CockroachDB's serializable isolation (eliminates phantom reads), and connection pooling changes. The conversation covered a phased migration approach: schema migration with MOLT, shadow writes, gradual read migration, write cutover, and decommissioning. Mark expressed strong interest in the data integrity benefits given his fintech context, and was advised to allocate 3-4 months for the full migration.",
+    "model": "default"
+  },
+  "conv_d02": {
+    "content": "Mark is deciding between Staff Engineer and Engineering Manager career paths at his company. After 3 years as a senior engineer, he enjoys both coding and mentoring. Through discussion, he clarified that he wants to keep solving hard technical problems while shaping org-wide approaches — a clear Staff Engineer signal. Key advice received: build a staff engineer portfolio (architectural decisions, cross-team initiatives), find a domain niche, practice writing (RFCs, design docs, tech talks), and note that transitioning from IC to management later is easier than the reverse.",
+    "model": "default"
+  },
+  "conv_d03": {
+    "content": "Mark is learning Rust coming from a Python background. The conversation focused on understanding Rust's ownership system through Python analogies: Python data is like a shared Google Doc (garbage collected), Rust data is like a physical notebook (one owner at a time). Three ownership rules were explained, along with three options for passing data (move, borrow, mutable borrow). Mark was introduced to lifetimes but advised to focus on ownership and borrowing first. The discussion highlighted that Rust catches bugs at compile time that Python only finds at runtime.",
+    "model": "default"
+  },
+  "conv_d04": {
+    "content": "Mark wants to build a CLI expense tracker as a side project using Python and SQLite. A clean architecture was proposed with Click-based CLI, SQLite operations, dataclass models, and report generation. Core commands include quick entry, monthly summaries, auto-categorization, and CSV export. For auto-categorization, a simple rules.json pattern-matching approach was recommended over ML — substring matching with fuzzy fallback. A v2 learning feature was suggested where manual categorizations automatically update the pattern file.",
+    "model": "default"
+  },
+  "conv_d05": {
+    "content": "Continuing the CockroachDB migration, Mark hit issues with PostgreSQL SERIAL columns during MOLT schema conversion. The solution discussed was converting to UUID with gen_random_uuid() as the default, which is CockroachDB-native and avoids distributed sequence overhead. Other schema conversion challenges covered: replacing PostgreSQL JSONB operators with CockroachDB-compatible syntax, converting enum types to CHECK constraints, and handling partial indexes. Mark chose a hybrid approach: UUIDs for new tables, CockroachDB sequences for existing tables that need numeric ordering.",
+    "model": "default"
+  },
+  "conv_d06": {
+    "content": "Mark is expanding his Rust skills by building a simple HTTP server. The conversation compared frameworks: raw hyper for learning, axum for productivity. Mark chose axum. Key topics covered: state management in axum (Arc<AppState> vs Extension), how Rust handles shared state differently from Python/Flask's global variables, and the role of the type system in preventing data races at compile time. The discussion reinforced ownership concepts in a practical async context.",
+    "model": "default"
+  },
+  "conv_d07": {
+    "content": "Mark needs to performance test the CockroachDB cluster before production cutover. Current PostgreSQL handles 10,000 reads/sec and 500 writes/sec. Testing strategy discussed: baseline PostgreSQL with pgbench, replicate workload in CockroachDB with 3-node cluster, test transaction retry behavior under contention. Critical insight for fintech: payment processing endpoints need retry logic wrapping all transactions (SQLSTATE 40001). Target retry rate under 5% at expected concurrency. Application code changes needed for retry loops around every transaction.",
+    "model": "default"
+  },
+  "conv_d08": {
+    "content": "Mark has decided on the Staff Engineer path and needs to build cross-team influence beyond his 8-person team. Practical playbook discussed: start with problems not solutions, write RFCs for cross-cutting issues, attend other teams' architecture reviews, offer to review external PRs. A 30-60-90 day approach was recommended: shadow teams to learn pain points, propose one cross-cutting improvement, ship and measure impact. Mark plans to use the CockroachDB migration as his first RFC since it affects payments, risk, and data teams.",
+    "model": "default"
+  },
+  "conv_d09": {
+    "content": "Mark wants to add receipt scanning to his CLI expense tracker using OCR. Options discussed: Tesseract (free, local, decent accuracy), Google Vision API (best accuracy, pay-per-use), and a hybrid approach. Mark chose Tesseract for v1 with Google Vision as optional upgrade. Architecture: CLI takes photo path, preprocesses image (grayscale, threshold), runs OCR, regex extracts amount/date/vendor, maps to expense entry. Discussion of common OCR pitfalls: receipt curling, thermal paper fading, and merchant name variations.",
+    "model": "default"
+  },
+  "conv_d10": {
+    "content": "Deep dive into the dual-write strategy for the CockroachDB migration. Mark's team is implementing shadow writes using Debezium CDC from PostgreSQL to CockroachDB. Key challenges discussed: handling schema differences during the transition period, managing write conflicts when both databases accept writes, and ensuring eventual consistency. The conversation covered the Debezium connector configuration, slot management, and monitoring lag. Critical decision: Mark will use a comparison service that periodically validates data consistency between the two databases.",
+    "model": "default"
+  },
+  "conv_d11": {
+    "content": "Mark is diving deeper into async Rust with tokio. The conversation covered the tokio runtime model (work-stealing scheduler), spawning tasks with tokio::spawn, select! for concurrent operations, and channels for inter-task communication. Key insight: unlike Python's asyncio which is single-threaded, tokio is multi-threaded by default. Mark learned about Send + Sync bounds and why some Python patterns (shared mutable state) don't translate directly. Practical exercise: refactoring the migration monitor to use channels instead of shared state.",
+    "model": "default"
+  },
+  "conv_d12": {
+    "content": "Mark is learning to write effective technical RFCs as part of his Staff Engineer development. The conversation covered RFC structure (context, proposal, alternatives, risks), writing for different audiences (engineers vs directors), and common mistakes (too much detail in the summary, not enough in alternatives). Mark drafted an outline for his CockroachDB migration RFC. Key advice: the best RFCs make the reader feel smart for agreeing, not dumb for not knowing. The RFC should tell a story: here's the problem, here's why it matters, here's our best option.",
+    "model": "default"
+  },
+  "conv_d13": {
+    "content": "Mark is adding data visualization to his expense tracker using matplotlib and Rich for terminal charts. Features discussed: monthly spending bar charts, category pie charts, trend lines over time, and budget vs actual comparison. Mark decided on dual output: Rich tables for quick terminal views and matplotlib for detailed PDF reports. The conversation covered matplotlib's object-oriented API, saving figures to PDF, and embedding charts in terminal using Rich's Panel and Table components.",
+    "model": "default"
+  },
+  "conv_d14": {
+    "content": "Mark is preparing for the CockroachDB migration rollout, focusing on team alignment. The conversation covered communication strategy: migration announcement email template, team-specific impact assessments, and a shared Confluence space for migration documentation. Key decision: create a migration tiger team with one representative from each affected team (payments, risk, data, platform). The tiger team meets weekly during the migration. Mark will lead the tiger team as the Staff Engineer driving the initiative.",
+    "model": "default"
+  },
+  "conv_d15": {
+    "content": "Mark is learning Rust error handling patterns. The conversation compared Rust's Result<T, E> with Python's try/except, covered the ? operator for error propagation, and introduced the thiserror and anyhow crates. Key distinction: thiserror for library code (typed errors), anyhow for application code (contextual errors). Mark refactored his migration monitor to use thiserror for database errors and anyhow for the CLI layer. The discussion emphasized how Rust makes error handling explicit and exhaustive, unlike Python where exceptions can silently propagate.",
+    "model": "default"
+  },
+  "conv_d16": {
+    "content": "Short exchange where Mark asked about reverting a specific commit in git without affecting subsequent commits. The answer covered git revert (creates a new commit undoing changes) vs git reset (rewrites history). Mark used git revert for a production hotfix. Brief discussion of interactive rebase for cleaning up feature branch history before merge.",
+    "model": "default"
+  },
+  "conv_d17": {
+    "content": "Mark reflected on how the CockroachDB migration project is accelerating his Staff Engineer trajectory. The conversation explored the intersection of technical leadership and career growth: how driving a cross-team infrastructure change builds the exact portfolio needed for Staff promotion. Key insight: the migration gives Mark visibility across payments, risk, and data teams — the three pillars of the company's technical architecture. Mark is documenting lessons learned for a future tech talk and internal blog post.",
+    "model": "default"
+  },
+  "conv_d18": {
+    "content": "Mark wants to add budget alerts and notifications to his expense tracker. Options discussed: email alerts via SMTP, desktop notifications via notify-py, and terminal alerts on next CLI invocation. Mark chose terminal alerts as the primary mechanism (simplest, no external deps) with optional email for monthly summaries. The conversation covered implementing budget thresholds per category, rolling vs calendar month budgets, and a simple rules engine for alert conditions.",
+    "model": "default"
+  },
+  "conv_d19": {
+    "content": "Mark is designing the backup and disaster recovery strategy for the CockroachDB cluster. Topics covered: CockroachDB's built-in BACKUP command (full and incremental), backup scheduling with cron, storing backups in S3 with lifecycle policies, and point-in-time recovery options. Key decision: daily incremental backups with weekly full backups, 90-day retention. The conversation also covered CockroachDB's node decommissioning process for hardware maintenance and the automatic rebalancing behavior when nodes rejoin.",
+    "model": "default"
+  },
+  "conv_d20": {
+    "content": "Mark is building a CLI tool in Rust using the clap crate. The conversation covered clap's derive macro API for defining commands and arguments, subcommand patterns, value validation, and shell completions. Mark is building a unified CLI for his migration tools: db-compare, db-monitor, and schema-validate subcommands. Key Rust patterns: using enums for subcommands, impl blocks for command execution, and structuring a multi-binary Rust project with a shared library crate.",
+    "model": "default"
+  },
+  "conv_d21": {
+    "content": "Mark is setting up monitoring for the CockroachDB cluster running in staging. The conversation covered CockroachDB's native Datadog integration and Prometheus-compatible metrics. Key metrics to monitor: SQL query latency (p50/p95/p99), transaction retry rate (<5% target), range distribution, disk I/O, and node health. Mark decided to use Grafana for detailed migration dashboards and Datadog for operational alerting. A migration-specific war room dashboard was recommended showing dual-write lag, read traffic split, data consistency checks, and cross-database comparison panels.",
+    "model": "default"
+  },
+  "conv_d22": {
+    "content": "Mark is navigating organizational resistance to the CockroachDB migration from the risk team's director who prefers 'proven' PostgreSQL. The Staff Engineer approach discussed: understand actual concerns (fear of unknown risk), build a data-driven case showing cost of NOT migrating, propose a time-boxed pilot on a non-critical service, and make stakeholders look good. Mark identified the risk team's batch analytics pipeline as the ideal pilot — read-heavy, not latency-sensitive, low blast radius, and owned by the director's team. Key insight: letting the director announce pilot success builds lasting influence.",
+    "model": "default"
+  },
+  "conv_d23": {
+    "content": "Mark is building a migration monitoring tool in Rust as a learning project. The first feature polls both PostgreSQL and CockroachDB databases and compares query results. The discussion covered async Rust architecture using tokio: concurrent polling with tokio::join!, periodic execution with interval, and connection pool sharing via references. Key Rust patterns demonstrated: structured async, no ownership issues with shared pool references, and clean comparison result types.",
+    "model": "default"
+  },
+  "conv_d24": {
+    "content": "Mark is adding multi-currency support to his expense tracker. The conversation covered exchange rate APIs (Open Exchange Rates for free tier), storing amounts in base currency with original currency metadata, and handling exchange rate fluctuations for historical entries. Key decision: store both original amount/currency and converted USD amount at time of entry. Mark chose a simple approach: fetch rates daily and cache locally, with manual override for known rates.",
+    "model": "default"
+  },
+  "conv_d25": {
+    "content": "Mark is designing a comprehensive data validation strategy for the CockroachDB migration. The conversation covered three validation layers: schema-level (constraints, indexes, triggers), data-level (row counts, checksums, random sample comparison), and application-level (running production queries against both databases and comparing results). Key tool discussed: a custom validation harness that runs continuous comparison queries during the dual-write phase. Mark plans to build this into his Rust migration toolkit.",
+    "model": "default"
+  },
+  "conv_d26": {
+    "content": "Mark is learning Rust testing strategies. The conversation covered unit tests (mod tests with #[test]), integration tests in tests/ directory, property-based testing with proptest, and benchmarking with criterion. Key insight: Rust's type system eliminates many test categories needed in Python (type errors, None checks). Mark focused on testing async code with tokio::test macro and mocking strategies using trait objects. Practical exercise: adding comprehensive tests to the migration monitor.",
+    "model": "default"
+  },
+  "conv_d27": {
+    "content": "Mark is considering open-sourcing his expense tracker as a portfolio piece for the Staff Engineer role. The conversation covered open-source preparation: choosing a license (MIT for maximum adoption), writing a good README, setting up GitHub Actions CI, and creating contribution guidelines. Career angle: open-source projects demonstrate technical leadership, community engagement, and communication skills — all Staff Engineer competencies. Mark decided to clean up the codebase first and launch with a blog post explaining the architecture decisions.",
+    "model": "default"
+  },
+  "conv_d28": {
+    "content": "Mark is creating the cutover day runbook for the CockroachDB migration. The conversation produced a detailed hour-by-hour plan: pre-cutover checks (data validation pass, monitoring green), traffic drain (reduce to read-only), final sync verification, DNS cutover, post-cutover monitoring (15min/1hr/24hr checkpoints), and rollback triggers. Key decision: the cutover will happen on a Saturday to minimize user impact, with the full team on standby. Rollback trigger: any p99 latency above 500ms or error rate above 0.1% within the first hour.",
+    "model": "default"
+  },
+  "conv_d29": {
+    "content": "Mark is building a TUI (terminal UI) dashboard for his migration tools using ratatui (formerly tui-rs). The conversation covered ratatui's widget system, layout constraints, and the event loop pattern. Mark is building a real-time dashboard showing: database comparison results, latency charts, and migration progress. Key Rust patterns: using crossterm for terminal events, structuring the app state as a state machine, and rendering efficiently with double-buffering.",
+    "model": "default"
+  },
+  "conv_d30": {
+    "content": "Comprehensive review of the entire CockroachDB migration journey. Mark reflected on lessons learned across planning, execution, and team dynamics. Technical lessons: UUID migration was harder than expected, Debezium CDC is excellent for dual-writes, CockroachDB's serializable isolation eliminated an entire class of fintech bugs. Career lessons: the migration project was the most impactful thing Mark could have done for Staff Engineer trajectory — it touched every team, required both deep technical work and organizational leadership, and produced measurable business outcomes (eliminated phantom reads, improved write scalability). Mark plans to write an internal retrospective and a public blog post.",
+    "model": "default"
+  }
+}

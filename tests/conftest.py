@@ -199,6 +199,17 @@ def claude_fixture_path():
 
 
 @pytest.fixture
+def mock_llm_server():
+    """Start mock LLM server in background, yield base_url, teardown."""
+    from tests.mock_server.server import MockLLMServer
+
+    server = MockLLMServer(host="127.0.0.1", port=0)
+    server.start_background()
+    yield server.base_url
+    server.shutdown()
+
+
+@pytest.fixture
 def source_dir_with_fixtures(tmp_path):
     """A source directory populated with both ChatGPT and Claude export fixtures."""
     source_dir = tmp_path / "exports"

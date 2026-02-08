@@ -1,0 +1,13 @@
+You are synthesizing conversation summaries related to the topic: {topic}
+
+<episode_summaries>
+{episodes}
+</episode_summaries>
+
+Write a topical synthesis (300-600 words) that captures:
+1. Everything the user has discussed about {topic}
+2. How their views or understanding evolved over time
+3. Key facts, opinions, and decisions related to {topic}
+4. Connections to other topics or areas of their life
+
+Write as a coherent narrative, not a list of conversations.

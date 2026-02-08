@@ -1,0 +1,13 @@
+Today was a productive day. I finally got the expense tracker CLI working with SQLite storage. The auto-categorization feature using pattern matching is surprisingly effective - about 90% accuracy on my test data.
+
+I spent most of the afternoon learning Rust ownership concepts. The borrow checker is frustrating at first but I'm starting to see how it prevents entire categories of bugs. The analogy of a physical notebook (only one person holds it at a time) really clicked for me.
+
+In the evening I reviewed the CockroachDB migration RFC. Got three approvals from team leads. The main concern from the data team is about join performance in a distributed setup. I need to run some benchmarks.
+
+Random thought: I should build the migration monitoring dashboard in Rust as a learning project. It would combine my database work with Rust practice, and it would be visible across the whole engineering org. Perfect staff engineer project.
+
+Things to do tomorrow:
+- Set up CockroachDB test cluster
+- Write performance benchmarks for top 10 queries
+- Continue Rust async chapter
+- Fix expense tracker CSV export bug

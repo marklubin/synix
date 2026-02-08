@@ -1,0 +1,13 @@
+You are summarizing a conversation between a user and an AI assistant.
+
+<conversation>
+{transcript}
+</conversation>
+
+Write a concise episode summary (200-400 words) that captures:
+1. The main topics discussed
+2. Key decisions, insights, or conclusions reached
+3. Any action items or commitments made
+4. The emotional tone and context of the conversation
+
+Write in third person. Focus on information that would be useful for long-term memory.

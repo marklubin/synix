@@ -1,10 +1,13 @@
-"""Tests for SQLite FTS5 search index."""
+"""Tests for SQLite FTS5 search index and shadow swap."""
 
 from __future__ import annotations
+
+import pytest
 
 from synix import Artifact
 from synix.artifacts.provenance import ProvenanceTracker
 from synix.search.index import SearchIndex
+from synix.search.indexer import ShadowIndexManager, SearchIndexProjection
 
 
 class TestSearchIndex:
@@ -170,3 +173,243 @@ class TestSearchIndex:
         assert len(results_old) == 0
 
         index.close()
+
+
+class TestShadowIndexManager:
+    """Tests for shadow index build-and-swap pattern."""
+
+    def test_begin_build_creates_shadow(self, tmp_build_dir):
+        """begin_build() creates a shadow index file."""
+        manager = ShadowIndexManager(tmp_build_dir)
+        shadow = manager.begin_build()
+
+        assert manager.shadow_path.exists()
+        shadow.insert(
+            Artifact(artifact_id="ep-001", artifact_type="episode",
+                     content="Test content"),
+            "episodes", 1,
+        )
+        # Shadow file exists, main does not yet
+        assert not manager.main_path.exists()
+        manager.rollback()
+
+    def test_commit_swaps_to_main(self, tmp_build_dir):
+        """commit() replaces main with shadow atomically."""
+        manager = ShadowIndexManager(tmp_build_dir)
+        shadow = manager.begin_build()
+        shadow.insert(
+            Artifact(artifact_id="ep-001", artifact_type="episode",
+                     content="Shadow content about Python"),
+            "episodes", 1,
+        )
+        manager.commit()
+
+        # Shadow file gone, main file exists
+        assert not manager.shadow_path.exists()
+        assert manager.main_path.exists()
+
+        # Main file has the data
+        index = SearchIndex(manager.main_path)
+        results = index.query("Python")
+        assert len(results) == 1
+        assert results[0].artifact_id == "ep-001"
+        index.close()
+
+    def test_commit_replaces_existing_main(self, tmp_build_dir):
+        """commit() replaces an existing main index with the shadow."""
+        # Create an initial main index
+        old_index = SearchIndex(tmp_build_dir / "search.db")
+        old_index.create()
+        old_index.insert(
+            Artifact(artifact_id="old-001", artifact_type="episode",
+                     content="Old data about Rust"),
+            "episodes", 1,
+        )
+        old_index.close()
+
+        # Build a shadow with different content
+        manager = ShadowIndexManager(tmp_build_dir)
+        shadow = manager.begin_build()
+        shadow.insert(
+            Artifact(artifact_id="new-001", artifact_type="episode",
+                     content="New data about Python"),
+            "episodes", 1,
+        )
+        manager.commit()
+
+        # Main now has the new data
+        index = SearchIndex(tmp_build_dir / "search.db")
+        results = index.query("Python")
+        assert len(results) == 1
+        assert results[0].artifact_id == "new-001"
+
+        # Old data is gone
+        results_old = index.query("Rust")
+        assert len(results_old) == 0
+        index.close()
+
+    def test_rollback_preserves_old_index(self, tmp_build_dir):
+        """rollback() keeps old main index intact and removes shadow."""
+        # Create initial main index
+        old_index = SearchIndex(tmp_build_dir / "search.db")
+        old_index.create()
+        old_index.insert(
+            Artifact(artifact_id="old-001", artifact_type="episode",
+                     content="Preserved data about Docker"),
+            "episodes", 1,
+        )
+        old_index.close()
+
+        # Start and then rollback a shadow build
+        manager = ShadowIndexManager(tmp_build_dir)
+        shadow = manager.begin_build()
+        shadow.insert(
+            Artifact(artifact_id="new-001", artifact_type="episode",
+                     content="New data that should be discarded"),
+            "episodes", 1,
+        )
+        manager.rollback()
+
+        # Shadow is gone
+        assert not manager.shadow_path.exists()
+
+        # Old main is preserved
+        index = SearchIndex(tmp_build_dir / "search.db")
+        results = index.query("Docker")
+        assert len(results) == 1
+        assert results[0].artifact_id == "old-001"
+        index.close()
+
+    def test_rollback_without_begin(self, tmp_build_dir):
+        """rollback() is safe even without begin_build()."""
+        manager = ShadowIndexManager(tmp_build_dir)
+        manager.rollback()  # should not raise
+
+    def test_commit_without_begin_raises(self, tmp_build_dir):
+        """commit() without begin_build() raises RuntimeError."""
+        manager = ShadowIndexManager(tmp_build_dir)
+        with pytest.raises(RuntimeError, match="No shadow build"):
+            manager.commit()
+
+    def test_stale_shadow_cleaned_on_begin(self, tmp_build_dir):
+        """begin_build() removes a stale shadow file from a previous failed build."""
+        shadow_path = tmp_build_dir / "search_shadow.db"
+        shadow_path.write_text("stale data")
+
+        manager = ShadowIndexManager(tmp_build_dir)
+        shadow = manager.begin_build()
+
+        # Stale file was replaced with a valid SQLite DB
+        results = shadow.query("anything")
+        assert results == []
+        manager.rollback()
+
+
+class TestSearchIndexProjectionShadow:
+    """Tests that SearchIndexProjection uses the shadow pattern."""
+
+    def test_materialize_uses_shadow(self, tmp_build_dir):
+        """materialize() builds via shadow and swaps atomically."""
+        proj = SearchIndexProjection(tmp_build_dir)
+
+        artifacts = [
+            Artifact(artifact_id="ep-001", artifact_type="episode",
+                     content="Content about machine learning",
+                     metadata={"layer_name": "episodes", "layer_level": 1}),
+        ]
+
+        proj.materialize(artifacts, {"sources": [{"layer": "episodes", "level": 1}]})
+
+        # Shadow should be gone after successful materialize
+        assert not (tmp_build_dir / "search_shadow.db").exists()
+        # Main should exist
+        assert (tmp_build_dir / "search.db").exists()
+
+        # Query works
+        results = proj.query("machine learning")
+        assert len(results) == 1
+        proj.close()
+
+    def test_materialize_preserves_old_on_failure(self, tmp_build_dir):
+        """If materialize fails, old index is preserved."""
+        # Create an initial index
+        proj = SearchIndexProjection(tmp_build_dir)
+        proj.materialize(
+            [Artifact(artifact_id="old-001", artifact_type="episode",
+                      content="Original data about Rust",
+                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            {"sources": [{"layer": "episodes", "level": 1}]},
+        )
+        proj.close()
+
+        # Now simulate a failure by passing an artifact that will cause an error
+        # We'll monkeypatch the SearchIndex.insert to fail mid-build
+        original_insert = SearchIndex.insert
+
+        call_count = 0
+        def failing_insert(self, artifact, layer_name, layer_level):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise RuntimeError("Simulated failure")
+            original_insert(self, artifact, layer_name, layer_level)
+
+        SearchIndex.insert = failing_insert
+        try:
+            proj2 = SearchIndexProjection(tmp_build_dir)
+            with pytest.raises(RuntimeError, match="Simulated failure"):
+                proj2.materialize(
+                    [
+                        Artifact(artifact_id="new-001", artifact_type="episode",
+                                 content="First new artifact",
+                                 metadata={"layer_name": "episodes", "layer_level": 1}),
+                        Artifact(artifact_id="new-002", artifact_type="episode",
+                                 content="Second new artifact that will fail",
+                                 metadata={"layer_name": "episodes", "layer_level": 1}),
+                    ],
+                    {"sources": [{"layer": "episodes", "level": 1}]},
+                )
+            proj2.close()
+        finally:
+            SearchIndex.insert = original_insert
+
+        # Shadow should be cleaned up
+        assert not (tmp_build_dir / "search_shadow.db").exists()
+
+        # Old index should still have the original data
+        index = SearchIndex(tmp_build_dir / "search.db")
+        results = index.query("Rust")
+        assert len(results) == 1
+        assert results[0].artifact_id == "old-001"
+        index.close()
+
+    def test_query_after_materialize(self, tmp_build_dir):
+        """Query works correctly after materialize replaces the index."""
+        proj = SearchIndexProjection(tmp_build_dir)
+
+        # First build
+        proj.materialize(
+            [Artifact(artifact_id="ep-001", artifact_type="episode",
+                      content="First build data",
+                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            {"sources": [{"layer": "episodes", "level": 1}]},
+        )
+        results1 = proj.query("First build")
+        assert len(results1) == 1
+
+        # Second build replaces content
+        proj.materialize(
+            [Artifact(artifact_id="ep-002", artifact_type="episode",
+                      content="Second build data",
+                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            {"sources": [{"layer": "episodes", "level": 1}]},
+        )
+        results2 = proj.query("Second build")
+        assert len(results2) == 1
+        assert results2[0].artifact_id == "ep-002"
+
+        # Old data gone
+        results_old = proj.query("First build")
+        assert len(results_old) == 0
+
+        proj.close()

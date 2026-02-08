@@ -1,0 +1,4052 @@
+[
+  {
+    "conversation_id": "fin_001",
+    "title": "sarah_287 - Portfolio Review",
+    "create_time": 1727740800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I want to review my investment portfolio. I have about $250,000 split between stocks and bonds, roughly 60/40. Is this allocation still appropriate for someone in their early 30s?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "For someone in their early 30s with a long investment horizon, a 60/40 stock-to-bond allocation is actually quite conservative. At your age, you could consider increasing equity exposure to 70-80% since you have decades to recover from market downturns. Let me look at your specific holdings."
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'm worried about taking on too much risk. I watched my parents lose a lot in 2008 and it made me very cautious. My current annual income is around $95,000 and I save about $1,500/month."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "That's a very understandable concern, and your savings rate is excellent \u2014 nearly 19% of gross income. Given your risk aversion, we could take a middle-ground approach: increase to 70/30 stocks/bonds, but within the equity portion, emphasize large-cap dividend payers and index funds rather than volatile growth stocks. This captures more upside while maintaining stability."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_002",
+    "title": "sarah_287 - Market Downturn",
+    "create_time": 1727870400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "The market dropped 15% this month and I'm panicking. My portfolio is down $37,000. Should I sell everything and wait for it to recover?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "I completely understand the anxiety \u2014 seeing $37,000 disappear on paper is stressful. But selling now would lock in those losses permanently. Historically, investors who sell during downturns miss the recovery. The S&P 500 has recovered from every downturn in history. Let's review your emergency fund first \u2014 do you still have 6 months of expenses in savings?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I have about $18,000 in my emergency fund. But what if the market drops another 20%? I can't sleep at night thinking about it."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Your emergency fund is solid. Here's what I recommend: first, we're NOT selling. Second, let's actually consider buying more \u2014 dollar-cost averaging during downturns is one of the most reliable wealth-building strategies. Third, let's adjust your bond allocation slightly higher, say 35%, to reduce volatility and help you sleep. The worst financial decisions are made from fear."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_003",
+    "title": "sarah_287 - Recovery Strategy",
+    "create_time": 1728000000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "The market has been recovering and my portfolio is almost back to where it was. I'm glad I didn't sell, but I want a better plan for next time."
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "I'm glad you held steady \u2014 that discipline saved you roughly $37,000 in realized losses. For the future, let's create a formal Investment Policy Statement (IPS) that documents your risk tolerance, target allocation, and specific rebalancing rules. When the next downturn hits \u2014 and it will \u2014 you'll have a written plan to follow instead of making emotional decisions."
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "That makes sense. I've also been thinking about diversifying beyond just US stocks and bonds. What about international exposure or alternative investments?"
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great thinking. I'd recommend: 15-20% international developed markets (VXUS or similar), 5% emerging markets, and potentially 5% REITs for real estate exposure without the hassle of property management. This gives you geographic diversification while keeping your portfolio manageable. Your allocation would become: 55% US equity, 20% international, 5% REITs, 20% bonds."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_004",
+    "title": "sarah_287 - Year End Review",
+    "create_time": 1728129600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "It's year-end review time. My portfolio is up 12% for the year despite that scary downturn mid-year. I feel much more confident now about my investment approach."
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Congratulations \u2014 12% is excellent, especially considering you weathered a significant downturn without panic-selling. Your new diversified allocation is working well: US equities up 14%, international up 8%, REITs up 11%, bonds up 3%. The behavioral discipline you showed during the downturn was worth more than any allocation change."
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I want to increase my monthly contributions to $2,000. I got a raise to $110,000 and I feel like I should be more aggressive about building wealth."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Outstanding. At $2,000/month with a 7% average annual return, you're looking at roughly $1.2 million by age 55. I'd also recommend maxing out your 401(k) if you haven't already \u2014 the tax advantages are significant at your income level. Your evolution from a nervous investor to a disciplined one with a written plan is exactly what long-term wealth building looks like."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_005",
+    "title": "tom_142 - Retirement Planning",
+    "create_time": 1728259200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss retirement planning options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Retirement Planning is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about retirement planning."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For retirement planning, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_006",
+    "title": "tom_142 - Tax Optimization",
+    "create_time": 1728388800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss tax optimization options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Tax Optimization is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about tax optimization."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For tax optimization, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_007",
+    "title": "tom_142 - Estate Planning",
+    "create_time": 1728518400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss estate planning options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Estate Planning is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about estate planning."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For estate planning, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_008",
+    "title": "tom_142 - College Savings",
+    "create_time": 1728648000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss college savings options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. College Savings is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about college savings."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For college savings, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_009",
+    "title": "tom_142 - Insurance",
+    "create_time": 1728777600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss insurance options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Insurance is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about insurance."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For insurance, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_010",
+    "title": "tom_142 - Real Estate",
+    "create_time": 1728907200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss real estate options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Real Estate is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about real estate."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For real estate, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_011",
+    "title": "tom_142 - Debt Payoff",
+    "create_time": 1729036800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss debt payoff options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Debt Payoff is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about debt payoff."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For debt payoff, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_012",
+    "title": "mike_501 - Startup Equity",
+    "create_time": 1729166400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss startup equity options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Startup Equity is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about startup equity."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For startup equity, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_013",
+    "title": "mike_501 - Stock Options",
+    "create_time": 1729296000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss stock options options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Stock Options is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about stock options."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For stock options, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_014",
+    "title": "mike_501 - Ipo Planning",
+    "create_time": 1729425600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss ipo planning options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Ipo Planning is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about ipo planning."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For ipo planning, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_015",
+    "title": "mike_501 - Tax Implications",
+    "create_time": 1729555200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss tax implications options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Tax Implications is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about tax implications."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For tax implications, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_016",
+    "title": "mike_501 - Diversification",
+    "create_time": 1729684800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss diversification options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Diversification is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about diversification."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For diversification, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_017",
+    "title": "mike_501 - Angel Investing",
+    "create_time": 1729814400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss angel investing options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Angel Investing is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about angel investing."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For angel investing, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_018",
+    "title": "lisa_089 - Emergency Fund",
+    "create_time": 1729944000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss emergency fund options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Emergency Fund is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about emergency fund."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For emergency fund, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_019",
+    "title": "lisa_089 - Budgeting",
+    "create_time": 1730073600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss budgeting options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Budgeting is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about budgeting."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For budgeting, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_020",
+    "title": "lisa_089 - Savings Goals",
+    "create_time": 1730203200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss savings goals options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Savings Goals is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about savings goals."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For savings goals, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_021",
+    "title": "lisa_089 - Credit Score",
+    "create_time": 1730332800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss credit score options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Credit Score is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about credit score."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For credit score, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_022",
+    "title": "lisa_089 - First Home",
+    "create_time": 1730462400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss first home options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. First Home is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about first home."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For first home, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_023",
+    "title": "james_334 - Aggressive Growth",
+    "create_time": 1730592000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss aggressive growth options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Aggressive Growth is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about aggressive growth."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For aggressive growth, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_024",
+    "title": "james_334 - Crypto Portfolio",
+    "create_time": 1730721600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss crypto portfolio options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Crypto Portfolio is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about crypto portfolio."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For crypto portfolio, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_025",
+    "title": "james_334 - Risk Assessment",
+    "create_time": 1730851200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss risk assessment options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Risk Assessment is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about risk assessment."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For risk assessment, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_026",
+    "title": "james_334 - Market Timing",
+    "create_time": 1730980800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss market timing options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Market Timing is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about market timing."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For market timing, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_027",
+    "title": "james_334 - Sector Rotation",
+    "create_time": 1731110400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss sector rotation options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Sector Rotation is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about sector rotation."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For sector rotation, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_028",
+    "title": "james_334 - Dividend Strategy",
+    "create_time": 1731240000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss dividend strategy options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Dividend Strategy is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about dividend strategy."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For dividend strategy, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_029",
+    "title": "rachel_776 - Sustainable Investing",
+    "create_time": 1731369600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss sustainable investing options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Sustainable Investing is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about sustainable investing."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For sustainable investing, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_030",
+    "title": "rachel_776 - Esg Funds",
+    "create_time": 1731499200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss esg funds options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Esg Funds is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about esg funds."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For esg funds, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_031",
+    "title": "rachel_776 - Impact Metrics",
+    "create_time": 1731628800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss impact metrics options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Impact Metrics is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about impact metrics."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For impact metrics, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_032",
+    "title": "rachel_776 - Green Bonds",
+    "create_time": 1731758400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss green bonds options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Green Bonds is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about green bonds."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For green bonds, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_033",
+    "title": "rachel_776 - Social Impact",
+    "create_time": 1731888000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss social impact options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Social Impact is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about social impact."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For social impact, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_034",
+    "title": "rachel_776 - Governance",
+    "create_time": 1732017600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss governance options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Governance is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about governance."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For governance, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_035",
+    "title": "rachel_776 - Portfolio Screening",
+    "create_time": 1732147200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss portfolio screening options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Portfolio Screening is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about portfolio screening."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For portfolio screening, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_036",
+    "title": "dave_445 - Small Business",
+    "create_time": 1732276800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss small business options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Small Business is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about small business."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For small business, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_037",
+    "title": "dave_445 - Cash Flow",
+    "create_time": 1732406400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss cash flow options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Cash Flow is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about cash flow."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For cash flow, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_038",
+    "title": "dave_445 - Business Loan",
+    "create_time": 1732536000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss business loan options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Business Loan is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about business loan."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For business loan, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_039",
+    "title": "dave_445 - Expansion Funding",
+    "create_time": 1732665600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss expansion funding options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Expansion Funding is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about expansion funding."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For expansion funding, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_040",
+    "title": "dave_445 - Inventory Financing",
+    "create_time": 1732795200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss inventory financing options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Inventory Financing is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about inventory financing."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For inventory financing, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_041",
+    "title": "dave_445 - Receivables",
+    "create_time": 1732924800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss receivables options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Receivables is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about receivables."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For receivables, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_042",
+    "title": "dave_445 - Succession Planning",
+    "create_time": 1733054400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss succession planning options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Succession Planning is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about succession planning."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For succession planning, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_043",
+    "title": "emily_662 - Life Insurance",
+    "create_time": 1733184000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss life insurance options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Life Insurance is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about life insurance."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For life insurance, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_044",
+    "title": "emily_662 - Disability Planning",
+    "create_time": 1733313600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss disability planning options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Disability Planning is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about disability planning."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For disability planning, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_045",
+    "title": "emily_662 - Health Savings",
+    "create_time": 1733443200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss health savings options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Health Savings is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about health savings."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For health savings, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_046",
+    "title": "emily_662 - Long Term Care",
+    "create_time": 1733572800,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss long term care options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Long Term Care is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about long term care."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For long term care, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_047",
+    "title": "emily_662 - Beneficiary Review",
+    "create_time": 1733702400,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss beneficiary review options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Beneficiary Review is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about beneficiary review."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For beneficiary review, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_048",
+    "title": "emily_662 - Annuities",
+    "create_time": 1733832000,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss annuities options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Annuities is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about annuities."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For annuities, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_049",
+    "title": "kevin_993 - Initial Consultation",
+    "create_time": 1733961600,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss initial consultation options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Initial Consultation is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about initial consultation."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For initial consultation, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  },
+  {
+    "conversation_id": "fin_050",
+    "title": "nina_118 - Quick Question",
+    "create_time": 1734091200,
+    "mapping": {
+      "root": {
+        "id": "root",
+        "parent": null,
+        "children": [
+          "m1"
+        ],
+        "message": null
+      },
+      "m1": {
+        "id": "m1",
+        "parent": "root",
+        "children": [
+          "m2"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "I'd like to discuss quick question options for my financial plan. What should I consider?"
+            ]
+          }
+        }
+      },
+      "m2": {
+        "id": "m2",
+        "parent": "m1",
+        "children": [
+          "m3"
+        ],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "Great question. Quick Question is an important component of financial planning. Let me walk you through the key considerations: risk assessment, time horizon, tax implications, and how it fits with your overall financial goals. What's your current situation?"
+            ]
+          }
+        }
+      },
+      "m3": {
+        "id": "m3",
+        "parent": "m2",
+        "children": [
+          "m4"
+        ],
+        "message": {
+          "author": {
+            "role": "user"
+          },
+          "content": {
+            "parts": [
+              "My current income is around $85,000 and I have about $15,000 in savings. I want to make sure I'm making smart decisions about quick question."
+            ]
+          }
+        }
+      },
+      "m4": {
+        "id": "m4",
+        "parent": "m3",
+        "children": [],
+        "message": {
+          "author": {
+            "role": "assistant"
+          },
+          "content": {
+            "parts": [
+              "With $85,000 income and $15,000 in savings, you're in a solid starting position. For quick question, I'd recommend a phased approach: first establish your baseline, then set specific goals with timelines, and finally implement a strategy that fits your risk tolerance and cash flow."
+            ]
+          }
+        }
+      }
+    }
+  }
+]
