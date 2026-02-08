@@ -8,6 +8,7 @@ import struct
 from pathlib import Path
 
 from synix.core.config import EmbeddingConfig
+from synix.core.errors import atomic_write
 
 
 class EmbeddingProvider:
@@ -59,7 +60,7 @@ class EmbeddingProvider:
     def _save_manifest(self) -> None:
         """Write the embedding cache manifest to disk."""
         self.embeddings_dir.mkdir(parents=True, exist_ok=True)
-        self.manifest_path.write_text(json.dumps(self._manifest or {}, indent=2))
+        atomic_write(self.manifest_path, json.dumps(self._manifest or {}, indent=2))
 
     @staticmethod
     def content_hash(text: str) -> str:

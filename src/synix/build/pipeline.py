@@ -51,15 +51,10 @@ def validate_pipeline(pipeline: Pipeline) -> None:
                     f"Available layers: {sorted(layer_names)}"
                 )
 
-    # Check exactly one level-0 layer
+    # Check at least one level-0 layer (multiple roots are allowed for multi-source pipelines)
     root_layers = [l for l in pipeline.layers if l.level == 0]
     if len(root_layers) == 0:
-        raise ValueError("Pipeline must have exactly one level-0 (source) layer, found none")
-    if len(root_layers) > 1:
-        names = [l.name for l in root_layers]
-        raise ValueError(
-            f"Pipeline must have exactly one level-0 (source) layer, found {len(root_layers)}: {names}"
-        )
+        raise ValueError("Pipeline must have at least one level-0 (source) layer, found none")
 
     # Check DAG is acyclic — resolve_build_order raises ValueError on cycles
     resolve_build_order(pipeline)

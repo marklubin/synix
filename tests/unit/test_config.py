@@ -62,22 +62,27 @@ class TestPipelineConfig:
         with pytest.raises(ValueError, match="does not exist"):
             validate_pipeline(pipeline)
 
-    def test_validate_single_root(self):
-        """Must have exactly one level-0 layer."""
-        # No level-0 layer
+    def test_validate_no_root_rejected(self):
+        """Must have at least one level-0 layer."""
         pipeline = Pipeline("test")
         pipeline.add_layer(Layer(name="episodes", level=1, transform="summarize"))
 
         with pytest.raises(ValueError, match="level-0"):
             validate_pipeline(pipeline)
 
-        # Two level-0 layers
-        pipeline2 = Pipeline("test2")
-        pipeline2.add_layer(Layer(name="transcripts1", level=0, transform="parse"))
-        pipeline2.add_layer(Layer(name="transcripts2", level=0, transform="parse"))
+    def test_validate_multiple_roots_accepted(self):
+        """Multiple level-0 layers are allowed for multi-source pipelines."""
+        pipeline = Pipeline("test")
+        pipeline.add_layer(Layer(name="chatgpt_transcripts", level=0, transform="parse"))
+        pipeline.add_layer(Layer(name="claude_transcripts", level=0, transform="parse"))
+        pipeline.add_layer(Layer(
+            name="episodes", level=1,
+            depends_on=["chatgpt_transcripts", "claude_transcripts"],
+            transform="summarize",
+        ))
 
-        with pytest.raises(ValueError, match="level-0"):
-            validate_pipeline(pipeline2)
+        # Should not raise
+        validate_pipeline(pipeline)
 
     def test_load_missing_file(self):
         """Loading a nonexistent file raises FileNotFoundError."""

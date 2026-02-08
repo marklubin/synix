@@ -1,0 +1,159 @@
+[
+  {
+    "id": "conv-gpt-001",
+    "title": "Machine learning fundamentals",
+    "create_time": 1710500000,
+    "update_time": 1710501000,
+    "current_node": "msg-004",
+    "mapping": {
+      "msg-root": {
+        "id": "msg-root",
+        "message": null,
+        "parent": null,
+        "children": ["msg-001"]
+      },
+      "msg-001": {
+        "id": "msg-001",
+        "message": {
+          "id": "msg-001",
+          "author": {"role": "user"},
+          "content": {
+            "content_type": "text",
+            "parts": ["What is machine learning and how does it differ from traditional programming?"]
+          },
+          "create_time": 1710500001
+        },
+        "parent": "msg-root",
+        "children": ["msg-002"]
+      },
+      "msg-002": {
+        "id": "msg-002",
+        "message": {
+          "id": "msg-002",
+          "author": {"role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Machine learning is a paradigm where systems learn patterns from data rather than following explicit rules. In traditional programming, you write specific instructions. In ML, you provide data and the algorithm finds the patterns. The main types are supervised learning (labeled data), unsupervised learning (finding hidden patterns), and reinforcement learning (learning from rewards)."]
+          },
+          "create_time": 1710500002
+        },
+        "parent": "msg-001",
+        "children": ["msg-003"]
+      },
+      "msg-003": {
+        "id": "msg-003",
+        "message": {
+          "id": "msg-003",
+          "author": {"role": "user"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Can you give an example of supervised learning?"]
+          },
+          "create_time": 1710500003
+        },
+        "parent": "msg-002",
+        "children": ["msg-004"]
+      },
+      "msg-004": {
+        "id": "msg-004",
+        "message": {
+          "id": "msg-004",
+          "author": {"role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["A classic example is spam detection. You train a model on emails labeled as spam or not-spam. The model learns features that distinguish spam (certain words, patterns, sender characteristics). When new emails arrive, the model classifies them based on what it learned. Common algorithms include logistic regression, random forests, and neural networks."]
+          },
+          "create_time": 1710500004
+        },
+        "parent": "msg-003",
+        "children": []
+      }
+    }
+  },
+  {
+    "id": "conv-gpt-002",
+    "title": "Docker containerization",
+    "create_time": 1710600000,
+    "update_time": 1710601000,
+    "current_node": "msg-002",
+    "mapping": {
+      "msg-root": {
+        "id": "msg-root",
+        "message": null,
+        "parent": null,
+        "children": ["msg-001"]
+      },
+      "msg-001": {
+        "id": "msg-001",
+        "message": {
+          "id": "msg-001",
+          "author": {"role": "user"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Explain Docker and why it's useful for development."]
+          },
+          "create_time": 1710600001
+        },
+        "parent": "msg-root",
+        "children": ["msg-002"]
+      },
+      "msg-002": {
+        "id": "msg-002",
+        "message": {
+          "id": "msg-002",
+          "author": {"role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Docker packages applications with their dependencies into containers. Unlike VMs, containers share the host OS kernel, making them lightweight and fast. Benefits include: consistent environments across dev/staging/prod, easy scaling, isolation between services, and reproducible builds. Docker Compose orchestrates multi-container applications."]
+          },
+          "create_time": 1710600002
+        },
+        "parent": "msg-001",
+        "children": []
+      }
+    }
+  },
+  {
+    "id": "conv-gpt-003",
+    "title": "Git branching strategies",
+    "create_time": 1711000000,
+    "update_time": 1711001000,
+    "current_node": "msg-002",
+    "mapping": {
+      "msg-root": {
+        "id": "msg-root",
+        "message": null,
+        "parent": null,
+        "children": ["msg-001"]
+      },
+      "msg-001": {
+        "id": "msg-001",
+        "message": {
+          "id": "msg-001",
+          "author": {"role": "user"},
+          "content": {
+            "content_type": "text",
+            "parts": ["What's the best Git branching strategy for a small team?"]
+          },
+          "create_time": 1711000001
+        },
+        "parent": "msg-root",
+        "children": ["msg-002"]
+      },
+      "msg-002": {
+        "id": "msg-002",
+        "message": {
+          "id": "msg-002",
+          "author": {"role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["For small teams, I recommend GitHub Flow: simple and effective. Main branch is always deployable. Create feature branches from main, open PRs for review, merge when approved. For more complex projects, GitFlow adds develop, release, and hotfix branches. Trunk-based development works well with CI/CD - short-lived branches merged frequently to main."]
+          },
+          "create_time": 1711000002
+        },
+        "parent": "msg-001",
+        "children": []
+      }
+    }
+  }
+]

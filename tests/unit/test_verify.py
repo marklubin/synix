@@ -145,6 +145,8 @@ class TestVerifyBuild:
         assert d["passed"] is True
         assert "checks" in d
         assert len(d["checks"]) == 8
+        for check in d["checks"]:
+            assert "fix_hint" in check
 
     def test_summary(self, populated_build):
         result = verify_build(populated_build)

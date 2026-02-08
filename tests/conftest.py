@@ -55,7 +55,7 @@ def sample_artifacts():
         Artifact(
             artifact_id="t-claude-conv003",
             artifact_type="transcript",
-            content="human: What is Rust ownership?\n\nassistant: Rust's ownership...\n\n",
+            content="user: What is Rust ownership?\n\nassistant: Rust's ownership...\n\n",
             metadata={
                 "source": "claude",
                 "source_conversation_id": "conv003",

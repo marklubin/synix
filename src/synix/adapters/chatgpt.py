@@ -9,12 +9,24 @@ from pathlib import Path
 from synix.core.models import Artifact
 
 
+_ALLOWED_ROLES = {"user", "assistant"}
+
+
 def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
     """Parse ChatGPT conversations.json export into transcript Artifacts.
 
     The ChatGPT export is a JSON array of conversation objects. Each conversation
-    has a tree-structured ``mapping`` of messages. We linearize by following the
-    first child at each node (the main thread).
+    has a tree-structured ``mapping`` of messages.
+
+    Linearization strategy:
+    - If the conversation has a ``current_node`` field pointing to the active leaf,
+      we walk parent pointers from that node back to root, then reverse to get
+      chronological order. This correctly handles regeneration branches.
+    - Otherwise, we fall back to following the first child at each node from root
+      (the legacy main-thread heuristic).
+
+    Only ``user`` and ``assistant`` messages are included; system, tool, and other
+    roles are filtered out.
     """
     filepath = Path(filepath)
     data = json.loads(filepath.read_text())
@@ -27,15 +39,18 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
         mapping = conv.get("mapping", {})
 
         # Linearize the message tree
-        messages = _linearize_mapping(mapping)
+        current_node = conv.get("current_node")
+        messages = _linearize_mapping(mapping, current_node=current_node)
 
         if not messages:
             continue
 
-        # Format transcript
+        # Format transcript — only user and assistant roles
         parts: list[str] = []
         for msg in messages:
             role = msg["author"]["role"]
+            if role not in _ALLOWED_ROLES:
+                continue
             text_parts = msg["content"].get("parts", [])
             text = "".join(str(p) for p in text_parts if isinstance(p, str))
             if text.strip():
@@ -68,19 +83,45 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
     return artifacts
 
 
-def _linearize_mapping(mapping: dict) -> list[dict]:
-    """Walk the ChatGPT message tree from root, following first child at each step."""
+def _linearize_mapping(mapping: dict, *, current_node: str | None = None) -> list[dict]:
+    """Linearize the ChatGPT message tree into a chronological message list.
+
+    When *current_node* is provided and found in *mapping*, we walk parent
+    pointers from that leaf back to the root and reverse the result.  This
+    correctly selects the active branch when the user regenerated a response
+    (which creates a fork in the tree).
+
+    When *current_node* is ``None`` or not present in *mapping*, we fall back
+    to the legacy strategy of following ``children[0]`` at every node from the
+    root.
+    """
+    # --- Strategy 1: walk from current_node to root via parent pointers ---
+    if current_node and current_node in mapping:
+        messages: list[dict] = []
+        node_id: str | None = current_node
+        while node_id is not None:
+            node = mapping.get(node_id)
+            if node is None:
+                break
+            msg = node.get("message")
+            if msg is not None:
+                messages.append(msg)
+            node_id = node.get("parent")
+        messages.reverse()
+        return messages
+
+    # --- Strategy 2 (fallback): follow first child from root ---
     root_id = None
-    for node_id, node in mapping.items():
+    for nid, node in mapping.items():
         if node.get("parent") is None:
-            root_id = node_id
+            root_id = nid
             break
 
     if root_id is None:
         return []
 
-    messages: list[dict] = []
-    current_id = root_id
+    messages = []
+    current_id: str | None = root_id
 
     while current_id is not None:
         node = mapping.get(current_id)

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from synix.core.models import Artifact
+
+_SENDER_MAP = {"human": "user", "Human": "user"}
 
 
 def parse_claude(filepath: str | Path) -> list[Artifact]:
@@ -13,6 +16,10 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
 
     The Claude export is ``{"conversations": [...]}``. Each conversation has a
     flat ``chat_messages`` array with ``sender`` and ``text`` fields.
+
+    Sender normalization: ``human`` / ``Human`` are mapped to ``user`` so that
+    transcripts from all sources use a consistent ``user`` / ``assistant``
+    vocabulary.
     """
     filepath = Path(filepath)
     data = json.loads(filepath.read_text())
@@ -33,6 +40,7 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
         parts: list[str] = []
         for msg in chat_messages:
             sender = msg.get("sender", "unknown")
+            sender = _SENDER_MAP.get(sender, sender)
             text = msg.get("text")
             if text is None:
                 # Fallback: try "content" field (nested content blocks)
@@ -54,7 +62,16 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
             continue
 
         content = "\n\n".join(parts) + "\n"
-        date_str = created_at[:10] if created_at else ""
+
+        # Parse ISO timestamp robustly
+        if created_at:
+            try:
+                dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                date_str = dt.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                date_str = created_at[:10] if len(created_at) >= 10 else ""
+        else:
+            date_str = ""
 
         artifacts.append(Artifact(
             artifact_id=f"t-claude-{uuid}",

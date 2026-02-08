@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from synix.core.errors import atomic_write
 from synix.core.models import ProvenanceRecord
 
 
@@ -24,7 +25,7 @@ class ProvenanceTracker:
         return {}
 
     def _save(self) -> None:
-        self._provenance_path.write_text(json.dumps(self._records, indent=2))
+        atomic_write(self._provenance_path, json.dumps(self._records, indent=2))
 
     def record(
         self,

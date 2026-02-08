@@ -19,6 +19,7 @@ class VerifyCheck:
     passed: bool
     message: str
     details: list[str] = field(default_factory=list)
+    fix_hint: str = ""
 
 
 @dataclass
@@ -54,6 +55,7 @@ class VerifyResult:
                     "passed": c.passed,
                     "message": c.message,
                     "details": c.details,
+                    "fix_hint": c.fix_hint,
                 }
                 for c in self.checks
             ],
@@ -108,6 +110,7 @@ def _check_build_exists(build_path: Path) -> VerifyCheck:
             name="build_exists",
             passed=False,
             message="Build directory does not exist",
+            fix_hint="Run: synix build <pipeline.py>",
         )
     manifest_path = build_path / "manifest.json"
     if not manifest_path.exists():
@@ -115,6 +118,7 @@ def _check_build_exists(build_path: Path) -> VerifyCheck:
             name="build_exists",
             passed=False,
             message="No manifest.json found in build directory",
+            fix_hint="Run: synix build <pipeline.py> to create build artifacts",
         )
     return VerifyCheck(
         name="build_exists",
@@ -131,6 +135,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
             name="manifest_valid",
             passed=False,
             message="No manifest.json found",
+            fix_hint="Re-run synix build to regenerate the manifest",
         )
     try:
         data = json.loads(manifest_path.read_text())
@@ -139,6 +144,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
             name="manifest_valid",
             passed=False,
             message=f"Invalid JSON in manifest: {e}",
+            fix_hint="Re-run synix build to regenerate the manifest",
         )
 
     if not isinstance(data, dict):
@@ -146,6 +152,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
             name="manifest_valid",
             passed=False,
             message="Manifest is not a JSON object",
+            fix_hint="Re-run synix build to regenerate the manifest",
         )
 
     issues = []
@@ -163,6 +170,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
             passed=False,
             message=f"Manifest has {len(issues)} structural issues",
             details=issues[:20],
+            fix_hint="Re-run synix build to regenerate the manifest",
         )
 
     return VerifyCheck(
@@ -180,6 +188,7 @@ def _check_artifacts_exist(build_path: Path) -> VerifyCheck:
             name="artifacts_exist",
             passed=False,
             message="No manifest.json found",
+            fix_hint="Re-run synix build to recreate missing artifacts",
         )
 
     manifest = json.loads(manifest_path.read_text())
@@ -195,6 +204,7 @@ def _check_artifacts_exist(build_path: Path) -> VerifyCheck:
             passed=False,
             message=f"{len(missing)} artifacts missing from disk",
             details=missing[:20],
+            fix_hint="Re-run synix build to recreate missing artifacts",
         )
 
     return VerifyCheck(
@@ -214,6 +224,7 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
             name="provenance_complete",
             passed=False,
             message="No manifest.json found",
+            fix_hint="Re-run synix build to regenerate provenance records",
         )
 
     manifest = json.loads(manifest_path.read_text())
@@ -226,6 +237,7 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
                 name="provenance_complete",
                 passed=False,
                 message=f"No provenance.json but {len(non_root)} non-root artifacts exist",
+                fix_hint="Re-run synix build to regenerate provenance records",
             )
         return VerifyCheck(
             name="provenance_complete",
@@ -246,6 +258,7 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
             passed=False,
             message=f"{len(missing)} non-root artifacts lack provenance",
             details=missing[:20],
+            fix_hint="Re-run synix build to regenerate provenance records",
         )
 
     return VerifyCheck(
@@ -279,6 +292,7 @@ def _check_search_index(build_path: Path) -> VerifyCheck:
                 name="search_index",
                 passed=False,
                 message="search.db exists but search_index table missing",
+                fix_hint="Re-run synix build to rebuild the search index",
             )
 
         # Count rows
@@ -295,6 +309,7 @@ def _check_search_index(build_path: Path) -> VerifyCheck:
             name="search_index",
             passed=False,
             message=f"Search index error: {e}",
+            fix_hint="Delete search.db and re-run synix build",
         )
 
 
@@ -322,6 +337,7 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
             passed=False,
             message=f"{len(mismatches)} content hash mismatches",
             details=mismatches[:20],
+            fix_hint="Re-run synix build --force to regenerate corrupted artifacts",
         )
 
     return VerifyCheck(
@@ -360,6 +376,7 @@ def _check_no_orphans(build_path: Path) -> VerifyCheck:
             passed=False,
             message=f"{len(orphans)} orphaned artifact files",
             details=orphans[:20],
+            fix_hint="Delete orphaned files or re-run synix build",
         )
 
     return VerifyCheck(
@@ -452,6 +469,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
                 f"{len(affected_customers)} customers affected"
             ),
             details=violations,
+            fix_hint="Add customer_id constraint to merge config and re-run synix build",
         )
 
     return VerifyCheck(

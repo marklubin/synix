@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from synix.core.errors import atomic_write
 from synix.core.models import Artifact
 
 
@@ -25,7 +26,7 @@ class ArtifactStore:
         return {}
 
     def _save_manifest(self) -> None:
-        self._manifest_path.write_text(json.dumps(self._manifest, indent=2))
+        atomic_write(self._manifest_path, json.dumps(self._manifest, indent=2))
 
     def save_artifact(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Save an artifact to the build directory."""
@@ -50,7 +51,7 @@ class ArtifactStore:
             "content": artifact.content,
             "metadata": artifact.metadata,
         }
-        artifact_path.write_text(json.dumps(artifact_data, indent=2))
+        atomic_write(artifact_path, json.dumps(artifact_data, indent=2))
 
         # Update manifest
         rel_path = f"layer{layer_level}-{layer_name}/{artifact.artifact_id}.json"

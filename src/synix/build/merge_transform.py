@@ -21,29 +21,46 @@ def _bigrams(text: str) -> set[tuple[str, str]]:
     return {(words[i], words[i + 1]) for i in range(len(words) - 1)}
 
 
+def _tokenize_combined(text: str) -> set[str]:
+    """Return the combined unigram + bigram token set for a text.
+
+    This is the tokenization step used by Jaccard similarity.  Pre-computing
+    the set once per text avoids redundant work in pairwise comparisons.
+    """
+    tokens = _tokenize(text)
+    bgs = _bigrams(text)
+    return tokens | {f"{a}_{b}" for a, b in bgs}
+
+
+def jaccard_similarity_from_sets(set_a: set, set_b: set) -> float:
+    """Compute Jaccard similarity from pre-computed token sets.
+
+    Args:
+        set_a: Combined unigram+bigram set for text A.
+        set_b: Combined unigram+bigram set for text B.
+
+    Returns:
+        Float between 0.0 and 1.0.
+    """
+    if not set_a and not set_b:
+        return 1.0  # both empty
+    if not set_a or not set_b:
+        return 0.0
+
+    intersection = set_a & set_b
+    union = set_a | set_b
+    return len(intersection) / len(union)
+
+
 def jaccard_similarity(text_a: str, text_b: str) -> float:
     """Compute Jaccard similarity between two texts using word tokens + bigrams.
 
     Combines unigram and bigram token sets for better accuracy.
     Returns a float between 0.0 and 1.0.
     """
-    tokens_a = _tokenize(text_a)
-    tokens_b = _tokenize(text_b)
-    bigrams_a = _bigrams(text_a)
-    bigrams_b = _bigrams(text_b)
-
-    # Combine unigrams and bigrams (as string tuples for union/intersection)
-    combined_a: set = tokens_a | {f"{a}_{b}" for a, b in bigrams_a}
-    combined_b: set = tokens_b | {f"{a}_{b}" for a, b in bigrams_b}
-
-    if not combined_a and not combined_b:
-        return 1.0  # both empty
-    if not combined_a or not combined_b:
-        return 0.0
-
-    intersection = combined_a & combined_b
-    union = combined_a | combined_b
-    return len(intersection) / len(union)
+    combined_a = _tokenize_combined(text_a)
+    combined_b = _tokenize_combined(text_b)
+    return jaccard_similarity_from_sets(combined_a, combined_b)
 
 
 def _parse_constraints(constraints: list[str]) -> list[str]:
@@ -122,6 +139,9 @@ def _build_merge_groups(
     if n == 0:
         return []
 
+    # Pre-tokenize all inputs once to avoid O(n²) re-tokenization
+    token_sets = [_tokenize_combined(inp.content) for inp in inputs]
+
     # Union-find for clustering
     parent = list(range(n))
 
@@ -139,7 +159,7 @@ def _build_merge_groups(
     # Check all pairs
     for i in range(n):
         for j in range(i + 1, n):
-            sim = jaccard_similarity(inputs[i].content, inputs[j].content)
+            sim = jaccard_similarity_from_sets(token_sets[i], token_sets[j])
             if sim >= threshold:
                 # Check constraints before merging
                 if not _violates_constraints(inputs[i], inputs[j], constraint_fields):
@@ -192,6 +212,9 @@ class MergeTransform(BaseTransform):
         if not inputs:
             return []
 
+        # Pre-tokenize all inputs once for use in merge groups and avg_similarity
+        token_sets = [_tokenize_combined(inp.content) for inp in inputs]
+
         # Build merge groups
         groups = _build_merge_groups(inputs, threshold, constraint_fields)
 
@@ -232,8 +255,8 @@ class MergeTransform(BaseTransform):
             for i, idx_i in enumerate(group_indices):
                 for j, idx_j in enumerate(group_indices):
                     if i < j:
-                        sim = jaccard_similarity(
-                            inputs[idx_i].content, inputs[idx_j].content
+                        sim = jaccard_similarity_from_sets(
+                            token_sets[idx_i], token_sets[idx_j]
                         )
                         similarities.append(sim)
             avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0

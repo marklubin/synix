@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from pathlib import Path
 
@@ -47,8 +48,8 @@ class HybridRetriever:
         self.embedding_provider = embedding_provider
         self.provenance_tracker = provenance_tracker
         # In-memory cache of artifact embeddings for semantic search.
-        # Populated lazily from the search index rows.
-        self._artifact_embeddings: dict[str, list[float]] | None = None
+        # Keyed by content hash -> embedding vector.  Populated lazily.
+        self._artifact_embeddings: dict[str, list[float]] = {}
 
     def _get_keyword_results(
         self, query: str, layers: list[str] | None = None
@@ -93,6 +94,51 @@ class HybridRetriever:
             })
         return result
 
+    @staticmethod
+    def _content_hash(content: str) -> str:
+        """Compute a SHA-256 hash of content for cache keying."""
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def _ensure_embeddings_loaded(self, layers: list[str] | None = None) -> dict[str, list[float]]:
+        """Ensure all indexed rows have their embeddings cached in memory.
+
+        For each row, computes a content hash and checks the in-memory cache.
+        Only calls ``embed_batch`` for content that is not already cached.
+
+        Returns:
+            Mapping of content hash -> embedding vector (the cache itself).
+        """
+        if self.embedding_provider is None:
+            return self._artifact_embeddings
+
+        rows = self._get_all_indexed_rows(layers)
+        if not rows:
+            return self._artifact_embeddings
+
+        # Find content that still needs embedding
+        uncached_contents: list[str] = []
+        uncached_hashes: list[str] = []
+        for row in rows:
+            h = self._content_hash(row["content"])
+            if h not in self._artifact_embeddings:
+                uncached_contents.append(row["content"])
+                uncached_hashes.append(h)
+
+        # Batch-embed only the uncached content
+        if uncached_contents:
+            new_embeddings = self.embedding_provider.embed_batch(uncached_contents)
+            for h, emb in zip(uncached_hashes, new_embeddings):
+                self._artifact_embeddings[h] = emb
+
+        return self._artifact_embeddings
+
+    def clear_cache(self) -> None:
+        """Reset the in-memory embedding cache.
+
+        Useful after index rebuilds when indexed content may have changed.
+        """
+        self._artifact_embeddings = {}
+
     def _get_semantic_results(
         self, query: str, layers: list[str] | None = None, top_k: int = 10
     ) -> list[SearchResult]:
@@ -102,18 +148,21 @@ class HybridRetriever:
 
         query_embedding = self.embedding_provider.embed(query)
 
-        # Get all indexed rows and their embeddings
+        # Ensure all indexed rows have their embeddings cached
+        self._ensure_embeddings_loaded(layers)
+
+        # Get all indexed rows
         rows = self._get_all_indexed_rows(layers)
         if not rows:
             return []
 
-        # Get embeddings for all artifact content
-        contents = [r["content"] for r in rows]
-        embeddings = self.embedding_provider.embed_batch(contents)
-
-        # Score each document by cosine similarity
+        # Score each document by cosine similarity using cached embeddings
         scored: list[tuple[float, dict]] = []
-        for row, emb in zip(rows, embeddings):
+        for row in rows:
+            h = self._content_hash(row["content"])
+            emb = self._artifact_embeddings.get(h)
+            if emb is None:
+                continue
             sim = _cosine_similarity(query_embedding, emb)
             scored.append((sim, row))
 

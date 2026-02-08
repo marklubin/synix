@@ -73,6 +73,148 @@ class TestChatGPTParsing:
         artifacts = parse_chatgpt(chatgpt_fixture_path)
         assert all(a.content_hash.startswith("sha256:") for a in artifacts)
 
+    def test_chatgpt_regeneration_follows_current_node(self, tmp_path):
+        """When a response is regenerated, current_node selects the active branch."""
+        conv = [{
+            "id": "conv-regen",
+            "title": "Regeneration test",
+            "create_time": 1710500000,
+            "current_node": "m4",
+            "mapping": {
+                "root": {
+                    "id": "root",
+                    "message": None,
+                    "parent": None,
+                    "children": ["m1"],
+                },
+                "m1": {
+                    "id": "m1",
+                    "message": {
+                        "id": "m1",
+                        "author": {"role": "user"},
+                        "content": {"content_type": "text", "parts": ["Hello"]},
+                        "create_time": 1710500001,
+                    },
+                    "parent": "root",
+                    "children": ["m2"],
+                },
+                "m2": {
+                    "id": "m2",
+                    "message": {
+                        "id": "m2",
+                        "author": {"role": "assistant"},
+                        "content": {"content_type": "text", "parts": ["First response"]},
+                        "create_time": 1710500002,
+                    },
+                    "parent": "m1",
+                    "children": ["m3", "m4"],
+                },
+                "m3": {
+                    "id": "m3",
+                    "message": {
+                        "id": "m3",
+                        "author": {"role": "user"},
+                        "content": {"content_type": "text", "parts": ["Abandoned branch"]},
+                        "create_time": 1710500003,
+                    },
+                    "parent": "m2",
+                    "children": [],
+                },
+                "m4": {
+                    "id": "m4",
+                    "message": {
+                        "id": "m4",
+                        "author": {"role": "user"},
+                        "content": {"content_type": "text", "parts": ["Current branch"]},
+                        "create_time": 1710500004,
+                    },
+                    "parent": "m2",
+                    "children": [],
+                },
+            },
+        }]
+        filepath = tmp_path / "regen.json"
+        filepath.write_text(json.dumps(conv))
+
+        artifacts = parse_chatgpt(filepath)
+        assert len(artifacts) == 1
+        content = artifacts[0].content
+        assert "Current branch" in content
+        assert "Abandoned branch" not in content
+
+    def test_chatgpt_filters_system_and_tool_roles(self, tmp_path):
+        """Only user and assistant messages appear in transcript."""
+        conv = [{
+            "id": "conv-roles",
+            "title": "Role filtering test",
+            "create_time": 1710500000,
+            "current_node": "m4",
+            "mapping": {
+                "root": {
+                    "id": "root",
+                    "message": None,
+                    "parent": None,
+                    "children": ["m1"],
+                },
+                "m1": {
+                    "id": "m1",
+                    "message": {
+                        "id": "m1",
+                        "author": {"role": "system"},
+                        "content": {"content_type": "text", "parts": ["System prompt text"]},
+                        "create_time": 1710500001,
+                    },
+                    "parent": "root",
+                    "children": ["m2"],
+                },
+                "m2": {
+                    "id": "m2",
+                    "message": {
+                        "id": "m2",
+                        "author": {"role": "user"},
+                        "content": {"content_type": "text", "parts": ["User question"]},
+                        "create_time": 1710500002,
+                    },
+                    "parent": "m1",
+                    "children": ["m3"],
+                },
+                "m3": {
+                    "id": "m3",
+                    "message": {
+                        "id": "m3",
+                        "author": {"role": "tool"},
+                        "content": {"content_type": "text", "parts": ["Tool output"]},
+                        "create_time": 1710500003,
+                    },
+                    "parent": "m2",
+                    "children": ["m4"],
+                },
+                "m4": {
+                    "id": "m4",
+                    "message": {
+                        "id": "m4",
+                        "author": {"role": "assistant"},
+                        "content": {"content_type": "text", "parts": ["Assistant answer"]},
+                        "create_time": 1710500004,
+                    },
+                    "parent": "m3",
+                    "children": [],
+                },
+            },
+        }]
+        filepath = tmp_path / "roles.json"
+        filepath.write_text(json.dumps(conv))
+
+        artifacts = parse_chatgpt(filepath)
+        assert len(artifacts) == 1
+        content = artifacts[0].content
+        assert "User question" in content
+        assert "Assistant answer" in content
+        assert "System prompt text" not in content
+        assert "Tool output" not in content
+        # message_count should only reflect user + assistant
+        assert artifacts[0].metadata["message_count"] == 2
+
 
 class TestClaudeParsing:
     """Tests for Claude export parser."""
@@ -98,6 +240,21 @@ class TestClaudeParsing:
         """All artifact IDs have t-claude- prefix."""
         artifacts = parse_claude(claude_fixture_path)
         assert all(a.artifact_id.startswith("t-claude-") for a in artifacts)
+
+    def test_claude_sender_normalized(self, claude_fixture_path):
+        """Claude 'human' sender is normalized to 'user' in transcripts."""
+        artifacts = parse_claude(claude_fixture_path)
+        for artifact in artifacts:
+            assert "human:" not in artifact.content, (
+                f"Artifact {artifact.artifact_id} contains un-normalized 'human:' sender"
+            )
+            # All user messages should use "user:" prefix
+            lines = artifact.content.strip().split("\n\n")
+            for line in lines:
+                role = line.split(":")[0]
+                assert role in ("user", "assistant"), (
+                    f"Unexpected role '{role}' in artifact {artifact.artifact_id}"
+                )
 
 
 class TestMixedSources:

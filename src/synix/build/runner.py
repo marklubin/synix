@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -310,9 +311,19 @@ def _execute_transform_concurrent(
     """
     results: list[list[Artifact] | Exception] = [None] * len(inputs)  # type: ignore[list-item]
 
+    # Keys that should be shared (not deep-copied) across workers because they
+    # contain non-picklable objects (e.g. logger with file handles).
+    _shared_keys = {"_logger"}
+
     def _run_one(index: int, single_input: Artifact) -> tuple[int, list[Artifact]]:
         """Execute the transform for a single input, returning (index, artifacts)."""
-        return index, transform.execute([single_input], config)
+        # Deep-copy mutable config to avoid cross-thread mutation, but share
+        # non-copyable objects like the logger.
+        shared = {k: config[k] for k in _shared_keys if k in config}
+        copyable = {k: v for k, v in config.items() if k not in _shared_keys}
+        worker_config = copy.deepcopy(copyable)
+        worker_config.update(shared)
+        return index, transform.execute([single_input], worker_config)
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
