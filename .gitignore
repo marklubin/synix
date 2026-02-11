@@ -57,6 +57,14 @@ Thumbs.db
 
 # Exports and data
 exports/
+exports-full/
+
+# Example build outputs
+examples/**/build/
+
+# Demo
+demo.tape
+demo.mp4
 
 # Jupyter
 .ipynb_checkpoints/

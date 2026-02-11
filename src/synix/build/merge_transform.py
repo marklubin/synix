@@ -6,8 +6,8 @@ import hashlib
 import re
 from collections import defaultdict
 
-from synix.core.models import Artifact
 from synix.build.transforms import BaseTransform, register_transform
+from synix.core.models import Artifact
 
 
 def _tokenize(text: str) -> set[str]:
@@ -184,6 +184,12 @@ class MergeTransform(BaseTransform):
         merge_prompt (str): Optional LLM prompt for synthesizing merged content.
             Not used in v0.1 -- content is concatenated.
     """
+
+    def split(
+        self, inputs: list[Artifact], config: dict
+    ) -> list[tuple[list[Artifact], dict]]:
+        """All inputs needed for pairwise similarity — single unit."""
+        return [(inputs, {})]
 
     def get_cache_key(self, config: dict) -> str:
         """Threshold and constraints affect output -- include in cache key."""

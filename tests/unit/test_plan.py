@@ -9,11 +9,10 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from synix import Artifact, Layer, Pipeline, Projection
+from synix import Layer, Pipeline, Projection
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, plan_build
 from synix.cli import main
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -150,12 +149,12 @@ class TestPlanBuildFreshPipeline:
         assert plan.total_rebuild == 4
         assert plan.total_cached == 0
 
-    def test_reason_is_no_previous_build(self, pipeline_obj):
-        """Fresh pipeline layers should have 'no previous build' reason."""
+    def test_reason_is_new(self, pipeline_obj):
+        """Fresh pipeline layers should have 'new' reason."""
         plan = plan_build(pipeline_obj)
 
         for step in plan.steps:
-            assert step.reason == "no previous build"
+            assert step.reason == "new"
 
 
 class TestPlanBuildFullyCached:
@@ -502,8 +501,8 @@ pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
 
         result = runner.invoke(main, ["plan", str(pipeline_file)])
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Build Plan" in result.output
-        assert "Summary" in result.output
+        assert "Estimated:" in result.output
+        assert "Estimated:" in result.output
 
     def test_plan_save_flag(self, runner, source_dir, tmp_path):
         """synix plan --save creates a build-plan artifact."""

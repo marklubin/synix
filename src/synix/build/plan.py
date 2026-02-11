@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from synix.core.models import Artifact, Layer, Pipeline
-from synix.build.artifacts import ArtifactStore
-from synix.build.dag import needs_rebuild, resolve_build_order
-from synix.build.transforms import get_transform
+import synix.build.llm_transforms  # noqa: F401
 
 # Import transform modules to trigger @register_transform decorators
 import synix.build.parse_transform  # noqa: F401
-import synix.build.llm_transforms  # noqa: F401
+from synix.build.artifacts import ArtifactStore
+from synix.build.dag import resolve_build_order
+from synix.build.transforms import get_transform
+from synix.core.config import LLMConfig, redact_api_key
+from synix.core.models import Artifact, Layer, Pipeline
 
 # Default token estimates per LLM call
 DEFAULT_INPUT_TOKENS_PER_CALL = 2000
@@ -36,6 +38,21 @@ class StepPlan:
     estimated_tokens: int  # rough estimate (input + output)
     estimated_cost: float  # rough USD estimate
     reason: str  # why rebuild needed (e.g., "prompt changed", "new inputs", "all cached")
+    resolved_llm_config: dict | None = None  # resolved LLM config for this layer (None for parse layers)
+    parallel_units: int = 1  # number of parallel work units from split()
+
+
+@dataclass
+class ProjectionPlan:
+    """Plan for a single projection."""
+
+    name: str
+    projection_type: str
+    source_layers: list[str]
+    status: str  # "cached", "rebuild", "new"
+    artifact_count: int
+    reason: str
+    embedding_config: dict | None = None
 
 
 @dataclass
@@ -44,11 +61,13 @@ class BuildPlan:
 
     pipeline_name: str
     steps: list[StepPlan] = field(default_factory=list)
+    projections: list[ProjectionPlan] = field(default_factory=list)
     total_estimated_llm_calls: int = 0
     total_estimated_tokens: int = 0
     total_estimated_cost: float = 0.0
     total_cached: int = 0
     total_rebuild: int = 0
+    global_llm_config: dict = field(default_factory=dict)  # pipeline-level LLM config
 
     def to_dict(self) -> dict:
         """Serialize to a plain dict suitable for JSON output."""
@@ -107,7 +126,12 @@ def plan_build(
 
     build_order = resolve_build_order(pipeline)
 
-    plan = BuildPlan(pipeline_name=pipeline.name)
+    # Resolve and store the global LLM config (with API key redacted)
+    global_llm = LLMConfig.from_dict(pipeline.llm_config) if pipeline.llm_config else LLMConfig()
+    plan = BuildPlan(
+        pipeline_name=pipeline.name,
+        global_llm_config=_llm_config_to_display_dict(global_llm),
+    )
 
     # Track artifacts per layer for downstream dependency analysis
     layer_artifacts: dict[str, list[Artifact]] = {}
@@ -127,6 +151,11 @@ def plan_build(
             plan.total_cached += 1
         else:
             plan.total_rebuild += 1
+
+    # Plan projections
+    for proj in pipeline.projections:
+        proj_plan = _plan_projection(proj, pipeline, layer_artifacts, store)
+        plan.projections.append(proj_plan)
 
     return plan
 
@@ -183,6 +212,9 @@ def _plan_layer(
     transform_cache_key = transform.get_cache_key(transform_config)
     model_config = transform_config.get("llm_config", {}) if layer.level > 0 else None
 
+    # Resolve the per-layer LLM config for display
+    resolved_llm = _resolve_layer_llm_config(layer, pipeline)
+
     if layer.level == 0:
         # Parse layer: actually run the parse transform to count artifacts (fast, no LLM)
         return _plan_parse_layer(
@@ -190,12 +222,23 @@ def _plan_layer(
         )
 
     # For LLM layers, analyze cache state
-    return _plan_llm_layer(
+    step = _plan_llm_layer(
         layer, inputs, prompt_id, model_config, transform_cache_key,
         store, layer_artifacts,
         input_tokens_per_call, output_tokens_per_call,
         input_token_price, output_token_price,
     )
+    step.resolved_llm_config = resolved_llm
+
+    # Estimate parallel unit count from split() if the layer will be built
+    if step.status != "cached" and inputs:
+        try:
+            units = transform.split(inputs, transform_config)
+            step.parallel_units = len(units)
+        except Exception:
+            step.parallel_units = 1
+
+    return step
 
 
 def _plan_parse_layer(
@@ -225,7 +268,7 @@ def _plan_parse_layer(
             estimated_llm_calls=0,
             estimated_tokens=0,
             estimated_cost=0.0,
-            reason="no previous build",
+            reason="new",
         )
 
     # Check how many are cached vs new
@@ -250,7 +293,7 @@ def _plan_parse_layer(
 
     if len(existing) == 0:
         status = "new"
-        reason = "no previous build"
+        reason = "new"
     else:
         status = "rebuild"
         parts = []
@@ -307,7 +350,7 @@ def _plan_llm_layer(
             estimated_llm_calls=estimated_count,
             estimated_tokens=estimated_count * tokens_per_call,
             estimated_cost=estimated_count * cost_per_call,
-            reason="no previous build",
+            reason="new",
         )
 
     existing = store.list_artifacts(layer.name)
@@ -349,7 +392,7 @@ def _plan_llm_layer(
 
     status = "rebuild" if existing else "new"
     if not existing:
-        reason = "no previous build"
+        reason = "new"
 
     # Store existing artifacts for downstream planning (they will be rebuilt, but
     # downstream layers need something for estimation)
@@ -408,7 +451,7 @@ def _determine_rebuild_reason(
 ) -> str:
     """Determine why a layer needs rebuild."""
     if not existing:
-        return "no previous build"
+        return "new"
 
     reasons = []
 
@@ -446,6 +489,45 @@ def _determine_rebuild_reason(
     return ", ".join(reasons) if reasons else "inputs changed"
 
 
+def _resolve_layer_llm_config(layer: Layer, pipeline: Pipeline) -> dict | None:
+    """Resolve the effective LLM config for a layer by deep-merging over pipeline defaults.
+
+    Returns None for parse layers (level 0) which don't use LLM.
+    For LLM layers, returns the resolved config dict with API key redacted.
+    """
+    if layer.level == 0:
+        return None
+
+    # Start with pipeline defaults
+    base = dict(pipeline.llm_config) if pipeline.llm_config else {}
+
+    # Deep-merge layer-specific llm_config overrides
+    if layer.config:
+        layer_llm = layer.config.get("llm_config")
+        if layer_llm:
+            base.update(layer_llm)
+
+    # Resolve into LLMConfig for display
+    resolved = LLMConfig.from_dict(base)
+    return _llm_config_to_display_dict(resolved)
+
+
+def _llm_config_to_display_dict(config: LLMConfig) -> dict:
+    """Convert an LLMConfig to a display-safe dict with redacted API key."""
+    resolved_key = config.resolve_api_key()
+    d: dict = {
+        "provider": config.provider,
+        "model": config.model,
+        "temperature": config.temperature,
+        "max_tokens": config.max_tokens,
+    }
+    if config.base_url:
+        d["base_url"] = config.base_url
+    if resolved_key:
+        d["api_key"] = redact_api_key(resolved_key)
+    return d
+
+
 def _estimate_artifact_count(layer: Layer, inputs: list[Artifact]) -> int:
     """Estimate how many artifacts a layer will produce based on grouping."""
     grouping = layer.grouping
@@ -469,3 +551,88 @@ def _estimate_artifact_count(layer: Layer, inputs: list[Artifact]) -> int:
     else:
         # Default: one artifact per input
         return max(len(inputs), 1)
+
+
+def _plan_projection(
+    proj,
+    pipeline: Pipeline,
+    layer_artifacts: dict[str, list[Artifact]],
+    store: ArtifactStore | None,
+) -> ProjectionPlan:
+    """Analyze a projection to determine its plan status."""
+    from synix.build.runner import PROJECTION_CACHE_FILE, _compute_projection_hash
+
+    source_layers = [s["layer"] for s in proj.sources]
+    build_dir = Path(pipeline.build_dir)
+
+    # Extract embedding config for display
+    embedding_config = proj.config.get("embedding_config") if proj.config else None
+
+    # Count total artifacts that would feed this projection
+    all_artifacts: list[Artifact] = []
+    for layer_name in source_layers:
+        arts = layer_artifacts.get(layer_name, [])
+        if not arts and store is not None:
+            arts = store.list_artifacts(layer_name)
+        all_artifacts.extend(arts)
+
+    artifact_count = len(all_artifacts)
+
+    # Check projection cache
+    cache_path = build_dir / PROJECTION_CACHE_FILE
+    if cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cache = {}
+    else:
+        cache = {}
+
+    cached_entry = cache.get(proj.name)
+    if cached_entry is None:
+        return ProjectionPlan(
+            name=proj.name,
+            projection_type=proj.projection_type,
+            source_layers=source_layers,
+            status="new",
+            artifact_count=artifact_count,
+            reason="new",
+            embedding_config=embedding_config,
+        )
+
+    # Compute current hash including projection config
+    current_hash = _compute_projection_hash(all_artifacts, proj.config)
+
+    if (
+        cached_entry.get("source_hash") == current_hash
+        and cached_entry.get("artifact_count") == artifact_count
+    ):
+        return ProjectionPlan(
+            name=proj.name,
+            projection_type=proj.projection_type,
+            source_layers=source_layers,
+            status="cached",
+            artifact_count=artifact_count,
+            reason="all cached",
+            embedding_config=embedding_config,
+        )
+
+    # Determine reason: check if config changed vs artifacts changed
+    reason = "source artifacts changed"
+    if cached_entry.get("config_hash") is not None and proj.config:
+        old_config_hash = cached_entry["config_hash"]
+        new_config_hash = hashlib.sha256(
+            json.dumps(proj.config, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        if old_config_hash != new_config_hash:
+            reason = "projection config changed"
+
+    return ProjectionPlan(
+        name=proj.name,
+        projection_type=proj.projection_type,
+        source_layers=source_layers,
+        status="rebuild",
+        artifact_count=artifact_count,
+        reason=reason,
+        embedding_config=embedding_config,
+    )

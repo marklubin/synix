@@ -6,7 +6,6 @@ swapped into place on success, preserving the old index on failure.
 
 from __future__ import annotations
 
-import sqlite3
 from unittest.mock import patch
 
 import pytest

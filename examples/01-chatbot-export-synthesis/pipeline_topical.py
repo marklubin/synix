@@ -1,8 +1,14 @@
 # pipeline_topical.py — Personal Memory Pipeline (Topic-Based Rollups)
-# Alternate pipeline for the demo "config change" moment
-# Same data, different architecture — episodes grouped by topic instead of month
+#
+# Alternate pipeline — episodes grouped by topic instead of month.
+# Run after pipeline_monthly.py to demo incremental rebuild:
+# transcripts + episodes stay cached, only rollups + core rebuild.
+#
+# Usage:
+#   cd examples/01-chatbot-export-synthesis
+#   synix build pipeline_topical.py
 
-from synix import Pipeline, Layer, Projection
+from synix import Layer, Pipeline, Projection
 
 pipeline = Pipeline("personal-memory-topical")
 
@@ -10,6 +16,7 @@ pipeline.source_dir = "./exports"
 pipeline.build_dir = "./build"
 
 pipeline.llm_config = {
+    "provider": "anthropic",
     "model": "claude-haiku-4-5-20251001",
     "temperature": 0.3,
     "max_tokens": 1024,
@@ -49,14 +56,12 @@ pipeline.add_layer(Layer(
             "personal-growth",
             "ai-and-agents",
         ],
-        # At runtime, the topical rollup transform queries the episode
-        # search index (already built) to find relevant episodes per topic.
-        # This scales to 1000+ conversations without blowing up context.
     },
 ))
 
 # Level 3: Core memory — same transform, but new inputs (topics instead of monthly)
 # Will REBUILD because its dependency changed
+# Uses Opus for highest-quality synthesis
 pipeline.add_layer(Layer(
     name="core",
     level=3,
@@ -64,6 +69,13 @@ pipeline.add_layer(Layer(
     transform="core_synthesis",
     grouping="single",
     context_budget=10000,
+    config={
+        "llm_config": {
+            "provider": "anthropic",
+            "model": "claude-opus-4-6",
+            "max_tokens": 4096,
+        },
+    },
 ))
 
 # --- Projections ---
@@ -72,10 +84,16 @@ pipeline.add_projection(Projection(
     name="memory-index",
     projection_type="search_index",
     sources=[
-        {"layer": "episodes", "search": ["fulltext"]},
-        {"layer": "topics", "search": ["fulltext"]},
-        {"layer": "core", "search": ["fulltext"]},
+        {"layer": "episodes", "search": ["fulltext", "semantic"]},
+        {"layer": "topics", "search": ["fulltext", "semantic"]},
+        {"layer": "core", "search": ["fulltext", "semantic"]},
     ],
+    config={
+        "embedding_config": {
+            "provider": "fastembed",
+            "model": "BAAI/bge-small-en-v1.5",
+        },
+    },
 ))
 
 pipeline.add_projection(Projection(

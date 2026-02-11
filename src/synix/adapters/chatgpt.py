@@ -8,7 +8,6 @@ from pathlib import Path
 
 from synix.core.models import Artifact
 
-
 _ALLOWED_ROLES = {"user", "assistant"}
 
 

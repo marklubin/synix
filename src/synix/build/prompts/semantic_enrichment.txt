@@ -1,0 +1,24 @@
+You are resolving a contradiction found in a memory artifact.
+
+The contradiction:
+- Claim A: {claim_a}
+- Claim B: {claim_b}
+
+Original artifact content:
+<artifact>
+{content}
+</artifact>
+
+Additional source context from original conversations:
+<sources>
+{source_context}
+</sources>
+
+Using the source context, determine whether this contradiction can be resolved. If there is enough information to understand the true situation (e.g., a temporal sequence, a correction, or additional context that reconciles the claims), rewrite the relevant section of the artifact to accurately reflect reality.
+
+Respond with JSON only:
+{
+  "status": "resolved" or "unresolved",
+  "content": "The full rewritten artifact content (only if resolved, empty string if unresolved)",
+  "explanation": "Why this was resolved/unresolved and what was changed or why it couldn't be fixed"
+}

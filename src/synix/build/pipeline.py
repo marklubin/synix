@@ -6,8 +6,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from synix.core.models import Pipeline
 from synix.build.dag import resolve_build_order
+from synix.core.models import Pipeline
 
 
 def load_pipeline(path: str) -> Pipeline:

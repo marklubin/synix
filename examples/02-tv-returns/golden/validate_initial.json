@@ -1,0 +1,225 @@
+{
+  "passed": false,
+  "validators_run": [
+    "semantic_conflict",
+    "pii"
+  ],
+  "violations": [
+    {
+      "violation_type": "semantic_conflict",
+      "severity": "error",
+      "message": "Unclear which process applies to defective items discovered 
+within 15 days but after unboxing",
+      "artifact_id": "cs-brief-SAM-OLED-65",
+      "field": "content",
+      "metadata": {
+        "title": "Unclear which process applies to defective items discovered 
+within 15 days but after unboxing",
+        "claim_a": "Return Window: 15 days from delivery. Condition: Unopened, 
+factory-sealed items only. Refund: Full refund to original payment method.",
+        "claim_b": "90-Day Satisfaction Guarantee: Any unit may be returned to 
+Samsung within 90 days of purchase for full refund or replacement \u2014 no 
+restocking fee, no questions asked.",
+        "claim_a_source_hint": "Store return policy (SCENARIO 1)",
+        "claim_b_source_hint": "Manufacturer warranty coverage (SCENARIO 3)",
+        "explanation": "A customer who opens the TV within 15 days and discovers
+a defect faces ambiguity: the store policy says opened items are subject to a 
+15% restocking fee and only unopened items qualify for returns, but the 
+manufacturer warranty says any unit within 90 days can be returned for full 
+refund with no restocking fee. The document does not clearly state whether an 
+opened but defective item within 15 days should go through the store (with 
+restocking fee) or directly to Samsung (with no fee). A CS agent could 
+incorrectly advise applying the 15% restocking fee when the manufacturer 
+warranty would actually apply.",
+        "confidence": "high",
+        "source_ids": [
+          "cs-brief-SAM-OLED-65",
+          "cs-brief-DYS-V15-DETECT",
+          "cs-brief-KAI-PRO-KNIFE8"
+        ],
+        "content_hash": 
+"sha256:2aecdff0b73f820a043274cd19df6b260c3368e124b196cc4191533ce4fa21d9"
+      },
+      "provenance_trace": [
+        {
+          "artifact_id": "cs-brief-SAM-OLED-65",
+          "layer": "cs_product_brief",
+          "field_value": null
+        },
+        {
+          "artifact_id": "product-offer-SAM-OLED-65",
+          "layer": "product_offers",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-return_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-shipping_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-warranty_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-return_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-shipping_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-warranty_policy",
+          "layer": "policies",
+          "field_value": null
+        }
+      ],
+      "violation_id": "d037f5c8b038c520"
+    },
+    {
+      "violation_type": "semantic_conflict",
+      "severity": "error",
+      "message": "Ambiguous responsibility for defect claims in the 15-day 
+window",
+      "artifact_id": "cs-brief-SAM-OLED-65",
+      "field": "content",
+      "metadata": {
+        "title": "Ambiguous responsibility for defect claims in the 15-day 
+window",
+        "claim_a": "Opened items are subject to 15% restocking fee. All original
+accessories, cables, remote controls, and documentation must be included.",
+        "claim_b": "Defective items are NOT eligible for store returns after 15 
+days; manufacturer warranty applies instead. Store does NOT process warranty 
+claims on behalf of Samsung.",
+        "claim_a_source_hint": "Store return policy (SCENARIO 1)",
+        "claim_b_source_hint": "Manufacturer warranty clarification (SCENARIO 
+3)",
+        "explanation": "The document states the store does not process warranty 
+claims and that defective items are not eligible for store returns after 15 
+days. However, it does not explicitly state whether a defective item discovered 
+within the 15-day window should be handled by the store or routed directly to 
+Samsung. This creates confusion about whether a CS agent should attempt to 
+process a defect claim through the store's 15-day return process (with 
+restocking fees) or immediately escalate to Samsung's warranty process (with no 
+fees). The phrase 'after 15 days' implies the store might handle defects within 
+15 days, but this contradicts the statement that the store does not process 
+warranty claims.",
+        "confidence": "high",
+        "source_ids": [
+          "cs-brief-SAM-OLED-65",
+          "cs-brief-DYS-V15-DETECT",
+          "cs-brief-KAI-PRO-KNIFE8"
+        ],
+        "content_hash": 
+"sha256:2aecdff0b73f820a043274cd19df6b260c3368e124b196cc4191533ce4fa21d9"
+      },
+      "provenance_trace": [
+        {
+          "artifact_id": "cs-brief-SAM-OLED-65",
+          "layer": "cs_product_brief",
+          "field_value": null
+        },
+        {
+          "artifact_id": "product-offer-SAM-OLED-65",
+          "layer": "product_offers",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-return_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-shipping_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-warranty_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-return_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-shipping_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-warranty_policy",
+          "layer": "policies",
+          "field_value": null
+        }
+      ],
+      "violation_id": "bda13e10a7cbb4fb"
+    },
+    {
+      "violation_type": "pii",
+      "severity": "error",
+      "message": "PII detected (email): jo***@gmail.com",
+      "artifact_id": "cs-brief-SAM-OLED-65",
+      "field": "content",
+      "metadata": {
+        "pattern": "email",
+        "redacted_value": "jo***@gmail.com",
+        "content_hash": 
+"sha256:2aecdff0b73f820a043274cd19df6b260c3368e124b196cc4191533ce4fa21d9"
+      },
+      "provenance_trace": [
+        {
+          "artifact_id": "cs-brief-SAM-OLED-65",
+          "layer": "cs_product_brief",
+          "field_value": null
+        },
+        {
+          "artifact_id": "product-offer-SAM-OLED-65",
+          "layer": "product_offers",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-return_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-shipping_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "idx-warranty_policy",
+          "layer": "policy_index",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-return_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-shipping_policy",
+          "layer": "policies",
+          "field_value": null
+        },
+        {
+          "artifact_id": "policy-warranty_policy",
+          "layer": "policies",
+          "field_value": null
+        }
+      ],
+      "violation_id": "2a501130aece7f93"
+    }
+  ]
+}

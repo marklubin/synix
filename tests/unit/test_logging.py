@@ -9,7 +9,6 @@ import pytest
 
 from synix.core.logging import (
     RunLog,
-    RunSummary,
     StepLog,
     SynixLogger,
     Verbosity,
@@ -125,12 +124,12 @@ class TestRunLog:
     def test_to_dict_works_with_assertion_helpers(self):
         """RunLog.to_dict() works with the assertion helper functions."""
         from tests.helpers.assertions import (
+            assert_artifact_cached,
+            assert_artifact_rebuilt,
             count_cache_hits,
+            count_cache_hits_for_step,
             count_llm_calls,
             count_llm_calls_for_step,
-            count_cache_hits_for_step,
-            assert_artifact_rebuilt,
-            assert_artifact_cached,
         )
 
         log = RunLog(run_id="test")
@@ -337,6 +336,7 @@ class TestRunLogWithRunner:
     def pipeline_and_sources(self, tmp_path, mock_llm):
         """Create a pipeline and source dir that don't conflict."""
         import shutil
+
         from synix import Layer, Pipeline, Projection
 
         fixtures_dir = Path(__file__).parent.parent / "synix" / "fixtures"

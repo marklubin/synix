@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import pytest
-
-from synix import Artifact
-from synix.build.transforms import get_transform
-from synix.build.merge_transform import (
-    MergeTransform,
-    jaccard_similarity,
-    _parse_constraints,
-    _build_merge_groups,
-)
-
 # Ensure merge transform is registered
 import synix.build.merge_transform  # noqa: F401
+from synix import Artifact
+from synix.build.merge_transform import (
+    MergeTransform,
+    _build_merge_groups,
+    _parse_constraints,
+    jaccard_similarity,
+)
+from synix.build.transforms import get_transform
 
 
 class TestSimilarityComputation:

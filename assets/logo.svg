@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <style>
+      .wire { fill:none; stroke-width:1.6; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+    </style>
+    <!-- Right-pointing half-diamond (triangle) -->
+    <clipPath id="tri">
+      <path d="M20 20 L20 180 L180 100 Z"/>
+    </clipPath>
+  </defs>
+  <!-- Palette (slightly more saturated, still notebook-ish):
+       blue  #3A6FA6
+       green #2F8A55
+       teal  #2C8C8C
+       red   #A44A4A
+       grey  #5F5F5F
+  -->
+  <!-- Layer geometry (perfect triangular wedge):
+       L1 x=20  y: 20,60,100,140,180
+       L2 x=60  y: 40,80,120,160
+       L3 x=100 y: 60,100,140
+       L4 x=140 y: 80,120
+       L5 x=180 y: 100
+  -->
+  <g clip-path="url(#tri)" opacity="0.98">
+    <!-- Left leaf spine (segmented vertical bus) -->
+    <path class="wire" stroke="#3A6FA6" d="M20 20 L20 60"/>
+    <path class="wire" stroke="#2F8A55" d="M20 60 L20 100"/>
+    <path class="wire" stroke="#2C8C8C" d="M20 100 L20 140"/>
+    <path class="wire" stroke="#A44A4A" d="M20 140 L20 180"/>
+    <!-- Straight DAG edges (binary-ish, symmetric) -->
+    <!-- L1 -> L2 -->
+    <path class="wire" stroke="#5F5F5F" d="M20 20 L60 40"/>
+    <path class="wire" stroke="#2C8C8C" d="M20 20 L60 80"/>
+    <path class="wire" stroke="#A44A4A" d="M20 60 L60 40"/>
+    <path class="wire" stroke="#3A6FA6" d="M20 60 L60 80"/>
+    <path class="wire" stroke="#2F8A55" d="M20 100 L60 80"/>
+    <path class="wire" stroke="#5F5F5F" d="M20 100 L60 120"/>
+    <path class="wire" stroke="#3A6FA6" d="M20 140 L60 120"/>
+    <path class="wire" stroke="#A44A4A" d="M20 140 L60 160"/>
+    <path class="wire" stroke="#2C8C8C" d="M20 180 L60 120"/>
+    <path class="wire" stroke="#2F8A55" d="M20 180 L60 160"/>
+    <!-- L2 -> L3 -->
+    <path class="wire" stroke="#A44A4A" d="M60 40 L100 60"/>
+    <path class="wire" stroke="#2C8C8C" d="M60 40 L100 100"/>
+    <path class="wire" stroke="#2F8A55" d="M60 80 L100 60"/>
+    <path class="wire" stroke="#5F5F5F" d="M60 80 L100 100"/>
+    <path class="wire" stroke="#3A6FA6" d="M60 120 L100 100"/>
+    <path class="wire" stroke="#A44A4A" d="M60 120 L100 140"/>
+    <path class="wire" stroke="#2C8C8C" d="M60 160 L100 100"/>
+    <path class="wire" stroke="#2F8A55" d="M60 160 L100 140"/>
+    <!-- L3 -> L4 (each to both children for perfect balance) -->
+    <path class="wire" stroke="#3A6FA6" d="M100 60 L140 80"/>
+    <path class="wire" stroke="#2F8A55" d="M100 60 L140 120"/>
+    <path class="wire" stroke="#5F5F5F" d="M100 100 L140 80"/>
+    <path class="wire" stroke="#2C8C8C" d="M100 100 L140 120"/>
+    <path class="wire" stroke="#A44A4A" d="M100 140 L140 80"/>
+    <path class="wire" stroke="#3A6FA6" d="M100 140 L140 120"/>
+    <!-- L4 -> L5 -->
+    <path class="wire" stroke="#A44A4A" d="M140 80 L180 100"/>
+    <path class="wire" stroke="#A44A4A" d="M140 120 L180 100"/>
+  </g>
+</svg>

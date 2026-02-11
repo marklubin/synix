@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from synix.build.executor import (
@@ -18,7 +17,6 @@ from synix.build.executor import (
     create_executor,
 )
 from synix.build.llm_client import LLMResponse
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,7 +1,12 @@
-# pipeline.py — Personal Memory Pipeline (Monthly Rollups)
-# This is the default pipeline for the demo
+# pipeline_monthly.py — Personal Memory Pipeline (Monthly Rollups)
+#
+# Usage:
+#   cd examples/01-chatbot-export-synthesis
+#   synix build pipeline_monthly.py
+#
+# Drop ChatGPT/Claude exports into ./exports/ before running.
 
-from synix import Pipeline, Layer, Projection
+from synix import Layer, Pipeline, Projection
 
 pipeline = Pipeline("personal-memory")
 
@@ -9,6 +14,7 @@ pipeline.source_dir = "./exports"
 pipeline.build_dir = "./build"
 
 pipeline.llm_config = {
+    "provider": "anthropic",
     "model": "claude-haiku-4-5-20251001",
     "temperature": 0.3,
     "max_tokens": 1024,
@@ -41,7 +47,7 @@ pipeline.add_layer(Layer(
     grouping="by_month",
 ))
 
-# Level 3: Core agent memory
+# Level 3: Core agent memory (uses Opus for highest-quality synthesis)
 pipeline.add_layer(Layer(
     name="core",
     level=3,
@@ -49,6 +55,13 @@ pipeline.add_layer(Layer(
     transform="core_synthesis",
     grouping="single",
     context_budget=10000,
+    config={
+        "llm_config": {
+            "provider": "anthropic",
+            "model": "claude-opus-4-6",
+            "max_tokens": 4096,
+        },
+    },
 ))
 
 # --- Projections ---
@@ -58,10 +71,16 @@ pipeline.add_projection(Projection(
     name="memory-index",
     projection_type="search_index",
     sources=[
-        {"layer": "episodes", "search": ["fulltext"]},
-        {"layer": "monthly", "search": ["fulltext"]},
-        {"layer": "core", "search": ["fulltext"]},
+        {"layer": "episodes", "search": ["fulltext", "semantic"]},
+        {"layer": "monthly", "search": ["fulltext", "semantic"]},
+        {"layer": "core", "search": ["fulltext", "semantic"]},
     ],
+    config={
+        "embedding_config": {
+            "provider": "fastembed",
+            "model": "BAAI/bge-small-en-v1.5",
+        },
+    },
 ))
 
 # Context document — ready-to-use agent system prompt

@@ -34,6 +34,25 @@ class BaseTransform(ABC):
         hash_prefix = hashlib.sha256(content.encode()).hexdigest()[:8]
         return f"{template_name}_v{hash_prefix}"
 
+    def split(
+        self, inputs: list[Artifact], config: dict
+    ) -> list[tuple[list[Artifact], dict]]:
+        """Split inputs into independently-processable work units.
+
+        Each unit is (unit_inputs, config_extras). The runner calls split()
+        to determine parallelism, then executes each unit (potentially
+        concurrently) via execute(unit_inputs, {**config, **config_extras}).
+
+        Default: 1:1 — one unit per input artifact. When inputs is empty
+        (e.g., source/parse transforms), returns a single unit so execute()
+        is still called. Override for transforms that need different
+        decomposition (e.g., N:1 for core synthesis, group-by-month for
+        monthly rollup).
+        """
+        if not inputs:
+            return [(inputs, {})]
+        return [([inp], {}) for inp in inputs]
+
     def get_cache_key(self, config: dict) -> str:
         """Return a hash of transform-specific config that affects output.
 

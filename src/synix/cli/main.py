@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import click
 from rich.console import Console
 
@@ -21,15 +23,34 @@ def get_layer_style(level: int) -> str:
     return LAYER_COLORS.get(level, "white")
 
 
+def is_demo_mode() -> bool:
+    """Check if running in demo mode (deterministic output, no timestamps/timings)."""
+    return os.environ.get("SYNIX_DEMO", "").strip() == "1"
+
+
 @click.group()
 def main():
     """Synix — A build system for agent memory."""
     pass
 
 
+def cli():
+    """Entrypoint that loads .env before running the CLI."""
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    main()
+
+
 # Import subcommand modules to register commands
+from synix.cli.artifact_commands import list_artifacts, show_artifact  # noqa: E402, F401
 from synix.cli.build_commands import build, plan, run_alias  # noqa: E402, F401
+from synix.cli.clean_commands import clean  # noqa: E402, F401
+from synix.cli.demo_commands import demo  # noqa: E402, F401
+from synix.cli.fix_commands import fix  # noqa: E402, F401
+from synix.cli.info_commands import info  # noqa: E402, F401
 from synix.cli.search_commands import search  # noqa: E402, F401
+from synix.cli.validate_commands import validate  # noqa: E402, F401
 from synix.cli.verify_commands import diff, lineage, status, verify  # noqa: E402, F401
 
 # Register commands
@@ -37,7 +58,14 @@ main.add_command(build)
 main.add_command(plan)
 main.add_command(run_alias, name="run")
 main.add_command(search)
+main.add_command(list_artifacts, name="list")
+main.add_command(show_artifact, name="show")
 main.add_command(lineage)
 main.add_command(status)
 main.add_command(verify)
+main.add_command(validate)
+main.add_command(fix)
 main.add_command(diff)
+main.add_command(clean)
+main.add_command(demo)
+main.add_command(info)

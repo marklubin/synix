@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import threading
 import time
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from synix import Artifact, Layer, Pipeline, Projection
-from synix.build.runner import run, _execute_transform_concurrent
+from synix.build.runner import _execute_transform_concurrent, run
 from synix.build.transforms import BaseTransform
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -109,10 +106,11 @@ class TestExecuteTransformConcurrent:
         # Sequential
         sequential_results = transform.execute(inputs, config)
 
-        # Concurrent
+        # Concurrent — pass units (1:1 split)
         transform2 = MockEpisodeTransform()
+        units = [([inp], {}) for inp in inputs]
         concurrent_results = _execute_transform_concurrent(
-            transform2, inputs, config, concurrency=4
+            transform2, units, config, concurrency=4
         )
 
         # Same number of artifacts
@@ -130,24 +128,26 @@ class TestExecuteTransformConcurrent:
             assert seq.prompt_id == conc.prompt_id
 
     def test_preserves_input_order(self):
-        """Results are returned in the same order as inputs regardless of completion."""
+        """Results are returned in the same order as units regardless of completion."""
         inputs = [_make_transcript(f"t-{i}") for i in range(10)]
         transform = MockEpisodeTransform(delay=0.01)
         config = {"llm_config": {"model": "test"}}
+        units = [([inp], {}) for inp in inputs]
 
-        results = _execute_transform_concurrent(transform, inputs, config, concurrency=5)
+        results = _execute_transform_concurrent(transform, units, config, concurrency=5)
 
         expected_ids = [f"ep-t-{i}" for i in range(10)]
         actual_ids = [a.artifact_id for a in results]
         assert actual_ids == expected_ids
 
     def test_single_input(self):
-        """Works correctly with a single input."""
+        """Works correctly with a single unit."""
         inputs = [_make_transcript("t-only")]
         transform = MockEpisodeTransform()
         config = {"llm_config": {"model": "test"}}
+        units = [([inp], {}) for inp in inputs]
 
-        results = _execute_transform_concurrent(transform, inputs, config, concurrency=4)
+        results = _execute_transform_concurrent(transform, units, config, concurrency=4)
 
         assert len(results) == 1
         assert results[0].artifact_id == "ep-t-only"
@@ -157,8 +157,9 @@ class TestExecuteTransformConcurrent:
         inputs = [_make_transcript(f"t-{i}") for i in range(6)]
         transform = MockEpisodeTransform(delay=0.05)
         config = {"llm_config": {"model": "test"}}
+        units = [([inp], {}) for inp in inputs]
 
-        _execute_transform_concurrent(transform, inputs, config, concurrency=4)
+        _execute_transform_concurrent(transform, units, config, concurrency=4)
 
         # Check that multiple threads were used
         threads_used = {entry["thread"] for entry in transform.call_log}
@@ -285,7 +286,8 @@ class TestConcurrentBuildRespectsLimit:
         config = {"llm_config": {"model": "test"}}
         concurrency_limit = 3
 
-        _execute_transform_concurrent(transform, inputs, config, concurrency_limit)
+        units = [([inp], {}) for inp in inputs]
+        _execute_transform_concurrent(transform, units, config, concurrency_limit)
 
         assert max_concurrent["value"] <= concurrency_limit, (
             f"Max concurrent was {max_concurrent['value']}, expected <= {concurrency_limit}"
@@ -323,11 +325,10 @@ class TestConcurrentBuildDefaultSequential:
         assert len(episodes) > 0
 
     def test_concurrency_1_single_input_no_concurrent(self):
-        """With a single input, _execute_transform_concurrent is not used
-        (the runner requires len(inputs) > 1 for concurrent path)."""
+        """With a single input, split() returns one unit so sequential path is used."""
         # This tests the guard condition in the runner.
-        # Single input + by_conversation + concurrency>1 still falls through
-        # to sequential because len(inputs) <= 1.
+        # Single input produces a single unit from split(), so len(units) <= 1
+        # falls through to the sequential path.
         inputs = [_make_transcript("t-only")]
         transform = MockEpisodeTransform()
         config = {"llm_config": {"model": "test"}}
@@ -348,8 +349,9 @@ class TestConcurrentErrorsDontCrash:
         transform = MockEpisodeTransform(fail_ids={"t-2"})
         config = {"llm_config": {"model": "test"}}
 
+        units = [([inp], {}) for inp in inputs]
         with pytest.raises(RuntimeError, match="Transform failed for t-2"):
-            _execute_transform_concurrent(transform, inputs, config, concurrency=4)
+            _execute_transform_concurrent(transform, units, config, concurrency=4)
 
         # Check that other inputs were still processed
         # (they ran in parallel, so they should have completed before the error was raised)
@@ -360,16 +362,17 @@ class TestConcurrentErrorsDontCrash:
         )
 
     def test_concurrent_all_errors_raises_first(self):
-        """If all transforms fail, the first error (by input order) is raised."""
+        """If all transforms fail, one of the errors is raised."""
         inputs = [_make_transcript(f"t-{i}") for i in range(3)]
         transform = MockEpisodeTransform(fail_ids={"t-0", "t-1", "t-2"})
         config = {"llm_config": {"model": "test"}}
 
-        with pytest.raises(RuntimeError, match="Transform failed for t-0"):
-            _execute_transform_concurrent(transform, inputs, config, concurrency=4)
+        units = [([inp], {}) for inp in inputs]
+        with pytest.raises(RuntimeError, match="Transform failed for t-"):
+            _execute_transform_concurrent(transform, units, config, concurrency=4)
 
     def test_sequential_layers_unaffected_by_concurrency(self, tmp_path, mock_llm):
-        """Layers with grouping != by_conversation run sequentially even with -j4."""
+        """Monthly/core layers still produce correct results with -j4 (split determines parallelism)."""
         source_dir = tmp_path / "exports"
         source_dir.mkdir()
         for i in range(3):
@@ -423,9 +426,10 @@ class TestConcurrentPerformance:
 
         # Concurrent timing
         transform_conc = MockEpisodeTransform(delay=0.05)
+        units = [([inp], {}) for inp in inputs]
         conc_start = time.monotonic()
         conc_results = _execute_transform_concurrent(
-            transform_conc, inputs, config, concurrency=6
+            transform_conc, units, config, concurrency=6
         )
         conc_time = time.monotonic() - conc_start
 
@@ -438,3 +442,125 @@ class TestConcurrentPerformance:
             f"Concurrent ({conc_time:.3f}s) not meaningfully faster than "
             f"sequential ({seq_time:.3f}s)"
         )
+
+
+class TestTransformSplit:
+    """Tests for the split() method on various transforms."""
+
+    def test_default_split_is_1_to_1(self):
+        """BaseTransform default split produces one unit per input."""
+        transform = MockEpisodeTransform()
+        inputs = [_make_transcript(f"t-{i}") for i in range(5)]
+        config = {"llm_config": {"model": "test"}}
+
+        units = transform.split(inputs, config)
+        assert len(units) == 5
+        for i, (unit_inputs, config_extras) in enumerate(units):
+            assert len(unit_inputs) == 1
+            assert unit_inputs[0].artifact_id == f"t-{i}"
+            assert config_extras == {}
+
+    def test_monthly_rollup_split_groups_by_month(self):
+        """MonthlyRollupTransform.split() groups episodes by month."""
+        from synix.build.llm_transforms import MonthlyRollupTransform
+
+        transform = MonthlyRollupTransform()
+        inputs = [
+            _make_transcript("t-0", date="2024-01-15"),
+            _make_transcript("t-1", date="2024-01-20"),
+            _make_transcript("t-2", date="2024-02-05"),
+        ]
+        config = {"llm_config": {"model": "test"}}
+
+        units = transform.split(inputs, config)
+        assert len(units) == 2  # Jan and Feb
+
+        jan_inputs, jan_extras = units[0]
+        assert len(jan_inputs) == 2
+        assert jan_extras == {"_month_key": "2024-01"}
+
+        feb_inputs, feb_extras = units[1]
+        assert len(feb_inputs) == 1
+        assert feb_extras == {"_month_key": "2024-02"}
+
+    def test_core_synthesis_split_single_unit(self):
+        """CoreSynthesisTransform.split() returns a single unit with all inputs."""
+        from synix.build.llm_transforms import CoreSynthesisTransform
+
+        transform = CoreSynthesisTransform()
+        inputs = [_make_transcript(f"t-{i}") for i in range(3)]
+        config = {"llm_config": {"model": "test"}}
+
+        units = transform.split(inputs, config)
+        assert len(units) == 1
+        assert len(units[0][0]) == 3
+        assert units[0][1] == {}
+
+    def test_merge_transform_split_single_unit(self):
+        """MergeTransform.split() returns a single unit (needs all inputs for pairwise)."""
+        from synix.build.merge_transform import MergeTransform
+
+        transform = MergeTransform()
+        inputs = [_make_transcript(f"t-{i}") for i in range(4)]
+        config = {}
+
+        units = transform.split(inputs, config)
+        assert len(units) == 1
+        assert len(units[0][0]) == 4
+        assert units[0][1] == {}
+
+    def test_topical_rollup_split_per_topic(self):
+        """TopicalRollupTransform.split() creates one unit per topic."""
+        from synix.build.llm_transforms import TopicalRollupTransform
+
+        transform = TopicalRollupTransform()
+        inputs = [_make_transcript(f"t-{i}") for i in range(3)]
+        config = {
+            "llm_config": {"model": "test"},
+            "topics": ["career", "health", "projects"],
+        }
+
+        units = transform.split(inputs, config)
+        assert len(units) == 3
+
+        topics = [extras["_topic"] for _, extras in units]
+        assert topics == ["career", "health", "projects"]
+
+        # Each unit should have all inputs (no search index)
+        for unit_inputs, _ in units:
+            assert len(unit_inputs) == 3
+
+    def test_concurrent_with_config_extras(self):
+        """_execute_transform_concurrent merges config_extras into per-worker config."""
+
+        class ConfigCheckTransform(BaseTransform):
+            def __init__(self):
+                self.seen_configs: list[dict] = []
+                self._lock = threading.Lock()
+
+            def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                with self._lock:
+                    self.seen_configs.append(dict(config))
+                return [Artifact(
+                    artifact_id=f"out-{config.get('_month_key', 'unknown')}",
+                    artifact_type="test",
+                    content="test",
+                    input_hashes=[inp.content_hash for inp in inputs],
+                )]
+
+        transform = ConfigCheckTransform()
+        units = [
+            ([_make_transcript("t-0")], {"_month_key": "2024-01"}),
+            ([_make_transcript("t-1")], {"_month_key": "2024-02"}),
+        ]
+        config = {"llm_config": {"model": "test"}, "base_key": "base_val"}
+
+        results = _execute_transform_concurrent(transform, units, config, concurrency=2)
+
+        assert len(results) == 2
+        # Check that config_extras were merged
+        month_keys = {c["_month_key"] for c in transform.seen_configs}
+        assert month_keys == {"2024-01", "2024-02"}
+        # Base config should be present
+        for c in transform.seen_configs:
+            assert c["base_key"] == "base_val"

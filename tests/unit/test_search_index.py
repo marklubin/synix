@@ -7,7 +7,7 @@ import pytest
 from synix import Artifact
 from synix.artifacts.provenance import ProvenanceTracker
 from synix.search.index import SearchIndex
-from synix.search.indexer import ShadowIndexManager, SearchIndexProjection
+from synix.search.indexer import SearchIndexProjection, ShadowIndexManager
 
 
 class TestSearchIndex:
@@ -413,3 +413,260 @@ class TestSearchIndexProjectionShadow:
         assert len(results_old) == 0
 
         proj.close()
+
+
+class TestFTS5QuerySanitization:
+    """Unit tests for SearchIndex._sanitize_fts5_query()."""
+
+    def test_special_chars_escaped(self):
+        """Special FTS5 chars (?, *, +, -, (, )) are safely wrapped."""
+        result = SearchIndex._sanitize_fts5_query("hello? world*")
+        # Tokens should be quoted to neutralize special chars
+        assert '"hello?"' in result
+        assert '"world*"' in result
+
+    def test_quotes_in_query(self):
+        """Embedded double quotes are stripped cleanly."""
+        result = SearchIndex._sanitize_fts5_query('say "hello" world')
+        # Double quotes in tokens are removed; tokens are re-quoted
+        assert '""' not in result
+        assert '"sayhello"' in result or '"say"' in result
+
+    def test_short_query_uses_and(self):
+        """1-3 terms use implicit AND (no OR)."""
+        result = SearchIndex._sanitize_fts5_query("machine learning")
+        assert "OR" not in result
+        assert '"machine"' in result
+        assert '"learning"' in result
+
+    def test_long_query_uses_or(self):
+        """4+ terms with content words use OR between them."""
+        result = SearchIndex._sanitize_fts5_query(
+            "what are the main themes from november conversations"
+        )
+        assert "OR" in result
+        # Stop words (what, are, the, from) should be stripped
+        assert '"what"' not in result
+        assert '"are"' not in result
+        # Content words preserved
+        assert '"main"' in result
+        assert '"themes"' in result
+        assert '"november"' in result
+        assert '"conversations"' in result
+
+    def test_all_stop_words_fallback(self):
+        """Query of only stop words falls back to AND."""
+        result = SearchIndex._sanitize_fts5_query("what is the")
+        assert "OR" not in result
+        # All tokens are kept since there are no content words
+        assert '"what"' in result
+        assert '"is"' in result
+        assert '"the"' in result
+
+    def test_punctuation_stripped(self):
+        """Trailing punctuation is stripped from tokens in OR mode."""
+        result = SearchIndex._sanitize_fts5_query(
+            "what do I think about anthropic?"
+        )
+        # In long-query OR mode, trailing ? stripped from "anthropic?"
+        assert '"anthropic"' in result
+        assert '"anthropic?"' not in result
+
+    def test_empty_tokens_skipped(self):
+        """Empty/whitespace-only tokens don't produce output."""
+        result = SearchIndex._sanitize_fts5_query('hello  ""  world')
+        # The empty-after-stripping token should not appear
+        tokens = result.split()
+        assert all(t.strip() for t in tokens)
+
+
+class TestFTS5QueryIntegration:
+    """Integration tests running full index.query() path with tricky inputs."""
+
+    def _make_index(self, tmp_build_dir):
+        index = SearchIndex(tmp_build_dir / "search.db")
+        index.create()
+        topics = [
+            "Discussion about Anthropic and their Claude AI assistant",
+            "Machine learning fundamentals and neural networks",
+            "Monthly themes from November conversations about AI",
+            "Python web development with Flask framework",
+            "Rust programming and the ownership model",
+        ]
+        for i, topic in enumerate(topics):
+            index.insert(
+                Artifact(
+                    artifact_id=f"ep-{i:03d}",
+                    artifact_type="episode",
+                    content=topic,
+                    metadata={"layer_name": "episodes", "topic": topic[:20]},
+                ),
+                "episodes", 1,
+            )
+        return index
+
+    def test_query_with_question_mark(self, tmp_build_dir):
+        """'what do I think about anthropic?' doesn't crash."""
+        index = self._make_index(tmp_build_dir)
+        results = index.query("what do I think about anthropic?")
+        assert isinstance(results, list)
+        index.close()
+
+    def test_query_with_asterisk(self, tmp_build_dir):
+        """'how to use the * operator' doesn't crash."""
+        index = self._make_index(tmp_build_dir)
+        results = index.query("how to use the * operator")
+        assert isinstance(results, list)
+        index.close()
+
+    def test_query_with_parentheses(self, tmp_build_dir):
+        """'(optional) configuration' doesn't crash."""
+        index = self._make_index(tmp_build_dir)
+        results = index.query("(optional) configuration")
+        assert isinstance(results, list)
+        index.close()
+
+    def test_natural_language_query_returns_results(self, tmp_build_dir):
+        """Long natural-language query returns results."""
+        index = self._make_index(tmp_build_dir)
+        results = index.query(
+            "what are the main themes from november conversations about AI?"
+        )
+        assert len(results) > 0
+        index.close()
+
+    def test_unicode_content_and_query(self, tmp_build_dir):
+        """Index and search with unicode/emoji."""
+        index = SearchIndex(tmp_build_dir / "search.db")
+        index.create()
+        index.insert(
+            Artifact(
+                artifact_id="ep-uni",
+                artifact_type="episode",
+                content="Discussion about caf\u00e9 culture and \U0001f30d global trends",
+                metadata={"layer_name": "episodes"},
+            ),
+            "episodes", 1,
+        )
+        results = index.query("caf\u00e9")
+        assert len(results) > 0
+        index.close()
+
+    def test_metadata_preserved_in_results(self, tmp_build_dir):
+        """Inserted metadata roundtrips through query."""
+        index = self._make_index(tmp_build_dir)
+        results = index.query("Anthropic")
+        assert len(results) > 0
+        assert "topic" in results[0].metadata
+        index.close()
+
+    def test_multiple_layer_filtering(self, tmp_build_dir):
+        """Filter to 2 of 3 layers, get correct subset."""
+        index = SearchIndex(tmp_build_dir / "search.db")
+        index.create()
+        for layer, level in [("episodes", 1), ("monthly", 2), ("core", 3)]:
+            index.insert(
+                Artifact(
+                    artifact_id=f"art-{layer}",
+                    artifact_type="episode",
+                    content=f"Python discussion in {layer} layer",
+                    metadata={"layer_name": layer},
+                ),
+                layer, level,
+            )
+        results = index.query("Python", layers=["episodes", "core"])
+        assert len(results) == 2
+        layer_names = {r.layer_name for r in results}
+        assert layer_names == {"episodes", "core"}
+        index.close()
+
+    def test_empty_string_query(self, tmp_build_dir):
+        """Empty string query doesn't crash."""
+        index = self._make_index(tmp_build_dir)
+        # FTS5 may raise on empty MATCH; we just verify no unhandled crash
+        try:
+            results = index.query("")
+            assert isinstance(results, list)
+        except Exception:
+            # An empty query raising a clean error is also acceptable
+            pass
+        index.close()
+
+
+class TestHybridRetriever:
+    """Tests for the HybridRetriever with keyword-only mode."""
+
+    def _make_retriever(self, tmp_build_dir):
+        from synix.search.retriever import HybridRetriever
+
+        index = SearchIndex(tmp_build_dir / "search.db")
+        index.create()
+        for i, content in enumerate([
+            "Machine learning and deep neural networks",
+            "Anthropic Claude AI assistant for coding",
+            "Rust programming language ownership model",
+        ]):
+            index.insert(
+                Artifact(
+                    artifact_id=f"ep-{i:03d}",
+                    artifact_type="episode",
+                    content=content,
+                    metadata={"layer_name": "episodes"},
+                ),
+                "episodes", 1,
+            )
+        return HybridRetriever(search_index=index), index
+
+    def test_keyword_mode_returns_results(self, tmp_build_dir):
+        """Basic keyword search works through retriever."""
+        retriever, index = self._make_retriever(tmp_build_dir)
+        results = retriever.query("machine learning", mode="keyword")
+        assert len(results) > 0
+        assert "machine learning" in results[0].content.lower()
+        index.close()
+
+    def test_hybrid_without_embeddings_falls_back(self, tmp_build_dir):
+        """Hybrid mode without embedding provider falls back to keyword."""
+        retriever, index = self._make_retriever(tmp_build_dir)
+        results = retriever.query("Anthropic", mode="hybrid")
+        assert len(results) > 0
+        assert "anthropic" in results[0].content.lower()
+        index.close()
+
+    def test_semantic_without_provider_raises(self, tmp_build_dir):
+        """Semantic mode without embedding provider raises ValueError."""
+        retriever, index = self._make_retriever(tmp_build_dir)
+        with pytest.raises(ValueError, match="[Ss]emantic"):
+            retriever.query("test", mode="semantic")
+        index.close()
+
+    def test_rrf_fusion_combines_rankings(self, tmp_build_dir):
+        """RRF fusion produces expected combined scores."""
+        from synix.search.results import SearchResult
+        from synix.search.retriever import HybridRetriever
+
+        index = SearchIndex(tmp_build_dir / "search.db")
+        index.create()
+        index.close()
+
+        retriever = HybridRetriever(search_index=index)
+
+        keyword_results = [
+            SearchResult(content="A", artifact_id="a", layer_name="ep",
+                         layer_level=1, score=10.0),
+            SearchResult(content="B", artifact_id="b", layer_name="ep",
+                         layer_level=1, score=5.0),
+        ]
+        semantic_results = [
+            SearchResult(content="B", artifact_id="b", layer_name="ep",
+                         layer_level=1, score=0.95),
+            SearchResult(content="C", artifact_id="c", layer_name="ep",
+                         layer_level=1, score=0.90),
+        ]
+
+        fused = retriever._rrf_fuse(keyword_results, semantic_results, top_k=10)
+        # "b" appears in both lists, so it should have highest RRF score
+        assert fused[0].artifact_id == "b"
+        # All three items should be present
+        fused_ids = {r.artifact_id for r in fused}
+        assert fused_ids == {"a", "b", "c"}

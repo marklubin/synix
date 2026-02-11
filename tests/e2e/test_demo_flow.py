@@ -13,9 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from synix import Layer, Pipeline, Projection
 from synix.cli import main
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -1,0 +1,52 @@
+[
+  {
+    "sku": "SAM-OLED-65",
+    "vendor": "Samsung Electronics America",
+    "wholesale_cost": 1049.0,
+    "msrp": 1799.99,
+    "our_price": 1299.99,
+    "fulfillment": "Drop-ship from Samsung regional warehouse (Memphis, TN)",
+    "lead_time_days": 3,
+    "stock_status": "In stock",
+    "manufacturer_warranty": "Samsung 90-day satisfaction guarantee and 1-year limited warranty. Any unit may be returned to Samsung within 90 days of purchase for a full refund or replacement \u2014 no restocking fee, no questions asked. After 90 days and within 1 year, Samsung will repair defective units at no cost. All returns and warranty claims handled through Samsung support at 1-800-SAMSUNG, not through retailer.",
+    "notes": "Customer A customer reported minor banding on 2024 batch \u2014 resolved in current production run",
+    "map_price": null,
+    "promo": {
+      "active": true,
+      "name": "New Year Sale",
+      "discount": "8% off MSRP",
+      "valid_through": "2026-02-28"
+    }
+  },
+  {
+    "sku": "DYS-V15-DETECT",
+    "vendor": "Dyson Inc.",
+    "wholesale_cost": 485.0,
+    "msrp": 749.99,
+    "our_price": 649.99,
+    "fulfillment": "Warehouse stock (Ontario, CA)",
+    "lead_time_days": 1,
+    "stock_status": "In stock",
+    "manufacturer_warranty": "Dyson 2-year parts and labor warranty. Covers defects and battery. Dyson offers free repair or replacement through Dyson support. Warranty claims must go through Dyson directly at dyson.com/support \u2014 retailer is not authorized to process warranty claims or replacements.",
+    "map_price": 599.99,
+    "promo": null
+  },
+  {
+    "sku": "KAI-PRO-KNIFE8",
+    "vendor": "KAI USA Ltd.",
+    "wholesale_cost": 95.0,
+    "msrp": 199.95,
+    "our_price": 169.95,
+    "fulfillment": "Warehouse stock (Portland, OR)",
+    "lead_time_days": 1,
+    "stock_status": "In stock \u2014 limited (12 units)",
+    "manufacturer_warranty": "Shun limited lifetime warranty against defects in materials and workmanship. Free sharpening for life of the knife \u2014 send to KAI sharpening center in Tualatin, OR. Chips and damage from misuse (bone cutting, frozen food, dishwasher) not covered. Warranty handled by KAI USA, not retailer.",
+    "map_price": null,
+    "promo": {
+      "active": true,
+      "name": "Valentine's Gift Guide Feature",
+      "discount": "Free knife roll with purchase",
+      "valid_through": "2026-02-14"
+    }
+  }
+]

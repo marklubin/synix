@@ -5,11 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from synix.adapters.text import parse_text
 from synix.adapters.registry import get_adapter, get_supported_extensions, parse_file
-
+from synix.adapters.text import parse_text
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "text_samples"
 

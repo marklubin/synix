@@ -1,14 +1,22 @@
 [project]
 name = "synix"
-version = "0.1.0"
-description = "A build system for agent memory"
+description = "Build system for agent memory"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
-    { name = "Mark", email = "mark@example.com" }
+    { name = "Mark Lubin" }
 ]
 keywords = ["agent", "memory", "build-system", "llm"]
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
     "click>=8.0",
@@ -16,28 +24,50 @@ dependencies = [
     "rich>=13.0",
     "anthropic>=0.40.0",
     "openai>=1.0",
+    "python-dotenv>=1.0",
+    "fastembed>=0.4",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
-synix = "synix.cli:main"
+synix = "synix.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/marklubin/synix"
+Repository = "https://github.com/marklubin/synix"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/synix/__init__.py"
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+    "ruff>=0.9.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
-line-length = 100
-target-version = "py311"
+line-length = 120
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E741",   # ambiguous variable name
+    "B023",   # function definition in loop (closures work correctly here)
+    "B905",   # zip() without strict= (pre-existing, not a bug)
+    "SIM102", "SIM103", "SIM105", "SIM108", "SIM115", "SIM117",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F841", "B007", "B011", "E501"]
+"examples/**" = ["E501"]
+"src/synix/search/embeddings.py" = ["E402"]  # imports after warning suppression

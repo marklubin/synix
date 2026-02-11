@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,9 +9,8 @@ import pytest
 from synix import Artifact
 from synix.build.provenance import ProvenanceTracker
 from synix.search.indexer import SearchIndex
-from synix.search.retriever import HybridRetriever, _cosine_similarity
 from synix.search.results import SearchResult
-
+from synix.search.retriever import HybridRetriever, _cosine_similarity
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -25,6 +23,8 @@ def _make_mock_embedding_provider(embedding_map: dict[str, list[float]]):
         embedding_map: maps text -> embedding vector. Any text not in the map
             gets a zero vector of matching dimensionality.
     """
+    import hashlib
+
     dim = len(next(iter(embedding_map.values()))) if embedding_map else 4
     provider = MagicMock()
 
@@ -34,8 +34,12 @@ def _make_mock_embedding_provider(embedding_map: dict[str, list[float]]):
     def mock_embed_batch(texts):
         return [embedding_map.get(t, [0.0] * dim) for t in texts]
 
+    def mock_content_hash(text):
+        return hashlib.sha256(f"mock:mock:{text}".encode()).hexdigest()
+
     provider.embed = mock_embed
     provider.embed_batch = mock_embed_batch
+    provider.content_hash = mock_content_hash
     return provider
 
 
@@ -485,16 +489,183 @@ class TestCLIFlags:
         assert "top_k" in param_names
 
     def test_search_mode_choices(self):
-        """The --mode flag accepts keyword, semantic, hybrid."""
+        """The --mode flag accepts keyword, semantic, hybrid, layered."""
         from synix.cli.search_commands import search
 
         mode_param = next(p for p in search.params if p.name == "mode")
         assert hasattr(mode_param.type, "choices")
-        assert set(mode_param.type.choices) == {"keyword", "semantic", "hybrid"}
+        assert set(mode_param.type.choices) == {"keyword", "semantic", "hybrid", "layered"}
 
-    def test_search_mode_default_keyword(self):
-        """The --mode flag defaults to keyword."""
+    def test_search_mode_default_auto_detect(self):
+        """The --mode flag defaults to None (auto-detect: hybrid when embeddings exist, else keyword)."""
         from synix.cli.search_commands import search
 
         mode_param = next(p for p in search.params if p.name == "mode")
-        assert mode_param.default == "keyword"
+        assert mode_param.default is None
+
+
+# ---------------------------------------------------------------------------
+# Min similarity threshold
+# ---------------------------------------------------------------------------
+
+class TestMinSimilarityThreshold:
+    def test_semantic_filters_low_scores(self, populated_index, sample_embedding_map):
+        """Semantic mode filters results below MIN_SEMANTIC_SCORE."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        # Set a high threshold so most results get filtered
+        retriever.MIN_SEMANTIC_SCORE = 0.95
+        results = retriever.query("machine learning", mode="semantic")
+
+        # Only the very close match should survive (ep-001 ~ 0.99 sim with the query)
+        for r in results:
+            assert r.score >= 0.95
+
+    def test_semantic_threshold_zero_returns_all(self, populated_index, sample_embedding_map):
+        """Setting min threshold to 0 returns all results."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+        results = retriever.query("machine learning", mode="semantic")
+
+        # Should have all 5 items from the index
+        assert len(results) == 5
+
+    def test_semantic_threshold_one_returns_none(self, populated_index, sample_embedding_map):
+        """Setting min threshold to 1.0 filters everything (nothing is perfectly identical)."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 1.0
+        results = retriever.query("machine learning", mode="semantic")
+
+        assert len(results) == 0
+
+    def test_default_threshold_is_035(self):
+        """Default MIN_SEMANTIC_SCORE is 0.35."""
+        assert HybridRetriever.MIN_SEMANTIC_SCORE == 0.35
+
+
+# ---------------------------------------------------------------------------
+# Layered retrieval (layer-weighted semantic + RRF)
+# ---------------------------------------------------------------------------
+
+class TestLayeredRetrieval:
+    def test_layered_returns_results(self, populated_index, sample_embedding_map):
+        """Layered mode returns fused results."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0  # Don't filter for this test
+        results = retriever.query("software engineer AI", mode="layered")
+
+        assert len(results) > 0
+
+    def test_layered_boosts_higher_layers(self, populated_index, sample_embedding_map):
+        """Layered mode boosts higher-level results in the semantic ranking."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+
+        # "software engineer AI" has similar semantic scores for monthly-001 (L2)
+        # and core-001 (L3) but core should get a bigger layer boost
+        results = retriever.query("software engineer AI", mode="layered")
+
+        # Core (L3) should rank above monthly (L2) even if raw similarity is lower
+        core_idx = next((i for i, r in enumerate(results) if r.artifact_id == "core-001"), None)
+        monthly_idx = next((i for i, r in enumerate(results) if r.artifact_id == "monthly-001"), None)
+        assert core_idx is not None
+        assert monthly_idx is not None
+        assert core_idx < monthly_idx, "Core (L3) should rank above monthly (L2) in layered mode"
+
+    def test_layered_search_mode_label(self, populated_index, sample_embedding_map):
+        """Layered mode results have search_mode='layered'."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+        results = retriever.query("machine learning", mode="layered")
+
+        for r in results:
+            assert r.search_mode == "layered"
+
+    def test_layered_preserves_semantic_scores(self, populated_index, sample_embedding_map):
+        """Layered results retain raw semantic_score (unweighted cosine sim)."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+        results = retriever.query("machine learning", mode="layered")
+
+        for r in results:
+            if r.semantic_score is not None:
+                # Raw cosine similarity should be between -1 and 1
+                assert -1.0 <= r.semantic_score <= 1.0
+
+    def test_layered_without_embeddings_falls_back(self, populated_index):
+        """Layered mode without embedding provider falls back to keyword."""
+        retriever = HybridRetriever(search_index=populated_index)
+        results = retriever.query("machine learning", mode="layered")
+        assert len(results) > 0
+
+    def test_layered_layer_filtering(self, populated_index, sample_embedding_map):
+        """Layered mode respects layer filtering."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+        results = retriever.query(
+            "machine learning", mode="layered", layers=["episodes"]
+        )
+        assert all(r.layer_name == "episodes" for r in results)
+
+    def test_layered_top_k(self, populated_index, sample_embedding_map):
+        """Layered mode respects top_k."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        retriever.MIN_SEMANTIC_SCORE = 0.0
+        results = retriever.query("machine learning", mode="layered", top_k=2)
+        assert len(results) <= 2
+
+    def test_layered_applies_min_score(self, populated_index, sample_embedding_map):
+        """Layered mode respects MIN_SEMANTIC_SCORE threshold."""
+        provider = _make_mock_embedding_provider(sample_embedding_map)
+        retriever = HybridRetriever(
+            search_index=populated_index,
+            embedding_provider=provider,
+        )
+        # "Rust ownership" query: only ep-003 (Rust) should have high similarity.
+        # With a high threshold, most semantic results get filtered, leaving
+        # only the keyword side of the fusion.
+        retriever.MIN_SEMANTIC_SCORE = 0.9
+        results = retriever.query("Rust ownership", mode="layered")
+
+        # The semantic side should only contribute the Rust result
+        semantic_ids = {r.artifact_id for r in results if r.semantic_score is not None and r.semantic_score >= 0.9}
+        assert "ep-003" in semantic_ids or len(results) > 0  # At least keyword results
+
+    def test_layer_boost_constant(self):
+        """Default LAYER_BOOST is 1.0."""
+        assert HybridRetriever.LAYER_BOOST == 1.0

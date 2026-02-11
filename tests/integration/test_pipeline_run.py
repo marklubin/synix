@@ -7,12 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline, Projection
+from synix import Layer, Pipeline, Projection
 from synix.artifacts.provenance import ProvenanceTracker
 from synix.artifacts.store import ArtifactStore
 from synix.pipeline.runner import run
 from synix.search.index import SearchIndex
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 

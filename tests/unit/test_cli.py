@@ -107,6 +107,100 @@ def test_build_command_exists(runner):
     assert "PIPELINE_PATH" in result.output
 
 
+def test_list_command_exists(runner):
+    """synix list --help succeeds."""
+    result = runner.invoke(main, ["list", "--help"])
+    assert result.exit_code == 0
+    assert "LAYER" in result.output
+
+
+def test_show_command_exists(runner):
+    """synix show --help succeeds."""
+    result = runner.invoke(main, ["show", "--help"])
+    assert result.exit_code == 0
+    assert "ARTIFACT_ID" in result.output
+
+
+def test_list_empty_build_dir(runner, tmp_path):
+    """synix list with empty build dir shows no artifacts."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    result = runner.invoke(main, ["list", "--build-dir", str(build_dir)])
+    assert result.exit_code == 0
+    assert "No artifacts" in result.output
+
+
+def test_show_nonexistent_artifact(runner, tmp_path):
+    """synix show with nonexistent artifact gives clear error."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    result = runner.invoke(main, ["show", "fake-id", "--build-dir", str(build_dir)])
+    assert result.exit_code != 0 or "not found" in result.output
+
+
+def test_list_with_layer_filter(runner, tmp_path):
+    """synix list with a nonexistent layer shows no results."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    result = runner.invoke(main, ["list", "nonexistent", "--build-dir", str(build_dir)])
+    assert result.exit_code == 0
+    assert "No artifacts" in result.output
+
+
+def test_verify_command_exists(runner):
+    """synix verify --help succeeds."""
+    result = runner.invoke(main, ["verify", "--help"])
+    assert result.exit_code == 0
+    assert "--build-dir" in result.output
+
+
+def test_verify_pipeline_option_exists(runner):
+    """synix verify --help shows --pipeline option."""
+    result = runner.invoke(main, ["verify", "--help"])
+    assert result.exit_code == 0
+    assert "--pipeline" in result.output
+
+
+def test_verify_with_nonexistent_pipeline(runner, tmp_path):
+    """synix verify --pipeline with nonexistent file errors."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    result = runner.invoke(main, [
+        "verify", "--build-dir", str(build_dir),
+        "--pipeline", str(tmp_path / "nonexistent.py"),
+    ])
+    # Click validates exists=True before the command runs
+    assert result.exit_code != 0
+
+
+def test_info_command_exists(runner):
+    """synix info --help succeeds."""
+    result = runner.invoke(main, ["info", "--help"])
+    assert result.exit_code == 0
+    assert "system information" in result.output.lower() or "configuration" in result.output.lower()
+
+
+def test_info_command_runs(runner, tmp_path, monkeypatch):
+    """synix info runs without crashing (no pipeline or build dir)."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(main, ["info"])
+    assert result.exit_code == 0
+    assert "build system for agent memory" in result.output.lower()
+    assert "Version" in result.output
+    assert "Python" in result.output
+    assert "Platform" in result.output
+    assert "No pipeline.py" in result.output
+
+
+def test_info_shows_logo(runner, tmp_path, monkeypatch):
+    """synix info displays the ASCII art logo."""
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(main, ["info"])
+    assert result.exit_code == 0
+    # The logo contains these distinctive Unicode box-drawing characters
+    assert "███" in result.output
+
+
 def test_build_does_not_import_search():
     """The build module must not directly import search — uses projection registry instead.
 
@@ -115,7 +209,6 @@ def test_build_does_not_import_search():
     it up via get_projection(). Direct imports from synix.search in synix.build
     would violate this decoupling.
     """
-    import importlib
     import sys
 
     # Clear any cached imports of the build modules

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 from click.testing import CliRunner
 
-from synix.cli import main
-from synix.core.models import Artifact
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
+from synix.cli import main
+from synix.core.models import Artifact
 from synix.search.indexer import SearchIndex
 
 

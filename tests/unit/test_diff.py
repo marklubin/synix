@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from synix import Artifact
 from synix.build.artifacts import ArtifactStore
-from synix.build.diff import diff_artifact, diff_builds, diff_artifact_by_id
+from synix.build.diff import diff_artifact, diff_artifact_by_id, diff_builds
 from synix.cli import main
 
 

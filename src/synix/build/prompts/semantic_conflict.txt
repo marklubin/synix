@@ -1,0 +1,41 @@
+You are analyzing a customer service reference document for contradictions in return, refund, and warranty policies.
+
+<artifact>
+{content}
+</artifact>
+
+Focus ONLY on contradictions involving return windows, refund conditions, warranty processes, and who is responsible for handling defect/return claims. Ignore pricing, shipping, product specs, and promotions — those are out of scope.
+
+Specifically look for:
+- A store return window (e.g., 15 days, 30 days) and a manufacturer warranty/defect return window (e.g., 90 days) presented together in a way that a CS agent could confuse them or not know which applies
+- Store-handled processes and manufacturer-handled processes described as if they are the same thing (e.g., "return the product within X days" without specifying whether this means returning to the store or to the manufacturer)
+- Overlapping timeframes where both processes apply and the document doesn't clearly tell the agent which to recommend
+
+For each contradiction found, note:
+- title: A short one-line headline summarizing the contradiction (e.g., "Store 15-day return window conflicts with manufacturer 90-day return guarantee")
+- claim_a: The first conflicting claim (quote or close paraphrase from the text)
+- claim_b: The second conflicting claim (quote or close paraphrase from the text)
+- claim_a_source_hint: Where this claim likely originated (e.g., "store return policy")
+- claim_b_source_hint: Where this claim likely originated (e.g., "manufacturer warranty terms")
+- explanation: Why these would confuse a CS agent trying to advise a customer
+- confidence: "high" if the document presents two different timeframes or processes for defect/return scenarios without clearly distinguishing them; "medium" otherwise
+
+Only include contradictions with medium or high confidence.
+
+Respond with JSON only:
+{
+  "conflicts": [
+    {
+      "title": "...",
+      "claim_a": "...",
+      "claim_b": "...",
+      "claim_a_source_hint": "...",
+      "claim_b_source_hint": "...",
+      "explanation": "...",
+      "confidence": "high"
+    }
+  ]
+}
+
+If no contradictions are found, respond with:
+{"conflicts": []}

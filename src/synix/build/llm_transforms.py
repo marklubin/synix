@@ -6,10 +6,10 @@ import hashlib
 import sys
 from collections import defaultdict
 
-from synix.core.config import LLMConfig
-from synix.core.models import Artifact
 from synix.build.llm_client import LLMClient, LLMResponse
 from synix.build.transforms import BaseTransform, register_transform
+from synix.core.config import LLMConfig
+from synix.core.models import Artifact
 
 
 def _make_llm_client(config: dict) -> LLMClient:
@@ -18,8 +18,15 @@ def _make_llm_client(config: dict) -> LLMClient:
     Handles backward compatibility: config dicts that don't include
     'provider' default to Anthropic.
     """
+    from synix.build.cassette import maybe_wrap_client
+
     llm_config = LLMConfig.from_dict(config.get("llm_config", {}))
-    return LLMClient(llm_config)
+    return maybe_wrap_client(LLMClient(llm_config))
+
+
+def _get_llm_client(config: dict) -> LLMClient:
+    """Get LLM client — use shared client from runner if available."""
+    return config.get("_shared_llm_client") or _make_llm_client(config)
 
 
 def _logged_complete(
@@ -70,7 +77,7 @@ class EpisodeSummaryTransform(BaseTransform):
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         template = self.load_prompt("episode_summary")
         prompt_id = self.get_prompt_id("episode_summary")
-        client = _make_llm_client(config)
+        client = _get_llm_client(config)
         model_config = config.get("llm_config", {})
 
         results: list[Artifact] = []
@@ -112,13 +119,10 @@ class EpisodeSummaryTransform(BaseTransform):
 class MonthlyRollupTransform(BaseTransform):
     """Group episodes by month, synthesize each month."""
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        template = self.load_prompt("monthly_rollup")
-        prompt_id = self.get_prompt_id("monthly_rollup")
-        client = _make_llm_client(config)
-        model_config = config.get("llm_config", {})
-
-        # Group by month (YYYY-MM from metadata.date)
+    def split(
+        self, inputs: list[Artifact], config: dict
+    ) -> list[tuple[list[Artifact], dict]]:
+        """Split episodes into per-month work units."""
         months: dict[str, list[Artifact]] = defaultdict(list)
         for ep in inputs:
             month = ep.metadata.get("date", "")[:7]  # YYYY-MM
@@ -129,40 +133,54 @@ class MonthlyRollupTransform(BaseTransform):
                       f"grouping as 'undated'", file=sys.stderr)
                 months["undated"].append(ep)
 
-        results: list[Artifact] = []
-        for month, episodes in sorted(months.items()):
-            if month == "undated":
-                year, mo = "unknown", "undated"
-            else:
-                year, mo = month.split("-")
-            episodes_text = "\n\n---\n\n".join(
-                f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
-                for ep in episodes
-            )
-            prompt = (
-                template
-                .replace("{month}", mo)
-                .replace("{year}", year)
-                .replace("{episodes}", episodes_text)
-            )
+        return [
+            (episodes, {"_month_key": month})
+            for month, episodes in sorted(months.items())
+        ]
 
-            response = _logged_complete(
-                client, config,
-                messages=[{"role": "user", "content": prompt}],
-                artifact_desc=f"monthly rollup {month}",
-            )
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+        month = config.get("_month_key")
+        if month is None:
+            # Called directly without split — process all groups sequentially
+            results: list[Artifact] = []
+            for unit_inputs, config_extras in self.split(inputs, config):
+                merged = {**config, **config_extras}
+                results.extend(self.execute(unit_inputs, merged))
+            return results
 
-            results.append(Artifact(
-                artifact_id=f"monthly-{month}",
-                artifact_type="rollup",
-                content=response.content,
-                input_hashes=[ep.content_hash for ep in episodes],
-                prompt_id=prompt_id,
-                model_config=model_config,
-                metadata={"month": month, "episode_count": len(episodes)},
-            ))
+        template = self.load_prompt("monthly_rollup")
+        prompt_id = self.get_prompt_id("monthly_rollup")
+        client = _get_llm_client(config)
+        model_config = config.get("llm_config", {})
 
-        return results
+        if month == "undated":
+            year, mo = "unknown", "undated"
+        else:
+            year, mo = month.split("-")
+        episodes_text = "\n\n---\n\n".join(
+            f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            for ep in inputs
+        )
+        prompt = (
+            template
+            .replace("{month}", mo)
+            .replace("{year}", year)
+            .replace("{episodes}", episodes_text)
+        )
+        response = _logged_complete(
+            client, config,
+            messages=[{"role": "user", "content": prompt}],
+            artifact_desc=f"monthly rollup {month}",
+        )
+        return [Artifact(
+            artifact_id=f"monthly-{month}",
+            artifact_type="rollup",
+            content=response.content,
+            input_hashes=[ep.content_hash for ep in inputs],
+            prompt_id=prompt_id,
+            model_config=model_config,
+            metadata={"month": month, "episode_count": len(inputs)},
+        )]
 
 
 @register_transform("topical_rollup")
@@ -174,11 +192,14 @@ class TopicalRollupTransform(BaseTransform):
         topics = sorted(config.get("topics", []))
         return hashlib.sha256(",".join(topics).encode()).hexdigest()[:8]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        template = self.load_prompt("topical_rollup")
-        prompt_id = self.get_prompt_id("topical_rollup")
-        client = _make_llm_client(config)
-        model_config = config.get("llm_config", {})
+    def split(
+        self, inputs: list[Artifact], config: dict
+    ) -> list[tuple[list[Artifact], dict]]:
+        """Split into per-topic work units.
+
+        Queries the search index in the main thread (thread-safe) to find
+        relevant episodes per topic. Only the LLM calls are parallelized.
+        """
         topics = config.get("topics", [])
 
         # Optionally query a search index for relevant episodes per topic
@@ -189,60 +210,88 @@ class TopicalRollupTransform(BaseTransform):
 
             from synix.search.indexer import SearchIndex
 
-            index = SearchIndex(Path(search_db_path))
+            db_path = Path(search_db_path)
+            if db_path.exists():
+                try:
+                    idx = SearchIndex(db_path)
+                    row = idx._get_conn().execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'"
+                    ).fetchone()
+                    if row is not None:
+                        index = idx
+                except Exception:
+                    index = None
 
-        results: list[Artifact] = []
-        try:
-            for topic in topics:
-                # Find relevant episodes
-                if index is not None:
-                    search_results = index.query(
-                        topic.replace("-", " "),
-                        layers=["episodes"],
-                    )
-                    matching_ids = {r.artifact_id for r in search_results}
-                    relevant = [ep for ep in inputs if ep.artifact_id in matching_ids]
-                    if not relevant:
-                        relevant = inputs  # fallback: use all
-                else:
-                    relevant = inputs  # use all episodes
-
-                episodes_text = "\n\n---\n\n".join(
-                    f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
-                    for ep in relevant
-                )
-                prompt = (
-                    template
-                    .replace("{topic}", topic.replace("-", " "))
-                    .replace("{episodes}", episodes_text)
-                )
-
-                slug = topic.lower().replace(" ", "-")
-                response = _logged_complete(
-                    client, config,
-                    messages=[{"role": "user", "content": prompt}],
-                    artifact_desc=f"topical rollup topic-{slug}",
-                )
-
-                results.append(Artifact(
-                    artifact_id=f"topic-{slug}",
-                    artifact_type="rollup",
-                    content=response.content,
-                    input_hashes=[ep.content_hash for ep in relevant],
-                    prompt_id=prompt_id,
-                    model_config=model_config,
-                    metadata={"topic": topic, "episode_count": len(relevant)},
-                ))
-        finally:
+        units: list[tuple[list[Artifact], dict]] = []
+        for topic in topics:
             if index is not None:
-                index.close()
+                search_results = index.query(
+                    topic.replace("-", " "),
+                    layers=["episodes"],
+                )
+                matching_ids = {r.artifact_id for r in search_results}
+                relevant = [ep for ep in inputs if ep.artifact_id in matching_ids]
+                if not relevant:
+                    relevant = inputs
+            else:
+                relevant = inputs
+            units.append((relevant, {"_topic": topic}))
 
-        return results
+        if index is not None:
+            index.close()
+
+        return units
+
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+        topic = config.get("_topic")
+        if topic is None:
+            # Called directly without split — process all topics sequentially
+            results: list[Artifact] = []
+            for unit_inputs, config_extras in self.split(inputs, config):
+                merged = {**config, **config_extras}
+                results.extend(self.execute(unit_inputs, merged))
+            return results
+
+        template = self.load_prompt("topical_rollup")
+        prompt_id = self.get_prompt_id("topical_rollup")
+        client = _get_llm_client(config)
+        model_config = config.get("llm_config", {})
+
+        episodes_text = "\n\n---\n\n".join(
+            f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            for ep in inputs
+        )
+        prompt = (
+            template
+            .replace("{topic}", topic.replace("-", " "))
+            .replace("{episodes}", episodes_text)
+        )
+        slug = topic.lower().replace(" ", "-")
+        response = _logged_complete(
+            client, config,
+            messages=[{"role": "user", "content": prompt}],
+            artifact_desc=f"topical rollup topic-{slug}",
+        )
+        return [Artifact(
+            artifact_id=f"topic-{slug}",
+            artifact_type="rollup",
+            content=response.content,
+            input_hashes=[ep.content_hash for ep in inputs],
+            prompt_id=prompt_id,
+            model_config=model_config,
+            metadata={"topic": topic, "episode_count": len(inputs)},
+        )]
 
 
 @register_transform("core_synthesis")
 class CoreSynthesisTransform(BaseTransform):
     """All rollups → single core memory document."""
+
+    def split(
+        self, inputs: list[Artifact], config: dict
+    ) -> list[tuple[list[Artifact], dict]]:
+        """N:1 — all inputs in a single unit (no parallelism)."""
+        return [(inputs, {})]
 
     def get_cache_key(self, config: dict) -> str:
         """context_budget affects output — include in cache key."""
@@ -252,7 +301,7 @@ class CoreSynthesisTransform(BaseTransform):
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         template = self.load_prompt("core_memory")
         prompt_id = self.get_prompt_id("core_memory")
-        client = _make_llm_client(config)
+        client = _get_llm_client(config)
         model_config = config.get("llm_config", {})
         context_budget = config.get("context_budget", 10000)
 

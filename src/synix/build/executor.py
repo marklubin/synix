@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import time
 import random
+import time
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
+from dataclasses import dataclass
 from threading import Semaphore
 
 from synix.build.llm_client import LLMClient, LLMResponse

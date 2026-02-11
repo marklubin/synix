@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 
@@ -130,12 +131,15 @@ class SynixLogger:
         self,
         verbosity: Verbosity = Verbosity.DEFAULT,
         build_dir: Path | None = None,
+        progress: Any | None = None,
     ):
         self.verbosity = verbosity
         self.build_dir = build_dir
+        self.progress = progress
         self.run_log = RunLog(
             run_id=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
         )
+        self._lock = Lock()
         self._log_file = None
         self._log_path: Path | None = None
         self._current_step: str | None = None
@@ -149,14 +153,20 @@ class SynixLogger:
             self._log_file = open(self._log_path, "a")
 
     def _write_event(self, event: dict[str, Any]) -> None:
-        """Write a JSON event to the JSONL log file."""
-        if self._log_file is not None:
-            event["timestamp"] = datetime.now(timezone.utc).isoformat()
-            self._log_file.write(json.dumps(event) + "\n")
-            self._log_file.flush()
+        """Write a JSON event to the JSONL log file (thread-safe)."""
+        with self._lock:
+            if self._log_file is not None:
+                event["timestamp"] = datetime.now(timezone.utc).isoformat()
+                self._log_file.write(json.dumps(event) + "\n")
+                self._log_file.flush()
 
     def _console_print(self, message: str, min_verbosity: Verbosity) -> None:
-        """Print to console if verbosity is high enough."""
+        """Print to console if verbosity is high enough.
+
+        Suppressed when a live progress display is active.
+        """
+        if self.progress:
+            return  # Live display handles output
         if self.verbosity >= min_verbosity:
             try:
                 from rich.console import Console
@@ -179,6 +189,9 @@ class SynixLogger:
             "level": level,
         })
 
+        if self.progress:
+            self.progress.layer_start(layer_name, level)
+
         self._console_print(
             f"  [bold]Building layer:[/bold] {layer_name} (level {level})",
             Verbosity.VERBOSE,
@@ -198,6 +211,9 @@ class SynixLogger:
             "time_seconds": round(elapsed, 3),
         })
 
+        if self.progress:
+            self.progress.layer_finish(layer_name, built, cached)
+
         self._console_print(
             f"    {layer_name}: {built} built, {cached} cached ({elapsed:.1f}s)",
             Verbosity.VERBOSE,
@@ -208,8 +224,9 @@ class SynixLogger:
 
     def artifact_built(self, layer_name: str, artifact_id: str) -> None:
         """Log that an artifact was built (not cached)."""
-        step = self.run_log.get_or_create_step(layer_name)
-        step.rebuilt_ids.append(artifact_id)
+        with self._lock:
+            step = self.run_log.get_or_create_step(layer_name)
+            step.rebuilt_ids.append(artifact_id)
 
         self._write_event({
             "event": "artifact_built",
@@ -224,15 +241,19 @@ class SynixLogger:
 
     def artifact_cached(self, layer_name: str, artifact_id: str) -> None:
         """Log that an artifact was found in cache."""
-        step = self.run_log.get_or_create_step(layer_name)
-        step.cache_hits += 1
-        step.cached_ids.append(artifact_id)
+        with self._lock:
+            step = self.run_log.get_or_create_step(layer_name)
+            step.cache_hits += 1
+            step.cached_ids.append(artifact_id)
 
         self._write_event({
             "event": "artifact_cached",
             "layer": layer_name,
             "artifact_id": artifact_id,
         })
+
+        if self.progress:
+            self.progress.artifact_cached(artifact_id)
 
         self._console_print(
             f"      [cyan]=[/cyan] {artifact_id} (cached)",
@@ -257,6 +278,9 @@ class SynixLogger:
             "model": model,
         })
 
+        if self.progress:
+            self.progress.artifact_start(artifact_desc)
+
         self._console_print(
             f"        [dim]LLM call: {artifact_desc} ({model})[/dim]",
             Verbosity.DEBUG,
@@ -276,9 +300,10 @@ class SynixLogger:
         elapsed = time.time() - start_time
         total_tokens = input_tokens + output_tokens
 
-        step = self.run_log.get_or_create_step(layer_name)
-        step.llm_calls += 1
-        step.tokens_used += total_tokens
+        with self._lock:
+            step = self.run_log.get_or_create_step(layer_name)
+            step.llm_calls += 1
+            step.tokens_used += total_tokens
 
         self._write_event({
             "event": "llm_call_finish",
@@ -289,9 +314,115 @@ class SynixLogger:
             "output_tokens": output_tokens,
         })
 
+        if self.progress:
+            self.progress.artifact_finish(artifact_desc, elapsed)
+
         self._console_print(
             f"        [dim]  -> {elapsed:.1f}s, {input_tokens}in/{output_tokens}out tokens[/dim]",
             Verbosity.DEBUG,
+        )
+
+    # -- Projection events --
+
+    def projection_start(self, name: str, projection_type: str,
+                         triggered_by: str | None = None) -> None:
+        """Log the start of a projection materialization."""
+        event: dict[str, Any] = {
+            "event": "projection_start",
+            "projection": name,
+            "projection_type": projection_type,
+        }
+        if triggered_by:
+            event["triggered_by"] = triggered_by
+
+        self._write_event(event)
+
+        if self.progress:
+            self.progress.projection_start(name, triggered_by=triggered_by)
+
+        self._console_print(
+            f"  [bold]Materializing projection:[/bold] {name} ({projection_type})",
+            Verbosity.VERBOSE,
+        )
+
+    def projection_finish(self, name: str,
+                          triggered_by: str | None = None) -> None:
+        """Log the completion of a projection materialization."""
+        event: dict[str, Any] = {
+            "event": "projection_finish",
+            "projection": name,
+        }
+        if triggered_by:
+            event["triggered_by"] = triggered_by
+
+        self._write_event(event)
+
+        if self.progress:
+            self.progress.projection_finish(name, triggered_by=triggered_by)
+
+        self._console_print(
+            f"    [green]✓[/green] {name} materialized",
+            Verbosity.VERBOSE,
+        )
+
+    # -- Embedding events --
+
+    def embedding_start(self, count: int, provider: str) -> None:
+        """Log the start of embedding generation."""
+        self._write_event({
+            "event": "embedding_start",
+            "count": count,
+            "provider": provider,
+        })
+
+        if self.progress:
+            self.progress.embedding_start(count, provider)
+
+        self._console_print(
+            f"      [dim]Generating {count} embeddings ({provider})[/dim]",
+            Verbosity.VERBOSE,
+        )
+
+    def embedding_progress(self, completed: int, total: int) -> None:
+        """Log embedding generation progress."""
+        if self.progress:
+            self.progress.embedding_progress(completed, total)
+
+    def embedding_finish(self, count: int, cached: int, generated: int) -> None:
+        """Log the completion of embedding generation."""
+        self._write_event({
+            "event": "embedding_finish",
+            "count": count,
+            "cached": cached,
+            "generated": generated,
+        })
+
+        if self.progress:
+            self.progress.embedding_finish(count, cached, generated)
+
+        self._console_print(
+            f"      [dim]{count} embeddings ({cached} cached, {generated} generated)[/dim]",
+            Verbosity.VERBOSE,
+        )
+
+    def projection_cached(self, name: str,
+                          triggered_by: str | None = None) -> None:
+        """Log that a projection was skipped (cached)."""
+        event: dict[str, Any] = {
+            "event": "projection_cached",
+            "projection": name,
+        }
+        if triggered_by:
+            event["triggered_by"] = triggered_by
+
+        self._write_event(event)
+
+        if self.progress:
+            self.progress.projection_cached(name, triggered_by=triggered_by)
+
+        self._console_print(
+            f"    [cyan]=[/cyan] {name} (cached)",
+            Verbosity.VERBOSE,
         )
 
     # -- Run lifecycle --

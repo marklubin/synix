@@ -15,9 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from synix import Layer, Pipeline, Projection
 from synix.cli import main
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -167,7 +165,7 @@ class TestDT2FreshBuild:
             "plan", str(financial_pipeline_file),
         ])
         assert result.exit_code == 0, f"Plan failed: {result.output}"
-        assert "Build Plan" in result.output
+        assert "Estimated:" in result.output
 
     def test_fresh_build_produces_correct_artifact_counts(
         self, runner, workspace, financial_pipeline_file

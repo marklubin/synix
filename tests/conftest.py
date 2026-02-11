@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline, Projection, ProvenanceRecord
-
+from synix import Artifact, Layer, Pipeline, Projection
 
 FIXTURES_DIR = Path(__file__).parent / "synix" / "fixtures"
 

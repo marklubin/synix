@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from synix import Artifact
-from synix.transforms.base import BaseTransform, get_transform, register_transform
-
 # Import to trigger registration
 import synix.transforms.parse  # noqa: F401
 import synix.transforms.summarize  # noqa: F401
+from synix import Artifact
+from synix.transforms.base import BaseTransform, get_transform
 
 
 class TestBaseTransform:

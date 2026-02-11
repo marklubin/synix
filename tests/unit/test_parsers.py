@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from synix.sources.chatgpt import parse_chatgpt
 from synix.sources.claude import parse_claude

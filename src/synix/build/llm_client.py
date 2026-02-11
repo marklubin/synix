@@ -23,11 +23,12 @@ class LLMResponse:
 class LLMClient:
     """Unified LLM client that dispatches to Anthropic or OpenAI SDKs.
 
-    Supports three providers:
+    Supports four providers:
     - "anthropic": Uses the anthropic SDK
     - "openai": Uses the openai SDK with OpenAI's default base URL
+    - "deepseek": Uses the openai SDK with DeepSeek's base URL
     - "openai-compatible": Uses the openai SDK with a custom base_url
-      (for Ollama, vLLM, DeepSeek, etc.)
+      (for Ollama, vLLM, etc.)
 
     Includes retry logic: 1 retry on transient errors (rate limit, timeout, connection).
     """
@@ -50,7 +51,7 @@ class LLMClient:
                 kwargs["base_url"] = self.config.base_url
             return anthropic.Anthropic(**kwargs)
 
-        elif self.config.provider in ("openai", "openai-compatible"):
+        elif self.config.provider in ("openai", "deepseek", "openai-compatible"):
             import openai
 
             kwargs = {}
@@ -58,6 +59,8 @@ class LLMClient:
                 kwargs["api_key"] = api_key
             if self.config.base_url:
                 kwargs["base_url"] = self.config.base_url
+            elif self.config.provider == "deepseek":
+                kwargs["base_url"] = "https://api.deepseek.com"
             elif self.config.provider == "openai-compatible" and not self.config.base_url:
                 raise ValueError(
                     "openai-compatible provider requires base_url to be set"
@@ -67,7 +70,7 @@ class LLMClient:
         else:
             raise ValueError(
                 f"Unknown LLM provider: {self.config.provider!r}. "
-                f"Supported: 'anthropic', 'openai', 'openai-compatible'"
+                f"Supported: 'anthropic', 'openai', 'deepseek', 'openai-compatible'"
             )
 
     def complete(

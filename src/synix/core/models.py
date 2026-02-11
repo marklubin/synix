@@ -61,12 +61,30 @@ class Projection:
 
 
 @dataclass
+class ValidatorDecl:
+    """Declaration of a domain validator to run after build."""
+
+    name: str                    # registered validator name
+    config: dict = field(default_factory=dict)
+
+
+@dataclass
+class FixerDecl:
+    """Declaration of a fixer to run on violations."""
+
+    name: str
+    config: dict = field(default_factory=dict)
+
+
+@dataclass
 class Pipeline:
     """The full declared memory architecture."""
 
     name: str
     layers: list[Layer] = field(default_factory=list)
     projections: list[Projection] = field(default_factory=list)
+    validators: list[ValidatorDecl] = field(default_factory=list)
+    fixers: list[FixerDecl] = field(default_factory=list)
     source_dir: str = "./exports"
     build_dir: str = "./build"
     llm_config: dict = field(default_factory=dict)
@@ -76,3 +94,9 @@ class Pipeline:
 
     def add_projection(self, projection: Projection) -> None:
         self.projections.append(projection)
+
+    def add_validator(self, validator: ValidatorDecl) -> None:
+        self.validators.append(validator)
+
+    def add_fixer(self, fixer: FixerDecl) -> None:
+        self.fixers.append(fixer)

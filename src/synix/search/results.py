@@ -16,3 +16,6 @@ class SearchResult:
     score: float
     provenance_chain: list[str] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
+    search_mode: str = "keyword"
+    keyword_score: float | None = None
+    semantic_score: float | None = None

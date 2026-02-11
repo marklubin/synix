@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 
 
 @dataclass

@@ -24,8 +24,8 @@ def lineage(artifact_id: str, build_dir: str):
 
     ARTIFACT_ID is the artifact to trace.
     """
-    from synix.build.provenance import ProvenanceTracker
     from synix.build.artifacts import ArtifactStore
+    from synix.build.provenance import ProvenanceTracker
 
     provenance = ProvenanceTracker(build_dir)
     store = ArtifactStore(build_dir)
@@ -100,7 +100,7 @@ def status(build_dir: str):
     if search_db.exists():
         console.print(f"\n[green]Search index:[/green] {search_db} exists")
     else:
-        console.print(f"\n[yellow]Search index:[/yellow] not built yet")
+        console.print("\n[yellow]Search index:[/yellow] not built yet")
 
     # Context doc status
     context_doc = build_path / "context.md"
@@ -108,28 +108,58 @@ def status(build_dir: str):
         size = context_doc.stat().st_size
         console.print(f"[green]Context doc:[/green] {context_doc} ({size} bytes)")
     else:
-        console.print(f"[yellow]Context doc:[/yellow] not built yet")
+        console.print("[yellow]Context doc:[/yellow] not built yet")
 
 
 @click.command()
 @click.option("--build-dir", default="./build", help="Build directory")
 @click.option("--check", "checks", multiple=True, help="Run specific checks only")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def verify(build_dir: str, checks: tuple[str, ...], output_json: bool):
+@click.option("--pipeline", "pipeline_path", default=None,
+              type=click.Path(exists=True),
+              help="Pipeline file to run domain validators from")
+def verify(build_dir: str, checks: tuple[str, ...], output_json: bool,
+           pipeline_path: str | None):
     """Verify integrity of a completed build.
 
     Checks: build_exists, manifest_valid, artifacts_exist,
     provenance_complete, search_index, content_hashes, no_orphans,
     merge_integrity.
+
+    Use --pipeline to also run domain-specific validators declared in the pipeline.
     """
     from synix.build.verify import verify_build
 
     check_list = list(checks) if checks else None
     result = verify_build(build_dir, checks=check_list)
 
+    # Run pipeline domain validators if requested
+    validation_result = None
+    if pipeline_path:
+        try:
+            from synix.build.artifacts import ArtifactStore
+            from synix.build.pipeline import load_pipeline
+            from synix.build.provenance import ProvenanceTracker
+            from synix.build.validators import run_validators
+
+            pipeline = load_pipeline(pipeline_path)
+            if build_dir:
+                pipeline.build_dir = build_dir
+
+            if pipeline.validators:
+                store = ArtifactStore(pipeline.build_dir)
+                provenance = ProvenanceTracker(pipeline.build_dir)
+                validation_result = run_validators(pipeline, store, provenance)
+        except Exception as e:
+            console.print(f"[yellow]Warning: could not run pipeline validators:[/yellow] {e}")
+
     if output_json:
-        console.print(json.dumps(result.to_dict(), indent=2))
-        sys.exit(0 if result.passed else 1)
+        out = result.to_dict()
+        if validation_result is not None:
+            out["domain_validations"] = validation_result.to_dict()
+        console.print(json.dumps(out, indent=2))
+        all_passed = result.passed and (validation_result is None or validation_result.passed)
+        sys.exit(0 if all_passed else 1)
 
     console.print()
 
@@ -139,8 +169,8 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool):
     table.add_column("Message")
 
     for check in result.checks:
-        status = "[green]PASS[/green]" if check.passed else "[red]FAIL[/red]"
-        table.add_row(check.name, status, check.message)
+        status_str = "[green]PASS[/green]" if check.passed else "[red]FAIL[/red]"
+        table.add_row(check.name, status_str, check.message)
 
     console.print(table)
 
@@ -152,7 +182,65 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool):
                 console.print(f"  [dim]{detail}[/dim]")
 
     console.print(f"\n[bold]{result.summary}[/bold]")
-    sys.exit(0 if result.passed else 1)
+
+    # Display domain validation results
+    if validation_result is not None:
+        _display_domain_validations(validation_result)
+
+    all_passed = result.passed and (validation_result is None or validation_result.passed)
+    sys.exit(0 if all_passed else 1)
+
+
+def _display_domain_validations(validation):
+    """Display domain validation results in verify output."""
+
+    console.print()
+
+    vtable = Table(title="Domain Validations", box=box.ROUNDED)
+    vtable.add_column("Validator", style="bold")
+    vtable.add_column("Status", justify="center")
+    vtable.add_column("Message")
+
+    violations_by_validator: dict[str, list] = {}
+    for v in validation.violations:
+        violations_by_validator.setdefault(v.violation_type, []).append(v)
+
+    for name in validation.validators_run:
+        viol_list = violations_by_validator.get(name, [])
+        errors = [v for v in viol_list if v.severity == "error"]
+        warnings = [v for v in viol_list if v.severity == "warning"]
+
+        if errors:
+            status_str = "[red]FAIL[/red]"
+            msg = f"{len(errors)} {name} violation(s)"
+        elif warnings:
+            status_str = "[yellow]WARN[/yellow]"
+            msg = f"{len(warnings)} warning(s)"
+        else:
+            status_str = "[green]PASS[/green]"
+            msg = "All artifacts passed"
+
+        vtable.add_row(name, status_str, msg)
+
+    console.print(vtable)
+
+    for name in validation.validators_run:
+        viol_list = violations_by_validator.get(name, [])
+        if not viol_list:
+            continue
+
+        console.print(f"\n[bold]{name}[/bold] violations:")
+        for v in viol_list:
+            severity_style = "red" if v.severity == "error" else "yellow"
+            console.print(f"  [{severity_style}]{v.artifact_id}[/{severity_style}]: {v.message}")
+
+            if v.provenance_trace:
+                console.print("    [dim]Provenance:[/dim]")
+                for step in v.provenance_trace:
+                    val_str = f"  {v.field}: {step.field_value}" if step.field_value else ""
+                    console.print(
+                        f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}"
+                    )
 
 
 @click.command()
@@ -207,7 +295,7 @@ def diff(artifact_id: str | None, build_dir: str, old_build_dir: str | None, lay
             console.print("[green]No differences[/green] between builds")
             return
 
-        console.print(f"\n[bold]Build diff[/bold]")
+        console.print("\n[bold]Build diff[/bold]")
         if layer:
             console.print(f"[dim]Layer filter: {layer}[/dim]")
 

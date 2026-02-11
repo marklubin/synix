@@ -8,10 +8,10 @@ import os
 import sqlite3
 from pathlib import Path
 
+from synix.build.projections import BaseProjection, register_projection
+from synix.build.provenance import ProvenanceTracker
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Artifact
-from synix.build.provenance import ProvenanceTracker
-from synix.build.projections import BaseProjection, register_projection
 from synix.search.results import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,51 @@ class SearchIndex:
         )
         conn.commit()
 
+    # Words too common to be useful in OR queries
+    _STOP_WORDS = frozenset({
+        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+        "do", "does", "did", "have", "has", "had", "i", "me", "my", "we",
+        "you", "your", "he", "she", "it", "they", "them", "this", "that",
+        "what", "which", "who", "whom", "how", "when", "where", "why",
+        "and", "or", "but", "not", "no", "if", "of", "in", "on", "at",
+        "to", "for", "with", "by", "from", "about", "into", "through",
+        "so", "than", "too", "very", "can", "will", "just",
+    })
+
+    @classmethod
+    def _sanitize_fts5_query(cls, q: str) -> str:
+        """Escape a user query for safe FTS5 MATCH usage.
+
+        Wraps each token in double quotes so special characters
+        (?, *, +, etc.) are treated as literals instead of FTS5 syntax.
+        Uses OR between content words (stop words stripped) so any
+        matching term produces results. Falls back to AND if all tokens
+        are content words (3 or fewer terms).
+        """
+        tokens = q.split()
+        escaped = []
+        for token in tokens:
+            clean = token.replace('"', '')
+            if clean:
+                escaped.append(f'"{clean}"')
+
+        # For short queries (<=3 terms), use AND (implicit) for precision
+        if len(escaped) <= 3:
+            return ' '.join(escaped)
+
+        # For longer natural-language queries, drop stop words and use OR
+        content_tokens = []
+        for token in tokens:
+            clean = token.replace('"', '').rstrip('?!.,;:')
+            if clean and clean.lower() not in cls._STOP_WORDS:
+                content_tokens.append(f'"{clean}"')
+
+        if not content_tokens:
+            # All stop words — fall back to original escaped tokens with AND
+            return ' '.join(escaped)
+
+        return ' OR '.join(content_tokens)
+
     def query(
         self,
         q: str,
@@ -69,6 +114,7 @@ class SearchIndex:
     ) -> list[SearchResult]:
         """Search with optional layer filtering and provenance chains."""
         conn = self._get_conn()
+        safe_q = self._sanitize_fts5_query(q)
 
         if layers:
             placeholders = ",".join("?" for _ in layers)
@@ -78,7 +124,7 @@ class SearchIndex:
                 f"WHERE search_index MATCH ? AND layer_name IN ({placeholders}) "
                 f"ORDER BY rank"
             )
-            params = [q, *layers]
+            params = [safe_q, *layers]
         else:
             sql = (
                 "SELECT content, artifact_id, layer_name, layer_level, metadata, rank "
@@ -86,7 +132,7 @@ class SearchIndex:
                 "WHERE search_index MATCH ? "
                 "ORDER BY rank"
             )
-            params = [q]
+            params = [safe_q]
 
         rows = conn.execute(sql, params).fetchall()
 
@@ -107,6 +153,8 @@ class SearchIndex:
                 score=abs(row["rank"]),
                 provenance_chain=chain,
                 metadata=metadata,
+                search_mode="keyword",
+                keyword_score=abs(row["rank"]),
             ))
 
         return results
@@ -232,13 +280,15 @@ class SearchIndexProjection(BaseProjection):
 
         # Optionally generate embeddings for indexed artifacts
         embedding_config = config.get("embedding_config")
+        synix_logger = config.get("_synix_logger")
         if embedding_config is not None and indexed_artifacts:
-            self._generate_embeddings(embedding_config, indexed_artifacts)
+            self._generate_embeddings(embedding_config, indexed_artifacts, synix_logger)
 
     def _generate_embeddings(
         self,
         embedding_config: EmbeddingConfig | dict,
         artifacts: list[Artifact],
+        synix_logger=None,
     ) -> None:
         """Generate and cache embeddings for the given artifacts."""
         from synix.search.embeddings import EmbeddingProvider
@@ -248,9 +298,27 @@ class SearchIndexProjection(BaseProjection):
 
         provider = EmbeddingProvider(embedding_config, self.build_dir)
         texts = [a.content for a in artifacts]
+
+        if synix_logger:
+            synix_logger.embedding_start(len(texts), embedding_config.provider)
+
+        progress_cb = None
+        if synix_logger:
+            def progress_cb(completed: int, total: int) -> None:
+                synix_logger.embedding_progress(completed, total)
+
         try:
-            provider.embed_batch(texts)
+            provider.embed_batch(texts, progress_callback=progress_cb)
+            # Compute cached vs generated counts
+            cached_count = sum(
+                1 for t in texts
+                if provider._load_embedding(provider.content_hash(t)) is not None
+            )
             logger.info("Generated embeddings for %d artifacts", len(artifacts))
+            if synix_logger:
+                synix_logger.embedding_finish(
+                    len(texts), cached=cached_count, generated=len(texts) - cached_count
+                )
         except Exception:
             # Embedding generation is best-effort; don't fail the whole build
             logger.warning(
@@ -259,6 +327,8 @@ class SearchIndexProjection(BaseProjection):
                 len(artifacts),
                 exc_info=True,
             )
+            if synix_logger:
+                synix_logger.embedding_finish(len(texts), cached=0, generated=0)
 
     def query(
         self,

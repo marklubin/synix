@@ -1,79 +1,62 @@
-# Synix
+<p align="center">
+  <img src="./assets/logo.svg" alt="Synix logo" width="120">
+</p>
 
-**Memory architectures that evolve with your agent**
+<pre align="center">
+ ███████╗██╗   ██╗███╗   ██╗██╗██╗  ██╗
+ ██╔════╝╚██╗ ██╔╝████╗  ██║██║╚██╗██╔╝
+ ███████╗ ╚████╔╝ ██╔██╗ ██║██║ ╚███╔╝
+ ╚════██║  ╚██╔╝  ██║╚██╗██║██║ ██╔██╗
+ ███████║   ██║   ██║ ╚████║██║██╔╝ ██╗
+ ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝
+</pre>
 
-Synix is a memory workbench for building custom cognitive architectures. Define processing pipelines in Python, experiment with branches, measure with benchmarks, and evolve without losing data.
+<h3 align="center">A build system for agent memory.</h3>
+
+<p align="center">
+  <video src="./examples/02-tv-returns/tv_returns.mp4" width="720" controls></video>
+</p>
 
 ## The Problem
 
-Current agent memory solutions are either too simple (Mem0: add/search) or too opinionated (Letta: fixed hierarchy). Nobody knows what the right memory architecture is for your domain — including you.
+Agent memory hasn't converged. Mem0, Letta, Zep, LangMem — each bakes in a different architecture because the right one depends on your domain and changes as your agent evolves. Most systems force you to commit to a schema early. Changing your approach means migrations or starting over.
 
-Synix lets you find out.
+## What Synix Does
 
-## Quick Start
+Conversations are sources. Prompts are build rules. Summaries and world models are artifacts. Declare your memory architecture in Python, build it, then change it — only affected layers rebuild. Trace any artifact back through the dependency graph to its source conversation.
 
 ```bash
-# Import and process in one command
-synix init personal-memory --from ~/exports/chatgpt.json
-synix run
-synix search "that rust conversation"
+uvx synix build pipeline.py
+uvx synix validate
+uvx synix search "return policy"
 ```
 
-## Python API
+## Key Capabilities
 
-```python
-from synix import Pipeline
+**Incremental rebuilds** — Change a prompt or add new conversations. Only downstream artifacts reprocess.
 
-pipeline = Pipeline("personal-memory", agent="mark")
+**Altitude-aware search** — Query episode summaries, monthly rollups, or core memory. Drill into provenance from any result.
 
-# Sources
-pipeline.source("chatgpt", file="~/exports/chatgpt.json", format="chatgpt-export")
+**Full provenance** — Every artifact chains back to the source conversations that produced it, through every transform in between.
 
-# Processing
-pipeline.transform("summaries", from_="chatgpt", prompt=summarize)
-pipeline.aggregate("monthly", from_="summaries", period="month", prompt=reflect)
-pipeline.fold("world-model", from_="monthly", prompt=world_model)
+**Validation and repair** — Detect semantic contradictions and PII leaks across artifacts, then fix them with LLM-assisted rewrites.
 
-# Outputs
-pipeline.output("context", from_="world-model", surface="projection")
-pipeline.output("search", from_=["summaries", "monthly"], surface="search")
+**Architecture evolution** — Swap monthly rollups for topic-based clustering. Transcripts and episodes stay cached. No migration scripts.
 
-# Run
-pipeline.run()
+## Where Synix Fits
 
-# Experiment
-branch = pipeline.branch("better-summaries")
-branch.transform("summaries", from_="chatgpt", prompt=improved_summarize)
-branch.run(full=True)
+| | Mem0 | Letta | Zep | LangMem | **Synix** |
+|---|---|---|---|---|---|
+| **Approach** | API-first memory store | Agent-managed memory | Temporal knowledge graph | Taxonomy-driven memory | Build system with pipelines |
+| **Incremental rebuilds** | — | — | — | — | Yes |
+| **Provenance tracking** | — | — | — | — | Full chain to source |
+| **Architecture changes** | Migration | Migration | Migration | Migration | Rebuild |
+| **Schema** | Fixed | Fixed | Fixed | Fixed | You define it |
 
-# Compare
-if branch.eval("locomo") > pipeline.eval("locomo"):
-    branch.promote()
-```
+Synix is not a memory store. It's the build system that produces one.
 
-## Key Features
+## Links
 
-- **Python-first** — Define pipelines in code, not config
-- **Full provenance** — Trace any memory back to its source
-- **Branching** — Experiment with different architectures in isolation
-- **Incremental** — Only process new data on re-runs
-- **Evolvable** — Change architecture without losing source data
-- **Measurable** — Built-in benchmarks (LoCoMo, LongMemEval)
-
-## Why Synix?
-
-The killer feature: **architecture migration without data loss**.
-
-If your current memory system isn't working, you normally have to start over. Synix lets you change the processing pipeline while keeping all source data. The data doesn't move — the lens changes.
-
-## Documentation
-
-See [DESIGN.md](./DESIGN.md) for the full design document.
-
-## Status
-
-🚧 **Early Development** — Design phase complete. Implementation in progress.
-
-## License
-
-MIT
+- [synix.dev](https://synix.dev)
+- [GitHub](https://github.com/marklubin/synix)
+- MIT License

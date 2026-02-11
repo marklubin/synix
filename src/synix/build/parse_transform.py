@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from synix.core.models import Artifact
 from synix.adapters.registry import get_supported_extensions, parse_file
 from synix.build.transforms import BaseTransform, register_transform
+from synix.core.models import Artifact
 
 
 @register_transform("parse")

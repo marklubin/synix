@@ -9,9 +9,7 @@ from pathlib import Path
 import pytest
 
 from synix import Layer, Pipeline, Projection
-from synix.artifacts.store import ArtifactStore
 from synix.pipeline.runner import run
-
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 

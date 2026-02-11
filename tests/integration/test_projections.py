@@ -12,7 +12,6 @@ from synix.artifacts.provenance import ProvenanceTracker
 from synix.pipeline.runner import run
 from synix.search.index import SearchIndex
 
-
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
 

@@ -16,9 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
-from synix import Layer, Pipeline, Projection
 from synix.cli import main
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -145,7 +143,7 @@ class TestDT3FreshBuild:
             "plan", str(incident_pipeline_file),
         ])
         assert result.exit_code == 0, f"Plan failed: {result.output}"
-        assert "Build Plan" in result.output
+        assert "Estimated:" in result.output
 
     def test_fresh_build_produces_correct_artifact_counts(
         self, runner, workspace, incident_pipeline_file
@@ -433,7 +431,7 @@ class TestDT3MergeTransform:
         # The failed check should mention cross-customer data
         failed = result.failed_checks
         assert len(failed) == 1
-        assert "merge_integrity" == failed[0].name
+        assert failed[0].name == "merge_integrity"
         assert "cross-customer" in failed[0].message.lower() or "customer" in failed[0].message.lower()
 
     def test_fix_config_incremental_rebuild(

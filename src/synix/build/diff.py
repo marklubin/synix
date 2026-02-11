@@ -7,8 +7,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.core.models import Artifact
 from synix.build.artifacts import ArtifactStore
+from synix.core.models import Artifact
 
 
 @dataclass

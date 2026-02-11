@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from synix.core.config import LLMConfig, EmbeddingConfig
-from synix.build.llm_client import LLMClient, LLMResponse
+import synix.build.llm_transforms  # noqa: F401
 
 # Import to trigger @register_transform decorators
 import synix.build.parse_transform  # noqa: F401
-import synix.build.llm_transforms  # noqa: F401
-
+from synix.build.llm_client import LLMClient, LLMResponse
+from synix.core.config import EmbeddingConfig, LLMConfig
 
 # ---------------------------------------------------------------------------
 # LLMConfig tests
@@ -142,9 +140,11 @@ class TestEmbeddingConfig:
 
     def test_defaults(self):
         config = EmbeddingConfig()
-        assert config.provider == "openai"
-        assert config.model == "text-embedding-3-small"
-        assert config.dimensions == 256
+        assert config.provider == "fastembed"
+        assert config.model == "BAAI/bge-small-en-v1.5"
+        assert config.dimensions == 384
+        assert config.batch_size == 64
+        assert config.concurrency == 4
 
     def test_from_dict(self):
         config = EmbeddingConfig.from_dict({

@@ -622,7 +622,15 @@ This will be placed directly in an AI agent's context window. Be specific and fa
 
 The CLI is a selling point. Use Click + Rich to make it feel polished.
 
-- **`synix run`**: Rich progress bars per layer (not just a spinner). Show: layer name, artifact count, built/cached/skipped. Final summary table with timing.
+**CRITICAL: Every CLI command must show live interactive progress.** The user must never stare at a frozen terminal wondering if the tool is working. Specifically:
+- Any operation that takes more than ~1 second (LLM calls, network I/O, heavy computation) **must** show a Rich spinner (`console.status()`) or progress bar while it runs.
+- The spinner/progress text must update to indicate what's happening (e.g., "Fixing cs-brief-SAM-OLED-65 [1/2]", not just "Working...").
+- Long-running engine functions (e.g., `run_fixers`, `run_validators`) must accept an `on_progress` callback so the CLI layer can update the UI during execution.
+- Never block on an LLM call or I/O operation without visible progress feedback.
+
+- **`synix build`**: Rich progress bars per layer (not just a spinner). Show: layer name, artifact count, built/cached/skipped. Final summary table with timing.
+- **`synix validate`**: Spinner per validator showing which validator is running and how many artifacts are being checked.
+- **`synix fix`**: Spinner with `[current/total]` progress during fixer LLM calls. Then interactive accept/deny/ignore prompts for each proposed fix.
 - **`synix search`**: Results displayed as Rich panels — layer label colored by level, content snippet, artifact ID. Provenance chain shown as indented tree below each result.
 - **`synix lineage`**: Rich Tree widget showing full dependency graph from artifact down to raw transcript.
 - **`synix status`**: Rich table — layer name, artifact count, last build time, cache hit ratio.

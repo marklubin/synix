@@ -1,7 +1,6 @@
 """Entry point for `python -m tests.mock_server`."""
 
 import argparse
-import sys
 
 from tests.mock_server.server import MockLLMServer
 
