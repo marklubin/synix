@@ -10,8 +10,8 @@
   ✓ policy_index (level 1)  <N> <STATUS>  <TIME>
   ✓ cs_product_brief (level 2)  <N> <STATUS>  <TIME>
     └─ cs-search  <MATERIALIZED>
-       └─ embeddings  3/3  <TIME>  (fastembed, <STATUS>: 3)
-    └─ cs-search  <STATUS>
+       └─ embeddings  3/3  <TIME>  (fastembed, <MATERIALIZED>: 3)
+    └─ cs-search  <MATERIALIZED>
                         Build Summary
 ╭──────────────────┬──────────────┬───────┬────────┬─────────╮
 │ Layer            │    Level     │ Built │ Cached │ Skipped │
@@ -20,7 +20,7 @@
 │ policies         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policy_index     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → cs-search    │ search_index │       │        │  <STATUS> │
+│   → cs-search    │ search_index │       │        │  <MATERIALIZED> │
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped

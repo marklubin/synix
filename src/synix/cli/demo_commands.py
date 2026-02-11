@@ -280,10 +280,18 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"((?:source|transform):\S+)\s+.*$", r"\1  <STATS>", line)
         # Normalize build progress counts (built vs cached)
         line = re.sub(r"\b\d+ (built|cached)\b", "<N> <STATUS>", line)
+        # Normalize search projection status + index count (e.g., "cached  9 indexed" or "new  14 indexed")
+        line = re.sub(
+            r"\b(?:cached|new|materialized|materializing\.\.\.)\s+\d+ indexed\b",
+            "<MATERIALIZED>  <N> indexed",
+            line,
+        )
         # Normalize materialization and cache status
         line = re.sub(r"\bmaterializ(?:ed|ing\.\.\.)", "<MATERIALIZED>", line)
         # Normalize standalone "cached" (e.g. "└─ search  cached")
-        line = re.sub(r"(?<!\d )\bcached\b", "<STATUS>", line)
+        line = re.sub(r"(?<!\d )\bcached\b", "<MATERIALIZED>", line)
+        # Normalize remaining "N indexed" counts
+        line = re.sub(r"\b\d+ indexed\b", "<N> indexed", line)
         # Normalize plan summary line (varies between fresh/incremental)
         line = re.sub(r"^Estimated:.*$", "<PLAN_SUMMARY>", line)
         # Normalize digits in Build Summary table rows (Built/Cached counts vary)

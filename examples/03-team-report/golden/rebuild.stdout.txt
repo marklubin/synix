@@ -15,7 +15,7 @@
     └─ search  <MATERIALIZED>
   ✓ final_report (level 3)  <N> <STATUS>  <TIME>
     └─ search  <MATERIALIZED>
-    └─ search  <STATUS>
+    └─ search  <MATERIALIZED>
                          Build Summary
 ╭───────────────┬──────────────┬───────┬────────┬─────────────╮
 │ Layer         │    Level     │ Built │ Cached │     Skipped │
@@ -29,7 +29,7 @@
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
 │   → search    │ search_index │       │        │ progressive │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │      <STATUS> │
+│   → search    │ search_index │       │        │      <MATERIALIZED> │
 ╰───────────────┴──────────────┴───────┴────────┴─────────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped

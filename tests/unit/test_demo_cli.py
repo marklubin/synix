@@ -116,7 +116,20 @@ class TestNormalizeOutput:
     def test_normalize_materialization(self):
         text1 = "    └─ search  materialized"
         text2 = "    └─ search  materializing..."
-        assert _normalize_output(text1, Path("/tmp/case")) == _normalize_output(text2, Path("/tmp/case"))
+        text3 = "    └─ search  cached"
+        result1 = _normalize_output(text1, Path("/tmp/case"))
+        result2 = _normalize_output(text2, Path("/tmp/case"))
+        result3 = _normalize_output(text3, Path("/tmp/case"))
+        assert result1 == result2 == result3
+        assert "<MATERIALIZED>" in result1
+
+    def test_normalize_search_projection_status(self):
+        cached = "    └── → search  synix_search_index (sqlite)  cached  9 indexed"
+        fresh = "    └── → search  synix_search_index (sqlite)  new  14 indexed"
+        result_cached = _normalize_output(cached, Path("/tmp/case"))
+        result_fresh = _normalize_output(fresh, Path("/tmp/case"))
+        assert result_cached == result_fresh
+        assert "<MATERIALIZED>  <N> indexed" in result_cached
 
     def test_normalize_passthrough(self):
         text = "No dynamic content here\nJust plain text"
