@@ -7,17 +7,17 @@ from pathlib import Path
 
 import click
 
-from synix.cli.main import console
+from synix.cli.main import console, pipeline_argument
 
 
 @click.command()
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation prompt")
 def clean(pipeline_path: str, build_dir: str | None, yes: bool):
     """Remove all build artifacts for a pipeline.
 
-    PIPELINE_PATH is the Python file defining the pipeline (e.g., pipeline.py).
+    PIPELINE_PATH defaults to pipeline.py in the current directory.
 
     Deletes the entire build directory. Use --yes to skip the confirmation prompt.
     """

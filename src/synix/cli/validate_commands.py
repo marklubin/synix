@@ -15,17 +15,17 @@ from rich.status import Status
 from rich.table import Table
 from rich.tree import Tree
 
-from synix.cli.main import console
+from synix.cli.main import console, pipeline_argument
 
 
 @click.command()
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
     """Validate built artifacts for contradictions, PII, and other issues.
 
-    PIPELINE_PATH is the Python file defining the pipeline (e.g., pipeline.py).
+    PIPELINE_PATH defaults to pipeline.py in the current directory.
 
     Runs validators and reports violations. Use `synix fix` to resolve them.
     """

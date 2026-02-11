@@ -11,11 +11,11 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.tree import Tree
 
-from synix.cli.main import console
+from synix.cli.main import console, pipeline_argument
 
 
 @click.command()
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--dry-run", is_flag=True,

@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
-from synix.cli.main import console, get_layer_style
+from synix.cli.main import console, get_layer_style, pipeline_argument
 from synix.cli.progress import BuildProgress
 from synix.core.models import Pipeline
 
@@ -58,7 +58,7 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
 
 
 @click.command()
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--source-dir", default=None, help="Override source directory")
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--verbose", "-v", count=True,
@@ -71,7 +71,7 @@ def build(pipeline_path: str, source_dir: str | None, build_dir: str | None,
           verbose: int, concurrency: int, validate: bool):
     """Build memory artifacts from a pipeline definition.
 
-    PIPELINE_PATH is the Python file defining the pipeline (e.g., pipeline.py).
+    PIPELINE_PATH defaults to pipeline.py in the current directory.
     """
     # Trigger search projection registration
     import synix.search.indexer  # noqa: F401
@@ -246,7 +246,7 @@ def _display_validation_results(validation):
 
 # Hidden alias for backward compatibility
 @click.command(hidden=True)
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--source-dir", default=None, help="Override source directory")
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--verbose", "-v", count=True, help="Verbosity level")
@@ -265,7 +265,7 @@ def run_alias(pipeline_path: str, source_dir: str | None, build_dir: str | None,
 
 
 @click.command()
-@click.argument("pipeline_path", type=click.Path(exists=True))
+@pipeline_argument
 @click.option("--source-dir", default=None, help="Override source directory")
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")

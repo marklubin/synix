@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -28,6 +30,33 @@ def is_demo_mode() -> bool:
     return os.environ.get("SYNIX_DEMO", "").strip() == "1"
 
 
+def _resolve_pipeline_path(
+    ctx: click.Context, param: click.Parameter, value: str | None,
+) -> str:
+    """Click callback: default to ./pipeline.py when no argument is given."""
+    if value is not None:
+        return value
+    default = str(Path.cwd() / "pipeline.py")
+    if not Path(default).exists():
+        console.print(
+            "[red]Error:[/red] No pipeline file specified and "
+            "[bold]pipeline.py[/bold] not found in the current directory."
+        )
+        sys.exit(1)
+    return default
+
+
+def pipeline_argument(fn):
+    """Shared Click argument decorator for PIPELINE_PATH with ./pipeline.py default."""
+    return click.argument(
+        "pipeline_path",
+        required=False,
+        default=None,
+        callback=_resolve_pipeline_path,
+        is_eager=False,
+    )(fn)
+
+
 @click.group()
 def main():
     """Synix — A build system for agent memory."""
@@ -49,6 +78,7 @@ from synix.cli.clean_commands import clean  # noqa: E402, F401
 from synix.cli.demo_commands import demo  # noqa: E402, F401
 from synix.cli.fix_commands import fix  # noqa: E402, F401
 from synix.cli.info_commands import info  # noqa: E402, F401
+from synix.cli.init_commands import init  # noqa: E402, F401
 from synix.cli.search_commands import search  # noqa: E402, F401
 from synix.cli.validate_commands import validate  # noqa: E402, F401
 from synix.cli.verify_commands import diff, lineage, status, verify  # noqa: E402, F401
@@ -69,3 +99,4 @@ main.add_command(diff)
 main.add_command(clean)
 main.add_command(demo)
 main.add_command(info)
+main.add_command(init)

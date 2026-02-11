@@ -31,6 +31,36 @@ uvx synix validate
 uvx synix search "return policy"
 ```
 
+## Quick Start
+
+`synix init` scaffolds a working project with source files, a multi-layer pipeline, and a validator.
+
+```bash
+uvx synix init my-project
+cd my-project
+```
+
+Build the pipeline (requires an LLM API key — see pipeline.py for config):
+
+```bash
+synix build
+```
+
+Browse what was built:
+
+```bash
+synix list                    # all artifacts, grouped by layer
+synix show final-report       # render an artifact as markdown
+synix show final-report --raw # full JSON with metadata and hashes
+```
+
+Validate and search:
+
+```bash
+synix validate                # run validators (e.g. max_length on final_report)
+synix search "hiking"         # full-text search across all indexed layers
+```
+
 ## Using Your Build Output
 
 After a build, Synix gives you two things: a search index and flat artifact files.
@@ -167,6 +197,24 @@ Drop files into `source_dir` — the `parse` transform auto-detects format by fi
 | Name | What it fixes |
 |------|--------------|
 | `semantic_enrichment` | Resolves semantic conflicts by rewriting with source episode context. Interactive approval. |
+
+## CLI Reference
+
+| Command | What it does |
+|---------|-------------|
+| `synix init <name>` | Scaffold a new project with sources, pipeline, and README. |
+| `synix build` | Run the pipeline. Only rebuilds what changed. |
+| `synix plan` | Dry-run — show what would build without running transforms. |
+| `synix list [layer]` | List all artifacts, optionally filtered by layer. |
+| `synix show <id>` | Display an artifact's content, rendered as markdown. `--raw` for JSON. |
+| `synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
+| `synix validate` | Run declared validators against build artifacts. |
+| `synix fix` | LLM-assisted repair of validation violations. |
+| `synix verify` | Check build integrity (hashes, provenance). |
+| `synix lineage <id>` | Show the full provenance chain for an artifact. |
+| `synix clean` | Delete the build directory. |
+
+All commands default to `./pipeline.py` in the current directory if no pipeline path is given.
 
 ## Key Capabilities
 
