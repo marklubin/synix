@@ -131,6 +131,17 @@ class TestNormalizeOutput:
         assert result_cached == result_fresh
         assert "<MATERIALIZED>  <N> indexed" in result_cached
 
+    def test_normalize_standalone_built(self):
+        text = "│   → search    │ search_index │       │        │       built │"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert "<MATERIALIZED>" in result
+        assert "built" not in result
+
+    def test_normalize_cassette_miss_key(self):
+        text = "Cassette miss for key 8c0f2d755f48... (prompt: You are)"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "Cassette miss for key <HASH>... (prompt: You are)"
+
     def test_normalize_passthrough(self):
         text = "No dynamic content here\nJust plain text"
         result = _normalize_output(text, Path("/tmp/case"))

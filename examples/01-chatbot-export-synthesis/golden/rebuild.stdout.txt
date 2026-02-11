@@ -15,6 +15,6 @@
   core (level 3)  0/1  ⟳ 1 in flight  <TIME>
 
     ⟳ synthesis  <TIME>
-Pipeline failed: Cassette miss for key 8c0f2d755f48... (prompt: You are synthesizing all available information into a
+Pipeline failed: Cassette miss for key <HASH>... (prompt: You are synthesizing all available information into a
 core memory document for a)
 Run with SYNIX_CASSETTE_MODE=record to capture this call.

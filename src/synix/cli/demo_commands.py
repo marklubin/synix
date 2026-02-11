@@ -271,6 +271,12 @@ def _normalize_output(text: str, case_path: Path) -> str:
             "LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>",
             line,
         )
+        # Normalize cassette miss keys (hash varies by environment)
+        line = re.sub(
+            r"Cassette miss for key [0-9a-f]+\.\.\.",
+            "Cassette miss for key <HASH>...",
+            line,
+        )
         # Replace inline token/cost fragments
         line = re.sub(r"[\d,]+ tokens, \$[\d.]+", "<N> tokens, $<COST>", line)
         # Remove API key display line (depends on env — may or may not be present)
@@ -288,8 +294,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
         )
         # Normalize materialization and cache status
         line = re.sub(r"\bmaterializ(?:ed|ing\.\.\.)", "<MATERIALIZED>", line)
-        # Normalize standalone "cached" (e.g. "└─ search  cached")
-        line = re.sub(r"(?<!\d )\bcached\b", "<MATERIALIZED>", line)
+        # Normalize standalone "cached" or "built" (e.g. "└─ search  cached", "│ built │")
+        line = re.sub(r"(?<!\d )\b(?:cached|built)\b", "<MATERIALIZED>", line)
         # Normalize remaining "N indexed" counts
         line = re.sub(r"\b\d+ indexed\b", "<N> indexed", line)
         # Normalize plan summary line (varies between fresh/incremental)

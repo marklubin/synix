@@ -60,7 +60,7 @@ ep-423ed14b-dda3-4f89-938b-76152356aca6
 │  tenants.                                                                                                            │
 │                                                                                                                      │
 │  Reverse Proxy Selection: Caddy or Traefik were recommended over Nginx for their dynamic configuration reloading     │
-│  capabilities, zero-downtime updates, and built-in wildcard domain support. Caddy was highlighted as the easiest     │
+│  capabilities, zero-downtime updates, and <MATERIALIZED>-in wildcard domain support. Caddy was highlighted as the easiest     │
 │  option for TLS management.                                                                                          │
 │                                                                                                                      │
 │  Instance Discovery: The approach depends on the process manager—Docker + Traefik use container labels for           │
