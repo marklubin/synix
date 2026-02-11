@@ -8,8 +8,8 @@
 #   Level 3: final_report [report]     → synthesis of team + project brief
 #
 # Usage:
-#   synix build
-#   synix validate
+#   synix build pipeline.py
+#   synix validate pipeline.py
 #   synix search 'hiking'
 
 from synix import Layer, Pipeline, Projection, ValidatorDecl

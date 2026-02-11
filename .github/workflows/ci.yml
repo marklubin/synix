@@ -23,10 +23,13 @@ jobs:
 
   demo-smoke:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [examples/01-chatbot-export-synthesis, examples/02-tv-returns, examples/03-team-report]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: uv run synix demo run examples/02-tv-returns
+      - run: uv run synix demo run ${{ matrix.example }}

@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Usage: ./scripts/new-example <name>
+# Creates examples/<name>/ with the standard example structure.
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <name>"
+    echo "Example: $0 04-my-new-example"
+    exit 1
+fi
+
+name=$1
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+dir="$REPO_ROOT/examples/$name"
+
+if [ -d "$dir" ]; then
+    echo "Error: $dir already exists"
+    exit 1
+fi
+
+mkdir -p "$dir"/{sources,cassettes,golden}
+touch "$dir/cassettes/.gitkeep" "$dir/golden/.gitkeep"
+
+# Copy .env.example from an existing example
+cp "$REPO_ROOT/examples/03-team-report/.env.example" "$dir/"
+
+# Create skeleton pipeline.py
+cat > "$dir/pipeline.py" << 'PIPELINE'
+from synix import Layer, Pipeline, Projection
+
+pipeline = Pipeline("my-pipeline")
+pipeline.source_dir = "./sources"
+pipeline.build_dir = "./build"
+pipeline.llm_config = {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "temperature": 0.3,
+    "max_tokens": 1024,
+}
+
+# Add layers here:
+# pipeline.add_layer(Layer(name="...", level=0, transform="parse"))
+
+# Add projections here:
+# pipeline.add_projection(Projection(
+#     name="search",
+#     projection_type="search_index",
+#     sources=[{"layer": "...", "search": ["fulltext"]}],
+# ))
+PIPELINE
+
+# Create skeleton case.py
+cat > "$dir/case.py" << 'CASE'
+"""Demo case — describe what this example demonstrates.
+
+Flow:
+  1. Plan  — show the DAG
+  2. Build — run the pipeline
+  3. Search — query the results
+"""
+
+case = {
+    "name": "REPLACE_ME",
+    "pipeline": "pipeline.py",
+    "steps": [
+        {"name": "note_plan", "command": ["synix", "demo", "note", "1/3 Planning..."]},
+        {"name": "plan", "command": ["synix", "plan", "PIPELINE"]},
+
+        {"name": "note_build", "command": ["synix", "demo", "note", "2/3 Building..."]},
+        {"name": "build", "command": ["synix", "build", "PIPELINE"]},
+
+        {"name": "note_search", "command": ["synix", "demo", "note", "3/3 Searching..."]},
+        {"name": "search", "command": ["synix", "search", "query", "--mode", "keyword", "--limit", "3"]},
+    ],
+    "goldens": {},
+}
+CASE
+
+# Create skeleton README.md
+cat > "$dir/README.md" << README
+# $name
+
+TODO: Describe what this example demonstrates.
+
+## Sample Data
+
+TODO: Describe the input data in \`sources/\`.
+
+## Run
+
+\`\`\`bash
+cd examples/$name
+cp .env.example .env     # add your API key
+synix build pipeline.py
+synix search 'query'
+\`\`\`
+README
+
+echo "Created example at $dir"
+echo "Next steps:"
+echo "  1. Add source data to $dir/sources/"
+echo "  2. Edit $dir/pipeline.py"
+echo "  3. Edit $dir/case.py"
+echo "  4. Record cassettes: SYNIX_CASSETTE_MODE=record synix demo run $dir"

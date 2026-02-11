@@ -100,10 +100,10 @@ Enter
 Type "# Fix the input, not the output."
 Enter
 Sleep 1.5s
-Type "grep -n 'john.smith' fixtures/vendor_offers.json"
+Type "grep -n 'john.smith' sources/vendor_offers.json"
 Enter
 Sleep 5s
-Type "sed -i 's/john.smith@gmail.com/A customer/g' fixtures/vendor_offers.json"
+Type "sed -i 's/john.smith@gmail.com/A customer/g' sources/vendor_offers.json"
 Enter
 Sleep 2s
 

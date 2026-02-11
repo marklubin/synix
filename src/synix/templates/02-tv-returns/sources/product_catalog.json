@@ -1,0 +1,51 @@
+[
+  {
+    "sku": "SAM-OLED-65",
+    "name": "Samsung 65\" S95D OLED Smart TV",
+    "category": "Electronics > TVs > OLED",
+    "brand": "Samsung",
+    "description": "65-inch 4K OLED with anti-glare, Neural Quantum Processor, Dolby Atmos, 144Hz refresh rate. 2024 model.",
+    "specs": {
+      "display": "4K OLED, 3840x2160",
+      "refresh_rate": "144Hz",
+      "hdr": "HDR10+, Dolby Vision",
+      "smart_platform": "Tizen OS",
+      "ports": "4x HDMI 2.1, 2x USB, 1x Ethernet",
+      "weight_lbs": 48.5,
+      "dimensions": "57.0 x 32.7 x 1.1 in"
+    },
+    "upc": "887276846293"
+  },
+  {
+    "sku": "DYS-V15-DETECT",
+    "name": "Dyson V15 Detect Absolute Cordless Vacuum",
+    "category": "Home & Kitchen > Vacuums > Cordless",
+    "brand": "Dyson",
+    "description": "Cordless stick vacuum with laser dust detection, piezo sensor particle counting, LCD screen showing real-time data. Up to 60 minutes runtime.",
+    "specs": {
+      "suction_power": "230 AW",
+      "runtime_minutes": 60,
+      "bin_volume_liters": 0.76,
+      "weight_lbs": 6.8,
+      "filtration": "Whole-machine HEPA",
+      "battery": "Removable, click-in"
+    },
+    "upc": "885609024578"
+  },
+  {
+    "sku": "KAI-PRO-KNIFE8",
+    "name": "Shun Premier 8\" Chef's Knife",
+    "category": "Home & Kitchen > Cutlery > Chef's Knives",
+    "brand": "Shun / KAI",
+    "description": "8-inch hand-sharpened Japanese chef's knife. VG-MAX cutting core with 68 layers of Damascus cladding. Walnut PakkaWood handle.",
+    "specs": {
+      "blade_length": "8 in",
+      "blade_material": "VG-MAX steel, 68-layer Damascus",
+      "hardness": "60-61 HRC",
+      "handle_material": "Walnut PakkaWood",
+      "weight_oz": 7.6,
+      "edge_angle": "16° per side"
+    },
+    "upc": "074645107000"
+  }
+]

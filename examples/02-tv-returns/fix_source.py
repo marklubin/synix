@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-p = Path("fixtures/vendor_offers.json")
+p = Path("sources/vendor_offers.json")
 data = json.loads(p.read_text())
 for offer in data:
     if "notes" in offer:
