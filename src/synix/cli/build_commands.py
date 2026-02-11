@@ -378,10 +378,12 @@ def plan(
                 parallel_label = f" ({step.parallel_units} parallel)"
             if step.cached_count > 0:
                 # Mixed: some cached, some need rebuild
-                status_parts.append(f"[{status_style}]{step.rebuild_count} {step.status}{parallel_label}[/{status_style}]")
+                rebuild_str = f"{step.rebuild_count} {step.status}{parallel_label}"
+                status_parts.append(f"[{status_style}]{rebuild_str}[/{status_style}]")
                 status_parts.append(f"[cyan]{step.cached_count} cached[/cyan]")
             else:
-                status_parts.append(f"[{status_style}]{step.artifact_count} {step.status}{parallel_label}[/{status_style}]")
+                count_str = f"{step.artifact_count} {step.status}{parallel_label}"
+                status_parts.append(f"[{status_style}]{count_str}[/{status_style}]")
         elif step.status == "cached":
             status_parts.append(f"[{status_style}]{step.artifact_count} cached[/{status_style}]")
         status_str = "  ".join(status_parts)

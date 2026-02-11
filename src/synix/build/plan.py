@@ -12,7 +12,7 @@ import synix.build.llm_transforms  # noqa: F401
 # Import transform modules to trigger @register_transform decorators
 import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
-from synix.build.dag import needs_rebuild, resolve_build_order
+from synix.build.dag import resolve_build_order
 from synix.build.transforms import get_transform
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import Artifact, Layer, Pipeline
