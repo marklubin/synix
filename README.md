@@ -31,6 +31,25 @@ uvx synix validate
 uvx synix search "return policy"
 ```
 
+## Using Your Build Output
+
+After a build, Synix gives you two things: a search index and flat artifact files.
+
+**Search via CLI:**
+```bash
+synix search "return policy"
+synix search "warranty terms" --top-k 5 --trace
+```
+
+**Use the artifacts directly:**
+
+Build output lives in `./build/` — JSON files per artifact, a `manifest.json` index, and a SQLite FTS5 database. Read them, copy them, or point any tool that speaks SQLite at `search.db`.
+
+```bash
+ls build/layer2-cs_product_brief/
+sqlite3 build/search.db "SELECT artifact_id, layer_name FROM search_index LIMIT 5"
+```
+
 ## Key Capabilities
 
 **Incremental rebuilds** — Change a prompt or add new conversations. Only downstream artifacts reprocess.
