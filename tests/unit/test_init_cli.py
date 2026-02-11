@@ -63,6 +63,16 @@ def test_init_source_content(runner, tmp_path, monkeypatch):
     assert "dashboard" in brief.lower()
 
 
+def test_init_env_example(runner, tmp_path, monkeypatch):
+    """synix init includes .env.example with supported API key fields."""
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(main, ["init", "env-test"])
+    env_example = (tmp_path / "env-test" / ".env.example").read_text()
+    assert "ANTHROPIC_API_KEY" in env_example
+    assert "OPENAI_API_KEY" in env_example
+    assert "DEEPSEEK_API_KEY" in env_example
+
+
 def test_init_existing_dir_errors(runner, tmp_path, monkeypatch):
     """synix init errors if directory already exists."""
     monkeypatch.chdir(tmp_path)
@@ -136,6 +146,7 @@ def test_init_output_message(runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(main, ["init", "my-project"])
     assert "cd my-project" in result.output
+    assert ".env.example" in result.output
     assert "synix build" in result.output
 
 

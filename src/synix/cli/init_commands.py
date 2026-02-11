@@ -17,11 +17,11 @@ def _get_template_dir() -> Path:
 
 
 @click.command()
-@click.argument("project_name")
+@click.argument("project_name", default="synix")
 def init(project_name: str):
     """Create a new Synix project with a minimal working example.
 
-    PROJECT_NAME is the directory name to create (e.g., my-project).
+    PROJECT_NAME is the directory name to create (default: synix).
     """
     target = Path(project_name)
 
@@ -45,6 +45,7 @@ def init(project_name: str):
         f"[green]Created project[/green] [bold]{project_name}/[/bold]\n"
         f"\n"
         f"  cd {project_name}\n"
+        f"  cp .env.example .env   [dim]# add your API key[/dim]\n"
         f"  synix build\n"
         f"  synix validate\n"
         f"  synix search 'hiking'"
