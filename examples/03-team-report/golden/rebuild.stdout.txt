@@ -29,7 +29,7 @@
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
 │   → search    │ search_index │       │        │ progressive │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │      <MATERIALIZED> │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
 ╰───────────────┴──────────────┴───────┴────────┴─────────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped

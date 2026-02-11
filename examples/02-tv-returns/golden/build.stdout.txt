@@ -20,7 +20,7 @@
 │ policies         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policy_index     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → cs-search    │ search_index │       │        │  <MATERIALIZED> │
+│   → cs-search    │ search_index │       │        │ <MATERIALIZED> │
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped

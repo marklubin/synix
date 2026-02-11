@@ -300,9 +300,11 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"\b\d+ indexed\b", "<N> indexed", line)
         # Normalize plan summary line (varies between fresh/incremental)
         line = re.sub(r"^Estimated:.*$", "<PLAN_SUMMARY>", line)
-        # Normalize digits in Build Summary table rows (Built/Cached counts vary)
+        # Normalize digits and placeholder padding in Build Summary table rows
         if line.count("│") >= 5:
             line = re.sub(r"(?<=│)\s*\d+\s*(?=│)", "  <N>  ", line)
+            # Normalize whitespace around <MATERIALIZED> in table cells
+            line = re.sub(r"│\s+<MATERIALIZED>\s+│", "│ <MATERIALIZED> │", line)
         # Replace verify output counts (artifact/provenance/hash counts grow across runs)
         line = re.sub(r"(\bManifest valid with )\d+( artifacts\b)", r"\g<1><N>\2", line)
         line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)
