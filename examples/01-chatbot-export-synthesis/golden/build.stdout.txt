@@ -8,10 +8,10 @@
   ✓ transcripts (level 0)  <N> <STATUS>  <TIME>
   ✓ episodes (level 1)  <N> <STATUS>  <TIME>
     └─ memory-index  <MATERIALIZED>
-       └─ embeddings  6/6  <TIME>  (fastembed, cached: 6)
+       └─ embeddings  6/6  <TIME>  (fastembed, <STATUS>: 6)
   ✓ monthly (level 2)  <N> <STATUS>  <TIME>
     └─ memory-index  <MATERIALIZED>
-       └─ embeddings  11/11  <TIME>  (fastembed, cached: 11)
+       └─ embeddings  11/11  <TIME>  (fastembed, <STATUS>: 11)
   core (level 3)  0/1  ⟳ 1 in flight  <TIME>
 
     ⟳ synthesis  <TIME>

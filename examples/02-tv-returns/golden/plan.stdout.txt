@@ -23,8 +23,8 @@ tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)
 └── cs_product_brief  transform:demo_enrich_cs_brief  <STATS>
     ├── ← product_offers
     ├── ← policy_index
-    └── → cs-search  synix_search_index (sqlite)  cached  3 indexed
+    └── → cs-search  synix_search_index (sqlite)  <STATUS>  3 indexed
         ├── ← cs_product_brief
         └── embeddings  bge-small-en-v1.5  384d  (fastembed)
 
-Estimated: 0 layer(s) to build, <N> <STATUS> · no LLM calls needed (fully cached)
+<PLAN_SUMMARY>

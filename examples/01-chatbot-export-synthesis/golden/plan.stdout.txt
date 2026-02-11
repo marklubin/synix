@@ -31,4 +31,4 @@ personal-memory  claude-haiku-4-5-20251001 (anthropic)
     └── → context-doc  flat_file (markdown)  new  5 indexed
         └── ← core
 
-Estimated: 1 layer(s) to build, <N> <STATUS> · 1 LLM calls, <N> tokens, $<COST>
+<PLAN_SUMMARY>

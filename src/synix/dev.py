@@ -60,9 +60,10 @@ def verify_demos() -> None:
 
 
 def release() -> None:
-    """Full pre-commit check suite: sync → lint → test → demos."""
-    _run([str(REPO_ROOT / "scripts" / "sync-templates")], "sync templates")
+    """Full pre-commit check suite: lint → sync → test → demos."""
     _run([sys.executable, "-m", "ruff", "check", "--fix", "."], "ruff fix")
+    _run([sys.executable, "-m", "ruff", "format", "."], "ruff format")
+    _run([str(REPO_ROOT / "scripts" / "sync-templates")], "sync templates")
     _run([sys.executable, "-m", "ruff", "check", "."], "ruff check")
     _run([sys.executable, "-m", "pytest", "tests/", "-v"], "pytest")
 

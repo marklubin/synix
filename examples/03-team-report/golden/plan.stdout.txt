@@ -25,11 +25,11 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 └── final_report  transform:report  <STATS>
     ├── ← team_dynamics
     ├── ← project_brief
-    └── → search  synix_search_index (sqlite)  cached  9 indexed
+    └── → search  synix_search_index (sqlite)  <STATUS>  9 indexed
         ├── ← bios
         ├── ← project_brief
         ├── ← work_styles
         ├── ← team_dynamics
         └── ← final_report
 
-Estimated: 3 layer(s) to build, <N> <STATUS> · no LLM calls needed (fully cached)
+<PLAN_SUMMARY>
