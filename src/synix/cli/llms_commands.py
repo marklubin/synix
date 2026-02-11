@@ -12,7 +12,12 @@ from synix.cli.main import console
 
 
 def _get_bundled_llms_txt() -> str | None:
-    """Read the llms.txt bundled with the package."""
+    """Read llms.txt from the project root."""
+    # Try project root first (where the file lives in the repo)
+    root = Path.cwd() / "llms.txt"
+    if root.exists():
+        return root.read_text(encoding="utf-8")
+    # Fallback: bundled with the package
     try:
         ref = importlib.resources.files("synix").joinpath("llms.txt")
         return ref.read_text(encoding="utf-8")
@@ -114,7 +119,7 @@ Generate the llms.txt content now."""
     "--output",
     type=click.Path(),
     default=None,
-    help="Output path for generated llms.txt (default: src/synix/llms.txt).",
+    help="Output path for generated llms.txt (default: ./llms.txt).",
 )
 def llms(generate: bool, output: str | None):
     """Display or generate the llms.txt project summary for LLMs."""
@@ -124,8 +129,8 @@ def llms(generate: bool, output: str | None):
         if output:
             out_path = Path(output)
         else:
-            # Default: write into the package source so it ships with the wheel
-            out_path = Path(__file__).parent.parent / "llms.txt"
+            # Default: write to project root
+            out_path = Path.cwd() / "llms.txt"
 
         out_path.write_text(content, encoding="utf-8")
         console.print(f"[green]Generated llms.txt[/green] → {out_path}")

@@ -24,13 +24,13 @@ jobs:
 
       - run: uv sync
 
-      - run: uv run synix llms --generate --output src/synix/llms.txt
+      - run: uv run synix llms --generate --output llms.txt
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Commit if changed
         run: |
-          git add src/synix/llms.txt
+          git add llms.txt
           git diff --cached --quiet && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

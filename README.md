@@ -244,4 +244,5 @@ Synix is not a memory store. It's the build system that produces one.
 
 - [synix.dev](https://synix.dev)
 - [GitHub](https://github.com/marklubin/synix)
+- [llms.txt](./llms.txt) — machine-readable project summary for LLMs
 - MIT License
