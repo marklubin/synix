@@ -195,7 +195,7 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in rec.parent_artifact_ids:
+                    for parent_id in sorted(rec.parent_artifact_ids):
                         label = f"[dim]{parent_id}[/dim]"
                         child = node.add(label)
                         _build_trace_tree(child, parent_id, visited)
@@ -214,7 +214,7 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in rec.parent_artifact_ids:
+                    for parent_id in sorted(rec.parent_artifact_ids):
                         child = node.add(f"[dim]{parent_id}[/dim]")
                         _add_parents(child, parent_id, visited)
 

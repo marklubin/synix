@@ -1,0 +1,26 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: tv-returns-demo                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 4                                                                                                            │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ product_offers (level 0)  3 cached  <TIME>
+  ✓ policies (level 0)  3 cached  <TIME>
+  ✓ policy_index (level 1)  3 cached  <TIME>
+  ✓ cs_product_brief (level 2)  3 cached  <TIME>
+    └─ cs-search  materialized
+       └─ embeddings  3/3  <TIME>  (fastembed, cached: 3)
+    └─ cs-search  cached
+                        Build Summary
+╭──────────────────┬──────────────┬───────┬────────┬─────────╮
+│ Layer            │    Level     │ Built │ Cached │ Skipped │
+├──────────────────┼──────────────┼───────┼────────┼─────────┤
+│ product_offers   │      0       │     0 │      3 │       0 │
+│ policies         │      0       │     0 │      3 │       0 │
+│ policy_index     │      1       │     0 │      3 │       0 │
+│ cs_product_brief │      2       │     0 │      3 │       0 │
+│   → cs-search    │ search_index │       │        │  cached │
+╰──────────────────┴──────────────┴───────┴────────┴─────────╯
+
+Total: 0 built, 12 cached, 0 skipped

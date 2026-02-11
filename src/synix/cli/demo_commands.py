@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,11 +85,15 @@ def run_case(case_dir: str, update_goldens: bool):
     env["SYNIX_CASSETTE_MODE"] = "replay"
     env["SYNIX_CASSETTE_DIR"] = cassette_dir
     env["SYNIX_DEMO"] = "1"
+    env["COLUMNS"] = "120"
+    env["NO_COLOR"] = "1"
 
     golden_dir = case_path / "golden"
     golden_dir.mkdir(exist_ok=True)
 
-    captured: dict[str, str] = {}
+    captured_json: dict[str, str] = {}
+    captured_stdout: dict[str, str] = {}
+    captured_stderr: dict[str, str] = {}
     failed = False
 
     for step in steps:
@@ -136,8 +142,14 @@ def run_case(case_dir: str, update_goldens: bool):
                 if len(lines) > 10:
                     console.print(f"    [dim]... ({len(lines) - 10} more lines)[/dim]")
 
+            # Capture stdout/stderr for every step (text golden comparison)
+            if result.stdout:
+                captured_stdout[step_name] = result.stdout
+            if result.stderr:
+                captured_stderr[step_name] = result.stderr
+
             if capture_json and result.stdout:
-                captured[step_name] = result.stdout.strip()
+                captured_json[step_name] = result.stdout.strip()
 
         except subprocess.TimeoutExpired:
             console.print("    [red]TIMEOUT[/red]")
@@ -146,18 +158,18 @@ def run_case(case_dir: str, update_goldens: bool):
             console.print(f"    [red]Command not found: {command[0]}[/red]")
             failed = True
 
-    # Golden comparison
+    # JSON golden comparison (existing behavior)
     if goldens:
-        console.print("\n[bold]Golden comparison:[/bold]")
+        console.print("\n[bold]Golden comparison (JSON):[/bold]")
 
         for step_name, golden_file in goldens.items():
             golden_path = golden_dir / golden_file
 
-            if step_name not in captured:
+            if step_name not in captured_json:
                 console.print(f"  {step_name}: [yellow]no captured output[/yellow]")
                 continue
 
-            actual_output = captured[step_name]
+            actual_output = captured_json[step_name]
 
             if update_goldens:
                 golden_path.write_text(actual_output)
@@ -185,21 +197,119 @@ def run_case(case_dir: str, update_goldens: bool):
             else:
                 console.print(f"  {step_name}: [red]FAIL[/red]")
                 failed = True
-                # Show diff snippet
-                expected_lines = expected.splitlines()
-                actual_lines = actual.splitlines()
-                for i, (e, a) in enumerate(zip(expected_lines, actual_lines)):
-                    if e != a:
-                        console.print(f"    [dim]line {i + 1}:[/dim]")
-                        console.print(f"      [red]expected:[/red] {e[:100]}")
-                        console.print(f"      [green]actual:[/green]  {a[:100]}")
-                        break
+                _show_text_diff(expected, actual, golden_file)
+
+    # Text golden comparison (stdout/stderr for every step)
+    all_step_names = [step.get("name", "unnamed") for step in steps]
+    has_text_goldens = any((golden_dir / f"{name}.stdout.txt").exists() for name in all_step_names)
+
+    if captured_stdout or has_text_goldens or update_goldens:
+        console.print("\n[bold]Golden comparison (text):[/bold]")
+
+        for step_name in all_step_names:
+            # stdout golden
+            stdout_golden_file = f"{step_name}.stdout.txt"
+            stdout_golden_path = golden_dir / stdout_golden_file
+
+            if step_name in captured_stdout:
+                actual_normalized = _normalize_output(captured_stdout[step_name], case_path)
+
+                if update_goldens:
+                    stdout_golden_path.write_text(actual_normalized)
+                    console.print(f"  {step_name} stdout: [cyan]updated[/cyan] → {stdout_golden_file}")
+                elif stdout_golden_path.exists():
+                    expected = stdout_golden_path.read_text()
+                    if expected == actual_normalized:
+                        console.print(f"  {step_name} stdout: [green]PASS[/green]")
+                    else:
+                        console.print(f"  {step_name} stdout: [red]FAIL[/red]")
+                        failed = True
+                        _show_text_diff(expected, actual_normalized, stdout_golden_file)
+                else:
+                    console.print(f"  {step_name} stdout: [yellow]no golden[/yellow] (run with --update-goldens)")
+
+            # stderr golden (only if non-empty)
+            stderr_golden_file = f"{step_name}.stderr.txt"
+            stderr_golden_path = golden_dir / stderr_golden_file
+
+            if step_name in captured_stderr:
+                actual_normalized = _normalize_output(captured_stderr[step_name], case_path)
+
+                if update_goldens:
+                    stderr_golden_path.write_text(actual_normalized)
+                    console.print(f"  {step_name} stderr: [cyan]updated[/cyan] → {stderr_golden_file}")
+                elif stderr_golden_path.exists():
+                    expected = stderr_golden_path.read_text()
+                    if expected == actual_normalized:
+                        console.print(f"  {step_name} stderr: [green]PASS[/green]")
+                    else:
+                        console.print(f"  {step_name} stderr: [red]FAIL[/red]")
+                        failed = True
+                        _show_text_diff(expected, actual_normalized, stderr_golden_file)
 
     if failed:
         console.print("\n[red]Demo case failed.[/red]")
         sys.exit(1)
     else:
         console.print("\n[green]Demo case passed.[/green]")
+
+
+def _normalize_output(text: str, case_path: Path) -> str:
+    """Replace dynamic values with stable placeholders for golden comparison."""
+    case_path_str = str(case_path)
+
+    lines = text.splitlines()
+    normalized = []
+    for line in lines:
+        # Replace case directory path with placeholder
+        line = line.replace(case_path_str, "<CASE_DIR>")
+        # Replace timing values like "1.2s" or "0.05s"
+        line = re.sub(r"\b\d+\.\d+s\b", "<TIME>", line)
+        # Replace full LLM stats lines
+        line = re.sub(
+            r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+",
+            "LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>",
+            line,
+        )
+        # Replace inline token/cost fragments
+        line = re.sub(r"[\d,]+ tokens, \$[\d.]+", "<N> tokens, $<COST>", line)
+        # Remove API key display line (depends on env — may or may not be present)
+        if re.search(r"│\s*API Key\s*│", line):
+            continue
+        # Replace verify output counts (artifact/provenance/hash counts grow across runs)
+        line = re.sub(r"(\bManifest valid with )\d+( artifacts\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
+        line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bSearch index has )\d+( entries\b)", r"\g<1><N>\2", line)
+        # Strip trailing whitespace
+        line = line.rstrip()
+        normalized.append(line)
+    return "\n".join(normalized)
+
+
+def _show_text_diff(expected: str, actual: str, label: str) -> None:
+    """Show a unified diff between expected and actual text, capped at 15 lines."""
+    diff_lines = list(
+        difflib.unified_diff(
+            expected.splitlines(),
+            actual.splitlines(),
+            fromfile=f"golden/{label}",
+            tofile="actual",
+            lineterm="",
+        )
+    )
+    if not diff_lines:
+        return
+    for line in diff_lines[:15]:
+        if line.startswith("+") and not line.startswith("+++"):
+            console.print(f"    [green]{line}[/green]")
+        elif line.startswith("-") and not line.startswith("---"):
+            console.print(f"    [red]{line}[/red]")
+        else:
+            console.print(f"    [dim]{line}[/dim]")
+    if len(diff_lines) > 15:
+        console.print(f"    [dim]... ({len(diff_lines) - 15} more diff lines)[/dim]")
 
 
 def _load_case(case_path: Path) -> dict | None:

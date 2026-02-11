@@ -1,0 +1,35 @@
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: my-first-pipeline                                                                                          │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 5                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value                     │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic                 │
+│ Model       │ claude-haiku-4-5-20251001 │
+│ Temperature │ 0.3                       │
+│ Max Tokens  │ 1024                      │
+╰─────────────┴───────────────────────────╯
+
+my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
+├── bios  source:parse  3 cached
+├── project_brief  source:parse  1 cached
+├── work_styles  transform:work_style  0 rebuild (3 parallel)  3 cached
+│   └── ← bios
+├── team_dynamics  transform:dynamics  0 rebuild  1 cached
+│   └── ← work_styles
+└── final_report  transform:report  0 rebuild  1 cached
+    ├── ← team_dynamics
+    ├── ← project_brief
+    └── → search  synix_search_index (sqlite)  cached  9 indexed
+        ├── ← bios
+        ├── ← project_brief
+        ├── ← work_styles
+        ├── ← team_dynamics
+        └── ← final_report
+
+Estimated: 3 layer(s) to build, 2 cached · no LLM calls needed (fully cached)

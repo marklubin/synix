@@ -1,0 +1,8 @@
+╭───────────────────────────────────────────────────── Synix Fix ──────────────────────────────────────────────────────╮
+│ Pipeline: tv-returns-demo                                                                                            │
+│ Build: build                                                                                                         │
+│ Active violations: 0                                                                                                 │
+│ Mode: fix                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+No active violations. Run synix validate first to detect violations.

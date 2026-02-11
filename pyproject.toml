@@ -31,6 +31,8 @@ dependencies = [
 
 [project.scripts]
 synix = "synix.cli.main:cli"
+release = "synix.dev:release"
+verify-demos = "synix.dev:verify_demos"
 
 [project.urls]
 Homepage = "https://github.com/marklubin/synix"

@@ -78,13 +78,19 @@ CLI UX requirements (Rich formatting, colors, progress): [docs/cli-ux.md](docs/c
 
 ## Contributing
 
-**Before pushing any changes**, run the prerelease checks:
+**Before pushing any changes**, run the full release check:
 
 ```bash
-./scripts/prerelease
+uv run release
 ```
 
-This runs `ruff fix` → `ruff check` → `pytest`. All must pass before pushing. CI runs the same checks — if prerelease passes locally, CI will pass.
+This runs: sync templates → ruff fix → ruff check → pytest → verify all demos. All must pass before pushing. CI runs the same checks — if release passes locally, CI will pass.
+
+To run just the demo verifications standalone (faster feedback during UX work):
+
+```bash
+uv run verify-demos
+```
 
 **Workflow changes** (`.github/workflows/`): test locally with [`act`](https://github.com/nektos/act) before pushing:
 

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
 
+from synix.cli.demo_commands import _normalize_output
 from synix.cli.main import is_demo_mode, main
 
 
@@ -58,6 +60,52 @@ class TestIsDemoMode:
     def test_off_for_other_values(self):
         with patch.dict(os.environ, {"SYNIX_DEMO": "0"}):
             assert is_demo_mode() is False
+
+
+class TestNormalizeOutput:
+    """Tests for _normalize_output."""
+
+    def test_normalize_timing(self):
+        text = "Build completed in 1.2s"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "Build completed in <TIME>"
+
+    def test_normalize_timing_fractional(self):
+        text = "Step took 0.05s, total 12.34s"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "Step took <TIME>, total <TIME>"
+
+    def test_normalize_paths(self):
+        case_path = Path("/home/user/synix/examples/01-chatbot")
+        text = f"Loading pipeline from {case_path}/pipeline.py"
+        result = _normalize_output(text, case_path)
+        assert result == "Loading pipeline from <CASE_DIR>/pipeline.py"
+
+    def test_normalize_llm_stats(self):
+        text = "LLM calls: 5, Tokens: 12,345, Est. cost: $0.42"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>"
+
+    def test_normalize_token_cost_fragment(self):
+        text = "Used 1,234 tokens, $0.05 for this step"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "Used <N> tokens, $<COST> for this step"
+
+    def test_normalize_verify_counts(self):
+        text = "│ manifest_valid      │  PASS  │ Manifest valid with 27 artifacts     │"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert "<N> artifacts" in result
+        assert "27" not in result
+
+    def test_normalize_passthrough(self):
+        text = "No dynamic content here\nJust plain text"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "No dynamic content here\nJust plain text"
+
+    def test_normalize_trailing_whitespace(self):
+        text = "line one   \nline two\t\nline three"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert result == "line one\nline two\nline three"
 
 
 class TestDemoGroup:

@@ -1,8 +1,7 @@
 {
   "passed": true,
   "validators_run": [
-    "semantic_conflict",
-    "pii"
+    "max_length"
   ],
   "violations": []
 }
