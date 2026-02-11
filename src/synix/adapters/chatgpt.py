@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from synix.core.models import Artifact
@@ -59,7 +59,7 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
             continue
 
         content = "\n\n".join(parts) + "\n"
-        date_str = datetime.fromtimestamp(create_time).strftime("%Y-%m-%d") if create_time else ""
+        date_str = datetime.fromtimestamp(create_time, tz=UTC).strftime("%Y-%m-%d") if create_time else ""
 
         # Derive last_message_date from individual message timestamps
         last_message_date = ""
@@ -69,7 +69,7 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
             if ts and ts > max_ts:
                 max_ts = ts
         if max_ts:
-            last_message_date = datetime.fromtimestamp(max_ts).strftime("%Y-%m-%d")
+            last_message_date = datetime.fromtimestamp(max_ts, tz=UTC).strftime("%Y-%m-%d")
 
         metadata = {
                 "source": "chatgpt",

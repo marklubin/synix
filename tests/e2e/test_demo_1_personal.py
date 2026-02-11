@@ -185,8 +185,8 @@ class TestDT1FreshBuild:
         assert layers.get("transcripts", 0) == 30
         # 30 transcripts → 30 episodes (1 per conversation)
         assert layers.get("episodes", 0) == 30
-        # Episodes across 4 months: 2024-11, 2024-12, 2025-01, 2025-12
-        assert layers.get("monthly", 0) == 4
+        # Episodes across 3 months (UTC): 2024-12, 2025-01, 2025-12
+        assert layers.get("monthly", 0) == 3
         # Single core memory
         assert layers.get("core", 0) == 1
 
