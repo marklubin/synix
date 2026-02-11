@@ -16,13 +16,13 @@
 ╰─────────────┴───────────────────────────╯
 
 my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
-├── bios  source:parse  3 cached
-├── project_brief  source:parse  1 cached
-├── work_styles  transform:work_style  0 rebuild (3 parallel)  3 cached
+├── bios  source:parse  <STATS>
+├── project_brief  source:parse  <STATS>
+├── work_styles  transform:work_style  <STATS>
 │   └── ← bios
-├── team_dynamics  transform:dynamics  0 rebuild  1 cached
+├── team_dynamics  transform:dynamics  <STATS>
 │   └── ← work_styles
-└── final_report  transform:report  0 rebuild  1 cached
+└── final_report  transform:report  <STATS>
     ├── ← team_dynamics
     ├── ← project_brief
     └── → search  synix_search_index (sqlite)  cached  9 indexed
@@ -32,4 +32,4 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
         ├── ← team_dynamics
         └── ← final_report
 
-Estimated: 3 layer(s) to build, 2 cached · no LLM calls needed (fully cached)
+Estimated: 3 layer(s) to build, <N> <STATUS> · no LLM calls needed (fully cached)

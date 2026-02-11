@@ -276,6 +276,12 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Remove API key display line (depends on env — may or may not be present)
         if re.search(r"│\s*API Key\s*│", line):
             continue
+        # Normalize plan tree stats (new/cached/rebuild counts vary between fresh and incremental)
+        line = re.sub(r"((?:source|transform):\S+)\s+.*$", r"\1  <STATS>", line)
+        # Normalize build progress counts (built vs cached)
+        line = re.sub(r"\b\d+ (built|cached)\b", "<N> <STATUS>", line)
+        # Normalize materialization status
+        line = re.sub(r"\bmaterializ(?:ed|ing\.\.\.)", "<MATERIALIZED>", line)
         # Replace verify output counts (artifact/provenance/hash counts grow across runs)
         line = re.sub(r"(\bManifest valid with )\d+( artifacts\b)", r"\g<1><N>\2", line)
         line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)

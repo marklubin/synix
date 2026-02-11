@@ -5,11 +5,11 @@
 │ Layers: 4                                                                                                            │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ product_offers (level 0)  3 cached  <TIME>
-  ✓ policies (level 0)  3 cached  <TIME>
-  ✓ policy_index (level 1)  3 cached  <TIME>
-  ✓ cs_product_brief (level 2)  3 cached  <TIME>
-    └─ cs-search  materialized
+  ✓ product_offers (level 0)  <N> <STATUS>  <TIME>
+  ✓ policies (level 0)  <N> <STATUS>  <TIME>
+  ✓ policy_index (level 1)  <N> <STATUS>  <TIME>
+  ✓ cs_product_brief (level 2)  <N> <STATUS>  <TIME>
+    └─ cs-search  <MATERIALIZED>
        └─ embeddings  3/3  <TIME>  (fastembed, cached: 3)
     └─ cs-search  cached
                         Build Summary
@@ -23,4 +23,4 @@
 │   → cs-search    │ search_index │       │        │  cached │
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
-Total: 0 built, 12 cached, 0 skipped
+Total: <N> <STATUS>, <N> <STATUS>, 0 skipped

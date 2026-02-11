@@ -16,12 +16,12 @@
 ╰─────────────┴───────────────────────────╯
 
 personal-memory  claude-haiku-4-5-20251001 (anthropic)
-├── transcripts  source:parse  6 cached
-├── episodes  transform:episode_summary  6 cached
+├── transcripts  source:parse  <STATS>
+├── episodes  transform:episode_summary  <STATS>
 │   └── ← transcripts
-├── monthly  transform:monthly_rollup  5 cached
+├── monthly  transform:monthly_rollup  <STATS>
 │   └── ← episodes
-└── core  transform:core_synthesis  1 new
+└── core  transform:core_synthesis  <STATS>
     ├── ← monthly
     ├── → memory-index  synix_search_index (sqlite)  new  16 indexed
     │   ├── ← episodes
@@ -31,4 +31,4 @@ personal-memory  claude-haiku-4-5-20251001 (anthropic)
     └── → context-doc  flat_file (markdown)  new  5 indexed
         └── ← core
 
-Estimated: 1 layer(s) to build, 3 cached · 1 LLM calls, <N> tokens, $<COST>
+Estimated: 1 layer(s) to build, <N> <STATUS> · 1 LLM calls, <N> tokens, $<COST>

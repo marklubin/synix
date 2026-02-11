@@ -97,6 +97,27 @@ class TestNormalizeOutput:
         assert "<N> artifacts" in result
         assert "27" not in result
 
+    def test_normalize_plan_tree_stats(self):
+        cached = "├── bios  source:parse  3 cached"
+        fresh = "├── bios  source:parse  3 new"
+        result_cached = _normalize_output(cached, Path("/tmp/case"))
+        result_fresh = _normalize_output(fresh, Path("/tmp/case"))
+        assert result_cached == result_fresh
+        assert "source:parse  <STATS>" in result_cached
+
+    def test_normalize_build_status(self):
+        built = "  ✓ bios (level 0)  3 built  1.2s"
+        cached = "  ✓ bios (level 0)  3 cached  0.0s"
+        result_built = _normalize_output(built, Path("/tmp/case"))
+        result_cached = _normalize_output(cached, Path("/tmp/case"))
+        assert result_built == result_cached
+        assert "<N> <STATUS>" in result_built
+
+    def test_normalize_materialization(self):
+        text1 = "    └─ search  materialized"
+        text2 = "    └─ search  materializing..."
+        assert _normalize_output(text1, Path("/tmp/case")) == _normalize_output(text2, Path("/tmp/case"))
+
     def test_normalize_passthrough(self):
         text = "No dynamic content here\nJust plain text"
         result = _normalize_output(text, Path("/tmp/case"))

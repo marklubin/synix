@@ -5,12 +5,12 @@
 │ Layers: 4                                                                                                            │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ transcripts (level 0)  6 cached  <TIME>
-  ✓ episodes (level 1)  6 cached  <TIME>
-    └─ memory-index  materialized
+  ✓ transcripts (level 0)  <N> <STATUS>  <TIME>
+  ✓ episodes (level 1)  <N> <STATUS>  <TIME>
+    └─ memory-index  <MATERIALIZED>
        └─ embeddings  6/6  <TIME>  (fastembed, cached: 6)
-  ✓ monthly (level 2)  5 cached  <TIME>
-    └─ memory-index  materializing...
+  ✓ monthly (level 2)  <N> <STATUS>  <TIME>
+    └─ memory-index  <MATERIALIZED>
        └─ embeddings  11/11  <TIME>  (fastembed, cached: 11)
   core (level 3)  0/1  ⟳ 1 in flight  <TIME>
 

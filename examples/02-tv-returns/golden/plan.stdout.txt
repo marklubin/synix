@@ -16,15 +16,15 @@
 ╰─────────────┴───────────────────────────╯
 
 tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)
-├── product_offers  source:demo_load_product_offers  3 cached
-├── policies  source:demo_load_policies  3 cached
-├── policy_index  transform:demo_extract_policies  3 cached
+├── product_offers  source:demo_load_product_offers  <STATS>
+├── policies  source:demo_load_policies  <STATS>
+├── policy_index  transform:demo_extract_policies  <STATS>
 │   └── ← policies
-└── cs_product_brief  transform:demo_enrich_cs_brief  3 cached
+└── cs_product_brief  transform:demo_enrich_cs_brief  <STATS>
     ├── ← product_offers
     ├── ← policy_index
     └── → cs-search  synix_search_index (sqlite)  cached  3 indexed
         ├── ← cs_product_brief
         └── embeddings  bge-small-en-v1.5  384d  (fastembed)
 
-Estimated: 0 layer(s) to build, 4 cached · no LLM calls needed (fully cached)
+Estimated: 0 layer(s) to build, <N> <STATUS> · no LLM calls needed (fully cached)
