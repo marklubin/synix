@@ -264,7 +264,10 @@ class TestPlanBuildPartialRebuild:
         # Transcripts should detect new source
         transcript_step = next(s for s in plan.steps if s.name == "transcripts")
         assert transcript_step.status == "rebuild"
-        assert "new source" in transcript_step.reason
+        assert "changed" in transcript_step.reason
+        # Only 1 artifact changed, the rest should be cached
+        assert transcript_step.rebuild_count == 1
+        assert transcript_step.cached_count == 8
 
     def test_cascade_detection(self, pipeline_obj, source_dir, mock_llm):
         """Changing episodes should cascade to monthly and core."""

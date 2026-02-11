@@ -12,7 +12,7 @@ import synix.build.llm_transforms  # noqa: F401
 # Import transform modules to trigger @register_transform decorators
 import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
-from synix.build.dag import resolve_build_order
+from synix.build.dag import needs_rebuild, resolve_build_order
 from synix.build.transforms import get_transform
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import Artifact, Layer, Pipeline
@@ -38,6 +38,8 @@ class StepPlan:
     estimated_tokens: int  # rough estimate (input + output)
     estimated_cost: float  # rough USD estimate
     reason: str  # why rebuild needed (e.g., "prompt changed", "new inputs", "all cached")
+    rebuild_count: int = 0  # artifacts that actually need rebuilding
+    cached_count: int = 0  # artifacts that are already up-to-date
     resolved_llm_config: dict | None = None  # resolved LLM config for this layer (None for parse layers)
     parallel_units: int = 1  # number of parallel work units from split()
 
@@ -138,7 +140,7 @@ def plan_build(
 
     for layer in build_order:
         step = _plan_layer(
-            layer, pipeline, src_dir, store, layer_artifacts,
+            layer, pipeline, src_dir, store, layer_artifacts, plan.steps,
             input_tokens_per_call, output_tokens_per_call,
             input_token_price, output_token_price,
         )
@@ -166,6 +168,7 @@ def _plan_layer(
     src_dir: str,
     store: ArtifactStore | None,
     layer_artifacts: dict[str, list[Artifact]],
+    prior_steps: list[StepPlan],
     input_tokens_per_call: int,
     output_tokens_per_call: int,
     input_token_price: float,
@@ -201,11 +204,13 @@ def _plan_layer(
     # Get the transform
     transform = get_transform(layer.transform)
     prompt_id = None
+    prompt_from_file = False  # True if prompt_id was resolved from a prompt file
     if layer.level > 0:
         try:
             prompt_id = transform.get_prompt_id(
                 _transform_to_prompt_name(layer.transform)
             )
+            prompt_from_file = True
         except (FileNotFoundError, OSError):
             prompt_id = layer.transform
 
@@ -221,10 +226,21 @@ def _plan_layer(
             layer, transform, transform_config, store, layer_artifacts
         )
 
+    # Check if any upstream dependency has pending rebuilds
+    upstream_dirty = False
+    if layer.depends_on:
+        step_lookup = {s.name: s for s in prior_steps}
+        for dep_name in layer.depends_on:
+            dep_step = step_lookup.get(dep_name)
+            if dep_step and dep_step.rebuild_count > 0:
+                upstream_dirty = True
+                break
+
     # For LLM layers, analyze cache state
     step = _plan_llm_layer(
-        layer, inputs, prompt_id, model_config, transform_cache_key,
-        store, layer_artifacts,
+        layer, inputs, prompt_id, prompt_from_file,
+        model_config, transform_cache_key,
+        store, layer_artifacts, upstream_dirty,
         input_tokens_per_call, output_tokens_per_call,
         input_token_price, output_token_price,
     )
@@ -265,6 +281,8 @@ def _plan_parse_layer(
             level=layer.level,
             status="new",
             artifact_count=artifact_count,
+            rebuild_count=artifact_count,
+            cached_count=0,
             estimated_llm_calls=0,
             estimated_tokens=0,
             estimated_cost=0.0,
@@ -278,6 +296,7 @@ def _plan_parse_layer(
 
     new_count = len(new_hashes - existing_hashes)
     removed_count = len(existing_hashes - new_hashes)
+    cached_count = len(new_hashes & existing_hashes)
 
     if new_count == 0 and removed_count == 0 and len(existing) == len(artifacts):
         return StepPlan(
@@ -285,6 +304,8 @@ def _plan_parse_layer(
             level=layer.level,
             status="cached",
             artifact_count=artifact_count,
+            rebuild_count=0,
+            cached_count=artifact_count,
             estimated_llm_calls=0,
             estimated_tokens=0,
             estimated_cost=0.0,
@@ -298,9 +319,9 @@ def _plan_parse_layer(
         status = "rebuild"
         parts = []
         if new_count > 0:
-            parts.append(f"{new_count} new source(s)")
+            parts.append(f"{new_count} changed")
         if removed_count > 0:
-            parts.append(f"{removed_count} removed source(s)")
+            parts.append(f"{removed_count} removed")
         reason = ", ".join(parts) if parts else "sources changed"
 
     return StepPlan(
@@ -308,6 +329,8 @@ def _plan_parse_layer(
         level=layer.level,
         status=status,
         artifact_count=artifact_count,
+        rebuild_count=new_count,
+        cached_count=cached_count,
         estimated_llm_calls=0,
         estimated_tokens=0,
         estimated_cost=0.0,
@@ -319,25 +342,27 @@ def _plan_llm_layer(
     layer: Layer,
     inputs: list[Artifact],
     prompt_id: str | None,
+    prompt_from_file: bool,
     model_config: dict | None,
     transform_cache_key: str,
     store: ArtifactStore | None,
     layer_artifacts: dict[str, list[Artifact]],
+    upstream_dirty: bool,
     input_tokens_per_call: int,
     output_tokens_per_call: int,
     input_token_price: float,
     output_token_price: float,
 ) -> StepPlan:
     """Plan an LLM (level > 0) layer by checking cache state."""
+    tokens_per_call = input_tokens_per_call + output_tokens_per_call
+    cost_per_call = (
+        input_tokens_per_call * input_token_price
+        + output_tokens_per_call * output_token_price
+    )
+
     if store is None:
         # No build dir -- everything is new
-        # Estimate artifact count from inputs and grouping
         estimated_count = _estimate_artifact_count(layer, inputs)
-        tokens_per_call = input_tokens_per_call + output_tokens_per_call
-        cost_per_call = (
-            input_tokens_per_call * input_token_price
-            + output_tokens_per_call * output_token_price
-        )
 
         # Store placeholder artifacts for downstream planning
         layer_artifacts[layer.name] = inputs  # approximate
@@ -347,6 +372,8 @@ def _plan_llm_layer(
             level=layer.level,
             status="new",
             artifact_count=estimated_count,
+            rebuild_count=estimated_count,
+            cached_count=0,
             estimated_llm_calls=estimated_count,
             estimated_tokens=estimated_count * tokens_per_call,
             estimated_cost=estimated_count * cost_per_call,
@@ -356,7 +383,9 @@ def _plan_llm_layer(
     existing = store.list_artifacts(layer.name)
 
     # Check if the whole layer is fully cached (same logic as runner._layer_fully_cached)
-    fully_cached = _is_layer_fully_cached(
+    # If upstream has pending rebuilds, those artifacts will get new hashes —
+    # so even if current input hashes match, the layer will need rebuilding.
+    fully_cached = not upstream_dirty and _is_layer_fully_cached(
         layer, existing, inputs, prompt_id, model_config, transform_cache_key
     )
 
@@ -367,42 +396,81 @@ def _plan_llm_layer(
             level=layer.level,
             status="cached",
             artifact_count=len(existing),
+            rebuild_count=0,
+            cached_count=len(existing),
             estimated_llm_calls=0,
             estimated_tokens=0,
             estimated_cost=0.0,
             reason="all cached",
         )
 
+    # Not fully cached — check per-artifact to get accurate rebuild count.
+    # Determine whether the rebuild is due to a global change (prompt, model,
+    # transform config) or just changed inputs. If global, everything rebuilds.
+    # If only inputs changed, check which existing artifacts are still valid.
+    global_change = _has_global_change(
+        existing, prompt_id, prompt_from_file, model_config, transform_cache_key
+    )
+
+    rebuild_count = 0
+    cached_count = 0
+
+    if global_change:
+        # Prompt, model, or transform config changed — all artifacts rebuild
+        estimated_count = _estimate_artifact_count(layer, inputs)
+        rebuild_count = estimated_count
+        cached_count = 0
+    else:
+        # Check per-artifact which are stale
+        try:
+            transform = get_transform(layer.transform)
+            units = transform.split(inputs, {})
+            # Build a set of all input hashes covered by existing artifacts
+            existing_by_inputs: dict[tuple[str, ...], bool] = {}
+            for art in existing:
+                key = tuple(sorted(art.input_hashes))
+                existing_by_inputs[key] = True
+
+            for unit_inputs, _ in units:
+                input_hashes = tuple(sorted(a.content_hash for a in unit_inputs))
+                if input_hashes in existing_by_inputs:
+                    if upstream_dirty and len(unit_inputs) > 1:
+                        # N:1 unit whose input hashes look cached, but upstream
+                        # has pending rebuilds that will change those hashes.
+                        # The current hashes are stale — mark as rebuild.
+                        rebuild_count += 1
+                    else:
+                        # 1:1 unit or no upstream dirty — hash check is reliable
+                        # because parse layers produce fresh hashes directly.
+                        cached_count += 1
+                else:
+                    rebuild_count += 1
+        except Exception:
+            estimated_count = _estimate_artifact_count(layer, inputs)
+            rebuild_count = estimated_count
+            cached_count = 0
+
+    total_count = rebuild_count + cached_count
+
     # Determine reason for rebuild
     reason = _determine_rebuild_reason(
         existing, inputs, prompt_id, model_config, transform_cache_key
-    )
-
-    # Estimate count and cost
-    estimated_count = _estimate_artifact_count(layer, inputs)
-    # If existing artifacts exist, some might still be cached individually
-    # but for planning, we report the full rebuild as worst-case
-    rebuild_count = estimated_count
-
-    tokens_per_call = input_tokens_per_call + output_tokens_per_call
-    cost_per_call = (
-        input_tokens_per_call * input_token_price
-        + output_tokens_per_call * output_token_price
     )
 
     status = "rebuild" if existing else "new"
     if not existing:
         reason = "new"
 
-    # Store existing artifacts for downstream planning (they will be rebuilt, but
-    # downstream layers need something for estimation)
+    # Store existing artifacts for downstream planning
     layer_artifacts[layer.name] = existing if existing else inputs
 
     return StepPlan(
         name=layer.name,
         level=layer.level,
         status=status,
-        artifact_count=estimated_count,
+        artifact_count=total_count,
+        rebuild_count=rebuild_count,
+        cached_count=cached_count,
         estimated_llm_calls=rebuild_count,
         estimated_tokens=rebuild_count * tokens_per_call,
         estimated_cost=rebuild_count * cost_per_call,
@@ -440,6 +508,54 @@ def _is_layer_fully_cached(
         return False
 
     return True
+
+
+def _has_global_change(
+    existing: list[Artifact],
+    prompt_id: str | None,
+    prompt_from_file: bool,
+    model_config: dict | None,
+    transform_cache_key: str,
+) -> bool:
+    """Check if prompt, model, or transform config changed (affects all artifacts).
+
+    For built-in transforms, prompt_id is a file-content hash that changes when
+    the prompt template is edited — a mismatch means a real change.
+    For custom transforms, the plan falls back to the transform name which won't
+    match the custom prompt_id set by execute(). In that case, check consistency
+    among existing artifacts instead.
+    """
+    if not existing:
+        return False
+
+    # Check model config
+    if model_config is not None:
+        for art in existing:
+            if (art.model_config or {}) != model_config:
+                return True
+
+    # Check transform cache key
+    if transform_cache_key:
+        for art in existing:
+            if art.metadata.get("transform_cache_key", "") != transform_cache_key:
+                return True
+
+    # Check prompt_id
+    if prompt_from_file:
+        # Built-in transform: prompt_id is a content hash of the prompt file.
+        # Any mismatch means the prompt was edited — a real global change.
+        for art in existing:
+            if art.prompt_id != prompt_id:
+                return True
+    else:
+        # Custom transform: plan fell back to transform name, which won't match
+        # the custom prompt_id. Instead, check if existing artifacts are
+        # self-consistent (all same prompt_id = nothing changed).
+        stored_prompt_ids = {art.prompt_id for art in existing}
+        if len(stored_prompt_ids) > 1:
+            return True  # inconsistent — something changed
+
+    return False
 
 
 def _determine_rebuild_reason(
