@@ -12,6 +12,7 @@
     └─ cs-search  <MATERIALIZED>
        └─ embeddings  3/3  <TIME>  (fastembed, <MATERIALIZED>: 3)
     └─ cs-search  <MATERIALIZED>
+       └─ embeddings  3/3  <TIME>  (fastembed, <MATERIALIZED>: 3)
                         Build Summary
 ╭──────────────────┬──────────────┬───────┬────────┬─────────╮
 │ Layer            │    Level     │ Built │ Cached │ Skipped │
@@ -24,3 +25,4 @@
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
+LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>

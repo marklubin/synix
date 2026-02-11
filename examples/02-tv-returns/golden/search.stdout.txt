@@ -104,25 +104,13 @@ cs-brief-DYS-V15-DETECT
 │                                                                                                                      │
 │  Store Return Policy: Does NOT accept returns for defective items beyond the 15-day window.                          │
 │                                                                                                                      │
-│  Manufacturer Warranty Applies Instead:                                                                              │
+│  Manufacturer Warranty Applies Instead: ... 2. Samsung handles all troubleshooting, repair authorization, and        │
+│  replacements 3. If Samsung requires proof of purchase, customer should request receipt from our store by calling    │
+│  1-888-555-SHOP with their order number 4. Important: All returns and warranty claims are handled through Samsung    │
+│  support, NOT through our store                                                                                      │
 │                                                                                                                      │
-│                                                                                                                      │
-│   Coverage                       Details                                                                             │
-│   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────   │
-│   90-Day Satisfaction Guarantee  Full refund or replacement — no restocking fee, no questions asked. This applies    │
-│                                  to defects discovered within 90 days of delivery, even if outside the 15-day        │
-│                                  store return window.                                                                │
-│   1-Year Limited Warranty        Repair of defective units at no cost (after 90 days, within 1 year)                 │
-│                                                                                                                      │
-│                                                                                                                      │
-│  ... 2. Samsung handles all troubleshooting, repair authorization, and replacements 3. If Samsung requires proof of  │
-│  purchase, customer should request receipt from our store by calling 1-888-555-SHOP with their order number 4.       │
-│  Important: All returns and warranty claims are handled through Samsung support, NOT through our store               │
-│                                                                                                                      │
-│  Key Point: The manufacturer warranty is separate from the store return policy. The 90-Day Satisfaction Guarantee    │
-│  provides coverage for defects discovered after the 15-day store return window closes (up to 90 days from            │
-│  delivery). Once 90 days have passed, the 1-Year Limited Warranty applies, which covers repair only (not full        │
-│  refunds or replacements).                                                                                           │
+│  Key Point: The manufacturer warranty is separate from the store return policy. Once the 15-day return window        │
+│  closes, defective units must be handled through Samsung, not through our store.                                     │
 │                                                                                                                      │
 │  ------------------------------------------------------------------------------------------------------------------  │
 │                                                                                                                      │
@@ -132,9 +120,8 @@ cs-brief-DYS-V15-DETECT
 │     delivery. Expedited shipping is NOT available.                                                                   │
 │   2 15-day return window for unopened items only — If opened, 15% restocking fee applies. After 15 days,             │
 │     manufacturer warranty takes over.                                                                                │
-│   3 90-Day Satisfaction Guarantee covers defects beyond 15 days — If a customer discovers a defect between day 16    │
-│     and day 90 after delivery, Samsung's 90-Day Satisfaction Guarantee provides full refund or replacement at no     │
-│     cost. Direct customers to 1-800-SAMSUNG. ...                                                                     │
+│   3 Manufacturer handles all warranty claims — Do not process warranty claims through our store. Direct customers    │
+│     to 1-800-SAMSUNG. ...                                                                                            │
 │                                                                                                                      │
 │  Artifact: cs-brief-SAM-OLED-65  Score: 0.00  Mode: keyword                                                          │
 │                                                                                                                      │

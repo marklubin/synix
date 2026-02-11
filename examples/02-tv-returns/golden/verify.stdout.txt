@@ -1,38 +1,16 @@
 
-                           Build Verification
-╭─────────────────────┬────────┬───────────────────────────────────────╮
-│ Check               │ Status │ Message                               │
-├─────────────────────┼────────┼───────────────────────────────────────┤
-│ build_exists        │  PASS  │ Build directory exists with manifest  │
-│ manifest_valid      │  PASS  │ Manifest valid with <N> artifacts      │
-│ artifacts_exist     │  PASS  │ All <N> artifact files present         │
-│ provenance_complete │  FAIL  │ <N> non-root artifacts lack provenance │
-│ search_index        │  PASS  │ Search index has <N> entries            │
-│ content_hashes      │  PASS  │ All <N> content hashes verified        │
-│ no_orphans          │  PASS  │ No orphaned artifact files            │
-│ merge_integrity     │  PASS  │ No merge artifacts found              │
-╰─────────────────────┴────────┴───────────────────────────────────────╯
+                               Build Verification
+╭─────────────────────┬────────┬────────────────────────────────────────────────╮
+│ Check               │ Status │ Message                                        │
+├─────────────────────┼────────┼────────────────────────────────────────────────┤
+│ build_exists        │  PASS  │ Build directory exists with manifest           │
+│ manifest_valid      │  PASS  │ Manifest valid with <N> artifacts               │
+│ artifacts_exist     │  PASS  │ All <N> artifact files present                  │
+│ provenance_complete │  PASS  │ All non-root artifacts have provenance records │
+│ search_index        │  PASS  │ Search index has <N> entries                     │
+│ content_hashes      │  PASS  │ All <N> content hashes verified                 │
+│ no_orphans          │  PASS  │ No orphaned artifact files                     │
+│ merge_integrity     │  PASS  │ No merge artifacts found                       │
+╰─────────────────────┴────────┴────────────────────────────────────────────────╯
 
-provenance_complete details:
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-e73f2e01 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-b76d6ad5 (level 99)
-  trace-semantic_enrichment-cs-brief-SAM-OLED-65-7a39a3ec (level 99)
-  trace-semantic_enrichment-cs-brief-SAM-OLED-65-46fb30c2 (level 99)
-  trace-semantic_enrichment-cs-brief-SAM-OLED-65-125c0e50 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-09b80bd3 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-e1e1adb3 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-c66f9e8d (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-8cda921d (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-0cfff695 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-bf78991d (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-aa33c99a (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-1dd6b691 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-a42b1750 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-72b7b3d2 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-07a366fb (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-e81d43a4 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-fb04ccc6 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-d3b04853 (level 99)
-  trace-semantic_conflict_check-cs-brief-SAM-OLED-65-453422de (level 99)
-
-1/8 checks failed
+All 8 checks passed
