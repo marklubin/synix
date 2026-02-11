@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import IntEnum
 from pathlib import Path
 from threading import Lock
@@ -137,7 +138,7 @@ class SynixLogger:
         self.build_dir = build_dir
         self.progress = progress
         self.run_log = RunLog(
-            run_id=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+            run_id=datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ"),
         )
         self._lock = Lock()
         self._log_file = None
@@ -156,7 +157,7 @@ class SynixLogger:
         """Write a JSON event to the JSONL log file (thread-safe)."""
         with self._lock:
             if self._log_file is not None:
-                event["timestamp"] = datetime.now(timezone.utc).isoformat()
+                event["timestamp"] = datetime.now(_dt.UTC).isoformat()
                 self._log_file.write(json.dumps(event) + "\n")
                 self._log_file.flush()
 
