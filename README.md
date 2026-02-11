@@ -50,6 +50,124 @@ ls build/layer2-cs_product_brief/
 sqlite3 build/search.db "SELECT artifact_id, layer_name FROM search_index LIMIT 5"
 ```
 
+## Defining a Pipeline
+
+A pipeline is a Python file that declares your memory architecture: sources, transforms, projections, and validators.
+
+```python
+# pipeline.py
+from synix import Pipeline, Layer, Projection, ValidatorDecl, FixerDecl
+
+pipeline = Pipeline("my-memory")
+pipeline.source_dir = "./exports"
+pipeline.build_dir = "./build"
+pipeline.llm_config = {
+    "model": "claude-sonnet-4-20250514",
+    "temperature": 0.3,
+    "max_tokens": 1024,
+}
+
+# Layer 0: auto-detect and parse source files
+pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+
+# Layer 1: one summary per conversation
+pipeline.add_layer(Layer(
+    name="episodes", level=1, depends_on=["transcripts"],
+    transform="episode_summary", grouping="by_conversation",
+))
+
+# Layer 2: group episodes by month
+pipeline.add_layer(Layer(
+    name="monthly", level=2, depends_on=["episodes"],
+    transform="monthly_rollup", grouping="by_month",
+))
+
+# Layer 3: synthesize everything into core memory
+pipeline.add_layer(Layer(
+    name="core", level=3, depends_on=["monthly"],
+    transform="core_synthesis", grouping="single",
+    context_budget=10000,
+))
+
+# Projections — how artifacts become usable
+pipeline.add_projection(Projection(
+    name="memory-index", projection_type="search_index",
+    sources=[
+        {"layer": "episodes", "search": ["fulltext"]},
+        {"layer": "monthly", "search": ["fulltext"]},
+        {"layer": "core", "search": ["fulltext"]},
+    ],
+))
+pipeline.add_projection(Projection(
+    name="context-doc", projection_type="flat_file",
+    sources=[{"layer": "core"}],
+    config={"output_path": "./build/context.md"},
+))
+
+# Optional: validators and fixers
+pipeline.add_validator(ValidatorDecl(name="pii", config={"severity": "warning"}))
+pipeline.add_validator(ValidatorDecl(name="semantic_conflict", config={
+    "llm_config": pipeline.llm_config,
+}))
+pipeline.add_fixer(FixerDecl(name="semantic_enrichment"))
+```
+
+Because pipelines are Python, you can generate layers dynamically:
+
+```python
+for topic in ["career", "projects", "health"]:
+    pipeline.add_layer(Layer(
+        name=f"topic-{topic}", level=2, depends_on=["episodes"],
+        transform="topical_rollup", grouping="by_topic",
+        config={"topics": [topic]},
+    ))
+```
+
+## Built-in Components
+
+### Sources
+
+Drop files into `source_dir` — the `parse` transform auto-detects format by file structure.
+
+| Format | Extensions | Notes |
+|--------|-----------|-------|
+| **ChatGPT** | `.json` | `conversations.json` exports. Handles regeneration branches via `current_node`. |
+| **Claude** | `.json` | Claude conversation exports with `chat_messages` arrays. |
+| **Text / Markdown** | `.txt`, `.md` | YAML frontmatter support. Auto-detects conversation turns (`User:` / `Assistant:` prefixes). |
+
+### Transforms
+
+| Name | Grouping | What it does |
+|------|----------|-------------|
+| `parse` | — | Auto-discovers and parses all source files into transcript artifacts. |
+| `episode_summary` | `by_conversation` | 1 transcript → 1 episode summary via LLM. |
+| `monthly_rollup` | `by_month` | Groups episodes by calendar month, synthesizes each via LLM. |
+| `topical_rollup` | `by_topic` | Groups episodes by user-declared topics. Requires `config={"topics": [...]}`. |
+| `core_synthesis` | `single` | All rollups → single core memory document. Respects `context_budget`. |
+| `merge` | — | Groups artifacts by content similarity (Jaccard), merges above threshold. |
+
+### Projections
+
+| Type | Output | Purpose |
+|------|--------|---------|
+| `search_index` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search. |
+| `flat_file` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt. |
+
+### Validators
+
+| Name | What it checks |
+|------|---------------|
+| `mutual_exclusion` | Merged artifacts don't mix values of a metadata field (e.g., `customer_id`). |
+| `required_field` | Artifacts in specified layers have a required metadata field. |
+| `pii` | Detects credit cards, SSNs, emails, phone numbers in content. |
+| `semantic_conflict` | LLM-based detection of contradictions across synthesized artifacts. |
+
+### Fixers
+
+| Name | What it fixes |
+|------|--------------|
+| `semantic_enrichment` | Resolves semantic conflicts by rewriting with source episode context. Interactive approval. |
+
 ## Key Capabilities
 
 **Incremental rebuilds** — Change a prompt or add new conversations. Only downstream artifacts reprocess.
