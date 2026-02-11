@@ -76,6 +76,27 @@ CLI UX requirements (Rich formatting, colors, progress): [docs/cli-ux.md](docs/c
 - No external databases, no Docker, no web server
 - UV-native: `uv sync`, `uv run synix`, `uv run pytest`
 
+## Contributing
+
+**Before pushing any changes**, run the prerelease checks:
+
+```bash
+./scripts/prerelease
+```
+
+This runs `ruff fix` → `ruff check` → `pytest`. All must pass before pushing. CI runs the same checks — if prerelease passes locally, CI will pass.
+
+**Workflow changes** (`.github/workflows/`): test locally with [`act`](https://github.com/nektos/act) before pushing:
+
+```bash
+act push -W .github/workflows/<workflow>.yml --secret-file .secrets
+```
+
+Store local secrets in `.secrets` (gitignored):
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
 ## Critical Rules
 
 - **DO NOT** refactor core engine or abstract prematurely

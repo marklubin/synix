@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== ruff fix ==="
+uv run ruff check --fix .
+echo ""
+
+echo "=== ruff check ==="
+uv run ruff check .
+echo ""
+
+echo "=== pytest ==="
+uv run pytest tests/ -v
+echo ""
+
+echo "=== all checks passed ==="
