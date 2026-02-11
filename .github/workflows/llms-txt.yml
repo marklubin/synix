@@ -9,6 +9,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -27,9 +30,9 @@ jobs:
 
       - name: Commit if changed
         run: |
-          git diff --quiet src/synix/llms.txt 2>/dev/null && exit 0
+          git add src/synix/llms.txt
+          git diff --cached --quiet && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/synix/llms.txt
           git commit -m "chore: regenerate llms.txt"
           git push
