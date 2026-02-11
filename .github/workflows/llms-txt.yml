@@ -1,0 +1,35 @@
+name: Generate llms.txt
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - "CLAUDE.md"
+      - "README.md"
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - run: uv sync
+
+      - run: uv run synix llms --generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Commit if changed
+        run: |
+          git diff --quiet src/synix/llms.txt 2>/dev/null && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/synix/llms.txt
+          git commit -m "chore: regenerate llms.txt"
+          git push
