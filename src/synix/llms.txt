@@ -1,0 +1,102 @@
+# synix
+
+> A build system for agent memory
+
+## What it does
+
+Synix processes conversation history through declarative pipelines to build searchable, hierarchical memory with full provenance tracking. Raw conversations become episodes, episodes roll up into monthly summaries, summaries synthesize into core memory — with content-addressed caching so only affected layers rebuild when you change prompts or add data.
+
+## Key concepts
+
+- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory) with SHA256 content addressing
+- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core)  
+- **Pipeline** — Python-declared layers, transforms, grouping strategies, and projections
+- **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search index, markdown context doc)
+- **Provenance** — every artifact traces back to source conversations, always included in search results
+- **Transform types** — transform (1:1), aggregate (N:1 grouped), fold (N:1 sequential), merge (deduplication)
+
+## Installation and quick start
+
+```bash
+# Install
+pip install synix
+
+# Initialize with conversation exports  
+synix init my-memory --from ~/exports/conversations.json
+
+# Build the pipeline
+synix build
+
+# Search with provenance
+synix search "that rust conversation" --trace
+```
+
+## CLI commands
+
+- `synix build` — Execute pipeline, only rebuild what changed
+- `synix plan` — Dry-run showing what would build and estimated cost  
+- `synix search <query>` — Full-text + semantic search across memory layers
+- `synix search <query> --step <layer>` — Search specific altitude (episodes vs monthly vs core)
+- `synix lineage <artifact-id>` — Show full provenance chain to sources
+- `synix diff <artifact-id>` — Compare artifact versions across builds
+- `synix verify` — Check build integrity (provenance, cache consistency)
+- `synix status` — Build summary table with artifact counts and timing
+
+## Architecture overview
+
+```
+src/synix/
+├── cli.py              # Click CLI commands
+├── pipeline/
+│   ├── config.py       # Parse Python pipeline → Pipeline/Layer objects  
+│   ├── dag.py          # DAG resolution, build order, rebuild detection
+│   └── runner.py       # Execute pipeline, walk DAG, cache artifacts
+├── artifacts/
+│   ├── store.py        # Artifact storage (filesystem-backed)
+│   └── provenance.py   # Provenance tracking and lineage queries
+├── transforms/
+│   ├── base.py         # Transform interface
+│   ├── parse.py        # ChatGPT/Claude JSON → transcript artifacts  
+│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)
+│   └── prompts/        # Prompt templates as text files
+├── projections/
+│   ├── search_index.py # SQLite FTS5 materialization and querying
+│   └── flat_file.py    # Render core memory as markdown context
+└── sources/
+    ├── chatgpt.py      # ChatGPT export parser
+    └── claude.py       # Claude export parser
+```
+
+## Pipeline definition
+
+Pipelines are defined in Python for flexibility:
+
+```python
+from synix import Pipeline, Layer, Projection
+
+pipeline = Pipeline("personal-memory")
+pipeline.source_dir = "./exports"
+pipeline.llm_config = {"model": "claude-sonnet-4", "temperature": 0.3}
+
+# Memory hierarchy
+pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], 
+                        transform="episode_summary", grouping="by_conversation"))
+pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
+                        transform="monthly_rollup", grouping="by_month"))
+pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
+                        transform="core_synthesis", grouping="single"))
+
+# Search surfaces  
+pipeline.add_projection(Projection(name="memory-index", projection_type="search_index",
+                                  sources=[{"layer": "episodes"}, {"layer": "monthly"}]))
+```
+
+## Important constraints
+
+- **SQLite only** — No external databases, filesystem + SQLite FTS5 for storage and search
+- **Python 3.11+** — Uses modern Python features, requires `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`  
+- **UV-native** — Built for `uv sync`, `uv run synix`, `uv run pytest` workflow
+- **No web UI** — Pure CLI tool, outputs can be consumed by other systems
+- **Content-addressed caching** — Rebuilds based on input/prompt hash changes, not timestamps
+- **Incremental only** — No streaming/real-time updates, designed for batch processing of conversation history
