@@ -40,6 +40,7 @@ class TestBaseTransform:
     def test_get_transform_unknown_raises(self):
         """Requesting unknown transform raises ValueError."""
         import pytest
+
         with pytest.raises(ValueError, match="Unknown transform"):
             get_transform("nonexistent_transform")
 
@@ -112,10 +113,16 @@ class TestMonthlyRollupTransform:
                 content=f"Episode {i} content about technical topics.",
                 metadata={"date": date, "title": f"Episode {i}"},
             )
-            for i, date in enumerate([
-                "2024-03-10", "2024-03-15", "2024-03-20",
-                "2024-04-05", "2024-04-10", "2024-04-15",
-            ])
+            for i, date in enumerate(
+                [
+                    "2024-03-10",
+                    "2024-03-15",
+                    "2024-03-20",
+                    "2024-04-05",
+                    "2024-04-10",
+                    "2024-04-15",
+                ]
+            )
         ]
 
         transform = get_transform("monthly_rollup")
@@ -169,10 +176,13 @@ class TestTopicalRollupTransform:
         topics = ["career", "health", "ai-projects"]
 
         transform = get_transform("topical_rollup")
-        results = transform.execute(episodes, {
-            "llm_config": {},
-            "topics": topics,
-        })
+        results = transform.execute(
+            episodes,
+            {
+                "llm_config": {},
+                "topics": topics,
+            },
+        )
 
         assert len(results) == 3
         assert len(mock_llm) == 3
@@ -192,10 +202,13 @@ class TestTopicalRollupTransform:
         ]
 
         transform = get_transform("topical_rollup")
-        results = transform.execute(episodes, {
-            "llm_config": {},
-            "topics": ["test-topic"],
-        })
+        results = transform.execute(
+            episodes,
+            {
+                "llm_config": {},
+                "topics": ["test-topic"],
+            },
+        )
 
         assert len(results) == 1
         # All 3 episodes should be in input_hashes

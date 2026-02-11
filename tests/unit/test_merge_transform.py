@@ -112,22 +112,25 @@ class TestMergeSimilarArtifacts:
             artifact_id="extract-conv_8834",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. "
-                    "Customer reported unable to complete payment transaction.",
+            "Customer reported unable to complete payment transaction.",
             metadata={"customer_id": "alice", "week": "47"},
         )
         art_b = Artifact(
             artifact_id="extract-conv_8891",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. "
-                    "Customer experienced payment failure during transaction.",
+            "Customer experienced payment failure during transaction.",
             metadata={"customer_id": "bob", "week": "47"},
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.5,
-            "constraints": [],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.5,
+                "constraints": [],
+            },
+        )
 
         # Should merge into one artifact
         assert len(results) == 1
@@ -153,10 +156,13 @@ class TestMergeSimilarArtifacts:
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.85,
-            "constraints": [],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.85,
+                "constraints": [],
+            },
+        )
 
         # Should remain separate
         assert len(results) == 2
@@ -166,23 +172,24 @@ class TestMergeSimilarArtifacts:
         art_a = Artifact(
             artifact_id="extract-conv_8834",
             artifact_type="extract",
-            content="BillingEngine threw ERR-4401 during checkout process week 47. "
-                    "Customer reported payment failure.",
+            content="BillingEngine threw ERR-4401 during checkout process week 47. Customer reported payment failure.",
             metadata={"customer_id": "alice", "week": "47"},
         )
         art_b = Artifact(
             artifact_id="extract-conv_8891",
             artifact_type="extract",
-            content="BillingEngine threw ERR-4401 during checkout process week 47. "
-                    "Customer reported payment failure.",
+            content="BillingEngine threw ERR-4401 during checkout process week 47. Customer reported payment failure.",
             metadata={"customer_id": "bob", "week": "47"},
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.5,
-            "constraints": ["NEVER merge records with different customer_id"],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.5,
+                "constraints": ["NEVER merge records with different customer_id"],
+            },
+        )
 
         # Should stay separate despite high similarity
         assert len(results) == 2
@@ -210,16 +217,22 @@ class TestMergeSimilarArtifacts:
         transform = get_transform("merge")
 
         # With low threshold, they merge
-        results_low = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.3,
-            "constraints": [],
-        })
+        results_low = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.3,
+                "constraints": [],
+            },
+        )
 
         # With very high threshold, they stay separate
-        results_high = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.99,
-            "constraints": [],
-        })
+        results_high = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.99,
+                "constraints": [],
+            },
+        )
 
         assert len(results_low) <= len(results_high)
         # Low threshold should merge them
@@ -247,10 +260,13 @@ class TestMergeMetadata:
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.5,
-            "constraints": [],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.5,
+                "constraints": [],
+            },
+        )
 
         assert len(results) == 1
         merged = results[0]
@@ -276,10 +292,13 @@ class TestMergeMetadata:
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.85,
-            "constraints": [],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.85,
+                "constraints": [],
+            },
+        )
 
         assert len(results) == 2
         # Singletons should retain their original artifact_id and type
@@ -305,10 +324,13 @@ class TestMergeMetadata:
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.5,
-            "constraints": [],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.5,
+                "constraints": [],
+            },
+        )
 
         assert len(results) == 1
         merged = results[0]
@@ -330,14 +352,18 @@ class TestMergeCacheKey:
     def test_cache_key_includes_constraints(self):
         """Changing constraints changes the cache key."""
         transform = get_transform("merge")
-        key_no_constraint = transform.get_cache_key({
-            "similarity_threshold": 0.85,
-            "constraints": [],
-        })
-        key_with_constraint = transform.get_cache_key({
-            "similarity_threshold": 0.85,
-            "constraints": ["NEVER merge records with different customer_id"],
-        })
+        key_no_constraint = transform.get_cache_key(
+            {
+                "similarity_threshold": 0.85,
+                "constraints": [],
+            }
+        )
+        key_with_constraint = transform.get_cache_key(
+            {
+                "similarity_threshold": 0.85,
+                "constraints": ["NEVER merge records with different customer_id"],
+            }
+        )
         assert key_no_constraint != key_with_constraint
 
     def test_cache_key_deterministic(self):
@@ -354,12 +380,16 @@ class TestMergeCacheKey:
     def test_cache_key_constraint_order_independent(self):
         """Constraints in different order produce same cache key (they are sorted)."""
         transform = get_transform("merge")
-        key_a = transform.get_cache_key({
-            "constraints": ["no different customer_id", "no different region"],
-        })
-        key_b = transform.get_cache_key({
-            "constraints": ["no different region", "no different customer_id"],
-        })
+        key_a = transform.get_cache_key(
+            {
+                "constraints": ["no different customer_id", "no different region"],
+            }
+        )
+        key_b = transform.get_cache_key(
+            {
+                "constraints": ["no different region", "no different customer_id"],
+            }
+        )
         assert key_a == key_b
 
 
@@ -398,10 +428,13 @@ class TestMergeEdgeCases:
         ]
 
         transform = get_transform("merge")
-        results = transform.execute(arts, {
-            "similarity_threshold": 0.5,
-            "constraints": [],
-        })
+        results = transform.execute(
+            arts,
+            {
+                "similarity_threshold": 0.5,
+                "constraints": [],
+            },
+        )
 
         # All three should merge into one
         assert len(results) == 1
@@ -423,10 +456,13 @@ class TestMergeEdgeCases:
         )
 
         transform = get_transform("merge")
-        results = transform.execute([art_a, art_b], {
-            "similarity_threshold": 0.5,
-            "constraints": ["NEVER merge records with different customer_id"],
-        })
+        results = transform.execute(
+            [art_a, art_b],
+            {
+                "similarity_threshold": 0.5,
+                "constraints": ["NEVER merge records with different customer_id"],
+            },
+        )
 
         # Missing field doesn't violate constraint, so they should merge
         assert len(results) == 1
@@ -436,10 +472,12 @@ class TestMergeEdgeCases:
         transform = get_transform("merge")
         # Create artifacts with identical content (similarity = 1.0 > 0.85 default)
         arts = [
-            Artifact(artifact_id="a", artifact_type="extract",
-                     content="Exact same content here for testing", metadata={}),
-            Artifact(artifact_id="b", artifact_type="extract",
-                     content="Exact same content here for testing", metadata={}),
+            Artifact(
+                artifact_id="a", artifact_type="extract", content="Exact same content here for testing", metadata={}
+            ),
+            Artifact(
+                artifact_id="b", artifact_type="extract", content="Exact same content here for testing", metadata={}
+            ),
         ]
         results = transform.execute(arts, {})
         assert len(results) == 1  # merged with default threshold
@@ -451,8 +489,7 @@ class TestBuildMergeGroups:
     def test_all_similar_one_group(self):
         """All similar artifacts form one group."""
         arts = [
-            Artifact(artifact_id=f"a{i}", artifact_type="x",
-                     content="Same content repeated here", metadata={})
+            Artifact(artifact_id=f"a{i}", artifact_type="x", content="Same content repeated here", metadata={})
             for i in range(4)
         ]
         groups = _build_merge_groups(arts, threshold=0.5, constraint_fields=[])
@@ -462,21 +499,25 @@ class TestBuildMergeGroups:
     def test_two_distinct_groups(self):
         """Two clusters of similar artifacts form two groups."""
         cluster_a = [
-            Artifact(artifact_id=f"billing-{i}", artifact_type="x",
-                     content="BillingEngine ERR-4401 checkout failure payment",
-                     metadata={})
+            Artifact(
+                artifact_id=f"billing-{i}",
+                artifact_type="x",
+                content="BillingEngine ERR-4401 checkout failure payment",
+                metadata={},
+            )
             for i in range(2)
         ]
         cluster_b = [
-            Artifact(artifact_id=f"shipping-{i}", artifact_type="x",
-                     content="Shipping delay warehouse logistics tracking number",
-                     metadata={})
+            Artifact(
+                artifact_id=f"shipping-{i}",
+                artifact_type="x",
+                content="Shipping delay warehouse logistics tracking number",
+                metadata={},
+            )
             for i in range(2)
         ]
 
-        groups = _build_merge_groups(
-            cluster_a + cluster_b, threshold=0.5, constraint_fields=[]
-        )
+        groups = _build_merge_groups(cluster_a + cluster_b, threshold=0.5, constraint_fields=[])
         # Should form 2 groups
         assert len(groups) == 2
 

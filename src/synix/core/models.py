@@ -64,7 +64,7 @@ class Projection:
 class ValidatorDecl:
     """Declaration of a domain validator to run after build."""
 
-    name: str                    # registered validator name
+    name: str  # registered validator name
     config: dict = field(default_factory=dict)
 
 

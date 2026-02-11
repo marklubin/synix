@@ -16,6 +16,7 @@ from synix.search.retriever import HybridRetriever, _cosine_similarity
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_embedding_provider(embedding_map: dict[str, list[float]]):
     """Create a mock EmbeddingProvider that returns deterministic embeddings.
 
@@ -61,6 +62,7 @@ def _populate_index(index: SearchIndex, items: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def search_index(tmp_build_dir):
@@ -140,6 +142,7 @@ def sample_embedding_map():
 # Cosine similarity
 # ---------------------------------------------------------------------------
 
+
 class TestCosineSimilarity:
     def test_identical_vectors(self):
         assert _cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
@@ -161,6 +164,7 @@ class TestCosineSimilarity:
 # ---------------------------------------------------------------------------
 # Keyword-only retrieval
 # ---------------------------------------------------------------------------
+
 
 class TestKeywordRetrieval:
     def test_keyword_returns_results(self, populated_index):
@@ -215,6 +219,7 @@ class TestKeywordRetrieval:
 # Semantic-only retrieval
 # ---------------------------------------------------------------------------
 
+
 class TestSemanticRetrieval:
     def test_semantic_returns_results(self, populated_index, sample_embedding_map):
         """Semantic mode returns results ranked by similarity."""
@@ -255,9 +260,7 @@ class TestSemanticRetrieval:
             search_index=populated_index,
             embedding_provider=provider,
         )
-        results = retriever.query(
-            "machine learning", mode="semantic", layers=["episodes"]
-        )
+        results = retriever.query("machine learning", mode="semantic", layers=["episodes"])
         assert all(r.layer_name == "episodes" for r in results)
 
     def test_semantic_top_k(self, populated_index, sample_embedding_map):
@@ -291,6 +294,7 @@ class TestSemanticRetrieval:
 # ---------------------------------------------------------------------------
 # Hybrid retrieval (RRF)
 # ---------------------------------------------------------------------------
+
 
 class TestHybridRetrieval:
     def test_hybrid_returns_results(self, populated_index, sample_embedding_map):
@@ -354,9 +358,7 @@ class TestHybridRetrieval:
             search_index=populated_index,
             embedding_provider=provider,
         )
-        results = retriever.query(
-            "machine learning", mode="hybrid", layers=["episodes"]
-        )
+        results = retriever.query("machine learning", mode="hybrid", layers=["episodes"])
         assert all(r.layer_name == "episodes" for r in results)
 
     def test_hybrid_without_embeddings_falls_back(self, populated_index):
@@ -389,6 +391,7 @@ class TestHybridRetrieval:
 # Invalid mode
 # ---------------------------------------------------------------------------
 
+
 class TestInvalidMode:
     def test_invalid_mode_raises(self, populated_index):
         """Invalid mode raises ValueError."""
@@ -400,6 +403,7 @@ class TestInvalidMode:
 # ---------------------------------------------------------------------------
 # RRF fusion unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestRRFFusion:
     def test_rrf_single_list(self):
@@ -473,6 +477,7 @@ class TestRRFFusion:
 # CLI flag tests
 # ---------------------------------------------------------------------------
 
+
 class TestCLIFlags:
     def test_search_mode_flag_exists(self):
         """The --mode flag is registered on the search command."""
@@ -507,6 +512,7 @@ class TestCLIFlags:
 # ---------------------------------------------------------------------------
 # Min similarity threshold
 # ---------------------------------------------------------------------------
+
 
 class TestMinSimilarityThreshold:
     def test_semantic_filters_low_scores(self, populated_index, sample_embedding_map):
@@ -557,6 +563,7 @@ class TestMinSimilarityThreshold:
 # ---------------------------------------------------------------------------
 # Layered retrieval (layer-weighted semantic + RRF)
 # ---------------------------------------------------------------------------
+
 
 class TestLayeredRetrieval:
     def test_layered_returns_results(self, populated_index, sample_embedding_map):
@@ -633,9 +640,7 @@ class TestLayeredRetrieval:
             embedding_provider=provider,
         )
         retriever.MIN_SEMANTIC_SCORE = 0.0
-        results = retriever.query(
-            "machine learning", mode="layered", layers=["episodes"]
-        )
+        results = retriever.query("machine learning", mode="layered", layers=["episodes"])
         assert all(r.layer_name == "episodes" for r in results)
 
     def test_layered_top_k(self, populated_index, sample_embedding_map):

@@ -42,10 +42,8 @@ class TestFlatFileProjection:
         projection = FlatFileProjection()
 
         artifacts = [
-            Artifact(artifact_id="core-1", artifact_type="core_memory",
-                     content="## Section One\nFirst part."),
-            Artifact(artifact_id="core-2", artifact_type="core_memory",
-                     content="## Section Two\nSecond part."),
+            Artifact(artifact_id="core-1", artifact_type="core_memory", content="## Section One\nFirst part."),
+            Artifact(artifact_id="core-2", artifact_type="core_memory", content="## Section Two\nSecond part."),
         ]
 
         projection.materialize(artifacts, {"output_path": str(output_path)})

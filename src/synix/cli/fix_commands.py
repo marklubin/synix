@@ -18,10 +18,8 @@ from synix.cli.main import console, pipeline_argument
 @pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-@click.option("--dry-run", is_flag=True,
-              help="Show fix proposals without applying")
-def fix(pipeline_path: str, build_dir: str | None, output_json: bool,
-        dry_run: bool):
+@click.option("--dry-run", is_flag=True, help="Show fix proposals without applying")
+def fix(pipeline_path: str, build_dir: str | None, output_json: bool, dry_run: bool):
     """Fix violations found by validate.
 
     Reads pre-saved violations from the violation queue and runs
@@ -41,10 +39,7 @@ def fix(pipeline_path: str, build_dir: str | None, output_json: bool,
 
     build_path = Path(pipeline.build_dir)
     if not build_path.exists():
-        console.print(
-            f"[red]Build directory not found:[/red] {build_path}\n"
-            "Run [bold]synix build[/bold] first."
-        )
+        console.print(f"[red]Build directory not found:[/red] {build_path}\nRun [bold]synix build[/bold] first.")
         sys.exit(1)
 
     _run_fix_mode(pipeline, build_path, output_json, dry_run)
@@ -73,49 +68,48 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
     queue.save_state()  # persist any expiry changes
 
     if not output_json:
-        console.print(Panel(
-            f"[bold]Pipeline:[/bold] {pipeline.name}\n"
-            f"[bold]Build:[/bold] {build_path}\n"
-            f"[bold]Active violations:[/bold] {len(active_dicts)}\n"
-            f"[bold]Mode:[/bold] {mode_label}",
-            title="[bold cyan]Synix Fix[/bold cyan]",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel(
+                f"[bold]Pipeline:[/bold] {pipeline.name}\n"
+                f"[bold]Build:[/bold] {build_path}\n"
+                f"[bold]Active violations:[/bold] {len(active_dicts)}\n"
+                f"[bold]Mode:[/bold] {mode_label}",
+                title="[bold cyan]Synix Fix[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
     if not active_dicts:
         if not output_json:
             console.print(
-                "\n[green]No active violations.[/green] "
-                "Run [bold]synix validate[/bold] first to detect violations."
+                "\n[green]No active violations.[/green] Run [bold]synix validate[/bold] first to detect violations."
             )
         return
 
     # Reconstruct Violation objects from persisted state
     result = ValidationResult()
     for vd in active_dicts:
-        result.violations.append(Violation(
-            violation_type=vd.get("violation_type", ""),
-            severity=vd.get("severity", "warning"),
-            message=vd.get("message", ""),
-            artifact_id=vd.get("artifact_id", ""),
-            field=vd.get("field", ""),
-            metadata=vd.get("metadata", {}),
-            violation_id=vd.get("violation_id", ""),
-        ))
+        result.violations.append(
+            Violation(
+                violation_type=vd.get("violation_type", ""),
+                severity=vd.get("severity", "warning"),
+                message=vd.get("message", ""),
+                artifact_id=vd.get("artifact_id", ""),
+                field=vd.get("field", ""),
+                metadata=vd.get("metadata", {}),
+                violation_id=vd.get("violation_id", ""),
+            )
+        )
 
     if not output_json:
         errors = sum(1 for v in result.violations if v.severity == "error")
         warnings = sum(1 for v in result.violations if v.severity == "warning")
         console.print(
-            f"\n  [bold]{len(result.violations)}[/bold] active violation(s) "
-            f"({errors} errors, {warnings} warnings)"
+            f"\n  [bold]{len(result.violations)}[/bold] active violation(s) ({errors} errors, {warnings} warnings)"
         )
 
     if not pipeline.fixers:
-        console.print(
-            "\n[yellow]No fixers declared in pipeline.[/yellow] "
-            "Add fixers to pipeline.fixers to enable fix."
-        )
+        console.print("\n[yellow]No fixers declared in pipeline.[/yellow] Add fixers to pipeline.fixers to enable fix.")
         return
 
     # Set up LLM client for fixers
@@ -124,6 +118,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
         from synix.build.cassette import maybe_wrap_client
         from synix.build.llm_client import LLMClient
         from synix.core.config import LLMConfig
+
         llm_cfg = LLMConfig.from_dict(pipeline.llm_config)
         llm_client = maybe_wrap_client(LLMClient(llm_cfg))
     except Exception:
@@ -133,6 +128,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
     search_index = None
     try:
         from synix.search.indexer import SearchIndex
+
         search_db = build_path / "search.db"
         if search_db.exists():
             search_index = SearchIndex(search_db)
@@ -141,18 +137,17 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
 
     # Run fixers with live progress
     if not output_json:
-        status = console.status(
-            "[bold cyan]Running fixers...[/bold cyan]", spinner="dots"
-        )
+        status = console.status("[bold cyan]Running fixers...[/bold cyan]", spinner="dots")
         status.start()
 
         def _on_progress(msg: str, current: int, total: int) -> None:
-            status.update(
-                f"[bold cyan]Fixing[/bold cyan] [{current}/{total}] {msg}"
-            )
+            status.update(f"[bold cyan]Fixing[/bold cyan] [{current}/{total}] {msg}")
 
         fix_result = run_fixers(
-            result, pipeline, store, provenance,
+            result,
+            pipeline,
+            store,
+            provenance,
             search_index=search_index,
             llm_client=llm_client,
             on_progress=_on_progress,
@@ -160,7 +155,10 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
         status.stop()
     else:
         fix_result = run_fixers(
-            result, pipeline, store, provenance,
+            result,
+            pipeline,
+            store,
+            provenance,
             search_index=search_index,
             llm_client=llm_client,
         )
@@ -202,9 +200,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
 
     for action in fix_result.actions:
         if action.action == "skip":
-            console.print(
-                f"\n[dim]Skipping {action.artifact_id}: {action.description}[/dim]"
-            )
+            console.print(f"\n[dim]Skipping {action.artifact_id}: {action.description}[/dim]")
             continue
 
         violation = violations_by_artifact.get(action.artifact_id)
@@ -235,9 +231,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
                     if v.artifact_id == action.artifact_id:
                         queue.resolve(v.violation_id, fix_action="accept_original")
                         break
-                console.print(
-                    f"[green]Accepted original for {action.artifact_id}[/green]"
-                )
+                console.print(f"[green]Accepted original for {action.artifact_id}[/green]")
             applied_count += 1
         elif choice == "d":
             console.print(f"[yellow]Denied fix for {action.artifact_id}[/yellow]")
@@ -247,9 +241,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
                 if v.artifact_id == action.artifact_id:
                     queue.ignore(v.violation_id)
                     break
-            console.print(
-                f"[dim]Ignored {action.artifact_id} (won't resurface for same content)[/dim]"
-            )
+            console.print(f"[dim]Ignored {action.artifact_id} (won't resurface for same content)[/dim]")
             ignored_count += 1
 
     queue.save_state()
@@ -275,9 +267,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
 
 def _build_fix_investigation_tree(action, violation, store, provenance):
     """Build a tree showing the investigation path from conflict to sources."""
-    tree = Tree(
-        f"[bold]{action.artifact_id}[/bold] [dim](conflict detected)[/dim]"
-    )
+    tree = Tree(f"[bold]{action.artifact_id}[/bold] [dim](conflict detected)[/dim]")
 
     # Walk provenance to show parents
     parent_ids = provenance.get_parents(action.artifact_id)
@@ -286,10 +276,7 @@ def _build_fix_investigation_tree(action, violation, store, provenance):
         for pid in parent_ids:
             parent_art = store.load_artifact(pid)
             if parent_art:
-                label = (
-                    f"[bold]{pid}[/bold] "
-                    f"[dim]({parent_art.artifact_type})[/dim]"
-                )
+                label = f"[bold]{pid}[/bold] [dim]({parent_art.artifact_type})[/dim]"
             else:
                 label = f"[bold]{pid}[/bold]"
             parents_branch.add(label)
@@ -300,10 +287,7 @@ def _build_fix_investigation_tree(action, violation, store, provenance):
         for eid in action.evidence_source_ids:
             ev_art = store.load_artifact(eid)
             if ev_art:
-                label = (
-                    f"[bold]{eid}[/bold] "
-                    f"[dim]({ev_art.artifact_type})[/dim]"
-                )
+                label = f"[bold]{eid}[/bold] [dim]({ev_art.artifact_type})[/dim]"
             else:
                 label = f"[bold]{eid}[/bold]"
             evidence_branch.add(label)
@@ -317,8 +301,7 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
     lines: list[str] = []
     if violation:
         lines.append(
-            f"[{severity_style} bold]{violation.severity.upper()}[/{severity_style} bold]"
-            f"  {violation.message}"
+            f"[{severity_style} bold]{violation.severity.upper()}[/{severity_style} bold]  {violation.message}"
         )
         if violation.violation_type == "semantic_conflict":
             claim_a = violation.metadata.get("claim_a", "")
@@ -337,18 +320,23 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
 
     if store and provenance:
         inv_tree = _build_fix_investigation_tree(
-            action, violation, store, provenance,
+            action,
+            violation,
+            store,
+            provenance,
         )
         panel_content = Group(body, "", inv_tree)
     else:
         panel_content = body
 
-    console.print(Panel(
-        panel_content,
-        title=f"[cyan]Fix: {action.artifact_id}[/cyan]",
-        border_style="cyan",
-        padding=(0, 1),
-    ))
+    console.print(
+        Panel(
+            panel_content,
+            title=f"[cyan]Fix: {action.artifact_id}[/cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+    )
 
     if action.new_content:
         fix_lines: list[str] = []
@@ -360,21 +348,21 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
         if len(action.new_content) > 800:
             preview += "\n..."
         fix_lines.append(preview)
-        console.print(Panel(
-            "\n".join(fix_lines),
-            title="[green]Proposed rewrite[/green]",
-            border_style="green",
-            padding=(0, 1),
-        ))
+        console.print(
+            Panel(
+                "\n".join(fix_lines),
+                title="[green]Proposed rewrite[/green]",
+                border_style="green",
+                padding=(0, 1),
+            )
+        )
 
 
 def _display_unresolved(action, violation=None, store=None, provenance=None):
     """Display an unresolved contradiction with investigation tree."""
     lines: list[str] = []
     if violation:
-        lines.append(
-            f"[yellow bold]WARNING[/yellow bold]  {violation.message}"
-        )
+        lines.append(f"[yellow bold]WARNING[/yellow bold]  {violation.message}")
         if violation.violation_type == "semantic_conflict":
             claim_a = violation.metadata.get("claim_a", "")
             claim_b = violation.metadata.get("claim_b", "")
@@ -383,9 +371,7 @@ def _display_unresolved(action, violation=None, store=None, provenance=None):
                 lines.append(f'[dim]Claim A:[/dim]  "{claim_a}"')
                 lines.append(f'[dim]Claim B:[/dim]  "{claim_b}"')
     else:
-        lines.append(
-            f"[bold yellow]Cannot auto-resolve: {action.artifact_id}[/bold yellow]"
-        )
+        lines.append(f"[bold yellow]Cannot auto-resolve: {action.artifact_id}[/bold yellow]")
 
     if action.llm_explanation:
         lines.append("")
@@ -395,18 +381,23 @@ def _display_unresolved(action, violation=None, store=None, provenance=None):
 
     if store and provenance:
         inv_tree = _build_fix_investigation_tree(
-            action, violation, store, provenance,
+            action,
+            violation,
+            store,
+            provenance,
         )
         panel_content = Group(body, "", inv_tree)
     else:
         panel_content = body
 
-    console.print(Panel(
-        panel_content,
-        title=f"[yellow]Unresolved: {action.artifact_id}[/yellow]",
-        border_style="yellow",
-        padding=(0, 1),
-    ))
+    console.print(
+        Panel(
+            panel_content,
+            title=f"[yellow]Unresolved: {action.artifact_id}[/yellow]",
+            border_style="yellow",
+            padding=(0, 1),
+        )
+    )
 
 
 def _prompt_choice() -> str:

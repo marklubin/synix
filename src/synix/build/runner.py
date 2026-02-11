@@ -58,8 +58,14 @@ class RunResult:
     validation: object | None = None  # ValidationResult when validators are declared
 
 
-def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
-        concurrency: int = 5, progress=None, validate: bool = False) -> RunResult:
+def run(
+    pipeline: Pipeline,
+    source_dir: str | None = None,
+    verbosity: int = 0,
+    concurrency: int = 5,
+    progress=None,
+    validate: bool = False,
+) -> RunResult:
     """Execute the full pipeline — walk DAG, run transforms, materialize projections.
 
     Args:
@@ -133,9 +139,7 @@ def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
         prompt_id = None
         if layer.level > 0:
             try:
-                prompt_id = transform.get_prompt_id(
-                    _transform_to_prompt_name(layer.transform)
-                )
+                prompt_id = transform.get_prompt_id(_transform_to_prompt_name(layer.transform))
             except (FileNotFoundError, OSError):
                 prompt_id = layer.transform
 
@@ -150,9 +154,7 @@ def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
         # and transform cache key, reuse them without calling the LLM.
         layer_built: list[Artifact] = []
 
-        if layer.level > 0 and _layer_fully_cached(
-            layer, inputs, prompt_id, model_config, transform_cache_key, store
-        ):
+        if layer.level > 0 and _layer_fully_cached(layer, inputs, prompt_id, model_config, transform_cache_key, store):
             # All cached — load existing artifacts
             existing = store.list_artifacts(layer.name)
             for art in existing:
@@ -170,7 +172,10 @@ def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
             # Helper to save a single artifact immediately (save-as-you-go)
             def _save_artifact(artifact: Artifact) -> None:
                 if needs_rebuild(
-                    artifact.artifact_id, artifact.input_hashes, prompt_id, store,
+                    artifact.artifact_id,
+                    artifact.input_hashes,
+                    prompt_id,
+                    store,
                     current_model_config=model_config,
                     current_transform_cache_key=transform_cache_key,
                 ):
@@ -213,7 +218,10 @@ def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
 
             if use_concurrent:
                 _execute_transform_concurrent(
-                    transform, units, transform_config, concurrency,
+                    transform,
+                    units,
+                    transform_config,
+                    concurrency,
                     on_complete=_on_batch_complete,
                 )
             else:
@@ -234,18 +242,15 @@ def run(pipeline: Pipeline, source_dir: str | None = None, verbosity: int = 0,
 
         # Materialize intermediate projections for this layer
         # (e.g., episode search index so topical rollup can query it)
-        _materialize_layer_projections(
-            pipeline, layer.name, layer_artifacts, store, build_dir, logger=logger
-        )
+        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=logger)
 
     # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(
-        pipeline, layer_artifacts, store, build_dir, logger=logger
-    )
+    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=logger)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
         from synix.build.validators import run_validators
+
         result.validation = run_validators(pipeline, store, provenance)
 
     result.total_time = time.time() - start_time
@@ -340,6 +345,7 @@ def _execute_transform_concurrent(
     shared_client = None
     try:
         from synix.build.llm_transforms import _make_llm_client
+
         shared_client = _make_llm_client(config)
     except Exception:
         pass  # Non-LLM transforms don't need a shared client
@@ -424,23 +430,24 @@ def _materialize_layer_projections(
             # Flat file only makes sense with all sources (e.g., core layer)
             if not all(ln in layer_artifacts for ln in source_layers):
                 continue
-            _materialize_projection(proj, layer_artifacts, build_dir,
-                                    logger=logger, triggered_by=layer_name)
+            _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
         elif proj.projection_type == "search_index":
             # Progressive: materialize with whatever sources are available
             available_sources = [s for s in proj.sources if s["layer"] in layer_artifacts]
             if available_sources:
                 _materialize_projection(
-                    proj, layer_artifacts, build_dir,
-                    source_override=available_sources, logger=logger,
+                    proj,
+                    layer_artifacts,
+                    build_dir,
+                    source_override=available_sources,
+                    logger=logger,
                     triggered_by=layer_name,
                 )
         else:
             # Unknown projection type — require all sources
             if not all(ln in layer_artifacts for ln in source_layers):
                 continue
-            _materialize_projection(proj, layer_artifacts, build_dir,
-                                    logger=logger, triggered_by=layer_name)
+            _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
 
 
 def _materialize_all_projections(
@@ -483,7 +490,10 @@ def _materialize_all_projections(
 
         # Materialize
         cached = _materialize_projection(
-            proj, layer_artifacts, build_dir, logger=logger,
+            proj,
+            layer_artifacts,
+            build_dir,
+            logger=logger,
             triggered_by=last_layer,
         )
         status = "cached" if cached else "built"
@@ -492,7 +502,8 @@ def _materialize_all_projections(
         # Update cache
         config_hash = (
             hashlib.sha256(json.dumps(proj.config, sort_keys=True, default=str).encode()).hexdigest()
-            if proj.config else None
+            if proj.config
+            else None
         )
         cache[proj.name] = {
             "source_hash": current_hash,
@@ -539,8 +550,7 @@ def _materialize_projection(
             break
 
     if logger:
-        logger.projection_start(proj.name, proj.projection_type,
-                                triggered_by=triggered_by)
+        logger.projection_start(proj.name, proj.projection_type, triggered_by=triggered_by)
 
     if proj.projection_type == "search_index":
         # Use projection registry to avoid direct search import

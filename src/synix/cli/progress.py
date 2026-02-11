@@ -51,13 +51,15 @@ class BuildProgress:
     def layer_finish(self, name: str, built: int, cached: int) -> None:
         with self._lock:
             elapsed = time.time() - self._layer_start
-            self._completed_layers.append({
-                "name": name,
-                "level": self._layer_level,
-                "built": built,
-                "cached": cached,
-                "elapsed": elapsed,
-            })
+            self._completed_layers.append(
+                {
+                    "name": name,
+                    "level": self._layer_level,
+                    "built": built,
+                    "cached": cached,
+                    "elapsed": elapsed,
+                }
+            )
             self._last_completed_layer = name
             self._layer_name = ""
             self._artifacts.clear()
@@ -135,12 +137,14 @@ class BuildProgress:
         with self._lock:
             if self._embedding_state:
                 elapsed = time.time() - self._embedding_state["start_time"]
-                self._embedding_state.update({
-                    "status": "done",
-                    "cached": cached,
-                    "generated": generated,
-                    "elapsed": elapsed,
-                })
+                self._embedding_state.update(
+                    {
+                        "status": "done",
+                        "cached": cached,
+                        "generated": generated,
+                        "elapsed": elapsed,
+                    }
+                )
                 # File it under the last projection
                 layer = self._last_completed_layer
                 if layer and layer in self._layer_projections:
@@ -149,9 +153,7 @@ class BuildProgress:
                         projs[-1]["embedding_state"] = dict(self._embedding_state)
                 self._embedding_state = None
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         with self._lock:
             # Completed layers (with inline projections)
             for layer in self._completed_layers:
@@ -194,26 +196,16 @@ class BuildProgress:
             # Current layer header
             now = time.time()
             layer_elapsed = now - self._layer_start
-            done_count = sum(
-                1 for a in self._artifacts.values()
-                if a.status in ("done", "cached")
-            )
-            running_count = sum(
-                1 for a in self._artifacts.values() if a.status == "running"
-            )
+            done_count = sum(1 for a in self._artifacts.values() if a.status in ("done", "cached"))
+            running_count = sum(1 for a in self._artifacts.values() if a.status == "running")
             total = len(self._order)
 
             style = _level_style(self._layer_level)
-            parts = [
-                f"  [{style}]{self._layer_name}[/{style}] "
-                f"(level {self._layer_level})"
-            ]
+            parts = [f"  [{style}]{self._layer_name}[/{style}] (level {self._layer_level})"]
             if total > 0:
                 parts.append(f"  {done_count}/{total}")
             if running_count > 0:
-                parts.append(
-                    f"  [yellow]⟳ {running_count} in flight[/yellow]"
-                )
+                parts.append(f"  [yellow]⟳ {running_count} in flight[/yellow]")
             parts.append(f"  [dim]{layer_elapsed:.1f}s[/dim]")
             yield Text.from_markup("".join(parts))
 
@@ -224,20 +216,12 @@ class BuildProgress:
                     art = self._artifacts[name]
                     short = _short_name(name)
                     if art.status == "done":
-                        yield Text.from_markup(
-                            f"    [green]✓[/green] {short}  "
-                            f"[dim]{art.elapsed:.1f}s[/dim]"
-                        )
+                        yield Text.from_markup(f"    [green]✓[/green] {short}  [dim]{art.elapsed:.1f}s[/dim]")
                     elif art.status == "cached":
-                        yield Text.from_markup(
-                            f"    [cyan]=[/cyan] {short}  [dim]cached[/dim]"
-                        )
+                        yield Text.from_markup(f"    [cyan]=[/cyan] {short}  [dim]cached[/dim]")
                     elif art.status == "running":
                         rt = now - art.start_time
-                        yield Text.from_markup(
-                            f"    [yellow]⟳[/yellow] {short}  "
-                            f"[yellow]{rt:.1f}s[/yellow]"
-                        )
+                        yield Text.from_markup(f"    [yellow]⟳[/yellow] {short}  [yellow]{rt:.1f}s[/yellow]")
                     else:
                         yield Text.from_markup(f"    [dim]· {short}[/dim]")
 
@@ -247,17 +231,11 @@ class BuildProgress:
         name = ps["name"]
         status = ps["status"]
         if status == "done":
-            yield Text.from_markup(
-                f"    └─ [magenta]{name}[/magenta]  [dim]materialized[/dim]"
-            )
+            yield Text.from_markup(f"    └─ [magenta]{name}[/magenta]  [dim]materialized[/dim]")
         elif status == "cached":
-            yield Text.from_markup(
-                f"    └─ [magenta]{name}[/magenta]  [dim]cached[/dim]"
-            )
+            yield Text.from_markup(f"    └─ [magenta]{name}[/magenta]  [dim]cached[/dim]")
         elif status == "running":
-            yield Text.from_markup(
-                f"    └─ [magenta]{name}[/magenta]  [yellow]materializing...[/yellow]"
-            )
+            yield Text.from_markup(f"    └─ [magenta]{name}[/magenta]  [yellow]materializing...[/yellow]")
 
         # Embedding state inline under projection
         emb = ps.get("embedding_state")
@@ -276,11 +254,13 @@ class BuildProgress:
 def _short_name(name: str) -> str:
     """Shorten artifact description for display."""
     for prefix in (
-        "episode ", "monthly rollup ", "topical rollup ",
+        "episode ",
+        "monthly rollup ",
+        "topical rollup ",
         "core memory ",
     ):
         if name.startswith(prefix):
-            name = name[len(prefix):]
+            name = name[len(prefix) :]
             break
     # Truncate long UUIDs: ep-chatgpt-67b96eaf-6884-800c-... -> ep-chatgpt-67b96eaf
     parts = name.split("-")

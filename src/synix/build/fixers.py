@@ -23,14 +23,15 @@ from synix.core.models import Pipeline
 # Data models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FixAction:
     """A proposed fix for a violation."""
 
     artifact_id: str
-    action: str                        # "rewrite", "redact", "skip", "unresolved"
+    action: str  # "rewrite", "redact", "skip", "unresolved"
     original_content_hash: str
-    new_content: str                   # proposed new content (empty for unresolved)
+    new_content: str  # proposed new content (empty for unresolved)
     new_content_hash: str
     description: str
     downstream_invalidated: list[str] = field(default_factory=list)
@@ -65,12 +66,13 @@ class FixContext:
     provenance: ProvenanceTracker
     pipeline: Pipeline
     search_index: object | None = None  # SearchIndex when available
-    llm_client: object | None = None    # LLMClient when available
+    llm_client: object | None = None  # LLMClient when available
 
 
 # ---------------------------------------------------------------------------
 # BaseFixer ABC + registry
 # ---------------------------------------------------------------------------
+
 
 class BaseFixer(ABC):
     """Abstract base class for fixers."""
@@ -92,24 +94,25 @@ _FIXERS: dict[str, type[BaseFixer]] = {}
 
 def register_fixer(name: str):
     """Decorator to register a fixer class by name."""
+
     def wrapper(cls: type[BaseFixer]) -> type[BaseFixer]:
         _FIXERS[name] = cls
         return cls
+
     return wrapper
 
 
 def get_fixer(name: str) -> BaseFixer:
     """Get an instantiated fixer by name."""
     if name not in _FIXERS:
-        raise ValueError(
-            f"Unknown fixer: {name}. Available: {list(_FIXERS.keys())}"
-        )
+        raise ValueError(f"Unknown fixer: {name}. Available: {list(_FIXERS.keys())}")
     return _FIXERS[name]()
 
 
 # ---------------------------------------------------------------------------
 # Downstream detection
 # ---------------------------------------------------------------------------
+
 
 def _find_downstream_artifacts(
     artifact_id: str,
@@ -126,6 +129,7 @@ def _find_downstream_artifacts(
 # ---------------------------------------------------------------------------
 # Apply fix (after human approval)
 # ---------------------------------------------------------------------------
+
 
 def apply_fix(
     action: FixAction,
@@ -169,6 +173,7 @@ def apply_fix(
 # ---------------------------------------------------------------------------
 # Execution engine
 # ---------------------------------------------------------------------------
+
 
 def run_fixers(
     validation_result: ValidationResult,
@@ -220,9 +225,7 @@ def run_fixers(
             try:
                 action = fixer.fix(violation, ctx)
                 # Compute downstream invalidation
-                action.downstream_invalidated = _find_downstream_artifacts(
-                    action.artifact_id, provenance
-                )
+                action.downstream_invalidated = _find_downstream_artifacts(action.artifact_id, provenance)
                 result.actions.append(action)
                 result.rebuild_required.extend(action.downstream_invalidated)
             except Exception as exc:
@@ -238,6 +241,7 @@ def run_fixers(
 # ---------------------------------------------------------------------------
 # Built-in fixers
 # ---------------------------------------------------------------------------
+
 
 @register_fixer("semantic_enrichment")
 class SemanticEnrichmentFixer(BaseFixer):
@@ -273,7 +277,7 @@ class SemanticEnrichmentFixer(BaseFixer):
                 description="No LLM client available",
             )
 
-        config = getattr(self, '_config', {})
+        config = getattr(self, "_config", {})
         max_context = config.get("max_context_episodes", 5)
         temperature = config.get("temperature", 0.3)
 
@@ -303,9 +307,7 @@ class SemanticEnrichmentFixer(BaseFixer):
                         if r.artifact_id not in seen_ids:
                             seen_ids.add(r.artifact_id)
                             evidence_source_ids.append(r.artifact_id)
-                            source_texts.append(
-                                f"[{r.artifact_id}]: {r.content[:500]}"
-                            )
+                            source_texts.append(f"[{r.artifact_id}]: {r.content[:500]}")
                 except Exception:
                     continue
 
@@ -314,8 +316,7 @@ class SemanticEnrichmentFixer(BaseFixer):
         # Build prompt
         prompt_template = (Path(__file__).parent / "prompts" / "semantic_enrichment.txt").read_text()
         prompt = (
-            prompt_template
-            .replace("{claim_a}", claim_a)
+            prompt_template.replace("{claim_a}", claim_a)
             .replace("{claim_b}", claim_b)
             .replace("{content}", artifact.content)
             .replace("{source_context}", source_context)
@@ -340,11 +341,10 @@ class SemanticEnrichmentFixer(BaseFixer):
             )
 
         # Store trace
-        _store_llm_trace(ctx.store, violation.artifact_id, prompt,
-                         response_text, "semantic_enrichment")
+        _store_llm_trace(ctx.store, violation.artifact_id, prompt, response_text, "semantic_enrichment")
 
         # Parse response — handle both closed and unclosed code blocks
-        match = re.search(r'```(?:json)?\s*\n?(.*?)(?:\n?```|$)', response_text, re.DOTALL)
+        match = re.search(r"```(?:json)?\s*\n?(.*?)(?:\n?```|$)", response_text, re.DOTALL)
         text = match.group(1).strip() if match else response_text.strip()
 
         try:

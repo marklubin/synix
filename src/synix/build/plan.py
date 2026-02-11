@@ -22,7 +22,7 @@ DEFAULT_INPUT_TOKENS_PER_CALL = 2000
 DEFAULT_OUTPUT_TOKENS_PER_CALL = 500
 
 # Default per-token pricing (USD) — Sonnet-class model
-DEFAULT_INPUT_TOKEN_PRICE = 3.0 / 1_000_000   # $3 per million input tokens
+DEFAULT_INPUT_TOKEN_PRICE = 3.0 / 1_000_000  # $3 per million input tokens
 DEFAULT_OUTPUT_TOKEN_PRICE = 15.0 / 1_000_000  # $15 per million output tokens
 
 
@@ -140,9 +140,16 @@ def plan_build(
 
     for layer in build_order:
         step = _plan_layer(
-            layer, pipeline, src_dir, store, layer_artifacts, plan.steps,
-            input_tokens_per_call, output_tokens_per_call,
-            input_token_price, output_token_price,
+            layer,
+            pipeline,
+            src_dir,
+            store,
+            layer_artifacts,
+            plan.steps,
+            input_tokens_per_call,
+            output_tokens_per_call,
+            input_token_price,
+            output_token_price,
         )
         plan.steps.append(step)
         plan.total_estimated_llm_calls += step.estimated_llm_calls
@@ -207,9 +214,7 @@ def _plan_layer(
     prompt_from_file = False  # True if prompt_id was resolved from a prompt file
     if layer.level > 0:
         try:
-            prompt_id = transform.get_prompt_id(
-                _transform_to_prompt_name(layer.transform)
-            )
+            prompt_id = transform.get_prompt_id(_transform_to_prompt_name(layer.transform))
             prompt_from_file = True
         except (FileNotFoundError, OSError):
             prompt_id = layer.transform
@@ -222,9 +227,7 @@ def _plan_layer(
 
     if layer.level == 0:
         # Parse layer: actually run the parse transform to count artifacts (fast, no LLM)
-        return _plan_parse_layer(
-            layer, transform, transform_config, store, layer_artifacts
-        )
+        return _plan_parse_layer(layer, transform, transform_config, store, layer_artifacts)
 
     # Check if any upstream dependency has pending rebuilds
     upstream_dirty = False
@@ -238,11 +241,19 @@ def _plan_layer(
 
     # For LLM layers, analyze cache state
     step = _plan_llm_layer(
-        layer, inputs, prompt_id, prompt_from_file,
-        model_config, transform_cache_key,
-        store, layer_artifacts, upstream_dirty,
-        input_tokens_per_call, output_tokens_per_call,
-        input_token_price, output_token_price,
+        layer,
+        inputs,
+        prompt_id,
+        prompt_from_file,
+        model_config,
+        transform_cache_key,
+        store,
+        layer_artifacts,
+        upstream_dirty,
+        input_tokens_per_call,
+        output_tokens_per_call,
+        input_token_price,
+        output_token_price,
     )
     step.resolved_llm_config = resolved_llm
 
@@ -355,10 +366,7 @@ def _plan_llm_layer(
 ) -> StepPlan:
     """Plan an LLM (level > 0) layer by checking cache state."""
     tokens_per_call = input_tokens_per_call + output_tokens_per_call
-    cost_per_call = (
-        input_tokens_per_call * input_token_price
-        + output_tokens_per_call * output_token_price
-    )
+    cost_per_call = input_tokens_per_call * input_token_price + output_tokens_per_call * output_token_price
 
     if store is None:
         # No build dir -- everything is new
@@ -408,9 +416,7 @@ def _plan_llm_layer(
     # Determine whether the rebuild is due to a global change (prompt, model,
     # transform config) or just changed inputs. If global, everything rebuilds.
     # If only inputs changed, check which existing artifacts are still valid.
-    global_change = _has_global_change(
-        existing, prompt_id, prompt_from_file, model_config, transform_cache_key
-    )
+    global_change = _has_global_change(existing, prompt_id, prompt_from_file, model_config, transform_cache_key)
 
     rebuild_count = 0
     cached_count = 0
@@ -453,9 +459,7 @@ def _plan_llm_layer(
     total_count = rebuild_count + cached_count
 
     # Determine reason for rebuild
-    reason = _determine_rebuild_reason(
-        existing, inputs, prompt_id, model_config, transform_cache_key
-    )
+    reason = _determine_rebuild_reason(existing, inputs, prompt_id, model_config, transform_cache_key)
 
     status = "rebuild" if existing else "new"
     if not existing:
@@ -578,18 +582,13 @@ def _determine_rebuild_reason(
 
     # Check model config change
     if model_config is not None:
-        config_mismatch = any(
-            (art.model_config or {}) != model_config for art in existing
-        )
+        config_mismatch = any((art.model_config or {}) != model_config for art in existing)
         if config_mismatch:
             reasons.append("model config changed")
 
     # Check transform cache key change
     if transform_cache_key:
-        key_mismatch = any(
-            art.metadata.get("transform_cache_key", "") != transform_cache_key
-            for art in existing
-        )
+        key_mismatch = any(art.metadata.get("transform_cache_key", "") != transform_cache_key for art in existing)
         if key_mismatch:
             reasons.append("transform config changed")
 
@@ -719,10 +718,7 @@ def _plan_projection(
     # Compute current hash including projection config
     current_hash = _compute_projection_hash(all_artifacts, proj.config)
 
-    if (
-        cached_entry.get("source_hash") == current_hash
-        and cached_entry.get("artifact_count") == artifact_count
-    ):
+    if cached_entry.get("source_hash") == current_hash and cached_entry.get("artifact_count") == artifact_count:
         return ProjectionPlan(
             name=proj.name,
             projection_type=proj.projection_type,
@@ -737,9 +733,7 @@ def _plan_projection(
     reason = "source artifacts changed"
     if cached_entry.get("config_hash") is not None and proj.config:
         old_config_hash = cached_entry["config_hash"]
-        new_config_hash = hashlib.sha256(
-            json.dumps(proj.config, sort_keys=True, default=str).encode()
-        ).hexdigest()
+        new_config_hash = hashlib.sha256(json.dumps(proj.config, sort_keys=True, default=str).encode()).hexdigest()
         if old_config_hash != new_config_hash:
             reason = "projection config changed"
 

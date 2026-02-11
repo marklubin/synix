@@ -22,6 +22,7 @@ from synix.core.models import Artifact, FixerDecl, Pipeline, ValidatorDecl
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def build_dir(tmp_path):
     d = tmp_path / "build"
@@ -52,28 +53,35 @@ def _make_artifact(aid, content, atype="episode", layer_name="episodes", **meta)
 # PII detection E2E
 # ---------------------------------------------------------------------------
 
+
 class TestPIIDetectionE2E:
     def test_pii_detected_in_episodes(self, store, provenance, build_dir):
         """Build artifacts with PII → validate detects them with provenance."""
         # Set up artifacts with provenance
         transcript = _make_artifact(
-            "t-1", "User says their SSN is 123-45-6789",
-            atype="transcript", layer_name="transcripts",
+            "t-1",
+            "User says their SSN is 123-45-6789",
+            atype="transcript",
+            layer_name="transcripts",
         )
         store.save_artifact(transcript, "transcripts", 0)
 
         episode = _make_artifact(
-            "ep-1", "The user mentioned their SSN: 123-45-6789",
-            atype="episode", layer_name="episodes",
+            "ep-1",
+            "The user mentioned their SSN: 123-45-6789",
+            atype="episode",
+            layer_name="episodes",
         )
         store.save_artifact(episode, "episodes", 1)
         provenance.record("ep-1", parent_ids=["t-1"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="pii",
-            config={"layers": ["episodes"], "severity": "warning"},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="pii",
+                config={"layers": ["episodes"], "severity": "warning"},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) >= 1
@@ -90,6 +98,7 @@ class TestPIIDetectionE2E:
 # Violation queue persistence
 # ---------------------------------------------------------------------------
 
+
 class TestViolationQueueE2E:
     def test_validate_persists_to_queue(self, store, provenance, build_dir):
         """Validate → violations saved to queue → load roundtrip."""
@@ -97,10 +106,12 @@ class TestViolationQueueE2E:
         store.save_artifact(art, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="pii",
-            config={"layers": ["episodes"]},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="pii",
+                config={"layers": ["episodes"]},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
 
@@ -125,9 +136,12 @@ class TestViolationQueueE2E:
         vid = compute_violation_id("pii", "ep-1", "email", "user@example.com")
 
         v1 = Violation(
-            violation_type="pii", severity="warning",
-            message="PII detected", artifact_id="ep-1",
-            field="content", violation_id=vid,
+            violation_type="pii",
+            severity="warning",
+            message="PII detected",
+            artifact_id="ep-1",
+            field="content",
+            violation_id=vid,
             metadata={"content_hash": "sha256:abc"},
         )
         queue.upsert(v1)
@@ -143,8 +157,11 @@ class TestViolationQueueE2E:
         queue = ViolationQueue(build_dir=build_dir)
 
         v = Violation(
-            violation_type="pii", severity="warning",
-            message="PII", artifact_id="ep-1", field="content",
+            violation_type="pii",
+            severity="warning",
+            message="PII",
+            artifact_id="ep-1",
+            field="content",
             violation_id=vid,
             metadata={"content_hash": "sha256:abc"},
         )
@@ -161,8 +178,11 @@ class TestViolationQueueE2E:
         queue = ViolationQueue(build_dir=build_dir)
 
         v = Violation(
-            violation_type="pii", severity="warning",
-            message="PII", artifact_id="ep-1", field="content",
+            violation_type="pii",
+            severity="warning",
+            message="PII",
+            artifact_id="ep-1",
+            field="content",
             violation_id=vid,
             metadata={"content_hash": "sha256:old"},
         )
@@ -178,22 +198,21 @@ class TestViolationQueueE2E:
 # Semantic conflict fix cycle
 # ---------------------------------------------------------------------------
 
+
 class TestSemanticFixCycleE2E:
     def _patch_llm(self, monkeypatch, conflict_client):
         """Patch LLMClient/LLMConfig so the validator creates conflict_client."""
-        monkeypatch.setattr(
-            "synix.build.llm_client.LLMClient", lambda cfg: conflict_client
-        )
-        monkeypatch.setattr(
-            "synix.core.config.LLMConfig.from_dict", lambda d: None
-        )
+        monkeypatch.setattr("synix.build.llm_client.LLMClient", lambda cfg: conflict_client)
+        monkeypatch.setattr("synix.core.config.LLMConfig.from_dict", lambda d: None)
 
     def test_validate_fix_rebuild_cycle(self, store, provenance, build_dir, monkeypatch):
         """Full cycle: build → validate (conflict) → fix (accept) → verify artifact rewritten."""
         # Set up: monthly artifact with a contradiction
         monthly = _make_artifact(
-            "monthly-dec", "Mark owns a BMW. Mark drives a Dodge Neon daily.",
-            atype="monthly", layer_name="monthly",
+            "monthly-dec",
+            "Mark owns a BMW. Mark drives a Dodge Neon daily.",
+            atype="monthly",
+            layer_name="monthly",
         )
         store.save_artifact(monthly, "monthly", 2)
 
@@ -206,8 +225,10 @@ class TestSemanticFixCycleE2E:
 
         # Core depends on monthly
         core = _make_artifact(
-            "core-1", "Core memory based on monthly summaries.",
-            atype="core", layer_name="core",
+            "core-1",
+            "Core memory based on monthly summaries.",
+            atype="core",
+            layer_name="core",
         )
         store.save_artifact(core, "core", 3)
         provenance.record("core-1", parent_ids=["monthly-dec"])
@@ -217,17 +238,21 @@ class TestSemanticFixCycleE2E:
 
         # Pipeline with semantic conflict validator + enrichment fixer
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="semantic_conflict",
-            config={
-                "layers": ["monthly"],
-                "llm_config": {"api_key": "test"},
-            },
-        ))
-        pipeline.add_fixer(FixerDecl(
-            name="semantic_enrichment",
-            config={"max_context_episodes": 3},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="semantic_conflict",
+                config={
+                    "layers": ["monthly"],
+                    "llm_config": {"api_key": "test"},
+                },
+            )
+        )
+        pipeline.add_fixer(
+            FixerDecl(
+                name="semantic_enrichment",
+                config={"max_context_episodes": 3},
+            )
+        )
 
         # Step 1: Validate — should find the contradiction
         result = run_validators(pipeline, store, provenance)
@@ -246,7 +271,10 @@ class TestSemanticFixCycleE2E:
         # Step 3: Run fixer
         mock_fix_client = _make_mock_fix_client_resolved()
         fix_result = run_fixers(
-            result, pipeline, store, provenance,
+            result,
+            pipeline,
+            store,
+            provenance,
             llm_client=mock_fix_client,
         )
 
@@ -282,8 +310,10 @@ class TestSemanticFixCycleE2E:
     def test_unresolved_accept_original(self, store, provenance, build_dir, monkeypatch):
         """Unresolved → user accepts original → violation resolved, no content change."""
         monthly = _make_artifact(
-            "monthly-1", "Contradictory content here.",
-            atype="monthly", layer_name="monthly",
+            "monthly-1",
+            "Contradictory content here.",
+            atype="monthly",
+            layer_name="monthly",
         )
         store.save_artifact(monthly, "monthly", 2)
         original_hash = monthly.content_hash
@@ -292,16 +322,20 @@ class TestSemanticFixCycleE2E:
         self._patch_llm(monkeypatch, _make_mock_conflict_client())
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="semantic_conflict",
-            config={
-                "layers": ["monthly"],
-                "llm_config": {"api_key": "test"},
-            },
-        ))
-        pipeline.add_fixer(FixerDecl(
-            name="semantic_enrichment",
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="semantic_conflict",
+                config={
+                    "layers": ["monthly"],
+                    "llm_config": {"api_key": "test"},
+                },
+            )
+        )
+        pipeline.add_fixer(
+            FixerDecl(
+                name="semantic_enrichment",
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) >= 1
@@ -309,7 +343,10 @@ class TestSemanticFixCycleE2E:
         # Run fixer — returns unresolved
         mock_client = _make_mock_fix_client_unresolved()
         fix_result = run_fixers(
-            result, pipeline, store, provenance,
+            result,
+            pipeline,
+            store,
+            provenance,
             llm_client=mock_client,
         )
 
@@ -336,6 +373,7 @@ class TestSemanticFixCycleE2E:
 # JSON output
 # ---------------------------------------------------------------------------
 
+
 class TestJSONOutput:
     def test_validate_json_parseable(self, store, provenance, build_dir):
         """--json output includes reasoning and violation_ids."""
@@ -343,9 +381,12 @@ class TestJSONOutput:
         store.save_artifact(art, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="pii", config={"layers": ["episodes"]},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="pii",
+                config={"layers": ["episodes"]},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         out = result.to_dict()
@@ -363,18 +404,23 @@ class TestJSONOutput:
 # Mock LLM clients
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_conflict_client():
     """Mock LLM client that always finds one conflict."""
-    conflict_json = json.dumps({
-        "conflicts": [{
-            "claim_a": "owns a BMW",
-            "claim_b": "drives a Dodge Neon daily",
-            "claim_a_source_hint": "August conversation",
-            "claim_b_source_hint": "December conversation",
-            "explanation": "Cannot own a BMW and daily-drive a Dodge Neon",
-            "confidence": "high",
-        }]
-    })
+    conflict_json = json.dumps(
+        {
+            "conflicts": [
+                {
+                    "claim_a": "owns a BMW",
+                    "claim_b": "drives a Dodge Neon daily",
+                    "claim_a_source_hint": "August conversation",
+                    "claim_b_source_hint": "December conversation",
+                    "explanation": "Cannot own a BMW and daily-drive a Dodge Neon",
+                    "confidence": "high",
+                }
+            ]
+        }
+    )
     mock_response = MagicMock()
     mock_response.content = conflict_json
     client = MagicMock()
@@ -384,11 +430,13 @@ def _make_mock_conflict_client():
 
 def _make_mock_fix_client_resolved():
     """Mock LLM client that resolves the contradiction."""
-    resolved_json = json.dumps({
-        "status": "resolved",
-        "content": "Mark previously owned a BMW. After an incident, he now drives a Dodge Neon daily.",
-        "explanation": "Temporal resolution based on source context.",
-    })
+    resolved_json = json.dumps(
+        {
+            "status": "resolved",
+            "content": "Mark previously owned a BMW. After an incident, he now drives a Dodge Neon daily.",
+            "explanation": "Temporal resolution based on source context.",
+        }
+    )
     mock_response = MagicMock()
     mock_response.content = resolved_json
     client = MagicMock()
@@ -398,11 +446,13 @@ def _make_mock_fix_client_resolved():
 
 def _make_mock_fix_client_unresolved():
     """Mock LLM client that cannot resolve the contradiction."""
-    unresolved_json = json.dumps({
-        "status": "unresolved",
-        "content": "",
-        "explanation": "Both claims appear without temporal markers. Cannot determine which is current.",
-    })
+    unresolved_json = json.dumps(
+        {
+            "status": "unresolved",
+            "content": "",
+            "explanation": "Both claims appear without temporal markers. Cannot determine which is current.",
+        }
+    )
     mock_response = MagicMock()
     mock_response.content = unresolved_json
     client = MagicMock()

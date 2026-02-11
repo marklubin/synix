@@ -13,6 +13,7 @@ from typing import Any
 # Artifact existence and caching
 # ---------------------------------------------------------------------------
 
+
 def assert_artifact_exists(store, step: str, record_id: str) -> None:
     """Assert that an artifact exists in the store for the given step and record.
 
@@ -24,8 +25,7 @@ def assert_artifact_exists(store, step: str, record_id: str) -> None:
     artifacts = store.list_artifacts(step)
     matching = [a for a in artifacts if record_id in a.artifact_id]
     assert matching, (
-        f"No artifact matching '{record_id}' found in step '{step}'. "
-        f"Available: {[a.artifact_id for a in artifacts]}"
+        f"No artifact matching '{record_id}' found in step '{step}'. Available: {[a.artifact_id for a in artifacts]}"
     )
 
 
@@ -40,13 +40,11 @@ def assert_artifact_cached(run_log: dict, step: str, record_id: str) -> None:
     step_log = _get_step_log(run_log, step)
     rebuilt = step_log.get("rebuilt_ids", [])
     assert record_id not in rebuilt, (
-        f"Artifact '{record_id}' was rebuilt in step '{step}' "
-        f"but expected it to be cached. Rebuilt: {rebuilt}"
+        f"Artifact '{record_id}' was rebuilt in step '{step}' but expected it to be cached. Rebuilt: {rebuilt}"
     )
     cached = step_log.get("cached_ids", [])
     assert any(record_id in cid for cid in cached), (
-        f"Artifact '{record_id}' not found in cached list for step '{step}'. "
-        f"Cached: {cached}"
+        f"Artifact '{record_id}' not found in cached list for step '{step}'. Cached: {cached}"
     )
 
 
@@ -61,8 +59,7 @@ def assert_artifact_rebuilt(run_log: dict, step: str, record_id: str) -> None:
     step_log = _get_step_log(run_log, step)
     rebuilt = step_log.get("rebuilt_ids", [])
     assert any(record_id in rid for rid in rebuilt), (
-        f"Artifact '{record_id}' was NOT rebuilt in step '{step}' "
-        f"but expected it to be. Rebuilt: {rebuilt}"
+        f"Artifact '{record_id}' was NOT rebuilt in step '{step}' but expected it to be. Rebuilt: {rebuilt}"
     )
 
 
@@ -70,9 +67,8 @@ def assert_artifact_rebuilt(run_log: dict, step: str, record_id: str) -> None:
 # Provenance
 # ---------------------------------------------------------------------------
 
-def assert_provenance_chain(
-    provenance_tracker, artifact_id: str, expected_chain: list[str]
-) -> None:
+
+def assert_provenance_chain(provenance_tracker, artifact_id: str, expected_chain: list[str]) -> None:
     """Assert that the provenance chain for an artifact matches expectations.
 
     Args:
@@ -84,14 +80,14 @@ def assert_provenance_chain(
     chain_ids = [r.artifact_id for r in chain]
     for expected_id in expected_chain:
         assert any(expected_id in cid for cid in chain_ids), (
-            f"Expected '{expected_id}' in provenance chain for '{artifact_id}'. "
-            f"Actual chain: {chain_ids}"
+            f"Expected '{expected_id}' in provenance chain for '{artifact_id}'. Actual chain: {chain_ids}"
         )
 
 
 # ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
+
 
 def assert_search_returns(
     search_fn,
@@ -113,8 +109,7 @@ def assert_search_returns(
     result_ids = [r.artifact_id for r in results[:top_k]]
     for expected_id in expected_ids:
         assert any(expected_id in rid for rid in result_ids), (
-            f"Expected '{expected_id}' in search results for query '{query}' "
-            f"(index: {index_name}). Got: {result_ids}"
+            f"Expected '{expected_id}' in search results for query '{query}' (index: {index_name}). Got: {result_ids}"
         )
 
 
@@ -140,14 +135,14 @@ def assert_search_indexes_are_independent(
     ids_b = {r.artifact_id for r in results_b}
     overlap = ids_a & ids_b
     assert not overlap, (
-        f"Search indexes '{index_a}' and '{index_b}' share artifact IDs: {overlap}. "
-        f"Indexes should be independent."
+        f"Search indexes '{index_a}' and '{index_b}' share artifact IDs: {overlap}. Indexes should be independent."
     )
 
 
 # ---------------------------------------------------------------------------
 # Diffing
 # ---------------------------------------------------------------------------
+
 
 def assert_diff_nonempty(diff_result: Any, artifact_id: str) -> None:
     """Assert that a diff result for an artifact is non-empty (content changed).
@@ -161,17 +156,13 @@ def assert_diff_nonempty(diff_result: Any, artifact_id: str) -> None:
     elif hasattr(diff_result, "changes"):
         changes = diff_result.changes
     elif hasattr(diff_result, "has_changes"):
-        assert diff_result.has_changes, (
-            f"Diff for '{artifact_id}' is empty but expected changes."
-        )
+        assert diff_result.has_changes, f"Diff for '{artifact_id}' is empty but expected changes."
         return
     else:
         # Treat as a string diff
         changes = str(diff_result).strip()
 
-    assert changes, (
-        f"Diff for artifact '{artifact_id}' is empty but expected changes."
-    )
+    assert changes, f"Diff for artifact '{artifact_id}' is empty but expected changes."
 
 
 def assert_diff_empty(diff_result: Any, artifact_id: str) -> None:
@@ -186,21 +177,18 @@ def assert_diff_empty(diff_result: Any, artifact_id: str) -> None:
     elif hasattr(diff_result, "changes"):
         changes = diff_result.changes
     elif hasattr(diff_result, "has_changes"):
-        assert not diff_result.has_changes, (
-            f"Diff for '{artifact_id}' has unexpected changes."
-        )
+        assert not diff_result.has_changes, f"Diff for '{artifact_id}' has unexpected changes."
         return
     else:
         changes = str(diff_result).strip()
 
-    assert not changes, (
-        f"Diff for artifact '{artifact_id}' has unexpected changes: {changes}"
-    )
+    assert not changes, f"Diff for artifact '{artifact_id}' has unexpected changes: {changes}"
 
 
 # ---------------------------------------------------------------------------
 # Verify
 # ---------------------------------------------------------------------------
+
 
 def assert_verify_passes(verify_result: Any) -> None:
     """Assert that a verification result indicates all checks passed.
@@ -217,16 +205,11 @@ def assert_verify_passes(verify_result: Any) -> None:
     else:
         raise TypeError(f"Unknown verify_result type: {type(verify_result)}")
 
-    assert exit_code == 0, (
-        f"Verify returned exit code {exit_code}, expected 0 (clean). "
-        f"Failures: {failures}"
-    )
+    assert exit_code == 0, f"Verify returned exit code {exit_code}, expected 0 (clean). Failures: {failures}"
     assert not failures, f"Verify has failures: {failures}"
 
 
-def assert_verify_fails(
-    verify_result: Any, expected_check: str, expected_count: int
-) -> None:
+def assert_verify_fails(verify_result: Any, expected_check: str, expected_count: int) -> None:
     """Assert that verification fails with a specific check and count.
 
     Args:
@@ -244,8 +227,7 @@ def assert_verify_fails(
         raise TypeError(f"Unknown verify_result type: {type(verify_result)}")
 
     assert exit_code != 0, (
-        f"Verify returned exit code 0 but expected failure. "
-        f"Expected check '{expected_check}' to fail."
+        f"Verify returned exit code 0 but expected failure. Expected check '{expected_check}' to fail."
     )
 
     check_failures = [f for f in failures if f.get("check") == expected_check]
@@ -258,6 +240,7 @@ def assert_verify_fails(
 # ---------------------------------------------------------------------------
 # Source sharing and step independence
 # ---------------------------------------------------------------------------
+
 
 def assert_steps_share_sources(store, step_a: str, step_b: str) -> None:
     """Assert that two steps reference the same source artifacts.
@@ -299,15 +282,13 @@ def assert_steps_have_distinct_artifacts(store, step_a: str, step_b: str) -> Non
     ids_a = {a.artifact_id for a in store.list_artifacts(step_a)}
     ids_b = {a.artifact_id for a in store.list_artifacts(step_b)}
     overlap = ids_a & ids_b
-    assert not overlap, (
-        f"Steps '{step_a}' and '{step_b}' share artifact IDs: {overlap}. "
-        f"Expected distinct artifacts."
-    )
+    assert not overlap, f"Steps '{step_a}' and '{step_b}' share artifact IDs: {overlap}. Expected distinct artifacts."
 
 
 # ---------------------------------------------------------------------------
 # LLM call and cache counting
 # ---------------------------------------------------------------------------
+
 
 def count_llm_calls(run_log: dict) -> int:
     """Count total LLM calls across all steps in a run log.
@@ -371,6 +352,7 @@ def count_cache_hits_for_step(run_log: dict, step_name: str) -> int:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_step_log(run_log: dict, step_name: str) -> dict:
     """Extract per-step data from a run log.
 
@@ -397,7 +379,5 @@ def _get_step_log(run_log: dict, step_name: str) -> dict:
     steps = run_log.get("steps", {})
     if step_name not in steps:
         available = list(steps.keys())
-        raise KeyError(
-            f"Step '{step_name}' not found in run log. Available steps: {available}"
-        )
+        raise KeyError(f"Step '{step_name}' not found in run log. Available steps: {available}")
     return steps[step_name]

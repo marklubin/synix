@@ -16,9 +16,9 @@ from typing import Any
 class Verbosity(IntEnum):
     """Verbosity levels for console output."""
 
-    DEFAULT = 0   # Summary table only
-    VERBOSE = 1   # + per-layer progress, per-artifact status
-    DEBUG = 2     # + LLM request/response details, timing
+    DEFAULT = 0  # Summary table only
+    VERBOSE = 1  # + per-layer progress, per-artifact status
+    DEBUG = 2  # + LLM request/response details, timing
 
 
 @dataclass
@@ -97,9 +97,7 @@ class RunLog:
         """Serialize to dict matching the format expected by assertion helpers."""
         return {
             "run_id": self.run_id,
-            "steps": {
-                name: step.to_dict() for name, step in self.steps.items()
-            },
+            "steps": {name: step.to_dict() for name, step in self.steps.items()},
             "total_llm_calls": self.total_llm_calls,
             "total_cache_hits": self.total_cache_hits,
             "total_time": self.total_time,
@@ -171,6 +169,7 @@ class SynixLogger:
         if self.verbosity >= min_verbosity:
             try:
                 from rich.console import Console
+
                 console = Console()
                 console.print(message)
             except ImportError:
@@ -184,11 +183,13 @@ class SynixLogger:
         self._step_start = time.time()
         self.run_log.get_or_create_step(layer_name)
 
-        self._write_event({
-            "event": "layer_start",
-            "layer": layer_name,
-            "level": level,
-        })
+        self._write_event(
+            {
+                "event": "layer_start",
+                "layer": layer_name,
+                "level": level,
+            }
+        )
 
         if self.progress:
             self.progress.layer_start(layer_name, level)
@@ -204,13 +205,15 @@ class SynixLogger:
         step = self.run_log.get_or_create_step(layer_name)
         step.time_seconds = elapsed
 
-        self._write_event({
-            "event": "layer_finish",
-            "layer": layer_name,
-            "built": built,
-            "cached": cached,
-            "time_seconds": round(elapsed, 3),
-        })
+        self._write_event(
+            {
+                "event": "layer_finish",
+                "layer": layer_name,
+                "built": built,
+                "cached": cached,
+                "time_seconds": round(elapsed, 3),
+            }
+        )
 
         if self.progress:
             self.progress.layer_finish(layer_name, built, cached)
@@ -229,11 +232,13 @@ class SynixLogger:
             step = self.run_log.get_or_create_step(layer_name)
             step.rebuilt_ids.append(artifact_id)
 
-        self._write_event({
-            "event": "artifact_built",
-            "layer": layer_name,
-            "artifact_id": artifact_id,
-        })
+        self._write_event(
+            {
+                "event": "artifact_built",
+                "layer": layer_name,
+                "artifact_id": artifact_id,
+            }
+        )
 
         self._console_print(
             f"      [green]+[/green] {artifact_id}",
@@ -247,11 +252,13 @@ class SynixLogger:
             step.cache_hits += 1
             step.cached_ids.append(artifact_id)
 
-        self._write_event({
-            "event": "artifact_cached",
-            "layer": layer_name,
-            "artifact_id": artifact_id,
-        })
+        self._write_event(
+            {
+                "event": "artifact_cached",
+                "layer": layer_name,
+                "artifact_id": artifact_id,
+            }
+        )
 
         if self.progress:
             self.progress.artifact_cached(artifact_id)
@@ -272,12 +279,14 @@ class SynixLogger:
         """Log the start of an LLM call. Returns start time for pairing with llm_call_finish."""
         start = time.time()
 
-        self._write_event({
-            "event": "llm_call_start",
-            "layer": layer_name,
-            "artifact_desc": artifact_desc,
-            "model": model,
-        })
+        self._write_event(
+            {
+                "event": "llm_call_start",
+                "layer": layer_name,
+                "artifact_desc": artifact_desc,
+                "model": model,
+            }
+        )
 
         if self.progress:
             self.progress.artifact_start(artifact_desc)
@@ -306,14 +315,16 @@ class SynixLogger:
             step.llm_calls += 1
             step.tokens_used += total_tokens
 
-        self._write_event({
-            "event": "llm_call_finish",
-            "layer": layer_name,
-            "artifact_desc": artifact_desc,
-            "duration_seconds": round(elapsed, 3),
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        })
+        self._write_event(
+            {
+                "event": "llm_call_finish",
+                "layer": layer_name,
+                "artifact_desc": artifact_desc,
+                "duration_seconds": round(elapsed, 3),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        )
 
         if self.progress:
             self.progress.artifact_finish(artifact_desc, elapsed)
@@ -325,8 +336,7 @@ class SynixLogger:
 
     # -- Projection events --
 
-    def projection_start(self, name: str, projection_type: str,
-                         triggered_by: str | None = None) -> None:
+    def projection_start(self, name: str, projection_type: str, triggered_by: str | None = None) -> None:
         """Log the start of a projection materialization."""
         event: dict[str, Any] = {
             "event": "projection_start",
@@ -346,8 +356,7 @@ class SynixLogger:
             Verbosity.VERBOSE,
         )
 
-    def projection_finish(self, name: str,
-                          triggered_by: str | None = None) -> None:
+    def projection_finish(self, name: str, triggered_by: str | None = None) -> None:
         """Log the completion of a projection materialization."""
         event: dict[str, Any] = {
             "event": "projection_finish",
@@ -370,11 +379,13 @@ class SynixLogger:
 
     def embedding_start(self, count: int, provider: str) -> None:
         """Log the start of embedding generation."""
-        self._write_event({
-            "event": "embedding_start",
-            "count": count,
-            "provider": provider,
-        })
+        self._write_event(
+            {
+                "event": "embedding_start",
+                "count": count,
+                "provider": provider,
+            }
+        )
 
         if self.progress:
             self.progress.embedding_start(count, provider)
@@ -391,12 +402,14 @@ class SynixLogger:
 
     def embedding_finish(self, count: int, cached: int, generated: int) -> None:
         """Log the completion of embedding generation."""
-        self._write_event({
-            "event": "embedding_finish",
-            "count": count,
-            "cached": cached,
-            "generated": generated,
-        })
+        self._write_event(
+            {
+                "event": "embedding_finish",
+                "count": count,
+                "cached": cached,
+                "generated": generated,
+            }
+        )
 
         if self.progress:
             self.progress.embedding_finish(count, cached, generated)
@@ -406,8 +419,7 @@ class SynixLogger:
             Verbosity.VERBOSE,
         )
 
-    def projection_cached(self, name: str,
-                          triggered_by: str | None = None) -> None:
+    def projection_cached(self, name: str, triggered_by: str | None = None) -> None:
         """Log that a projection was skipped (cached)."""
         event: dict[str, Any] = {
             "event": "projection_cached",
@@ -430,24 +442,28 @@ class SynixLogger:
 
     def run_start(self, pipeline_name: str, layer_count: int) -> None:
         """Log the start of a pipeline run."""
-        self._write_event({
-            "event": "run_start",
-            "pipeline": pipeline_name,
-            "layer_count": layer_count,
-        })
+        self._write_event(
+            {
+                "event": "run_start",
+                "pipeline": pipeline_name,
+                "layer_count": layer_count,
+            }
+        )
 
     def run_finish(self, total_time: float) -> None:
         """Log the completion of a pipeline run and finalize stats."""
         self.run_log.total_time = total_time
         self.run_log.finalize()
 
-        self._write_event({
-            "event": "run_finish",
-            "total_time": round(total_time, 3),
-            "total_llm_calls": self.run_log.total_llm_calls,
-            "total_tokens": self.run_log.total_tokens,
-            "total_cost_estimate": round(self.run_log.total_cost_estimate, 4),
-        })
+        self._write_event(
+            {
+                "event": "run_finish",
+                "total_time": round(total_time, 3),
+                "total_llm_calls": self.run_log.total_llm_calls,
+                "total_tokens": self.run_log.total_tokens,
+                "total_cost_estimate": round(self.run_log.total_cost_estimate, 4),
+            }
+        )
 
         if self._log_file is not None:
             self._log_file.close()
@@ -455,9 +471,7 @@ class SynixLogger:
 
     def get_summary(self) -> RunSummary:
         """Get a human-readable summary of the run."""
-        total_artifacts = sum(
-            len(s.rebuilt_ids) + len(s.cached_ids) for s in self.run_log.steps.values()
-        )
+        total_artifacts = sum(len(s.rebuilt_ids) + len(s.cached_ids) for s in self.run_log.steps.values())
         cache_hit_rate = 0.0
         if total_artifacts > 0:
             cache_hit_rate = self.run_log.total_cache_hits / total_artifacts

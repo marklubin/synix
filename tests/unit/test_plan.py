@@ -46,28 +46,48 @@ def pipeline_obj(build_dir, source_dir):
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                      transform="episode_summary", grouping="by_conversation"))
-    p.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
-                      transform="monthly_rollup", grouping="by_month"))
-    p.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
-                      transform="core_synthesis", grouping="single", context_budget=10000))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
+    p.add_layer(
+        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
+    )
+    p.add_layer(
+        Layer(
+            name="core",
+            level=3,
+            depends_on=["monthly"],
+            transform="core_synthesis",
+            grouping="single",
+            context_budget=10000,
+        )
+    )
 
-    p.add_projection(Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext"]},
-            {"layer": "monthly", "search": ["fulltext"]},
-            {"layer": "core", "search": ["fulltext"]},
-        ],
-    ))
-    p.add_projection(Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": str(build_dir / "context.md")},
-    ))
+    p.add_projection(
+        Projection(
+            name="memory-index",
+            projection_type="search_index",
+            sources=[
+                {"layer": "episodes", "search": ["fulltext"]},
+                {"layer": "monthly", "search": ["fulltext"]},
+                {"layer": "core", "search": ["fulltext"]},
+            ],
+        )
+    )
+    p.add_projection(
+        Projection(
+            name="context-doc",
+            projection_type="flat_file",
+            sources=[{"layer": "core"}],
+            config={"output_path": str(build_dir / "context.md")},
+        )
+    )
 
     return p
 
@@ -245,18 +265,27 @@ class TestPlanBuildPartialRebuild:
         # Add a new conversation to the Claude export
         claude_path = source_dir / "claude_export.json"
         data = json.loads(claude_path.read_text())
-        data["conversations"].append({
-            "uuid": "conv-plan-test-001",
-            "title": "A new test conversation",
-            "created_at": "2024-04-01T10:00:00Z",
-            "chat_messages": [
-                {"uuid": "msg-pt-1", "sender": "human",
-                 "text": "Hello from plan test.", "created_at": "2024-04-01T10:00:00Z"},
-                {"uuid": "msg-pt-2", "sender": "assistant",
-                 "text": "Hi there, plan test response.",
-                 "created_at": "2024-04-01T10:01:00Z"},
-            ],
-        })
+        data["conversations"].append(
+            {
+                "uuid": "conv-plan-test-001",
+                "title": "A new test conversation",
+                "created_at": "2024-04-01T10:00:00Z",
+                "chat_messages": [
+                    {
+                        "uuid": "msg-pt-1",
+                        "sender": "human",
+                        "text": "Hello from plan test.",
+                        "created_at": "2024-04-01T10:00:00Z",
+                    },
+                    {
+                        "uuid": "msg-pt-2",
+                        "sender": "assistant",
+                        "text": "Hi there, plan test response.",
+                        "created_at": "2024-04-01T10:01:00Z",
+                    },
+                ],
+            }
+        )
         claude_path.write_text(json.dumps(data))
 
         plan = plan_build(pipeline_obj)
@@ -318,15 +347,23 @@ class TestBuildPlanSerialization:
             pipeline_name="test",
             steps=[
                 StepPlan(
-                    name="transcripts", level=0, status="new",
-                    artifact_count=5, estimated_llm_calls=0,
-                    estimated_tokens=0, estimated_cost=0.0,
+                    name="transcripts",
+                    level=0,
+                    status="new",
+                    artifact_count=5,
+                    estimated_llm_calls=0,
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
                     reason="no previous build",
                 ),
                 StepPlan(
-                    name="episodes", level=1, status="rebuild",
-                    artifact_count=5, estimated_llm_calls=5,
-                    estimated_tokens=12500, estimated_cost=0.0525,
+                    name="episodes",
+                    level=1,
+                    status="rebuild",
+                    artifact_count=5,
+                    estimated_llm_calls=5,
+                    estimated_tokens=12500,
+                    estimated_cost=0.0525,
                     reason="prompt changed",
                 ),
             ],
@@ -351,9 +388,13 @@ class TestBuildPlanSerialization:
             pipeline_name="test",
             steps=[
                 StepPlan(
-                    name="core", level=3, status="cached",
-                    artifact_count=1, estimated_llm_calls=0,
-                    estimated_tokens=0, estimated_cost=0.0,
+                    name="core",
+                    level=3,
+                    status="cached",
+                    artifact_count=1,
+                    estimated_llm_calls=0,
+                    estimated_tokens=0,
+                    estimated_cost=0.0,
                     reason="all cached",
                 ),
             ],
@@ -376,9 +417,13 @@ class TestBuildPlanSerialization:
             pipeline_name="roundtrip-test",
             steps=[
                 StepPlan(
-                    name="episodes", level=1, status="rebuild",
-                    artifact_count=3, estimated_llm_calls=3,
-                    estimated_tokens=7500, estimated_cost=0.0315,
+                    name="episodes",
+                    level=1,
+                    status="rebuild",
+                    artifact_count=3,
+                    estimated_llm_calls=3,
+                    estimated_tokens=7500,
+                    estimated_cost=0.0315,
                     reason="2 new input(s)",
                 ),
             ],
@@ -462,7 +507,7 @@ from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("test-json")
 pipeline.source_dir = {str(source_dir)!r}
-pipeline.build_dir = {str(tmp_path / 'build')!r}
+pipeline.build_dir = {str(tmp_path / "build")!r}
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -494,7 +539,7 @@ from synix import Pipeline, Layer
 
 pipeline = Pipeline("test-rich")
 pipeline.source_dir = {str(source_dir)!r}
-pipeline.build_dir = {str(tmp_path / 'build')!r}
+pipeline.build_dir = {str(tmp_path / "build")!r}
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -551,8 +596,15 @@ class TestPlanEdgeCases:
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
         p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                         transform="episode_summary", grouping="by_conversation"))
+        p.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
 
         plan = plan_build(p)
 
@@ -579,11 +631,25 @@ class TestPlanEdgeCases:
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
         p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                         transform="episode_summary", grouping="by_conversation"))
-        p.add_layer(Layer(name="topics", level=2, depends_on=["episodes"],
-                         transform="topical_rollup", grouping="by_topic",
-                         config={"topics": ["career", "tech", "personal"]}))
+        p.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
+        p.add_layer(
+            Layer(
+                name="topics",
+                level=2,
+                depends_on=["episodes"],
+                transform="topical_rollup",
+                grouping="by_topic",
+                config={"topics": ["career", "tech", "personal"]},
+            )
+        )
 
         plan = plan_build(p)
 

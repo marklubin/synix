@@ -25,6 +25,7 @@ from synix.core.models import Artifact, FixerDecl, Pipeline
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def build_dir(tmp_path):
     d = tmp_path / "build"
@@ -54,6 +55,7 @@ def _make_artifact(aid, atype="episode", content="test content", **meta):
 # ---------------------------------------------------------------------------
 # FixAction data model tests
 # ---------------------------------------------------------------------------
+
 
 class TestFixAction:
     def test_basic_fields(self):
@@ -94,18 +96,22 @@ class TestFixResult:
         assert r.errors == []
 
     def test_fixed_count(self):
-        r = FixResult(actions=[
-            FixAction("a", "rewrite", "", "", "", ""),
-            FixAction("b", "redact", "", "", "", ""),
-            FixAction("c", "skip", "", "", "", ""),
-        ])
+        r = FixResult(
+            actions=[
+                FixAction("a", "rewrite", "", "", "", ""),
+                FixAction("b", "redact", "", "", "", ""),
+                FixAction("c", "skip", "", "", "", ""),
+            ]
+        )
         assert r.fixed_count == 2
         assert r.skipped_count == 1
 
     def test_unresolved_counts_as_skipped(self):
-        r = FixResult(actions=[
-            FixAction("a", "unresolved", "", "", "", ""),
-        ])
+        r = FixResult(
+            actions=[
+                FixAction("a", "unresolved", "", "", "", ""),
+            ]
+        )
         assert r.fixed_count == 0
         assert r.skipped_count == 1
 
@@ -114,11 +120,13 @@ class TestFixResult:
 # Registry tests
 # ---------------------------------------------------------------------------
 
+
 class TestFixerRegistry:
     def test_register_and_get(self):
         @register_fixer("test_fixer_reg")
         class TestFixer(BaseFixer):
             handles_violation_types = ["test_type"]
+
             def fix(self, violation, ctx):
                 return FixAction("a", "skip", "", "", "", "test skip")
 
@@ -133,6 +141,7 @@ class TestFixerRegistry:
         @register_fixer("test_fixer_handle")
         class HandleFixer(BaseFixer):
             handles_violation_types = ["type_a", "type_b"]
+
             def fix(self, violation, ctx):
                 return FixAction("a", "skip", "", "", "", "")
 
@@ -147,12 +156,11 @@ class TestFixerRegistry:
 # run_fixers tests
 # ---------------------------------------------------------------------------
 
+
 class TestRunFixers:
     def test_no_fixers(self, store, provenance):
         pipeline = Pipeline("test")
-        vr = ValidationResult(violations=[
-            Violation("test", "error", "msg", "a", "f")
-        ])
+        vr = ValidationResult(violations=[Violation("test", "error", "msg", "a", "f")])
         result = run_fixers(vr, pipeline, store, provenance)
         assert result.actions == []
         assert result.fixers_run == []
@@ -161,18 +169,19 @@ class TestRunFixers:
         @register_fixer("test_match_fixer")
         class MatchFixer(BaseFixer):
             handles_violation_types = ["match_type"]
+
             def fix(self, violation, ctx):
-                return FixAction(
-                    violation.artifact_id, "skip", "", "", "", "skipped"
-                )
+                return FixAction(violation.artifact_id, "skip", "", "", "", "skipped")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(FixerDecl(name="test_match_fixer"))
 
-        vr = ValidationResult(violations=[
-            Violation("match_type", "error", "msg", "art-1", "f"),
-            Violation("other_type", "error", "msg", "art-2", "f"),
-        ])
+        vr = ValidationResult(
+            violations=[
+                Violation("match_type", "error", "msg", "art-1", "f"),
+                Violation("other_type", "error", "msg", "art-2", "f"),
+            ]
+        )
         result = run_fixers(vr, pipeline, store, provenance)
         assert len(result.actions) == 1
         assert result.actions[0].artifact_id == "art-1"
@@ -182,15 +191,18 @@ class TestRunFixers:
         @register_fixer("test_error_fixer")
         class ErrorFixer(BaseFixer):
             handles_violation_types = ["error_type"]
+
             def fix(self, violation, ctx):
                 raise RuntimeError("fixer broke")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(FixerDecl(name="test_error_fixer"))
 
-        vr = ValidationResult(violations=[
-            Violation("error_type", "error", "msg", "art-1", "f"),
-        ])
+        vr = ValidationResult(
+            violations=[
+                Violation("error_type", "error", "msg", "art-1", "f"),
+            ]
+        )
         result = run_fixers(vr, pipeline, store, provenance)
         assert len(result.errors) == 1
         assert "fixer broke" in result.errors[0]
@@ -206,17 +218,18 @@ class TestRunFixers:
         @register_fixer("test_downstream_fixer")
         class DownstreamFixer(BaseFixer):
             handles_violation_types = ["downstream_type"]
+
             def fix(self, violation, ctx):
-                return FixAction(
-                    violation.artifact_id, "rewrite", "", "new", "", "fixed"
-                )
+                return FixAction(violation.artifact_id, "rewrite", "", "new", "", "fixed")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(FixerDecl(name="test_downstream_fixer"))
 
-        vr = ValidationResult(violations=[
-            Violation("downstream_type", "error", "msg", "parent-1", "f"),
-        ])
+        vr = ValidationResult(
+            violations=[
+                Violation("downstream_type", "error", "msg", "parent-1", "f"),
+            ]
+        )
         result = run_fixers(vr, pipeline, store, provenance)
         assert len(result.actions) == 1
         assert set(result.actions[0].downstream_invalidated) == {"child-1", "child-2"}
@@ -226,6 +239,7 @@ class TestRunFixers:
 # ---------------------------------------------------------------------------
 # _find_downstream_artifacts tests
 # ---------------------------------------------------------------------------
+
 
 class TestFindDownstream:
     def test_finds_children(self, provenance):
@@ -246,10 +260,10 @@ class TestFindDownstream:
 # apply_fix tests
 # ---------------------------------------------------------------------------
 
+
 class TestApplyFix:
     def test_rewrites_artifact(self, store, provenance):
-        art = _make_artifact("art-1", "episode", "original content",
-                             layer_name="episodes", layer_level=1)
+        art = _make_artifact("art-1", "episode", "original content", layer_name="episodes", layer_level=1)
         store.save_artifact(art, "episodes", 1)
         provenance.record("art-1", parent_ids=["t-1"])
 
@@ -291,6 +305,7 @@ class TestApplyFix:
 # Mock helpers for SemanticEnrichmentFixer
 # ---------------------------------------------------------------------------
 
+
 class _MockLLMResponse:
     def __init__(self, content):
         self.content = content
@@ -328,6 +343,7 @@ class _MockSearchIndex:
 # SemanticEnrichmentFixer tests
 # ---------------------------------------------------------------------------
 
+
 class TestSemanticEnrichmentFixer:
     def _make_violation(self, artifact_id="a-1"):
         return Violation(
@@ -354,12 +370,13 @@ class TestSemanticEnrichmentFixer:
             '{"status": "resolved", "content": "He initially liked cats but later changed his mind.", '
             '"explanation": "Temporal resolution"}'
         )
-        mock_search = _MockSearchIndex([
-            _MockSearchResult("src-1", "User said they like cats"),
-        ])
+        mock_search = _MockSearchIndex(
+            [
+                _MockSearchResult("src-1", "User said they like cats"),
+            ]
+        )
 
-        ctx = FixContext(store, provenance, Pipeline("test"),
-                         search_index=mock_search, llm_client=mock_llm)
+        ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
         fixer = SemanticEnrichmentFixer()
         action = fixer.fix(self._make_violation(), ctx)
@@ -375,12 +392,10 @@ class TestSemanticEnrichmentFixer:
         store.save_artifact(art, "episodes", 1)
 
         mock_llm = _MockLLMClient(
-            '{"status": "unresolved", "content": "", '
-            '"explanation": "Not enough context to resolve"}'
+            '{"status": "unresolved", "content": "", "explanation": "Not enough context to resolve"}'
         )
 
-        ctx = FixContext(store, provenance, Pipeline("test"),
-                         llm_client=mock_llm)
+        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
 
         fixer = SemanticEnrichmentFixer()
         action = fixer.fix(self._make_violation(), ctx)
@@ -400,8 +415,7 @@ class TestSemanticEnrichmentFixer:
         art = _make_artifact("a-1", "episode", "Some content.")
         store.save_artifact(art, "episodes", 1)
 
-        ctx = FixContext(store, provenance, Pipeline("test"),
-                         llm_client=None)
+        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=None)
 
         fixer = SemanticEnrichmentFixer()
         action = fixer.fix(self._make_violation(), ctx)
@@ -410,21 +424,18 @@ class TestSemanticEnrichmentFixer:
 
     def test_evidence_provenance_on_apply(self, store, provenance):
         """Full flow: fix then apply, verify provenance includes evidence."""
-        art = _make_artifact("a-1", "episode", "Original content.",
-                             layer_name="episodes", layer_level=1)
+        art = _make_artifact("a-1", "episode", "Original content.", layer_name="episodes", layer_level=1)
         store.save_artifact(art, "episodes", 1)
         provenance.record("a-1", parent_ids=["t-1"])
 
-        mock_llm = _MockLLMClient(
-            '{"status": "resolved", "content": "Fixed content.", '
-            '"explanation": "resolved"}'
+        mock_llm = _MockLLMClient('{"status": "resolved", "content": "Fixed content.", "explanation": "resolved"}')
+        mock_search = _MockSearchIndex(
+            [
+                _MockSearchResult("evidence-1", "evidence text"),
+            ]
         )
-        mock_search = _MockSearchIndex([
-            _MockSearchResult("evidence-1", "evidence text"),
-        ])
 
-        ctx = FixContext(store, provenance, Pipeline("test"),
-                         search_index=mock_search, llm_client=mock_llm)
+        ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
         fixer = SemanticEnrichmentFixer()
         action = fixer.fix(self._make_violation(), ctx)

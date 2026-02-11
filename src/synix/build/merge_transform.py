@@ -12,12 +12,12 @@ from synix.core.models import Artifact
 
 def _tokenize(text: str) -> set[str]:
     """Convert text to a set of lowercased word tokens."""
-    return set(re.findall(r'\b\w+\b', text.lower()))
+    return set(re.findall(r"\b\w+\b", text.lower()))
 
 
 def _bigrams(text: str) -> set[tuple[str, str]]:
     """Convert text to a set of word bigrams for richer similarity."""
-    words = re.findall(r'\b\w+\b', text.lower())
+    words = re.findall(r"\b\w+\b", text.lower())
     return {(words[i], words[i + 1]) for i in range(len(words) - 1)}
 
 
@@ -73,7 +73,7 @@ def _parse_constraints(constraints: list[str]) -> list[str]:
     for constraint in constraints:
         # Match patterns like "different <field_name>" or "distinct <field_name>"
         match = re.search(
-            r'(?:different|distinct)\s+(\w+)',
+            r"(?:different|distinct)\s+(\w+)",
             constraint,
             re.IGNORECASE,
         )
@@ -104,15 +104,39 @@ def _generate_group_key(artifacts: list[Artifact]) -> str:
     across all artifacts in the group.
     """
     stopwords = {
-        "about", "above", "after", "again", "being", "below", "between",
-        "could", "during", "every", "first", "found", "their", "there",
-        "these", "thing", "those", "through", "under", "using", "which",
-        "while", "would", "other", "should", "still", "where", "before",
+        "about",
+        "above",
+        "after",
+        "again",
+        "being",
+        "below",
+        "between",
+        "could",
+        "during",
+        "every",
+        "first",
+        "found",
+        "their",
+        "there",
+        "these",
+        "thing",
+        "those",
+        "through",
+        "under",
+        "using",
+        "which",
+        "while",
+        "would",
+        "other",
+        "should",
+        "still",
+        "where",
+        "before",
     }
 
     word_counts: dict[str, int] = defaultdict(int)
     for art in artifacts:
-        words = re.findall(r'\b\w+\b', art.content.lower())
+        words = re.findall(r"\b\w+\b", art.content.lower())
         for word in words:
             if len(word) > 4 and word not in stopwords:
                 word_counts[word] += 1
@@ -185,9 +209,7 @@ class MergeTransform(BaseTransform):
             Not used in v0.1 -- content is concatenated.
     """
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """All inputs needed for pairwise similarity — single unit."""
         return [(inputs, {})]
 
@@ -250,36 +272,38 @@ class MergeTransform(BaseTransform):
 
             # Collect metadata
             source_ids = [art.artifact_id for art in group_artifacts]
-            source_customer_ids = list({
-                art.metadata.get("customer_id", "unknown")
-                for art in group_artifacts
-                if art.metadata.get("customer_id")
-            })
+            source_customer_ids = list(
+                {
+                    art.metadata.get("customer_id", "unknown")
+                    for art in group_artifacts
+                    if art.metadata.get("customer_id")
+                }
+            )
 
             # Compute average pairwise similarity for the group
             similarities: list[float] = []
             for i, idx_i in enumerate(group_indices):
                 for j, idx_j in enumerate(group_indices):
                     if i < j:
-                        sim = jaccard_similarity_from_sets(
-                            token_sets[idx_i], token_sets[idx_j]
-                        )
+                        sim = jaccard_similarity_from_sets(token_sets[idx_i], token_sets[idx_j])
                         similarities.append(sim)
             avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
 
-            results.append(Artifact(
-                artifact_id=artifact_id,
-                artifact_type="merge",
-                content=merged_content,
-                input_hashes=[art.content_hash for art in group_artifacts],
-                prompt_id=None,
-                model_config=None,
-                metadata={
-                    "source_artifact_ids": source_ids,
-                    "source_customer_ids": source_customer_ids,
-                    "similarity_score": round(avg_similarity, 4),
-                    "merge_count": len(group_artifacts),
-                },
-            ))
+            results.append(
+                Artifact(
+                    artifact_id=artifact_id,
+                    artifact_type="merge",
+                    content=merged_content,
+                    input_hashes=[art.content_hash for art in group_artifacts],
+                    prompt_id=None,
+                    model_config=None,
+                    metadata={
+                        "source_artifact_ids": source_ids,
+                        "source_customer_ids": source_customer_ids,
+                        "similarity_score": round(avg_similarity, 4),
+                        "merge_count": len(group_artifacts),
+                    },
+                )
+            )
 
         return results

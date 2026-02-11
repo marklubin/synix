@@ -29,7 +29,7 @@ from synix.core.models import Pipeline, Layer, ValidatorDecl
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
-pipeline.source_dir = "{tmp_path / 'exports'}"
+pipeline.source_dir = "{tmp_path / "exports"}"
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
 pipeline.add_validator(ValidatorDecl(
     name="pii",
@@ -49,7 +49,7 @@ from synix.core.models import Pipeline, Layer, ValidatorDecl, FixerDecl
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
-pipeline.source_dir = "{tmp_path / 'exports'}"
+pipeline.source_dir = "{tmp_path / "exports"}"
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
 pipeline.add_validator(ValidatorDecl(
     name="pii",
@@ -81,9 +81,13 @@ class TestFixHelp:
 class TestFixCommand:
     def test_fix_no_queue(self, runner, pipeline_with_fixer, build_dir):
         """No violations_state.json → 'No active violations'."""
-        result = runner.invoke(main, [
-            "fix", str(pipeline_with_fixer),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "fix",
+                str(pipeline_with_fixer),
+            ],
+        )
         assert result.exit_code == 0
         assert "No active violations" in result.output
 
@@ -107,15 +111,17 @@ class TestFixCommand:
 
         # Persist a violation against the original hash
         queue = ViolationQueue.load(build_dir)
-        queue.upsert(Violation(
-            violation_type="pii",
-            severity="warning",
-            message="PII detected (ssn)",
-            artifact_id="ep-1",
-            field="content",
-            metadata={"content_hash": original_hash},
-            violation_id="test-vid-1",
-        ))
+        queue.upsert(
+            Violation(
+                violation_type="pii",
+                severity="warning",
+                message="PII detected (ssn)",
+                artifact_id="ep-1",
+                field="content",
+                metadata={"content_hash": original_hash},
+                violation_id="test-vid-1",
+            )
+        )
         queue.save_state()
 
         # Verify it's active before rebuild
@@ -131,18 +137,19 @@ class TestFixCommand:
         store.save_artifact(art2, "episodes", 1)
 
         # Now run fix — violation should be auto-expired
-        result = runner.invoke(main, [
-            "fix", str(simple_pipeline),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "fix",
+                str(simple_pipeline),
+            ],
+        )
         assert result.exit_code == 0
         assert "No active violations" in result.output
 
         # Verify the violation was marked expired in state
         queue2 = ViolationQueue.load(build_dir)
-        expired = [
-            e for e in queue2._state.values()
-            if e.get("status") == "expired"
-        ]
+        expired = [e for e in queue2._state.values() if e.get("status") == "expired"]
         assert len(expired) == 1
 
     def test_fix_active_violations_no_fixer(self, runner, simple_pipeline, build_dir):
@@ -162,28 +169,39 @@ class TestFixCommand:
         content_hash = store.get_content_hash("ep-1")
 
         queue = ViolationQueue.load(build_dir)
-        queue.upsert(Violation(
-            violation_type="pii",
-            severity="warning",
-            message="PII detected",
-            artifact_id="ep-1",
-            field="content",
-            metadata={"content_hash": content_hash},
-            violation_id="test-vid-2",
-        ))
+        queue.upsert(
+            Violation(
+                violation_type="pii",
+                severity="warning",
+                message="PII detected",
+                artifact_id="ep-1",
+                field="content",
+                metadata={"content_hash": content_hash},
+                violation_id="test-vid-2",
+            )
+        )
         queue.save_state()
 
-        result = runner.invoke(main, [
-            "fix", str(simple_pipeline),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "fix",
+                str(simple_pipeline),
+            ],
+        )
         assert result.exit_code == 0
         assert "No fixers" in result.output
 
     def test_fix_dry_run(self, runner, pipeline_with_fixer, build_dir):
         """--dry-run flag is accepted."""
-        result = runner.invoke(main, [
-            "fix", str(pipeline_with_fixer), "--dry-run",
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "fix",
+                str(pipeline_with_fixer),
+                "--dry-run",
+            ],
+        )
         assert result.exit_code == 0
 
     def test_fix_nonexistent_pipeline_errors(self, runner):
@@ -191,9 +209,14 @@ class TestFixCommand:
         assert result.exit_code != 0
 
     def test_fix_nonexistent_build_dir_errors(self, runner, simple_pipeline, tmp_path):
-        result = runner.invoke(main, [
-            "fix", str(simple_pipeline),
-            "--build-dir", str(tmp_path / "no_such_dir"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "fix",
+                str(simple_pipeline),
+                "--build-dir",
+                str(tmp_path / "no_such_dir"),
+            ],
+        )
         assert result.exit_code != 0
         assert "not found" in result.output.lower() or "Build directory" in result.output

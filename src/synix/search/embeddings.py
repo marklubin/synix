@@ -22,6 +22,7 @@ def _suppress_hf_warnings() -> None:
     warnings.filterwarnings("ignore", message=".*progress bar.*", category=UserWarning)
     warnings.filterwarnings("ignore", module="huggingface_hub")
 
+
 from synix.core.config import EmbeddingConfig
 from synix.core.errors import atomic_write
 
@@ -40,9 +41,7 @@ class FastEmbedBackend:
             _suppress_hf_warnings()
             from fastembed import TextEmbedding
 
-            self._model_cache[self.model_name] = TextEmbedding(
-                model_name=self.model_name
-            )
+            self._model_cache[self.model_name] = TextEmbedding(model_name=self.model_name)
         return self._model_cache[self.model_name]
 
     def embed(self, text: str) -> list[float]:
@@ -113,10 +112,7 @@ class OpenAIBackend:
         if not texts:
             return []
 
-        chunks = [
-            texts[i : i + self.batch_size]
-            for i in range(0, len(texts), self.batch_size)
-        ]
+        chunks = [texts[i : i + self.batch_size] for i in range(0, len(texts), self.batch_size)]
 
         if len(chunks) == 1:
             result = self._embed_chunk(chunks[0])

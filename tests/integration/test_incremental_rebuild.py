@@ -37,28 +37,48 @@ def pipeline_obj(build_dir):
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                      transform="episode_summary", grouping="by_conversation"))
-    p.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
-                      transform="monthly_rollup", grouping="by_month"))
-    p.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
-                      transform="core_synthesis", grouping="single", context_budget=10000))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
+    p.add_layer(
+        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
+    )
+    p.add_layer(
+        Layer(
+            name="core",
+            level=3,
+            depends_on=["monthly"],
+            transform="core_synthesis",
+            grouping="single",
+            context_budget=10000,
+        )
+    )
 
-    p.add_projection(Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext"]},
-            {"layer": "monthly", "search": ["fulltext"]},
-            {"layer": "core", "search": ["fulltext"]},
-        ],
-    ))
-    p.add_projection(Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": str(build_dir / "context.md")},
-    ))
+    p.add_projection(
+        Projection(
+            name="memory-index",
+            projection_type="search_index",
+            sources=[
+                {"layer": "episodes", "search": ["fulltext"]},
+                {"layer": "monthly", "search": ["fulltext"]},
+                {"layer": "core", "search": ["fulltext"]},
+            ],
+        )
+    )
+    p.add_projection(
+        Projection(
+            name="context-doc",
+            projection_type="flat_file",
+            sources=[{"layer": "core"}],
+            config={"output_path": str(build_dir / "context.md")},
+        )
+    )
 
     return p
 
@@ -82,18 +102,27 @@ class TestIncrementalRebuild:
         # Add a new conversation to the Claude export
         claude_path = source_dir / "claude_export.json"
         data = json.loads(claude_path.read_text())
-        data["conversations"].append({
-            "uuid": "conv-new-001",
-            "title": "New conversation about Synix",
-            "created_at": "2024-03-25T10:00:00Z",
-            "chat_messages": [
-                {"uuid": "msg-new-1", "sender": "human",
-                 "text": "Tell me about Synix.", "created_at": "2024-03-25T10:00:00Z"},
-                {"uuid": "msg-new-2", "sender": "assistant",
-                 "text": "Synix is a build system for agent memory.",
-                 "created_at": "2024-03-25T10:01:00Z"},
-            ],
-        })
+        data["conversations"].append(
+            {
+                "uuid": "conv-new-001",
+                "title": "New conversation about Synix",
+                "created_at": "2024-03-25T10:00:00Z",
+                "chat_messages": [
+                    {
+                        "uuid": "msg-new-1",
+                        "sender": "human",
+                        "text": "Tell me about Synix.",
+                        "created_at": "2024-03-25T10:00:00Z",
+                    },
+                    {
+                        "uuid": "msg-new-2",
+                        "sender": "assistant",
+                        "text": "Synix is a build system for agent memory.",
+                        "created_at": "2024-03-25T10:01:00Z",
+                    },
+                ],
+            }
+        )
         claude_path.write_text(json.dumps(data))
 
         # Second run — should have some cached + some built
@@ -113,6 +142,7 @@ class TestIncrementalRebuild:
 
         # Now change the episode prompt template to force rebuild
         from synix.transforms.base import PROMPTS_DIR
+
         prompt_path = PROMPTS_DIR / "episode_summary.txt"
         original = prompt_path.read_text()
         try:

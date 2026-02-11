@@ -33,11 +33,13 @@ class MockEpisodeTransform(BaseTransform):
         results: list[Artifact] = []
         for inp in inputs:
             with self._lock:
-                self.call_log.append({
-                    "artifact_id": inp.artifact_id,
-                    "thread": threading.current_thread().name,
-                    "time": time.monotonic(),
-                })
+                self.call_log.append(
+                    {
+                        "artifact_id": inp.artifact_id,
+                        "thread": threading.current_thread().name,
+                        "time": time.monotonic(),
+                    }
+                )
 
             if inp.artifact_id in self.fail_ids:
                 raise RuntimeError(f"Transform failed for {inp.artifact_id}")
@@ -45,18 +47,20 @@ class MockEpisodeTransform(BaseTransform):
             if self.delay > 0:
                 time.sleep(self.delay)
 
-            results.append(Artifact(
-                artifact_id=f"ep-{inp.artifact_id}",
-                artifact_type="episode",
-                content=f"Summary of {inp.content}",
-                input_hashes=[inp.content_hash],
-                prompt_id="test_prompt_v1",
-                model_config={"model": "test", "temperature": 0.3},
-                metadata={
-                    "source_conversation_id": inp.artifact_id,
-                    "date": inp.metadata.get("date", "2024-01-01"),
-                },
-            ))
+            results.append(
+                Artifact(
+                    artifact_id=f"ep-{inp.artifact_id}",
+                    artifact_type="episode",
+                    content=f"Summary of {inp.content}",
+                    input_hashes=[inp.content_hash],
+                    prompt_id="test_prompt_v1",
+                    model_config={"model": "test", "temperature": 0.3},
+                    metadata={
+                        "source_conversation_id": inp.artifact_id,
+                        "date": inp.metadata.get("date", "2024-01-01"),
+                    },
+                )
+            )
         return results
 
 
@@ -82,10 +86,15 @@ def _make_pipeline_with_episodes(build_dir: str, source_dir: str) -> Pipeline:
     p.source_dir = source_dir
     p.llm_config = {"model": "test-model", "temperature": 0.3, "max_tokens": 1024}
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(
-        name="episodes", level=1, depends_on=["transcripts"],
-        transform="episode_summary", grouping="by_conversation",
-    ))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
     return p
 
 
@@ -109,9 +118,7 @@ class TestExecuteTransformConcurrent:
         # Concurrent — pass units (1:1 split)
         transform2 = MockEpisodeTransform()
         units = [([inp], {}) for inp in inputs]
-        concurrent_results = _execute_transform_concurrent(
-            transform2, units, config, concurrency=4
-        )
+        concurrent_results = _execute_transform_concurrent(transform2, units, config, concurrency=4)
 
         # Same number of artifacts
         assert len(concurrent_results) == len(sequential_results)
@@ -163,9 +170,7 @@ class TestExecuteTransformConcurrent:
 
         # Check that multiple threads were used
         threads_used = {entry["thread"] for entry in transform.call_log}
-        assert len(threads_used) > 1, (
-            f"Expected multiple threads, got: {threads_used}"
-        )
+        assert len(threads_used) > 1, f"Expected multiple threads, got: {threads_used}"
 
 
 class TestConcurrentBuildSameResults:
@@ -179,9 +184,7 @@ class TestConcurrentBuildSameResults:
 
         # Create some simple text files as source data
         for i in range(4):
-            (source_dir / f"conv_{i}.txt").write_text(
-                f"user: Question {i}\nassistant: Answer {i}\n"
-            )
+            (source_dir / f"conv_{i}.txt").write_text(f"user: Question {i}\nassistant: Answer {i}\n")
 
         # --- Sequential build (concurrency=1) ---
         build_dir_seq = tmp_path / "build_seq"
@@ -190,15 +193,23 @@ class TestConcurrentBuildSameResults:
         p_seq.source_dir = str(source_dir)
         p_seq.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
         p_seq.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p_seq.add_layer(Layer(
-            name="episodes", level=1, depends_on=["transcripts"],
-            transform="episode_summary", grouping="by_conversation",
-        ))
-        p_seq.add_projection(Projection(
-            name="context-doc", projection_type="flat_file",
-            sources=[{"layer": "episodes"}],
-            config={"output_path": str(build_dir_seq / "context.md")},
-        ))
+        p_seq.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
+        p_seq.add_projection(
+            Projection(
+                name="context-doc",
+                projection_type="flat_file",
+                sources=[{"layer": "episodes"}],
+                config={"output_path": str(build_dir_seq / "context.md")},
+            )
+        )
 
         result_seq = run(p_seq, concurrency=1)
 
@@ -209,15 +220,23 @@ class TestConcurrentBuildSameResults:
         p_conc.source_dir = str(source_dir)
         p_conc.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
         p_conc.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p_conc.add_layer(Layer(
-            name="episodes", level=1, depends_on=["transcripts"],
-            transform="episode_summary", grouping="by_conversation",
-        ))
-        p_conc.add_projection(Projection(
-            name="context-doc", projection_type="flat_file",
-            sources=[{"layer": "episodes"}],
-            config={"output_path": str(build_dir_conc / "context.md")},
-        ))
+        p_conc.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
+        p_conc.add_projection(
+            Projection(
+                name="context-doc",
+                projection_type="flat_file",
+                sources=[{"layer": "episodes"}],
+                config={"output_path": str(build_dir_conc / "context.md")},
+            )
+        )
 
         result_conc = run(p_conc, concurrency=4)
 
@@ -273,12 +292,14 @@ class TestConcurrentBuildRespectsLimit:
                     time.sleep(0.05)  # Hold the slot to allow overlap measurement
                     with lock:
                         current_concurrent["value"] -= 1
-                    results.append(Artifact(
-                        artifact_id=f"ep-{inp.artifact_id}",
-                        artifact_type="episode",
-                        content=f"Summary of {inp.content}",
-                        input_hashes=[inp.content_hash],
-                    ))
+                    results.append(
+                        Artifact(
+                            artifact_id=f"ep-{inp.artifact_id}",
+                            artifact_type="episode",
+                            content=f"Summary of {inp.content}",
+                            input_hashes=[inp.content_hash],
+                        )
+                    )
                 return results
 
         inputs = [_make_transcript(f"t-{i}") for i in range(10)]
@@ -309,10 +330,15 @@ class TestConcurrentBuildDefaultSequential:
         p.source_dir = str(source_dir)
         p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
         p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(Layer(
-            name="episodes", level=1, depends_on=["transcripts"],
-            transform="episode_summary", grouping="by_conversation",
-        ))
+        p.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
 
         # With concurrency=1, should still produce correct results
         result = run(p, concurrency=1)
@@ -320,6 +346,7 @@ class TestConcurrentBuildDefaultSequential:
 
         # Verify artifacts were created
         from synix.build.artifacts import ArtifactStore
+
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
@@ -357,9 +384,7 @@ class TestConcurrentErrorsDontCrash:
         # (they ran in parallel, so they should have completed before the error was raised)
         processed_ids = {entry["artifact_id"] for entry in transform.call_log}
         # At minimum, several inputs should have been submitted before the error
-        assert len(processed_ids) >= 2, (
-            f"Expected at least 2 inputs to be processed, got: {processed_ids}"
-        )
+        assert len(processed_ids) >= 2, f"Expected at least 2 inputs to be processed, got: {processed_ids}"
 
     def test_concurrent_all_errors_raises_first(self):
         """If all transforms fail, one of the errors is raised."""
@@ -376,9 +401,7 @@ class TestConcurrentErrorsDontCrash:
         source_dir = tmp_path / "exports"
         source_dir.mkdir()
         for i in range(3):
-            (source_dir / f"conv_{i}.txt").write_text(
-                f"user: Q{i}\nassistant: A{i}\n"
-            )
+            (source_dir / f"conv_{i}.txt").write_text(f"user: Q{i}\nassistant: A{i}\n")
 
         build_dir = tmp_path / "build"
         p = Pipeline("test-monthly-seq")
@@ -386,18 +409,34 @@ class TestConcurrentErrorsDontCrash:
         p.source_dir = str(source_dir)
         p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
         p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(Layer(
-            name="episodes", level=1, depends_on=["transcripts"],
-            transform="episode_summary", grouping="by_conversation",
-        ))
-        p.add_layer(Layer(
-            name="monthly", level=2, depends_on=["episodes"],
-            transform="monthly_rollup", grouping="by_month",
-        ))
-        p.add_layer(Layer(
-            name="core", level=3, depends_on=["monthly"],
-            transform="core_synthesis", grouping="single", context_budget=10000,
-        ))
+        p.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["transcripts"],
+                transform="episode_summary",
+                grouping="by_conversation",
+            )
+        )
+        p.add_layer(
+            Layer(
+                name="monthly",
+                level=2,
+                depends_on=["episodes"],
+                transform="monthly_rollup",
+                grouping="by_month",
+            )
+        )
+        p.add_layer(
+            Layer(
+                name="core",
+                level=3,
+                depends_on=["monthly"],
+                transform="core_synthesis",
+                grouping="single",
+                context_budget=10000,
+            )
+        )
 
         # Should complete without errors even with concurrency > 1
         result = run(p, concurrency=4)
@@ -405,6 +444,7 @@ class TestConcurrentErrorsDontCrash:
 
         # Monthly and core layers should have been built
         from synix.build.artifacts import ArtifactStore
+
         store = ArtifactStore(build_dir)
         assert len(store.list_artifacts("monthly")) >= 1
         assert len(store.list_artifacts("core")) == 1
@@ -428,9 +468,7 @@ class TestConcurrentPerformance:
         transform_conc = MockEpisodeTransform(delay=0.05)
         units = [([inp], {}) for inp in inputs]
         conc_start = time.monotonic()
-        conc_results = _execute_transform_concurrent(
-            transform_conc, units, config, concurrency=6
-        )
+        conc_results = _execute_transform_concurrent(transform_conc, units, config, concurrency=6)
         conc_time = time.monotonic() - conc_start
 
         # Both should produce correct results
@@ -439,8 +477,7 @@ class TestConcurrentPerformance:
         # Concurrent should be meaningfully faster
         # 6 * 0.05 = 0.3s sequential vs ~0.05s concurrent
         assert conc_time < seq_time * 0.75, (
-            f"Concurrent ({conc_time:.3f}s) not meaningfully faster than "
-            f"sequential ({seq_time:.3f}s)"
+            f"Concurrent ({conc_time:.3f}s) not meaningfully faster than sequential ({seq_time:.3f}s)"
         )
 
 
@@ -541,12 +578,14 @@ class TestTransformSplit:
             def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
                 with self._lock:
                     self.seen_configs.append(dict(config))
-                return [Artifact(
-                    artifact_id=f"out-{config.get('_month_key', 'unknown')}",
-                    artifact_type="test",
-                    content="test",
-                    input_hashes=[inp.content_hash for inp in inputs],
-                )]
+                return [
+                    Artifact(
+                        artifact_id=f"out-{config.get('_month_key', 'unknown')}",
+                        artifact_type="test",
+                        content="test",
+                        input_hashes=[inp.content_hash for inp in inputs],
+                    )
+                ]
 
         transform = ConfigCheckTransform()
         units = [

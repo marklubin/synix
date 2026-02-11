@@ -50,8 +50,8 @@ def monthly_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo1-monthly")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -64,7 +64,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "monthly", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -77,8 +77,8 @@ def topical_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo1-topical")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -93,7 +93,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "topics", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -159,15 +159,17 @@ class TestDT1FreshBuild:
 
     def test_plan_shows_all_layers_as_new(self, runner, workspace, monthly_pipeline_file):
         """synix plan on a fresh workspace shows all layers need building."""
-        result = runner.invoke(main, [
-            "plan", str(monthly_pipeline_file),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "plan",
+                str(monthly_pipeline_file),
+            ],
+        )
         assert result.exit_code == 0, f"Plan failed: {result.output}"
         assert "Estimated:" in result.output
 
-    def test_fresh_build_produces_correct_artifact_counts(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_fresh_build_produces_correct_artifact_counts(self, runner, workspace, monthly_pipeline_file):
         """First build produces: 30 transcripts, 30 episodes, 4 monthly, 1 core."""
         result = runner.invoke(main, ["build", str(monthly_pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
@@ -190,33 +192,26 @@ class TestDT1FreshBuild:
         # Single core memory
         assert layers.get("core", 0) == 1
 
-    def test_verify_passes_after_fresh_build(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_verify_passes_after_fresh_build(self, runner, workspace, monthly_pipeline_file):
         """synix verify passes on a clean build."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
         from synix.build.verify import verify_build
+
         result = verify_build(str(workspace["build_dir"]))
         assert result.passed, f"Verify failed: {result.summary}. Details: {[c.message for c in result.failed_checks]}"
 
-    def test_search_index_populated_after_build(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_search_index_populated_after_build(self, runner, workspace, monthly_pipeline_file):
         """Search returns results for content present in the corpus."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
         search_db = workspace["build_dir"] / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, [
-            "search", "programming", "--build-dir", str(workspace["build_dir"])
-        ])
+        result = runner.invoke(main, ["search", "programming", "--build-dir", str(workspace["build_dir"])])
         assert result.exit_code == 0
 
-    def test_context_doc_created_with_core_content(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_context_doc_created_with_core_content(self, runner, workspace, monthly_pipeline_file):
         """Context doc contains the core memory synthesis."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
@@ -226,9 +221,7 @@ class TestDT1FreshBuild:
         assert "Identity" in content
         assert "Mark" in content
 
-    def test_all_derived_artifacts_have_provenance(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_all_derived_artifacts_have_provenance(self, runner, workspace, monthly_pipeline_file):
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
@@ -237,10 +230,7 @@ class TestDT1FreshBuild:
         provenance = json.loads(provenance_path.read_text())
 
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {
-            aid for aid, info in manifest.items()
-            if info.get("layer") != "transcripts"
-        }
+        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
         missing = [aid for aid in derived if aid not in provenance]
         assert not missing, f"Missing provenance for: {missing}"
 
@@ -257,11 +247,9 @@ class TestDT1Search:
         """Search filtered to episodes layer returns only episode results."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        result = runner.invoke(main, [
-            "search", "programming",
-            "--layers", "episodes",
-            "--build-dir", str(workspace["build_dir"])
-        ])
+        result = runner.invoke(
+            main, ["search", "programming", "--layers", "episodes", "--build-dir", str(workspace["build_dir"])]
+        )
         assert result.exit_code == 0
         # Should have results from episodes layer
         if "No results" not in result.output:
@@ -324,14 +312,13 @@ class TestDT1ConfigChange:
         assert len(context1) > 0
         assert len(context2) > 0
 
-    def test_verify_passes_after_topical_rebuild(
-        self, runner, workspace, monthly_pipeline_file, topical_pipeline_file
-    ):
+    def test_verify_passes_after_topical_rebuild(self, runner, workspace, monthly_pipeline_file, topical_pipeline_file):
         """Verify still passes after config change rebuild."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
         runner.invoke(main, ["build", str(topical_pipeline_file)])
 
         from synix.build.verify import verify_build
+
         result = verify_build(str(workspace["build_dir"]))
         assert result.passed, f"Verify failed: {result.summary}"
 
@@ -344,9 +331,7 @@ class TestDT1ConfigChange:
 class TestDT1CacheHit:
     """DT-1.4: No-change rebuild should be fully cached."""
 
-    def test_second_run_uses_cache(
-        self, runner, workspace, monthly_pipeline_file, mock_anthropic
-    ):
+    def test_second_run_uses_cache(self, runner, workspace, monthly_pipeline_file, mock_anthropic):
         """Second identical run should not make new LLM calls for episodes+."""
         # First build
         result1 = runner.invoke(main, ["build", str(monthly_pipeline_file)])
@@ -360,19 +345,20 @@ class TestDT1CacheHit:
 
         # Second run should make 0 new LLM calls
         assert calls_after_second == calls_after_first, (
-            f"Expected no new LLM calls on cached rebuild. "
-            f"First: {calls_after_first}, Second: {calls_after_second}"
+            f"Expected no new LLM calls on cached rebuild. First: {calls_after_first}, Second: {calls_after_second}"
         )
 
-    def test_plan_shows_all_cached_on_second_run(
-        self, runner, workspace, monthly_pipeline_file
-    ):
+    def test_plan_shows_all_cached_on_second_run(self, runner, workspace, monthly_pipeline_file):
         """Plan after a clean build shows everything as cached."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        result = runner.invoke(main, [
-            "plan", str(monthly_pipeline_file),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "plan",
+                str(monthly_pipeline_file),
+            ],
+        )
         assert result.exit_code == 0
         # Plan should report cached status
         assert "cached" in result.output.lower()

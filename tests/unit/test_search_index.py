@@ -53,14 +53,18 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Discussion about Python programming"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about Python programming"),
+            "episodes",
+            1,
         )
         index.insert(
-            Artifact(artifact_id="monthly-001", artifact_type="rollup",
-                     content="Monthly summary covering Python and other topics"),
-            "monthly", 2,
+            Artifact(
+                artifact_id="monthly-001",
+                artifact_type="rollup",
+                content="Monthly summary covering Python and other topics",
+            ),
+            "monthly",
+            2,
         )
 
         # Filter to episodes only
@@ -85,9 +89,9 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Discussion about AI systems"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about AI systems"),
+            "episodes",
+            1,
         )
 
         tracker = ProvenanceTracker(tmp_build_dir)
@@ -109,15 +113,23 @@ class TestSearchIndex:
 
         # One artifact mentions "Rust" many times
         index.insert(
-            Artifact(artifact_id="ep-rust", artifact_type="episode",
-                     content="Rust Rust Rust. The user loves Rust programming. Rust ownership is great."),
-            "episodes", 1,
+            Artifact(
+                artifact_id="ep-rust",
+                artifact_type="episode",
+                content="Rust Rust Rust. The user loves Rust programming. Rust ownership is great.",
+            ),
+            "episodes",
+            1,
         )
         # Another mentions it once among other things
         index.insert(
-            Artifact(artifact_id="ep-mixed", artifact_type="episode",
-                     content="The user discussed Python, JavaScript, and briefly mentioned Rust."),
-            "episodes", 1,
+            Artifact(
+                artifact_id="ep-mixed",
+                artifact_type="episode",
+                content="The user discussed Python, JavaScript, and briefly mentioned Rust.",
+            ),
+            "episodes",
+            1,
         )
 
         results = index.query("Rust")
@@ -133,9 +145,9 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Discussion about Python programming"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about Python programming"),
+            "episodes",
+            1,
         )
 
         results = index.query("xyznonexistent")
@@ -150,9 +162,9 @@ class TestSearchIndex:
         # First build
         index.create()
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="First version about Python"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="First version about Python"),
+            "episodes",
+            1,
         )
         results1 = index.query("Python")
         assert len(results1) == 1
@@ -160,9 +172,9 @@ class TestSearchIndex:
         # Second build (create drops and recreates)
         index.create()
         index.insert(
-            Artifact(artifact_id="ep-002", artifact_type="episode",
-                     content="Second version about Python and Rust"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-002", artifact_type="episode", content="Second version about Python and Rust"),
+            "episodes",
+            1,
         )
         results2 = index.query("Python")
         assert len(results2) == 1
@@ -185,9 +197,9 @@ class TestShadowIndexManager:
 
         assert manager.shadow_path.exists()
         shadow.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Test content"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="Test content"),
+            "episodes",
+            1,
         )
         # Shadow file exists, main does not yet
         assert not manager.main_path.exists()
@@ -198,9 +210,9 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Shadow content about Python"),
-            "episodes", 1,
+            Artifact(artifact_id="ep-001", artifact_type="episode", content="Shadow content about Python"),
+            "episodes",
+            1,
         )
         manager.commit()
 
@@ -221,9 +233,9 @@ class TestShadowIndexManager:
         old_index = SearchIndex(tmp_build_dir / "search.db")
         old_index.create()
         old_index.insert(
-            Artifact(artifact_id="old-001", artifact_type="episode",
-                     content="Old data about Rust"),
-            "episodes", 1,
+            Artifact(artifact_id="old-001", artifact_type="episode", content="Old data about Rust"),
+            "episodes",
+            1,
         )
         old_index.close()
 
@@ -231,9 +243,9 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="new-001", artifact_type="episode",
-                     content="New data about Python"),
-            "episodes", 1,
+            Artifact(artifact_id="new-001", artifact_type="episode", content="New data about Python"),
+            "episodes",
+            1,
         )
         manager.commit()
 
@@ -254,9 +266,9 @@ class TestShadowIndexManager:
         old_index = SearchIndex(tmp_build_dir / "search.db")
         old_index.create()
         old_index.insert(
-            Artifact(artifact_id="old-001", artifact_type="episode",
-                     content="Preserved data about Docker"),
-            "episodes", 1,
+            Artifact(artifact_id="old-001", artifact_type="episode", content="Preserved data about Docker"),
+            "episodes",
+            1,
         )
         old_index.close()
 
@@ -264,9 +276,9 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="new-001", artifact_type="episode",
-                     content="New data that should be discarded"),
-            "episodes", 1,
+            Artifact(artifact_id="new-001", artifact_type="episode", content="New data that should be discarded"),
+            "episodes",
+            1,
         )
         manager.rollback()
 
@@ -313,9 +325,12 @@ class TestSearchIndexProjectionShadow:
         proj = SearchIndexProjection(tmp_build_dir)
 
         artifacts = [
-            Artifact(artifact_id="ep-001", artifact_type="episode",
-                     content="Content about machine learning",
-                     metadata={"layer_name": "episodes", "layer_level": 1}),
+            Artifact(
+                artifact_id="ep-001",
+                artifact_type="episode",
+                content="Content about machine learning",
+                metadata={"layer_name": "episodes", "layer_level": 1},
+            ),
         ]
 
         proj.materialize(artifacts, {"sources": [{"layer": "episodes", "level": 1}]})
@@ -335,9 +350,14 @@ class TestSearchIndexProjectionShadow:
         # Create an initial index
         proj = SearchIndexProjection(tmp_build_dir)
         proj.materialize(
-            [Artifact(artifact_id="old-001", artifact_type="episode",
-                      content="Original data about Rust",
-                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            [
+                Artifact(
+                    artifact_id="old-001",
+                    artifact_type="episode",
+                    content="Original data about Rust",
+                    metadata={"layer_name": "episodes", "layer_level": 1},
+                )
+            ],
             {"sources": [{"layer": "episodes", "level": 1}]},
         )
         proj.close()
@@ -347,6 +367,7 @@ class TestSearchIndexProjectionShadow:
         original_insert = SearchIndex.insert
 
         call_count = 0
+
         def failing_insert(self, artifact, layer_name, layer_level):
             nonlocal call_count
             call_count += 1
@@ -360,12 +381,18 @@ class TestSearchIndexProjectionShadow:
             with pytest.raises(RuntimeError, match="Simulated failure"):
                 proj2.materialize(
                     [
-                        Artifact(artifact_id="new-001", artifact_type="episode",
-                                 content="First new artifact",
-                                 metadata={"layer_name": "episodes", "layer_level": 1}),
-                        Artifact(artifact_id="new-002", artifact_type="episode",
-                                 content="Second new artifact that will fail",
-                                 metadata={"layer_name": "episodes", "layer_level": 1}),
+                        Artifact(
+                            artifact_id="new-001",
+                            artifact_type="episode",
+                            content="First new artifact",
+                            metadata={"layer_name": "episodes", "layer_level": 1},
+                        ),
+                        Artifact(
+                            artifact_id="new-002",
+                            artifact_type="episode",
+                            content="Second new artifact that will fail",
+                            metadata={"layer_name": "episodes", "layer_level": 1},
+                        ),
                     ],
                     {"sources": [{"layer": "episodes", "level": 1}]},
                 )
@@ -389,9 +416,14 @@ class TestSearchIndexProjectionShadow:
 
         # First build
         proj.materialize(
-            [Artifact(artifact_id="ep-001", artifact_type="episode",
-                      content="First build data",
-                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            [
+                Artifact(
+                    artifact_id="ep-001",
+                    artifact_type="episode",
+                    content="First build data",
+                    metadata={"layer_name": "episodes", "layer_level": 1},
+                )
+            ],
             {"sources": [{"layer": "episodes", "level": 1}]},
         )
         results1 = proj.query("First build")
@@ -399,9 +431,14 @@ class TestSearchIndexProjectionShadow:
 
         # Second build replaces content
         proj.materialize(
-            [Artifact(artifact_id="ep-002", artifact_type="episode",
-                      content="Second build data",
-                      metadata={"layer_name": "episodes", "layer_level": 1})],
+            [
+                Artifact(
+                    artifact_id="ep-002",
+                    artifact_type="episode",
+                    content="Second build data",
+                    metadata={"layer_name": "episodes", "layer_level": 1},
+                )
+            ],
             {"sources": [{"layer": "episodes", "level": 1}]},
         )
         results2 = proj.query("Second build")
@@ -441,9 +478,7 @@ class TestFTS5QuerySanitization:
 
     def test_long_query_uses_or(self):
         """4+ terms with content words use OR between them."""
-        result = SearchIndex._sanitize_fts5_query(
-            "what are the main themes from november conversations"
-        )
+        result = SearchIndex._sanitize_fts5_query("what are the main themes from november conversations")
         assert "OR" in result
         # Stop words (what, are, the, from) should be stripped
         assert '"what"' not in result
@@ -465,9 +500,7 @@ class TestFTS5QuerySanitization:
 
     def test_punctuation_stripped(self):
         """Trailing punctuation is stripped from tokens in OR mode."""
-        result = SearchIndex._sanitize_fts5_query(
-            "what do I think about anthropic?"
-        )
+        result = SearchIndex._sanitize_fts5_query("what do I think about anthropic?")
         # In long-query OR mode, trailing ? stripped from "anthropic?"
         assert '"anthropic"' in result
         assert '"anthropic?"' not in result
@@ -501,7 +534,8 @@ class TestFTS5QueryIntegration:
                     content=topic,
                     metadata={"layer_name": "episodes", "topic": topic[:20]},
                 ),
-                "episodes", 1,
+                "episodes",
+                1,
             )
         return index
 
@@ -529,9 +563,7 @@ class TestFTS5QueryIntegration:
     def test_natural_language_query_returns_results(self, tmp_build_dir):
         """Long natural-language query returns results."""
         index = self._make_index(tmp_build_dir)
-        results = index.query(
-            "what are the main themes from november conversations about AI?"
-        )
+        results = index.query("what are the main themes from november conversations about AI?")
         assert len(results) > 0
         index.close()
 
@@ -546,7 +578,8 @@ class TestFTS5QueryIntegration:
                 content="Discussion about caf\u00e9 culture and \U0001f30d global trends",
                 metadata={"layer_name": "episodes"},
             ),
-            "episodes", 1,
+            "episodes",
+            1,
         )
         results = index.query("caf\u00e9")
         assert len(results) > 0
@@ -572,7 +605,8 @@ class TestFTS5QueryIntegration:
                     content=f"Python discussion in {layer} layer",
                     metadata={"layer_name": layer},
                 ),
-                layer, level,
+                layer,
+                level,
             )
         results = index.query("Python", layers=["episodes", "core"])
         assert len(results) == 2
@@ -601,11 +635,13 @@ class TestHybridRetriever:
 
         index = SearchIndex(tmp_build_dir / "search.db")
         index.create()
-        for i, content in enumerate([
-            "Machine learning and deep neural networks",
-            "Anthropic Claude AI assistant for coding",
-            "Rust programming language ownership model",
-        ]):
+        for i, content in enumerate(
+            [
+                "Machine learning and deep neural networks",
+                "Anthropic Claude AI assistant for coding",
+                "Rust programming language ownership model",
+            ]
+        ):
             index.insert(
                 Artifact(
                     artifact_id=f"ep-{i:03d}",
@@ -613,7 +649,8 @@ class TestHybridRetriever:
                     content=content,
                     metadata={"layer_name": "episodes"},
                 ),
-                "episodes", 1,
+                "episodes",
+                1,
             )
         return HybridRetriever(search_index=index), index
 
@@ -652,16 +689,12 @@ class TestHybridRetriever:
         retriever = HybridRetriever(search_index=index)
 
         keyword_results = [
-            SearchResult(content="A", artifact_id="a", layer_name="ep",
-                         layer_level=1, score=10.0),
-            SearchResult(content="B", artifact_id="b", layer_name="ep",
-                         layer_level=1, score=5.0),
+            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=10.0),
+            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=5.0),
         ]
         semantic_results = [
-            SearchResult(content="B", artifact_id="b", layer_name="ep",
-                         layer_level=1, score=0.95),
-            SearchResult(content="C", artifact_id="c", layer_name="ep",
-                         layer_level=1, score=0.90),
+            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.95),
+            SearchResult(content="C", artifact_id="c", layer_name="ep", layer_level=1, score=0.90),
         ]
 
         fused = retriever._rrf_fuse(keyword_results, semantic_results, top_k=10)

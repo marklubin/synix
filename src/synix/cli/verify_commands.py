@@ -115,11 +115,14 @@ def status(build_dir: str):
 @click.option("--build-dir", default="./build", help="Build directory")
 @click.option("--check", "checks", multiple=True, help="Run specific checks only")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-@click.option("--pipeline", "pipeline_path", default=None,
-              type=click.Path(exists=True),
-              help="Pipeline file to run domain validators from")
-def verify(build_dir: str, checks: tuple[str, ...], output_json: bool,
-           pipeline_path: str | None):
+@click.option(
+    "--pipeline",
+    "pipeline_path",
+    default=None,
+    type=click.Path(exists=True),
+    help="Pipeline file to run domain validators from",
+)
+def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_path: str | None):
     """Verify integrity of a completed build.
 
     Checks: build_exists, manifest_valid, artifacts_exist,
@@ -238,9 +241,7 @@ def _display_domain_validations(validation):
                 console.print("    [dim]Provenance:[/dim]")
                 for step in v.provenance_trace:
                     val_str = f"  {v.field}: {step.field_value}" if step.field_value else ""
-                    console.print(
-                        f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}"
-                    )
+                    console.print(f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}")
 
 
 @click.command()
@@ -270,15 +271,15 @@ def diff(artifact_id: str | None, build_dir: str, old_build_dir: str | None, lay
 
         console.print(f"\n[bold]Diff for:[/bold] {artifact_id}")
         if result.old_prompt_id != result.new_prompt_id:
-            console.print(
-                f"[yellow]Prompt changed:[/yellow] {result.old_prompt_id} → {result.new_prompt_id}"
-            )
+            console.print(f"[yellow]Prompt changed:[/yellow] {result.old_prompt_id} → {result.new_prompt_id}")
         if result.content_diff:
-            console.print(Panel(
-                Syntax(result.content_diff, "diff", theme="monokai"),
-                title="Content diff",
-                border_style="yellow",
-            ))
+            console.print(
+                Panel(
+                    Syntax(result.content_diff, "diff", theme="monokai"),
+                    title="Content diff",
+                    border_style="yellow",
+                )
+            )
         if result.metadata_diff:
             console.print("\n[bold]Metadata changes:[/bold]")
             for key, changes in result.metadata_diff.items():

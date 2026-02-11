@@ -51,8 +51,8 @@ def incident_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo3-incident")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -65,7 +65,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "monthly", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -139,15 +139,17 @@ class TestDT3FreshBuild:
 
     def test_plan_shows_all_layers_as_new(self, runner, workspace, incident_pipeline_file):
         """synix plan on a fresh workspace shows all layers need building."""
-        result = runner.invoke(main, [
-            "plan", str(incident_pipeline_file),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "plan",
+                str(incident_pipeline_file),
+            ],
+        )
         assert result.exit_code == 0, f"Plan failed: {result.output}"
         assert "Estimated:" in result.output
 
-    def test_fresh_build_produces_correct_artifact_counts(
-        self, runner, workspace, incident_pipeline_file
-    ):
+    def test_fresh_build_produces_correct_artifact_counts(self, runner, workspace, incident_pipeline_file):
         """First build produces: 100 transcripts, 100 episodes, 2 monthly rollups, 1 core."""
         result = runner.invoke(main, ["build", str(incident_pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
@@ -170,36 +172,26 @@ class TestDT3FreshBuild:
         # Single core memory
         assert layers.get("core", 0) == 1
 
-    def test_verify_passes_after_fresh_build(
-        self, runner, workspace, incident_pipeline_file
-    ):
+    def test_verify_passes_after_fresh_build(self, runner, workspace, incident_pipeline_file):
         """synix verify passes on a clean build."""
         runner.invoke(main, ["build", str(incident_pipeline_file)])
 
         from synix.build.verify import verify_build
-        result = verify_build(str(workspace["build_dir"]))
-        assert result.passed, (
-            f"Verify failed: {result.summary}. "
-            f"Details: {[c.message for c in result.failed_checks]}"
-        )
 
-    def test_search_returns_results(
-        self, runner, workspace, incident_pipeline_file
-    ):
+        result = verify_build(str(workspace["build_dir"]))
+        assert result.passed, f"Verify failed: {result.summary}. Details: {[c.message for c in result.failed_checks]}"
+
+    def test_search_returns_results(self, runner, workspace, incident_pipeline_file):
         """Search returns results for support-domain content after build."""
         runner.invoke(main, ["build", str(incident_pipeline_file)])
 
         search_db = workspace["build_dir"] / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, [
-            "search", "billing", "--build-dir", str(workspace["build_dir"])
-        ])
+        result = runner.invoke(main, ["search", "billing", "--build-dir", str(workspace["build_dir"])])
         assert result.exit_code == 0
 
-    def test_all_derived_artifacts_have_provenance(
-        self, runner, workspace, incident_pipeline_file
-    ):
+    def test_all_derived_artifacts_have_provenance(self, runner, workspace, incident_pipeline_file):
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(incident_pipeline_file)])
 
@@ -208,10 +200,7 @@ class TestDT3FreshBuild:
         provenance = json.loads(provenance_path.read_text())
 
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {
-            aid for aid, info in manifest.items()
-            if info.get("layer") != "transcripts"
-        }
+        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
         missing = [aid for aid in derived if aid not in provenance]
         assert not missing, f"Missing provenance for: {missing}"
 
@@ -224,9 +213,7 @@ class TestDT3FreshBuild:
 class TestDT3CacheBehavior:
     """DT-3.2: No-change rebuild should be fully cached."""
 
-    def test_second_run_fully_cached(
-        self, runner, workspace, incident_pipeline_file, mock_anthropic
-    ):
+    def test_second_run_fully_cached(self, runner, workspace, incident_pipeline_file, mock_anthropic):
         """Second identical run should not make new LLM calls."""
         # First build
         result1 = runner.invoke(main, ["build", str(incident_pipeline_file)])
@@ -240,8 +227,7 @@ class TestDT3CacheBehavior:
 
         # Second run should make 0 new LLM calls
         assert calls_after_second == calls_after_first, (
-            f"Expected no new LLM calls on cached rebuild. "
-            f"First: {calls_after_first}, Second: {calls_after_second}"
+            f"Expected no new LLM calls on cached rebuild. First: {calls_after_first}, Second: {calls_after_second}"
         )
 
 
@@ -263,8 +249,8 @@ def merge_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo3-merge-bad")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -277,7 +263,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "merged", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -294,8 +280,8 @@ def merge_pipeline_fixed_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo3-merge-fixed")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -308,7 +294,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "merged", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -322,9 +308,7 @@ class TestDT3MergeTransform:
     the config triggers an incremental rebuild of only the affected layers.
     """
 
-    def test_build_with_merge_layer(
-        self, runner, workspace, merge_pipeline_file
-    ):
+    def test_build_with_merge_layer(self, runner, workspace, merge_pipeline_file):
         """Build pipeline with a merge layer — produces merge artifacts with cross-customer data."""
         result = runner.invoke(main, ["build", str(merge_pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
@@ -344,13 +328,13 @@ class TestDT3MergeTransform:
 
         # Verify merge artifacts exist (IDs start with "merge-" or type is "merge")
         merge_aids = [
-            aid for aid, info in manifest.items()
-            if aid.startswith("merge-") or info.get("artifact_type") == "merge"
+            aid for aid, info in manifest.items() if aid.startswith("merge-") or info.get("artifact_type") == "merge"
         ]
         assert len(merge_aids) >= 1, "No merge artifacts found in manifest"
 
         # Verify at least one merge artifact contains content from multiple customers
         from synix.build.artifacts import ArtifactStore
+
         store = ArtifactStore(workspace["build_dir"])
         found_multi_customer = False
         for merge_id in merge_aids:
@@ -361,13 +345,9 @@ class TestDT3MergeTransform:
             if len(source_customers) > 1:
                 found_multi_customer = True
                 break
-        assert found_multi_customer, (
-            "Expected at least one merge artifact with data from multiple customers"
-        )
+        assert found_multi_customer, "Expected at least one merge artifact with data from multiple customers"
 
-    def test_provenance_trace_reveals_bad_merge(
-        self, runner, workspace, merge_pipeline_file
-    ):
+    def test_provenance_trace_reveals_bad_merge(self, runner, workspace, merge_pipeline_file):
         """Provenance chain from a merged artifact reveals cross-customer contamination."""
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
@@ -379,10 +359,7 @@ class TestDT3MergeTransform:
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
 
         # Find a merge artifact with multiple customers
-        merge_aids = [
-            aid for aid, info in manifest.items()
-            if aid.startswith("merge-")
-        ]
+        merge_aids = [aid for aid, info in manifest.items() if aid.startswith("merge-")]
         assert merge_aids, "No merge artifacts found"
 
         # Get provenance parents for a multi-customer merge artifact
@@ -393,15 +370,11 @@ class TestDT3MergeTransform:
                 contaminated_merge_id = merge_id
                 break
 
-        assert contaminated_merge_id is not None, (
-            "No merge artifact found with cross-customer contamination"
-        )
+        assert contaminated_merge_id is not None, "No merge artifact found with cross-customer contamination"
 
         # Get the provenance parents of this merge artifact
         parent_ids = tracker.get_parents(contaminated_merge_id)
-        assert len(parent_ids) > 1, (
-            f"Expected merge artifact to have multiple parents, got {len(parent_ids)}"
-        )
+        assert len(parent_ids) > 1, f"Expected merge artifact to have multiple parents, got {len(parent_ids)}"
 
         # Check that parent artifacts map to different customer_ids
         customer_ids_in_parents: set[str] = set()
@@ -414,9 +387,7 @@ class TestDT3MergeTransform:
             f"Expected parents to span multiple customers, got: {customer_ids_in_parents}"
         )
 
-    def test_verify_merge_integrity_check(
-        self, runner, workspace, merge_pipeline_file
-    ):
+    def test_verify_merge_integrity_check(self, runner, workspace, merge_pipeline_file):
         """Verify detects integrity violations in cross-customer merged artifacts."""
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
@@ -424,8 +395,7 @@ class TestDT3MergeTransform:
 
         result = verify_build(str(workspace["build_dir"]), checks=["merge_integrity"])
         assert not result.passed, (
-            "merge_integrity check should FAIL because merge artifacts span multiple customers. "
-            f"Got: {result.summary}"
+            f"merge_integrity check should FAIL because merge artifacts span multiple customers. Got: {result.summary}"
         )
 
         # The failed check should mention cross-customer data
@@ -443,12 +413,8 @@ class TestDT3MergeTransform:
         assert result1.exit_code == 0, f"First build failed: {result1.output}"
 
         manifest_before = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_count_before = sum(
-            1 for info in manifest_before.values() if info.get("layer") == "transcripts"
-        )
-        episode_count_before = sum(
-            1 for info in manifest_before.values() if info.get("layer") == "episodes"
-        )
+        transcript_count_before = sum(1 for info in manifest_before.values() if info.get("layer") == "transcripts")
+        episode_count_before = sum(1 for info in manifest_before.values() if info.get("layer") == "episodes")
         calls_after_first = mock_anthropic["n"]
 
         # Second build: fixed merge pipeline (adds constraint)
@@ -456,12 +422,8 @@ class TestDT3MergeTransform:
         assert result2.exit_code == 0, f"Second build failed: {result2.output}"
 
         manifest_after = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_count_after = sum(
-            1 for info in manifest_after.values() if info.get("layer") == "transcripts"
-        )
-        episode_count_after = sum(
-            1 for info in manifest_after.values() if info.get("layer") == "episodes"
-        )
+        transcript_count_after = sum(1 for info in manifest_after.values() if info.get("layer") == "transcripts")
+        episode_count_after = sum(1 for info in manifest_after.values() if info.get("layer") == "episodes")
 
         # Transcripts and episodes should be cached (same counts)
         assert transcript_count_after == transcript_count_before, (
@@ -472,53 +434,36 @@ class TestDT3MergeTransform:
         )
 
         # Merge layer should be rebuilt (constraint changed -> different cache key)
-        merge_count_after = sum(
-            1 for info in manifest_after.values() if info.get("layer") == "merged"
-        )
+        merge_count_after = sum(1 for info in manifest_after.values() if info.get("layer") == "merged")
         assert merge_count_after >= 1, "Expected merge artifacts after fix"
 
         # Core should also be rebuilt (dependency on merge changed)
-        assert sum(
-            1 for info in manifest_after.values() if info.get("layer") == "core"
-        ) == 1
+        assert sum(1 for info in manifest_after.values() if info.get("layer") == "core") == 1
 
         # The fixed pipeline should produce no cross-customer merges
         from synix.build.verify import verify_build
+
         verify_result = verify_build(str(workspace["build_dir"]), checks=["merge_integrity"])
         assert verify_result.passed, (
             f"Fixed pipeline should pass merge_integrity. Got: {verify_result.summary}. "
             f"Details: {[c.message for c in verify_result.failed_checks]}"
         )
 
-    def test_post_fix_no_collateral_damage(
-        self, runner, workspace, merge_pipeline_file, merge_pipeline_fixed_file
-    ):
+    def test_post_fix_no_collateral_damage(self, runner, workspace, merge_pipeline_file, merge_pipeline_fixed_file):
         """After fix, transcript and episode artifact IDs are preserved — no collateral damage."""
         # First build: bad merge pipeline
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
         manifest_before = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_before = {
-            aid for aid, info in manifest_before.items()
-            if info.get("layer") == "transcripts"
-        }
-        episode_ids_before = {
-            aid for aid, info in manifest_before.items()
-            if info.get("layer") == "episodes"
-        }
+        transcript_ids_before = {aid for aid, info in manifest_before.items() if info.get("layer") == "transcripts"}
+        episode_ids_before = {aid for aid, info in manifest_before.items() if info.get("layer") == "episodes"}
 
         # Second build: fixed merge pipeline
         runner.invoke(main, ["build", str(merge_pipeline_fixed_file)])
 
         manifest_after = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_after = {
-            aid for aid, info in manifest_after.items()
-            if info.get("layer") == "transcripts"
-        }
-        episode_ids_after = {
-            aid for aid, info in manifest_after.items()
-            if info.get("layer") == "episodes"
-        }
+        transcript_ids_after = {aid for aid, info in manifest_after.items() if info.get("layer") == "transcripts"}
+        episode_ids_after = {aid for aid, info in manifest_after.items() if info.get("layer") == "episodes"}
 
         # All original transcript IDs should still be present
         missing_transcripts = transcript_ids_before - transcript_ids_after
@@ -534,9 +479,7 @@ class TestDT3MergeTransform:
             f"{sorted(list(missing_episodes))[:5]}"
         )
 
-    def test_incident_timeline_reconstruction(
-        self, runner, workspace, merge_pipeline_file
-    ):
+    def test_incident_timeline_reconstruction(self, runner, workspace, merge_pipeline_file):
         """Reconstruct incident timeline: full chain from merge -> episodes -> transcripts."""
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
@@ -548,10 +491,7 @@ class TestDT3MergeTransform:
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
 
         # Find a merge artifact that spans customers
-        merge_aids = [
-            aid for aid, info in manifest.items()
-            if aid.startswith("merge-")
-        ]
+        merge_aids = [aid for aid, info in manifest.items() if aid.startswith("merge-")]
         assert merge_aids, "No merge artifacts found"
 
         contaminated_id = None
@@ -577,8 +517,7 @@ class TestDT3MergeTransform:
 
         # Verify that some of the referenced IDs are transcript-level artifacts
         transcript_ids_in_chain = {
-            aid for aid in all_referenced_ids
-            if aid in manifest and manifest[aid].get("layer") == "transcripts"
+            aid for aid in all_referenced_ids if aid in manifest and manifest[aid].get("layer") == "transcripts"
         }
         assert transcript_ids_in_chain, (
             f"Provenance chain should trace back to transcript-level artifacts. "

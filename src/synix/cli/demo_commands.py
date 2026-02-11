@@ -29,11 +29,13 @@ def note(message: str):
     purely deterministic output for reproducible recordings.
     """
     console.print()
-    console.print(Panel(
-        f"[bold]{message}[/bold]",
-        border_style="cyan",
-        padding=(0, 2),
-    ))
+    console.print(
+        Panel(
+            f"[bold]{message}[/bold]",
+            border_style="cyan",
+            padding=(0, 2),
+        )
+    )
     console.print()
 
 
@@ -64,14 +66,16 @@ def run_case(case_dir: str, update_goldens: bool):
     goldens = case.get("goldens", {})
     case_name = case.get("name", case_path.name)
 
-    console.print(Panel(
-        f"[bold]Case:[/bold] {case_name}\n"
-        f"[bold]Dir:[/bold] {case_path}\n"
-        f"[bold]Steps:[/bold] {len(steps)}\n"
-        f"[bold]Goldens:[/bold] {len(goldens)}",
-        title="[bold cyan]Synix Demo Run[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Case:[/bold] {case_name}\n"
+            f"[bold]Dir:[/bold] {case_path}\n"
+            f"[bold]Steps:[/bold] {len(steps)}\n"
+            f"[bold]Goldens:[/bold] {len(goldens)}",
+            title="[bold cyan]Synix Demo Run[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     # Set up environment for deterministic replay
     env = dict(os.environ)
@@ -93,10 +97,7 @@ def run_case(case_dir: str, update_goldens: bool):
         capture_json = step.get("capture_json", False)
 
         # Replace PIPELINE placeholder with actual pipeline path
-        command = [
-            pipeline_file if c == "PIPELINE" else c
-            for c in command
-        ]
+        command = [pipeline_file if c == "PIPELINE" else c for c in command]
 
         # Replace bare "synix" with the venv script path
         # so the demo runs in the same Python environment as the runner.
@@ -164,10 +165,7 @@ def run_case(case_dir: str, update_goldens: bool):
                 continue
 
             if not golden_path.exists():
-                console.print(
-                    f"  {step_name}: [yellow]no golden file[/yellow] "
-                    f"(run with --update-goldens)"
-                )
+                console.print(f"  {step_name}: [yellow]no golden file[/yellow] (run with --update-goldens)")
                 failed = True
                 continue
 
@@ -192,7 +190,7 @@ def run_case(case_dir: str, update_goldens: bool):
                 actual_lines = actual.splitlines()
                 for i, (e, a) in enumerate(zip(expected_lines, actual_lines)):
                     if e != a:
-                        console.print(f"    [dim]line {i+1}:[/dim]")
+                        console.print(f"    [dim]line {i + 1}:[/dim]")
                         console.print(f"      [red]expected:[/red] {e[:100]}")
                         console.print(f"      [green]actual:[/green]  {a[:100]}")
                         break

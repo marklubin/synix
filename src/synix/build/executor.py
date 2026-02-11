@@ -146,8 +146,7 @@ class ConcurrentExecutor(LLMExecutor):
                     results[idx] = LLMResult(
                         index=idx,
                         error=TimeoutError(
-                            f"Request {idx} ({requests[idx].artifact_desc}) "
-                            f"timed out after {self.timeout}s"
+                            f"Request {idx} ({requests[idx].artifact_desc}) timed out after {self.timeout}s"
                         ),
                     )
                 except Exception as exc:
@@ -202,7 +201,7 @@ class ConcurrentExecutor(LLMExecutor):
                 if "rate" in error_msg or "429" in error_msg:
                     last_error = exc
                     if attempt < self.max_retries:
-                        delay = self.base_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                        delay = self.base_delay * (2**attempt) + random.uniform(0, 0.5)
                         time.sleep(delay)
                         continue
                 # Non-rate-limit RuntimeError — don't retry
@@ -212,10 +211,8 @@ class ConcurrentExecutor(LLMExecutor):
 
         return LLMResult(
             index=index,
-            error=last_error or RuntimeError(
-                f"Request {index} ({request.artifact_desc}) failed after "
-                f"{self.max_retries + 1} attempts"
-            ),
+            error=last_error
+            or RuntimeError(f"Request {index} ({request.artifact_desc}) failed after {self.max_retries + 1} attempts"),
         )
 
 

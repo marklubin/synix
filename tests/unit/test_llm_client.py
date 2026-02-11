@@ -39,14 +39,16 @@ class TestLLMConfig:
 
     def test_from_dict_explicit_overrides(self):
         """Explicit dict values override defaults."""
-        config = LLMConfig.from_dict({
-            "provider": "openai",
-            "model": "gpt-4o",
-            "temperature": 0.7,
-            "max_tokens": 2048,
-            "base_url": "https://api.example.com/v1",
-            "api_key": "sk-test-123",
-        })
+        config = LLMConfig.from_dict(
+            {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "base_url": "https://api.example.com/v1",
+                "api_key": "sk-test-123",
+            }
+        )
         assert config.provider == "openai"
         assert config.model == "gpt-4o"
         assert config.temperature == 0.7
@@ -71,10 +73,12 @@ class TestLLMConfig:
         monkeypatch.setenv("SYNIX_LLM_PROVIDER", "openai")
         monkeypatch.setenv("SYNIX_LLM_MODEL", "gpt-4o-mini")
 
-        config = LLMConfig.from_dict({
-            "provider": "anthropic",
-            "model": "claude-haiku-4-5-20251001",
-        })
+        config = LLMConfig.from_dict(
+            {
+                "provider": "anthropic",
+                "model": "claude-haiku-4-5-20251001",
+            }
+        )
         assert config.provider == "anthropic"
         assert config.model == "claude-haiku-4-5-20251001"
 
@@ -126,11 +130,13 @@ class TestLLMConfig:
 
     def test_backward_compat_no_provider_key(self):
         """Dict without 'provider' defaults to anthropic — backward compatible."""
-        config = LLMConfig.from_dict({
-            "model": "claude-sonnet-4-20250514",
-            "temperature": 0.3,
-            "max_tokens": 1024,
-        })
+        config = LLMConfig.from_dict(
+            {
+                "model": "claude-sonnet-4-20250514",
+                "temperature": 0.3,
+                "max_tokens": 1024,
+            }
+        )
         assert config.provider == "anthropic"
         assert config.model == "claude-sonnet-4-20250514"
 
@@ -147,12 +153,14 @@ class TestEmbeddingConfig:
         assert config.concurrency == 4
 
     def test_from_dict(self):
-        config = EmbeddingConfig.from_dict({
-            "provider": "openai",
-            "model": "text-embedding-3-large",
-            "dimensions": 1024,
-            "base_url": "https://embed.example.com/v1",
-        })
+        config = EmbeddingConfig.from_dict(
+            {
+                "provider": "openai",
+                "model": "text-embedding-3-large",
+                "dimensions": 1024,
+                "base_url": "https://embed.example.com/v1",
+            }
+        )
         assert config.model == "text-embedding-3-large"
         assert config.dimensions == 1024
         assert config.base_url == "https://embed.example.com/v1"

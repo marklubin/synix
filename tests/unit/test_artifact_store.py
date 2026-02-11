@@ -40,20 +40,23 @@ class TestArtifactStore:
         for i in range(2):
             store.save_artifact(
                 Artifact(artifact_id=f"t-{i}", artifact_type="transcript", content=f"transcript {i}"),
-                layer_name="transcripts", layer_level=0,
+                layer_name="transcripts",
+                layer_level=0,
             )
 
         # 2 episodes
         for i in range(2):
             store.save_artifact(
                 Artifact(artifact_id=f"ep-{i}", artifact_type="episode", content=f"episode {i}"),
-                layer_name="episodes", layer_level=1,
+                layer_name="episodes",
+                layer_level=1,
             )
 
         # 1 core
         store.save_artifact(
             Artifact(artifact_id="core-memory", artifact_type="core_memory", content="core"),
-            layer_name="core", layer_level=3,
+            layer_name="core",
+            layer_level=3,
         )
 
         assert len(store.list_artifacts("transcripts")) == 2
@@ -80,11 +83,13 @@ class TestArtifactStore:
         store1 = ArtifactStore(tmp_build_dir)
         store1.save_artifact(
             Artifact(artifact_id="persist-1", artifact_type="transcript", content="persisted"),
-            layer_name="transcripts", layer_level=0,
+            layer_name="transcripts",
+            layer_level=0,
         )
         store1.save_artifact(
             Artifact(artifact_id="persist-2", artifact_type="episode", content="also persisted"),
-            layer_name="episodes", layer_level=1,
+            layer_name="episodes",
+            layer_level=1,
         )
 
         # Create new store instance from same directory
@@ -102,13 +107,15 @@ class TestArtifactStore:
 
         store.save_artifact(
             Artifact(artifact_id="overwrite-me", artifact_type="transcript", content="version 1"),
-            layer_name="transcripts", layer_level=0,
+            layer_name="transcripts",
+            layer_level=0,
         )
         original_hash = store.get_content_hash("overwrite-me")
 
         store.save_artifact(
             Artifact(artifact_id="overwrite-me", artifact_type="transcript", content="version 2"),
-            layer_name="transcripts", layer_level=0,
+            layer_name="transcripts",
+            layer_level=0,
         )
 
         loaded = store.load_artifact("overwrite-me")

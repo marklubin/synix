@@ -27,6 +27,7 @@ def _get_version() -> str:
     """Get the synix package version from metadata."""
     try:
         from importlib.metadata import version
+
         return version("synix")
     except Exception:
         return "unknown"
@@ -64,6 +65,7 @@ def _show_pipeline_info() -> None:
 
     try:
         from synix.build.pipeline import load_pipeline
+
         pipeline = load_pipeline(str(pipeline_path))
     except Exception as e:
         console.print(f"[yellow]Could not load pipeline.py:[/yellow] {e}")
@@ -145,6 +147,7 @@ def _show_build_status() -> None:
 
     if last_modified is not None:
         from datetime import datetime
+
         last_dt = datetime.fromtimestamp(last_modified)
         table.add_row("Last Build", last_dt.strftime("%Y-%m-%d %H:%M:%S"))
 

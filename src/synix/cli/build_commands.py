@@ -36,23 +36,17 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
         if proj.projection_type == "search_index":
             # Progressive: every source layer triggers
             for ln in source_layers:
-                triggers.setdefault(ln, []).append(
-                    (proj.name, proj.projection_type, "progressive")
-                )
+                triggers.setdefault(ln, []).append((proj.name, proj.projection_type, "progressive"))
         elif proj.projection_type == "flat_file":
             # Complete: only the last source layer triggers
             if source_layers:
                 last = max(source_layers, key=lambda ln: layer_order.get(ln, 0))
-                triggers.setdefault(last, []).append(
-                    (proj.name, proj.projection_type, "complete")
-                )
+                triggers.setdefault(last, []).append((proj.name, proj.projection_type, "complete"))
         else:
             # Unknown type: last source layer
             if source_layers:
                 last = max(source_layers, key=lambda ln: layer_order.get(ln, 0))
-                triggers.setdefault(last, []).append(
-                    (proj.name, proj.projection_type, "complete")
-                )
+                triggers.setdefault(last, []).append((proj.name, proj.projection_type, "complete"))
 
     return triggers
 
@@ -61,14 +55,12 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
 @pipeline_argument
 @click.option("--source-dir", default=None, help="Override source directory")
 @click.option("--build-dir", default=None, help="Override build directory")
-@click.option("--verbose", "-v", count=True,
-              help="Verbosity level: -v per-artifact, -vv debug/LLM details")
-@click.option("--concurrency", "-j", default=5, type=int,
-              help="Number of concurrent LLM requests (default 5)")
-@click.option("--validate", is_flag=True, default=False,
-              help="Run domain validators after build")
-def build(pipeline_path: str, source_dir: str | None, build_dir: str | None,
-          verbose: int, concurrency: int, validate: bool):
+@click.option("--verbose", "-v", count=True, help="Verbosity level: -v per-artifact, -vv debug/LLM details")
+@click.option("--concurrency", "-j", default=5, type=int, help="Number of concurrent LLM requests (default 5)")
+@click.option("--validate", is_flag=True, default=False, help="Run domain validators after build")
+def build(
+    pipeline_path: str, source_dir: str | None, build_dir: str | None, verbose: int, concurrency: int, validate: bool
+):
     """Build memory artifacts from a pipeline definition.
 
     PIPELINE_PATH defaults to pipeline.py in the current directory.
@@ -90,15 +82,17 @@ def build(pipeline_path: str, source_dir: str | None, build_dir: str | None,
         pipeline.build_dir = build_dir
 
     concurrency_label = f"{concurrency} threads" if concurrency > 1 else "sequential"
-    console.print(Panel(
-        f"[bold]Pipeline:[/bold] {pipeline.name}\n"
-        f"[bold]Source:[/bold] {pipeline.source_dir}\n"
-        f"[bold]Build:[/bold] {pipeline.build_dir}\n"
-        f"[bold]Layers:[/bold] {len(pipeline.layers)}\n"
-        f"[bold]Concurrency:[/bold] {concurrency_label}",
-        title="[bold cyan]Synix Build[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Pipeline:[/bold] {pipeline.name}\n"
+            f"[bold]Source:[/bold] {pipeline.source_dir}\n"
+            f"[bold]Build:[/bold] {pipeline.build_dir}\n"
+            f"[bold]Layers:[/bold] {len(pipeline.layers)}\n"
+            f"[bold]Concurrency:[/bold] {concurrency_label}",
+            title="[bold cyan]Synix Build[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     start_time = time.time()
 
@@ -108,10 +102,14 @@ def build(pipeline_path: str, source_dir: str | None, build_dir: str | None,
     progress = BuildProgress()
     try:
         with Live(progress, console=console, refresh_per_second=4):
-            result = run_pipeline(pipeline, source_dir=source_dir,
-                                  verbosity=effective_verbosity,
-                                  concurrency=concurrency, progress=progress,
-                                  validate=validate)
+            result = run_pipeline(
+                pipeline,
+                source_dir=source_dir,
+                verbosity=effective_verbosity,
+                concurrency=concurrency,
+                progress=progress,
+                validate=validate,
+            )
     except Exception as e:
         console.print(f"\n[red]Pipeline failed:[/red] {e}")
         sys.exit(1)
@@ -167,10 +165,7 @@ def build(pipeline_path: str, source_dir: str | None, build_dir: str | None,
     console.print(table)
     from synix.cli.main import is_demo_mode
 
-    console.print(
-        f"\n[bold]Total:[/bold] {result.built} built, "
-        f"{result.cached} cached, {result.skipped} skipped"
-    )
+    console.print(f"\n[bold]Total:[/bold] {result.built} built, {result.cached} cached, {result.skipped} skipped")
     if not is_demo_mode():
         console.print(f"[bold]Time:[/bold] {elapsed:.1f}s")
 
@@ -239,9 +234,7 @@ def _display_validation_results(validation):
                 console.print("    [dim]Provenance:[/dim]")
                 for step in v.provenance_trace:
                     val_str = f"  {v.field}: {step.field_value}" if step.field_value else ""
-                    console.print(
-                        f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}"
-                    )
+                    console.print(f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}")
 
 
 # Hidden alias for backward compatibility
@@ -250,18 +243,23 @@ def _display_validation_results(validation):
 @click.option("--source-dir", default=None, help="Override source directory")
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--verbose", "-v", count=True, help="Verbosity level")
-@click.option("--concurrency", "-j", default=5, type=int,
-              help="Number of concurrent LLM requests (default 5)")
-@click.option("--validate", is_flag=True, default=False,
-              help="Run domain validators after build")
-def run_alias(pipeline_path: str, source_dir: str | None, build_dir: str | None,
-              verbose: int, concurrency: int, validate: bool):
+@click.option("--concurrency", "-j", default=5, type=int, help="Number of concurrent LLM requests (default 5)")
+@click.option("--validate", is_flag=True, default=False, help="Run domain validators after build")
+def run_alias(
+    pipeline_path: str, source_dir: str | None, build_dir: str | None, verbose: int, concurrency: int, validate: bool
+):
     """Process exports through a memory pipeline (alias for 'build')."""
     # Reuse the build command context
     ctx = click.get_current_context()
-    ctx.invoke(build, pipeline_path=pipeline_path, source_dir=source_dir,
-               build_dir=build_dir, verbose=verbose, concurrency=concurrency,
-               validate=validate)
+    ctx.invoke(
+        build,
+        pipeline_path=pipeline_path,
+        source_dir=source_dir,
+        build_dir=build_dir,
+        verbose=verbose,
+        concurrency=concurrency,
+        validate=validate,
+    )
 
 
 @click.command()
@@ -307,14 +305,16 @@ def plan(
         return
 
     # ── Header panel ─────────────────────────────────────────────
-    console.print(Panel(
-        f"[bold]Pipeline:[/bold] {build_plan.pipeline_name}\n"
-        f"[bold]Source:[/bold] {pipeline.source_dir}\n"
-        f"[bold]Build:[/bold] {pipeline.build_dir}\n"
-        f"[bold]Layers:[/bold] {len(build_plan.steps)}",
-        title="[bold cyan]Synix Build Plan[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Pipeline:[/bold] {build_plan.pipeline_name}\n"
+            f"[bold]Source:[/bold] {pipeline.source_dir}\n"
+            f"[bold]Build:[/bold] {pipeline.build_dir}\n"
+            f"[bold]Layers:[/bold] {len(build_plan.steps)}",
+            title="[bold cyan]Synix Build Plan[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
     # LLM Configuration section
     _display_llm_config(build_plan)
@@ -331,10 +331,7 @@ def plan(
     model_label = global_cfg.get("model", "?") if global_cfg else "?"
     provider_label = global_cfg.get("provider", "") if global_cfg else ""
 
-    tree = Tree(
-        f"[bold cyan]{build_plan.pipeline_name}[/bold cyan]  "
-        f"[dim]{model_label} ({provider_label})[/dim]"
-    )
+    tree = Tree(f"[bold cyan]{build_plan.pipeline_name}[/bold cyan]  [dim]{model_label} ({provider_label})[/dim]")
 
     # Build lookup: which projections source from which layers
     proj_plan_map = {pp.name: pp for pp in build_plan.projections}
@@ -388,19 +385,14 @@ def plan(
             status_parts.append(f"[{status_style}]{step.artifact_count} cached[/{status_style}]")
         status_str = "  ".join(status_parts)
 
-        layer_node = tree.add(
-            f"[{layer_style}][bold]{step.name}[/bold][/{layer_style}]  "
-            f"{type_label}  {status_str}"
-        )
+        layer_node = tree.add(f"[{layer_style}][bold]{step.name}[/bold][/{layer_style}]  {type_label}  {status_str}")
 
         # Show inputs (← depends_on)
         if layer_obj and layer_obj.depends_on:
             for dep in layer_obj.depends_on:
                 dep_step = step_lookup.get(dep)
                 dep_style = get_layer_style(dep_step.level) if dep_step else "dim"
-                layer_node.add(
-                    f"[dim]← [{dep_style}]{dep}[/{dep_style}][/dim]"
-                )
+                layer_node.add(f"[dim]← [{dep_style}]{dep}[/{dep_style}][/dim]")
 
         # Show projections on their final trigger layer
         for proj_name, _, _ in proj_triggers.get(step.name, []):
@@ -411,9 +403,7 @@ def plan(
                 continue
 
             proj_status_style = STATUS_STYLES.get(pp.status, "dim")
-            proj_type_label = PROJECTION_TYPE_LABELS.get(
-                pp.projection_type, pp.projection_type
-            )
+            proj_type_label = PROJECTION_TYPE_LABELS.get(pp.projection_type, pp.projection_type)
             proj_label = (
                 f"[magenta][bold]{pp.name}[/bold][/magenta]  "
                 f"[dim]{proj_type_label}[/dim]  "
@@ -424,12 +414,8 @@ def plan(
 
             # Show source layers feeding this projection
             for src_name in pp.source_layers:
-                src_style = get_layer_style(
-                    step_lookup[src_name].level
-                ) if src_name in step_lookup else "dim"
-                proj_node.add(
-                    f"[dim]← [{src_style}]{src_name}[/{src_style}][/dim]"
-                )
+                src_style = get_layer_style(step_lookup[src_name].level) if src_name in step_lookup else "dim"
+                proj_node.add(f"[dim]← [{src_style}]{src_name}[/{src_style}][/dim]")
 
             # Show embedding config
             if pp.embedding_config:
@@ -439,10 +425,7 @@ def plan(
                     model = model.rsplit("/", 1)[-1]
                 dims = ec.get("dimensions", "")
                 emb_provider = ec.get("provider", "")
-                proj_node.add(
-                    f"[dim]embeddings  {model}"
-                    f"  {dims}d  ({emb_provider})[/dim]"
-                )
+                proj_node.add(f"[dim]embeddings  {model}  {dims}d  ({emb_provider})[/dim]")
 
     console.print()
     console.print(tree)
@@ -451,10 +434,7 @@ def plan(
     summary_parts = []
 
     # Layers
-    summary_parts.append(
-        f"{build_plan.total_rebuild} layer(s) to build, "
-        f"{build_plan.total_cached} cached"
-    )
+    summary_parts.append(f"{build_plan.total_rebuild} layer(s) to build, {build_plan.total_cached} cached")
 
     # Cost estimate
     if build_plan.total_estimated_llm_calls > 0:
@@ -467,9 +447,7 @@ def plan(
         summary_parts.append("no LLM calls needed (fully cached)")
 
     console.print()
-    console.print(
-        f"[bold]Estimated:[/bold] {' · '.join(summary_parts)}"
-    )
+    console.print(f"[bold]Estimated:[/bold] {' · '.join(summary_parts)}")
 
     if save:
         _save_plan_artifact(build_plan, pipeline)

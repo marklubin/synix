@@ -441,25 +441,27 @@ class MockLLMHandler(BaseHTTPRequestHandler):
 
         # Generate output for the batch
         # For simplicity, produce one result per batch
-        result_line = json.dumps({
-            "id": f"req-{uuid.uuid4().hex[:12]}",
-            "custom_id": "request-1",
-            "response": {
-                "status_code": 200,
-                "body": {
-                    "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
-                    "object": "chat.completion",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "message": {"role": "assistant", "content": "Batch response content."},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        result_line = json.dumps(
+            {
+                "id": f"req-{uuid.uuid4().hex[:12]}",
+                "custom_id": "request-1",
+                "response": {
+                    "status_code": 200,
+                    "body": {
+                        "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                        "object": "chat.completion",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "Batch response content."},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+                    },
                 },
-            },
-        })
+            }
+        )
         batch_store[output_file_id] = result_line + "\n"
 
         self._send_json(batch_store[batch_id])

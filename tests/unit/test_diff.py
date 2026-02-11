@@ -93,12 +93,16 @@ class TestDiffArtifact:
 
     def test_metadata_change(self):
         old = Artifact(
-            artifact_id="test", artifact_type="episode",
-            content="Same", metadata={"key": "old_value"},
+            artifact_id="test",
+            artifact_type="episode",
+            content="Same",
+            metadata={"key": "old_value"},
         )
         new = Artifact(
-            artifact_id="test", artifact_type="episode",
-            content="Same", metadata={"key": "new_value"},
+            artifact_id="test",
+            artifact_type="episode",
+            content="Same",
+            metadata={"key": "new_value"},
         )
         result = diff_artifact(old, new)
         assert result.has_changes
@@ -108,12 +112,16 @@ class TestDiffArtifact:
 
     def test_prompt_change(self):
         old = Artifact(
-            artifact_id="test", artifact_type="episode",
-            content="Same", prompt_id="v1",
+            artifact_id="test",
+            artifact_type="episode",
+            content="Same",
+            prompt_id="v1",
         )
         new = Artifact(
-            artifact_id="test", artifact_type="episode",
-            content="Same", prompt_id="v2",
+            artifact_id="test",
+            artifact_type="episode",
+            content="Same",
+            prompt_id="v2",
         )
         result = diff_artifact(old, new)
         assert result.has_changes
@@ -181,21 +189,32 @@ class TestDiffCLI:
     def test_diff_single_artifact(self, two_builds):
         old_dir, new_dir = two_builds
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "diff", "ep-001",
-            "--build-dir", str(new_dir),
-            "--old-build-dir", str(old_dir),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "diff",
+                "ep-001",
+                "--build-dir",
+                str(new_dir),
+                "--old-build-dir",
+                str(old_dir),
+            ],
+        )
         assert result.exit_code == 0
 
     def test_diff_builds_cli(self, two_builds):
         old_dir, new_dir = two_builds
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "diff",
-            "--build-dir", str(new_dir),
-            "--old-build-dir", str(old_dir),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "diff",
+                "--build-dir",
+                str(new_dir),
+                "--old-build-dir",
+                str(old_dir),
+            ],
+        )
         assert result.exit_code == 0
         assert "added" in result.output or "removed" in result.output or "modified" in result.output
 

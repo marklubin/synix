@@ -26,6 +26,7 @@ from synix.core.models import Artifact, Pipeline
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProvenanceStep:
     """A single node in a provenance trace with field value at that node."""
@@ -39,14 +40,14 @@ class ProvenanceStep:
 class Violation:
     """A structured validation failure."""
 
-    violation_type: str          # "mutual_exclusion", "required_field", custom
-    severity: str                # "error", "warning"
-    message: str                 # human-readable summary
-    artifact_id: str             # artifact that violated
-    field: str                   # metadata field involved
+    violation_type: str  # "mutual_exclusion", "required_field", custom
+    severity: str  # "error", "warning"
+    message: str  # human-readable summary
+    artifact_id: str  # artifact that violated
+    field: str  # metadata field involved
     metadata: dict = field(default_factory=dict)
     provenance_trace: list[ProvenanceStep] = field(default_factory=list)
-    violation_id: str = ""       # Deterministic ID for dedup; computed at creation
+    violation_id: str = ""  # Deterministic ID for dedup; computed at creation
 
 
 @dataclass
@@ -82,11 +83,13 @@ class ValidationContext:
                 if raw is not None:
                     field_value = str(raw) if not isinstance(raw, list) else str(raw)
 
-            steps.append(ProvenanceStep(
-                artifact_id=current_id,
-                layer=layer,
-                field_value=field_value,
-            ))
+            steps.append(
+                ProvenanceStep(
+                    artifact_id=current_id,
+                    layer=layer,
+                    field_value=field_value,
+                )
+            )
 
             # Walk to parents
             parent_ids = self.provenance.get_parents(current_id)
@@ -138,6 +141,7 @@ class ValidationResult:
 # Violation factory functions
 # ---------------------------------------------------------------------------
 
+
 def mutual_exclusion_violation(
     artifact_id: str,
     field_name: str,
@@ -147,9 +151,7 @@ def mutual_exclusion_violation(
     message: str | None = None,
 ) -> Violation:
     """Create a mutual exclusion violation."""
-    msg = message or (
-        f"Mutual exclusion on '{field_name}': {values}"
-    )
+    msg = message or (f"Mutual exclusion on '{field_name}': {values}")
     return Violation(
         violation_type="mutual_exclusion",
         severity=severity,
@@ -183,27 +185,28 @@ def required_field_violation(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def compute_violation_id(violation_type: str, artifact_id: str,
-                         claim_a: str = "", claim_b: str = "") -> str:
+
+def compute_violation_id(violation_type: str, artifact_id: str, claim_a: str = "", claim_b: str = "") -> str:
     """Stable ID for deduplication. Normalized: lowercase, stripped, sorted claims."""
     claims = sorted([claim_a.strip().lower(), claim_b.strip().lower()])
     raw = f"{violation_type}|{artifact_id}|{claims[0]}|{claims[1]}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def _store_llm_trace(store: ArtifactStore, artifact_id: str, prompt: str,
-                     response: str, trace_type: str) -> None:
+def _store_llm_trace(store: ArtifactStore, artifact_id: str, prompt: str, response: str, trace_type: str) -> None:
     """Save an LLM interaction as a system artifact for auditability."""
     trace = Artifact(
         artifact_id=f"trace-{trace_type}-{artifact_id}-{uuid4().hex[:8]}",
         artifact_type="llm_trace",
-        content=json.dumps({
-            "trace_type": trace_type,
-            "target_artifact": artifact_id,
-            "prompt": prompt,
-            "response": response,
-            "timestamp": datetime.now().isoformat(),
-        }),
+        content=json.dumps(
+            {
+                "trace_type": trace_type,
+                "target_artifact": artifact_id,
+                "prompt": prompt,
+                "response": response,
+                "timestamp": datetime.now().isoformat(),
+            }
+        ),
         metadata={"trace_type": trace_type, "target_artifact": artifact_id},
     )
     store.save_artifact(trace, layer_name="traces", layer_level=99)
@@ -212,6 +215,7 @@ def _store_llm_trace(store: ArtifactStore, artifact_id: str, prompt: str,
 # ---------------------------------------------------------------------------
 # ViolationQueue
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ViolationQueue:
@@ -250,9 +254,13 @@ class ViolationQueue:
         content_hash = violation.metadata.get("content_hash", "")
         self._state[vid] = {
             "violation_id": vid,
-            "status": "active" if (existing is None or existing.get("status") != "ignored"
-                                   or existing.get("last_seen_hash") != content_hash)
-                      else "ignored",
+            "status": "active"
+            if (
+                existing is None
+                or existing.get("status") != "ignored"
+                or existing.get("last_seen_hash") != content_hash
+            )
+            else "ignored",
             "last_seen_hash": content_hash,
             "violation": {
                 "violation_type": violation.violation_type,
@@ -265,35 +273,40 @@ class ViolationQueue:
             },
         }
         # Reset ignored status if content changed
-        if (existing and existing.get("status") == "ignored"
-                and existing.get("last_seen_hash") != content_hash):
+        if existing and existing.get("status") == "ignored" and existing.get("last_seen_hash") != content_hash:
             self._state[vid]["status"] = "active"
-        self._append_log({
-            "event": "detected",
-            "violation_id": vid,
-            "timestamp": datetime.now().isoformat(),
-            "artifact_id": violation.artifact_id,
-            "type": violation.violation_type,
-        })
+        self._append_log(
+            {
+                "event": "detected",
+                "violation_id": vid,
+                "timestamp": datetime.now().isoformat(),
+                "artifact_id": violation.artifact_id,
+                "type": violation.violation_type,
+            }
+        )
 
     def ignore(self, violation_id: str) -> None:
         if violation_id in self._state:
             self._state[violation_id]["status"] = "ignored"
-            self._append_log({
-                "event": "ignored",
-                "violation_id": violation_id,
-                "timestamp": datetime.now().isoformat(),
-            })
+            self._append_log(
+                {
+                    "event": "ignored",
+                    "violation_id": violation_id,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
     def resolve(self, violation_id: str, fix_action: str = "") -> None:
         if violation_id in self._state:
             self._state[violation_id]["status"] = "resolved"
-            self._append_log({
-                "event": "resolved",
-                "violation_id": violation_id,
-                "timestamp": datetime.now().isoformat(),
-                "fix_action": fix_action,
-            })
+            self._append_log(
+                {
+                    "event": "resolved",
+                    "violation_id": violation_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "fix_action": fix_action,
+                }
+            )
 
     def is_ignored(self, violation_id: str, content_hash: str) -> bool:
         entry = self._state.get(violation_id)
@@ -315,12 +328,14 @@ class ViolationQueue:
                 current_hash = store.get_content_hash(artifact_id)
                 if current_hash and current_hash != entry.get("last_seen_hash"):
                     entry["status"] = "expired"
-                    self._append_log({
-                        "event": "expired",
-                        "violation_id": entry["violation_id"],
-                        "timestamp": datetime.now().isoformat(),
-                        "reason": "artifact_rebuilt",
-                    })
+                    self._append_log(
+                        {
+                            "event": "expired",
+                            "violation_id": entry["violation_id"],
+                            "timestamp": datetime.now().isoformat(),
+                            "reason": "artifact_rebuilt",
+                        }
+                    )
                     continue
             result.append(entry["violation"])
         return result
@@ -333,6 +348,7 @@ class ViolationQueue:
 # ---------------------------------------------------------------------------
 # BaseValidator ABC + registry
 # ---------------------------------------------------------------------------
+
 
 class BaseValidator(ABC):
     """Abstract base class for domain validators."""
@@ -348,24 +364,25 @@ _VALIDATORS: dict[str, type[BaseValidator]] = {}
 
 def register_validator(name: str):
     """Decorator to register a validator class by name."""
+
     def wrapper(cls: type[BaseValidator]) -> type[BaseValidator]:
         _VALIDATORS[name] = cls
         return cls
+
     return wrapper
 
 
 def get_validator(name: str) -> BaseValidator:
     """Get an instantiated validator by name."""
     if name not in _VALIDATORS:
-        raise ValueError(
-            f"Unknown validator: {name}. Available: {list(_VALIDATORS.keys())}"
-        )
+        raise ValueError(f"Unknown validator: {name}. Available: {list(_VALIDATORS.keys())}")
     return _VALIDATORS[name]()
 
 
 # ---------------------------------------------------------------------------
 # Built-in validators
 # ---------------------------------------------------------------------------
+
 
 @register_validator("mutual_exclusion")
 class MutualExclusionValidator(BaseValidator):
@@ -399,11 +416,13 @@ class MutualExclusionValidator(BaseValidator):
                         values.add(str(v))
 
             if len(values) > 1:
-                violations.append(mutual_exclusion_violation(
-                    artifact_id=artifact.artifact_id,
-                    field_name=self._field_name,
-                    values=sorted(values),
-                ))
+                violations.append(
+                    mutual_exclusion_violation(
+                        artifact_id=artifact.artifact_id,
+                        field_name=self._field_name,
+                        values=sorted(values),
+                    )
+                )
 
         return violations
 
@@ -423,10 +442,12 @@ class RequiredFieldValidator(BaseValidator):
         for artifact in artifacts:
             raw = artifact.metadata.get(self._field_name)
             if raw is None or (isinstance(raw, str) and not raw.strip()):
-                violations.append(required_field_violation(
-                    artifact_id=artifact.artifact_id,
-                    field_name=self._field_name,
-                ))
+                violations.append(
+                    required_field_violation(
+                        artifact_id=artifact.artifact_id,
+                        field_name=self._field_name,
+                    )
+                )
 
         return violations
 
@@ -437,27 +458,21 @@ class PIIValidator(BaseValidator):
 
     PATTERNS = {
         "credit_card": re.compile(
-            r'\b(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}'  # Visa
-            r'|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}'  # MC
-            r'|3[47][0-9]{1}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{3,4}'  # Amex
-            r'|6(?:011|5[0-9]{2})[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})\b'  # Discover
+            r"\b(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}"  # Visa
+            r"|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}"  # MC
+            r"|3[47][0-9]{1}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{3,4}"  # Amex
+            r"|6(?:011|5[0-9]{2})[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})\b"  # Discover
         ),
-        "ssn": re.compile(
-            r'\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b'
-        ),
-        "email": re.compile(
-            r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
-        ),
-        "phone": re.compile(
-            r'\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b'
-        ),
+        "ssn": re.compile(r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b"),
+        "email": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"),
+        "phone": re.compile(r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"),
     }
 
     @staticmethod
     def _redact(value: str, pattern_name: str) -> str:
         """Redact a matched PII value for display."""
         if pattern_name == "credit_card":
-            digits = re.sub(r'[\s-]', '', value)
+            digits = re.sub(r"[\s-]", "", value)
             return digits[:4] + "****" + digits[-2:]
         elif pattern_name == "ssn":
             return "***-**-" + value[-4:]
@@ -470,7 +485,7 @@ class PIIValidator(BaseValidator):
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         violations: list[Violation] = []
-        config = getattr(self, '_config', {})
+        config = getattr(self, "_config", {})
         enabled_patterns = config.get("patterns", list(self.PATTERNS.keys()))
         severity = config.get("severity", "warning")
 
@@ -483,19 +498,21 @@ class PIIValidator(BaseValidator):
                 for match in matches:
                     redacted = self._redact(match, pattern_name)
                     vid = compute_violation_id("pii", artifact.artifact_id, pattern_name, match)
-                    violations.append(Violation(
-                        violation_type="pii",
-                        severity=severity,
-                        message=f"PII detected ({pattern_name}): {redacted}",
-                        artifact_id=artifact.artifact_id,
-                        field="content",
-                        metadata={
-                            "pattern": pattern_name,
-                            "redacted_value": redacted,
-                            "content_hash": artifact.content_hash,
-                        },
-                        violation_id=vid,
-                    ))
+                    violations.append(
+                        Violation(
+                            violation_type="pii",
+                            severity=severity,
+                            message=f"PII detected ({pattern_name}): {redacted}",
+                            artifact_id=artifact.artifact_id,
+                            field="content",
+                            metadata={
+                                "pattern": pattern_name,
+                                "redacted_value": redacted,
+                                "content_hash": artifact.content_hash,
+                            },
+                            violation_id=vid,
+                        )
+                    )
         return violations
 
 
@@ -503,10 +520,11 @@ class PIIValidator(BaseValidator):
 # Semantic conflict helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse_conflict_response(response_text: str) -> list[dict]:
     """Extract conflict list from LLM response (JSON in code blocks or raw)."""
     # Try to extract JSON from code blocks first
-    match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', response_text, re.DOTALL)
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
     text = match.group(1).strip() if match else response_text.strip()
 
     try:
@@ -539,7 +557,7 @@ class SemanticConflictValidator(BaseValidator):
     """
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
-        config = getattr(self, '_config', {})
+        config = getattr(self, "_config", {})
         max_artifacts = config.get("max_artifacts", 20)
 
         violations: list[Violation] = []
@@ -552,6 +570,7 @@ class SemanticConflictValidator(BaseValidator):
                 from synix.build.cassette import maybe_wrap_client
                 from synix.build.llm_client import LLMClient
                 from synix.core.config import LLMConfig
+
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
             except Exception:
@@ -568,6 +587,7 @@ class SemanticConflictValidator(BaseValidator):
         search_index = None
         try:
             import importlib
+
             _indexer = importlib.import_module("synix.search.indexer")
             search_db = ctx.store.build_dir / "search.db"
             if search_db.exists():
@@ -584,10 +604,7 @@ class SemanticConflictValidator(BaseValidator):
                 )
 
                 # Store LLM trace
-                _store_llm_trace(
-                    ctx.store, artifact.artifact_id,
-                    prompt, response.content, "semantic_conflict_check"
-                )
+                _store_llm_trace(ctx.store, artifact.artifact_id, prompt, response.content, "semantic_conflict_check")
 
                 conflicts = _parse_conflict_response(response.content)
 
@@ -613,35 +630,33 @@ class SemanticConflictValidator(BaseValidator):
                                 except Exception:
                                     pass
 
-                    vid = compute_violation_id(
-                        "semantic_conflict", artifact.artifact_id, claim_a, claim_b
-                    )
+                    vid = compute_violation_id("semantic_conflict", artifact.artifact_id, claim_a, claim_b)
 
                     severity = "error" if confidence == "high" else "warning"
 
-                    message = title if title else (
-                        f"\"{claim_a}\" vs \"{claim_b}\""
-                    )
+                    message = title if title else (f'"{claim_a}" vs "{claim_b}"')
 
-                    violations.append(Violation(
-                        violation_type="semantic_conflict",
-                        severity=severity,
-                        message=message,
-                        artifact_id=artifact.artifact_id,
-                        field="content",
-                        metadata={
-                            "title": title,
-                            "claim_a": claim_a,
-                            "claim_b": claim_b,
-                            "claim_a_source_hint": claim_a_hint,
-                            "claim_b_source_hint": claim_b_hint,
-                            "explanation": explanation,
-                            "confidence": confidence,
-                            "source_ids": source_ids,
-                            "content_hash": artifact.content_hash,
-                        },
-                        violation_id=vid,
-                    ))
+                    violations.append(
+                        Violation(
+                            violation_type="semantic_conflict",
+                            severity=severity,
+                            message=message,
+                            artifact_id=artifact.artifact_id,
+                            field="content",
+                            metadata={
+                                "title": title,
+                                "claim_a": claim_a,
+                                "claim_b": claim_b,
+                                "claim_a_source_hint": claim_a_hint,
+                                "claim_b_source_hint": claim_b_hint,
+                                "explanation": explanation,
+                                "confidence": confidence,
+                                "source_ids": source_ids,
+                                "content_hash": artifact.content_hash,
+                            },
+                            violation_id=vid,
+                        )
+                    )
 
             except Exception:
                 # LLM errors → skip this artifact gracefully
@@ -653,10 +668,10 @@ class SemanticConflictValidator(BaseValidator):
         return violations
 
 
-
 # ---------------------------------------------------------------------------
 # Execution engine
 # ---------------------------------------------------------------------------
+
 
 def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
     """Gather artifacts matching the validator config's scope/layers filters."""

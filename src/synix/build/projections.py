@@ -23,9 +23,11 @@ _PROJECTIONS: dict[str, type] = {}
 
 def register_projection(name: str):
     """Decorator to register a projection class."""
+
     def wrapper(cls):
         _PROJECTIONS[name] = cls
         return cls
+
     return wrapper
 
 

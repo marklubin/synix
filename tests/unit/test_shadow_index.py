@@ -154,7 +154,8 @@ class TestShadowIndexSwap:
         shadow = manager.begin_build()
         shadow.insert(
             _make_artifact("new-001", "New shadow content about Kubernetes"),
-            "episodes", 1,
+            "episodes",
+            1,
         )
 
         # While shadow is being built, the old main index should still be queryable
@@ -186,7 +187,8 @@ class TestShadowIndexSwap:
         # Write some data to the shadow
         shadow.insert(
             _make_artifact("ep-001", "Data that will be rolled back"),
-            "episodes", 1,
+            "episodes",
+            1,
         )
 
         # Shadow file should exist before rollback
@@ -208,7 +210,8 @@ class TestShadowIndexSwap:
         shadow = manager.begin_build()
         shadow.insert(
             _make_artifact("ep-001", "Atomic swap test content"),
-            "episodes", 1,
+            "episodes",
+            1,
         )
 
         shadow_path_str = str(manager.shadow_path)

@@ -103,11 +103,16 @@ class TestClean:
         alt_build.mkdir()
         (alt_build / "search.db").write_text("")
 
-        result = runner.invoke(main, [
-            "clean", str(pipeline_file),
-            "--build-dir", str(alt_build),
-            "-y",
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "clean",
+                str(pipeline_file),
+                "--build-dir",
+                str(alt_build),
+                "-y",
+            ],
+        )
         assert result.exit_code == 0
         assert "Cleaned" in result.output
         assert not alt_build.exists()
