@@ -228,6 +228,19 @@ Commands that take a pipeline path (`build`, `plan`, `validate`, `fix`, `clean`)
 
 **Architecture evolution** — Swap monthly rollups for topic-based clustering. Transcripts and episodes stay cached. No migration scripts.
 
+## Known Limitations
+
+Synix provenance is retrospective: it tracks which inputs and prompts
+produced each artifact. However, it cannot answer forward-looking
+questions such as:
+
+> "If I change this transcript, what downstream artifacts would be affected?"
+
+Answering this requires re-running `synix plan`.
+
+This is a known limitation of the content-addressed caching model.
+
+
 ## Where Synix Fits
 
 | | Mem0 | Letta | Zep | LangMem | **Synix** |
