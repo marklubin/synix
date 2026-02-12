@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # Usage: ./scripts/new-template <name>
-# Creates examples/<name>/ with the standard template structure.
-# Internal dev files (cassettes, goldens, case.py) are added separately.
+# Creates templates/<name>/ with the standard template structure.
 set -euo pipefail
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <name>"
-    echo "Example: $0 04-my-new-example"
+    echo "Example: $0 04-my-new-template"
     exit 1
 fi
 
 name=$1
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-dir="$REPO_ROOT/examples/$name"
+dir="$REPO_ROOT/templates/$name"
 
 if [ -d "$dir" ]; then
     echo "Error: $dir already exists"
@@ -54,7 +53,7 @@ PIPELINE
 cat > "$dir/README.md" << README
 # $name
 
-TODO: Describe what this example demonstrates.
+TODO: Describe what this template demonstrates.
 
 ## Sample Data
 
@@ -63,7 +62,7 @@ TODO: Describe the input data in \`sources/\`.
 ## Run
 
 \`\`\`bash
-cd examples/$name
+cd templates/$name
 cp .env.example .env     # add your API key
 uvx synix build pipeline.py
 uvx synix search 'query'

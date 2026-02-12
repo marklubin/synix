@@ -76,7 +76,7 @@ class TestNormalizeOutput:
         assert result == "Step took <TIME>, total <TIME>"
 
     def test_normalize_paths(self):
-        case_path = Path("/home/user/synix/examples/01-chatbot")
+        case_path = Path("/home/user/synix/templates/01-chatbot")
         text = f"Loading pipeline from {case_path}/pipeline.py"
         result = _normalize_output(text, case_path)
         assert result == "Loading pipeline from <CASE_DIR>/pipeline.py"

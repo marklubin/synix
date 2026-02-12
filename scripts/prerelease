@@ -17,8 +17,8 @@ echo "=== pytest ==="
 uv run pytest tests/ -v
 echo ""
 
-echo "=== verify examples ==="
-for case_dir in examples/*/; do
+echo "=== verify templates ==="
+for case_dir in templates/*/; do
     if [ -f "$case_dir/case.py" ]; then
         if [ -f "$case_dir/cassettes/llm.yaml" ]; then
             echo "--- $case_dir ---"

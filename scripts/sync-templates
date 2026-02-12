@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Copies user-facing files from examples/ into src/synix/templates/
+# Copies user-facing files from templates/ into src/synix/templates/
 # for wheel packaging. Run before release.
 #
 # Why this exists: `synix init` copies from src/synix/templates/ which is
-# bundled in the pip package. Examples contain extra dev-only files (cassettes,
+# bundled in the pip package. Templates contain extra dev-only files (cassettes,
 # goldens, case.py) that shouldn't ship. This script copies only user-facing
 # files to keep them in sync.
 set -euo pipefail
@@ -11,21 +11,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-for example in "$REPO_ROOT"/examples/*/; do
-    name=$(basename "$example")
+for tmpl in "$REPO_ROOT"/templates/*/; do
+    name=$(basename "$tmpl")
     dest="$REPO_ROOT/src/synix/templates/$name"
     rm -rf "$dest"
     mkdir -p "$dest"
     # Copy only user-facing files (not .env.example — shared at templates root)
-    cp "$example/pipeline.py" "$dest/" 2>/dev/null || true
-    # Example 01 has two pipeline files
-    cp "$example"/pipeline_*.py "$dest/" 2>/dev/null || true
-    cp "$example/README.md" "$dest/" 2>/dev/null || true
-    # Copy transforms.py if present (example 02)
-    cp "$example/transforms.py" "$dest/" 2>/dev/null || true
-    if [ -d "$example/sources" ]; then
-        cp -r "$example/sources" "$dest/"
+    cp "$tmpl/pipeline.py" "$dest/" 2>/dev/null || true
+    # Template 01 has two pipeline files
+    cp "$tmpl"/pipeline_*.py "$dest/" 2>/dev/null || true
+    cp "$tmpl/README.md" "$dest/" 2>/dev/null || true
+    # Copy transforms.py if present (template 02)
+    cp "$tmpl/transforms.py" "$dest/" 2>/dev/null || true
+    if [ -d "$tmpl/sources" ]; then
+        cp -r "$tmpl/sources" "$dest/"
     fi
 done
 
-echo "Templates synced from examples/ → src/synix/templates/"
+echo "Templates synced from templates/ → src/synix/templates/"

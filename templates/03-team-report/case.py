@@ -22,30 +22,25 @@ case = {
     "pipeline": "pipeline.py",
     "steps": [
         # Step 1: Plan
-        {"name": "note_plan", "command": ["synix", "demo", "note",
-            "1/5 Planning build..."]},
+        {"name": "note_plan", "command": ["synix", "demo", "note", "1/5 Planning build..."]},
         {"name": "plan", "command": ["synix", "plan", "PIPELINE"]},
-
         # Step 2: Build
-        {"name": "note_build", "command": ["synix", "demo", "note",
-            "2/5 Building: bios → work styles → team dynamics → final report..."]},
+        {
+            "name": "note_build",
+            "command": ["synix", "demo", "note", "2/5 Building: bios → work styles → team dynamics → final report..."],
+        },
         {"name": "build", "command": ["synix", "build", "PIPELINE"]},
-
         # Step 3: Search
-        {"name": "note_search", "command": ["synix", "demo", "note",
-            "3/5 Searching across all layers..."]},
-        {"name": "search", "command": [
-            "synix", "search", "climate dashboard", "--mode", "keyword", "--limit", "3"]},
-
+        {"name": "note_search", "command": ["synix", "demo", "note", "3/5 Searching across all layers..."]},
+        {"name": "search", "command": ["synix", "search", "climate dashboard", "--mode", "keyword", "--limit", "3"]},
         # Step 4: Validate
-        {"name": "note_validate", "command": ["synix", "demo", "note",
-            "4/5 Validating final report length..."]},
-        {"name": "validate", "command": ["synix", "validate", "PIPELINE", "--json"],
-         "capture_json": True},
-
+        {"name": "note_validate", "command": ["synix", "demo", "note", "4/5 Validating final report length..."]},
+        {"name": "validate", "command": ["synix", "validate", "PIPELINE", "--json"], "capture_json": True},
         # Step 5: Rebuild — everything cached
-        {"name": "note_rebuild", "command": ["synix", "demo", "note",
-            "5/5 Rebuilding (nothing changed → all cached)..."]},
+        {
+            "name": "note_rebuild",
+            "command": ["synix", "demo", "note", "5/5 Rebuilding (nothing changed → all cached)..."],
+        },
         {"name": "rebuild", "command": ["synix", "build", "PIPELINE"]},
     ],
     "goldens": {

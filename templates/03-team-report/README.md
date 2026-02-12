@@ -27,7 +27,7 @@ sources/
 ## Run
 
 ```bash
-cd examples/03-team-report
+cd templates/03-team-report
 cp .env.example .env     # add your API key
 
 uvx synix build pipeline.py

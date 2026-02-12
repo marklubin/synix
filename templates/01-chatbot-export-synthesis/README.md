@@ -22,7 +22,7 @@ sources/
 ## Run
 
 ```bash
-cd examples/01-chatbot-export-synthesis
+cd templates/01-chatbot-export-synthesis
 cp .env.example .env       # add your API key
 
 # Full build — transcripts -> episodes -> monthly rollups -> core memory

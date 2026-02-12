@@ -1,6 +1,6 @@
 """Demo 3: Team Report — E2E cassette replay test.
 
-Verifies that `synix demo run examples/03-team-report` replays from cassettes
+Verifies that `synix demo run templates/03-team-report` replays from cassettes
 and matches golden outputs, with no real LLM calls required.
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-CASE_DIR = Path(__file__).parent.parent.parent / "examples" / "03-team-report"
+CASE_DIR = Path(__file__).parent.parent.parent / "templates" / "03-team-report"
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 """Scrub PII from source data — fix at the source, not the artifact."""
+
 import json
 from pathlib import Path
 

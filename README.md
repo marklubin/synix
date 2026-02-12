@@ -14,7 +14,7 @@
 <h3 align="center">A build system for agent memory.</h3>
 
 <p align="center">
-  <video src="./examples/02-tv-returns/tv_returns.mp4" width="720" controls></video>
+  <video src="./templates/02-tv-returns/tv_returns.mp4" width="720" controls></video>
 </p>
 
 ## The Problem

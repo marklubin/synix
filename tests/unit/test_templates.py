@@ -1,4 +1,4 @@
-"""Tests for template sync — verifies bundled templates match examples."""
+"""Tests for template sync — verifies bundled templates match templates."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-EXAMPLES_DIR = REPO_ROOT / "examples"
+EXAMPLES_DIR = REPO_ROOT / "templates"
 TEMPLATES_DIR = REPO_ROOT / "src" / "synix" / "templates"
 
-# Files that sync-templates copies from examples into templates
+# Files that sync-templates copies from templates into templates
 # (.env.example is shared at templates root, not per-template)
 USER_FACING_FILES = ["pipeline.py", "README.md"]
 
@@ -27,7 +27,7 @@ def _template_dirs():
     reason="Templates not synced yet — run scripts/sync-templates first",
 )
 class TestTemplatesMatchExamples:
-    """Verify src/synix/templates/ is in sync with examples/."""
+    """Verify src/synix/templates/ is in sync with templates/."""
 
     def test_every_template_has_matching_example(self):
         """Each template dir should correspond to an example."""

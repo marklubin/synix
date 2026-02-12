@@ -21,7 +21,7 @@ def _run(cmd: list[str], label: str, *, check: bool = True) -> int:
 
 def _find_demo_cases() -> list[Path]:
     """Find all example directories that have both case.py and cassettes."""
-    examples_dir = REPO_ROOT / "examples"
+    examples_dir = REPO_ROOT / "templates"
     cases = []
     for case_dir in sorted(examples_dir.iterdir()):
         if not case_dir.is_dir():

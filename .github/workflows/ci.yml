@@ -21,25 +21,25 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest tests/ -v
 
-  discover-examples:
+  discover-templates:
     runs-on: ubuntu-latest
     outputs:
-      examples: ${{ steps.find.outputs.examples }}
+      templates: ${{ steps.find.outputs.templates }}
     steps:
       - uses: actions/checkout@v4
       - id: find
-        run: echo "examples=$(ls -d examples/*/  | sed 's|/$||' | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+        run: echo "templates=$(ls -d templates/*/  | sed 's|/$||' | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
 
   demo-smoke:
     runs-on: ubuntu-latest
-    needs: discover-examples
+    needs: discover-templates
     strategy:
       matrix:
-        example: ${{ fromJson(needs.discover-examples.outputs.examples) }}
+        template: ${{ fromJson(needs.discover-templates.outputs.templates) }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
       - run: uv sync
-      - run: uv run synix demo run ${{ matrix.example }}
+      - run: uv run synix demo run ${{ matrix.template }}

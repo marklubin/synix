@@ -129,9 +129,7 @@ class DemoExtractPoliciesTransform(BaseTransform):
 class DemoEnrichCSBriefTransform(BaseTransform):
     """Combine product/offer data with policy rules into a CS agent brief."""
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         products = sorted(
             [a for a in inputs if a.artifact_type == "product_offer_view"],
             key=lambda a: a.artifact_id,
@@ -159,8 +157,7 @@ class DemoEnrichCSBriefTransform(BaseTransform):
         )
 
         policies_text = "\n\n---\n\n".join(
-            f"### {p.metadata.get('policy_name', p.artifact_id)}\n{p.content}"
-            for p in policies
+            f"### {p.metadata.get('policy_name', p.artifact_id)}\n{p.content}" for p in policies
         )
 
         artifacts = []
@@ -203,10 +200,7 @@ class DemoEnrichCSBriefTransform(BaseTransform):
                     artifact_id=f"cs-brief-{sku}",
                     artifact_type="cs_product_brief",
                     content=response.content,
-                    input_hashes=(
-                        [product.content_hash]
-                        + [p.content_hash for p in policies]
-                    ),
+                    input_hashes=([product.content_hash] + [p.content_hash for p in policies]),
                     prompt_id=prompt_id,
                     model_config=model_config,
                     metadata={
