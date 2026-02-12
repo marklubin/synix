@@ -3,7 +3,7 @@
 Re-export core models for backward compatibility.
 """
 
-__version__ = "0.9.4"
+__version__ = "0.9.5"
 
 from synix.core.models import (  # noqa: F401
     Artifact,
