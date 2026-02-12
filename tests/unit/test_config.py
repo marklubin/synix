@@ -14,7 +14,8 @@ class TestPipelineConfig:
     def test_load_pipeline_module(self, tmp_path):
         """Create a temp pipeline.py file, load it, verify Pipeline object."""
         pipeline_file = tmp_path / "test_pipeline.py"
-        pipeline_file.write_text(textwrap.dedent("""\
+        pipeline_file.write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Layer
 
             pipeline = Pipeline("test")
@@ -23,7 +24,8 @@ class TestPipelineConfig:
                 name="episodes", level=1, depends_on=["transcripts"],
                 transform="episode_summary", grouping="by_conversation",
             ))
-        """))
+        """)
+        )
 
         result = load_pipeline(str(pipeline_file))
         assert isinstance(result, Pipeline)
@@ -50,7 +52,6 @@ class TestPipelineConfig:
         pipeline.add_layer(Layer(name="core", level=2, depends_on=["episodes"], transform="synthesize"))
 
         with pytest.raises(ValueError, match="circular"):
-
             validate_pipeline(pipeline)
 
     def test_validate_missing_dependency(self):
@@ -75,11 +76,14 @@ class TestPipelineConfig:
         pipeline = Pipeline("test")
         pipeline.add_layer(Layer(name="chatgpt_transcripts", level=0, transform="parse"))
         pipeline.add_layer(Layer(name="claude_transcripts", level=0, transform="parse"))
-        pipeline.add_layer(Layer(
-            name="episodes", level=1,
-            depends_on=["chatgpt_transcripts", "claude_transcripts"],
-            transform="summarize",
-        ))
+        pipeline.add_layer(
+            Layer(
+                name="episodes",
+                level=1,
+                depends_on=["chatgpt_transcripts", "claude_transcripts"],
+                transform="summarize",
+            )
+        )
 
         # Should not raise
         validate_pipeline(pipeline)

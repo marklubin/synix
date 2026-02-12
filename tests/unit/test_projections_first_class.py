@@ -29,9 +29,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 def _layers_in_index(db_path: Path) -> set[str]:
     """Return the distinct layer_name values present in search.db."""
     conn = sqlite3.connect(str(db_path))
-    rows = conn.execute(
-        "SELECT DISTINCT layer_name FROM search_index"
-    ).fetchall()
+    rows = conn.execute("SELECT DISTINCT layer_name FROM search_index").fetchall()
     conn.close()
     return {r[0] for r in rows}
 
@@ -39,9 +37,7 @@ def _layers_in_index(db_path: Path) -> set[str]:
 def _artifact_count_in_index(db_path: Path) -> int:
     """Return total row count in the search index."""
     conn = sqlite3.connect(str(db_path))
-    (count,) = conn.execute(
-        "SELECT count(*) FROM search_index"
-    ).fetchone()
+    (count,) = conn.execute("SELECT count(*) FROM search_index").fetchone()
     conn.close()
     return count
 
@@ -49,6 +45,7 @@ def _artifact_count_in_index(db_path: Path) -> int:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def source_dir(tmp_path):
@@ -72,28 +69,48 @@ def _monthly_pipeline(build_dir: Path) -> Pipeline:
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                      transform="episode_summary", grouping="by_conversation"))
-    p.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
-                      transform="monthly_rollup", grouping="by_month"))
-    p.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
-                      transform="core_synthesis", grouping="single", context_budget=10000))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
+    p.add_layer(
+        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
+    )
+    p.add_layer(
+        Layer(
+            name="core",
+            level=3,
+            depends_on=["monthly"],
+            transform="core_synthesis",
+            grouping="single",
+            context_budget=10000,
+        )
+    )
 
-    p.add_projection(Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext"]},
-            {"layer": "monthly", "search": ["fulltext"]},
-            {"layer": "core", "search": ["fulltext"]},
-        ],
-    ))
-    p.add_projection(Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": str(build_dir / "context.md")},
-    ))
+    p.add_projection(
+        Projection(
+            name="memory-index",
+            projection_type="search_index",
+            sources=[
+                {"layer": "episodes", "search": ["fulltext"]},
+                {"layer": "monthly", "search": ["fulltext"]},
+                {"layer": "core", "search": ["fulltext"]},
+            ],
+        )
+    )
+    p.add_projection(
+        Projection(
+            name="context-doc",
+            projection_type="flat_file",
+            sources=[{"layer": "core"}],
+            config={"output_path": str(build_dir / "context.md")},
+        )
+    )
     return p
 
 
@@ -104,31 +121,55 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                      transform="episode_summary", grouping="by_conversation"))
-    p.add_layer(Layer(
-        name="topics", level=2, depends_on=["episodes"],
-        transform="topical_rollup", grouping="by_topic",
-        config={"topics": ["programming", "machine-learning"]},
-    ))
-    p.add_layer(Layer(name="core", level=3, depends_on=["topics"],
-                      transform="core_synthesis", grouping="single", context_budget=10000))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
+    p.add_layer(
+        Layer(
+            name="topics",
+            level=2,
+            depends_on=["episodes"],
+            transform="topical_rollup",
+            grouping="by_topic",
+            config={"topics": ["programming", "machine-learning"]},
+        )
+    )
+    p.add_layer(
+        Layer(
+            name="core",
+            level=3,
+            depends_on=["topics"],
+            transform="core_synthesis",
+            grouping="single",
+            context_budget=10000,
+        )
+    )
 
-    p.add_projection(Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext"]},
-            {"layer": "topics", "search": ["fulltext"]},
-            {"layer": "core", "search": ["fulltext"]},
-        ],
-    ))
-    p.add_projection(Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": str(build_dir / "context.md")},
-    ))
+    p.add_projection(
+        Projection(
+            name="memory-index",
+            projection_type="search_index",
+            sources=[
+                {"layer": "episodes", "search": ["fulltext"]},
+                {"layer": "topics", "search": ["fulltext"]},
+                {"layer": "core", "search": ["fulltext"]},
+            ],
+        )
+    )
+    p.add_projection(
+        Projection(
+            name="context-doc",
+            projection_type="flat_file",
+            sources=[{"layer": "core"}],
+            config={"output_path": str(build_dir / "context.md")},
+        )
+    )
     return p
 
 
@@ -145,6 +186,7 @@ def pipeline_obj(build_dir):
 # which projection work and what the index contains at each step.
 # ---------------------------------------------------------------------------
 
+
 class TestLayerProjectionChain:
     """Verify the progressive relationship: each layer completion triggers
     its projection step, and downstream layers can query the result."""
@@ -154,16 +196,16 @@ class TestLayerProjectionChain:
         """Fake episode artifacts with the metadata the index needs."""
         return [
             Artifact(
-                artifact_id="ep-conv001", artifact_type="episode",
+                artifact_id="ep-conv001",
+                artifact_type="episode",
                 content="Discussion about Python programming and web development.",
-                metadata={"layer_name": "episodes", "layer_level": 1,
-                          "date": "2024-03", "title": "Python chat"},
+                metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "Python chat"},
             ),
             Artifact(
-                artifact_id="ep-conv002", artifact_type="episode",
+                artifact_id="ep-conv002",
+                artifact_type="episode",
                 content="Machine learning model training and evaluation.",
-                metadata={"layer_name": "episodes", "layer_level": 1,
-                          "date": "2024-03", "title": "ML chat"},
+                metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "ML chat"},
             ),
         ]
 
@@ -171,7 +213,8 @@ class TestLayerProjectionChain:
     def monthly_artifacts(self):
         return [
             Artifact(
-                artifact_id="monthly-2024-03", artifact_type="rollup",
+                artifact_id="monthly-2024-03",
+                artifact_type="rollup",
                 content="March themes: programming and ML.",
                 metadata={"layer_name": "monthly", "layer_level": 2, "month": "2024-03"},
             ),
@@ -181,14 +224,18 @@ class TestLayerProjectionChain:
     def core_artifacts(self):
         return [
             Artifact(
-                artifact_id="core-memory", artifact_type="core_memory",
+                artifact_id="core-memory",
+                artifact_type="core_memory",
                 content="## Identity\nSoftware engineer focused on AI.",
                 metadata={"layer_name": "core", "layer_level": 3},
             ),
         ]
 
     def test_after_episodes_index_has_only_episodes(
-        self, build_dir, pipeline_obj, episode_artifacts,
+        self,
+        build_dir,
+        pipeline_obj,
+        episode_artifacts,
     ):
         """After episodes complete, search index contains episode data only."""
         build_dir.mkdir(parents=True, exist_ok=True)
@@ -196,7 +243,11 @@ class TestLayerProjectionChain:
         layer_artifacts = {"episodes": episode_artifacts}
 
         _materialize_layer_projections(
-            pipeline_obj, "episodes", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
         )
 
         db_path = build_dir / "search.db"
@@ -204,7 +255,11 @@ class TestLayerProjectionChain:
         assert _layers_in_index(db_path) == {"episodes"}
 
     def test_after_monthly_index_has_episodes_and_monthly(
-        self, build_dir, pipeline_obj, episode_artifacts, monthly_artifacts,
+        self,
+        build_dir,
+        pipeline_obj,
+        episode_artifacts,
+        monthly_artifacts,
     ):
         """After monthly completes, search index contains both episodes and monthly."""
         build_dir.mkdir(parents=True, exist_ok=True)
@@ -213,7 +268,11 @@ class TestLayerProjectionChain:
 
         # Step 1: episodes complete → first projection
         _materialize_layer_projections(
-            pipeline_obj, "episodes", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         db_path = build_dir / "search.db"
         assert _layers_in_index(db_path) == {"episodes"}
@@ -221,13 +280,21 @@ class TestLayerProjectionChain:
         # Step 2: monthly complete → index rebuilt with both
         layer_artifacts["monthly"] = monthly_artifacts
         _materialize_layer_projections(
-            pipeline_obj, "monthly", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
     def test_after_core_index_has_all_three_layers(
-        self, build_dir, pipeline_obj,
-        episode_artifacts, monthly_artifacts, core_artifacts,
+        self,
+        build_dir,
+        pipeline_obj,
+        episode_artifacts,
+        monthly_artifacts,
+        core_artifacts,
     ):
         """After core completes, search index contains episodes + monthly + core."""
         build_dir.mkdir(parents=True, exist_ok=True)
@@ -239,24 +306,40 @@ class TestLayerProjectionChain:
         # Simulate the runner's per-layer projection calls
         layer_artifacts["episodes"] = episode_artifacts
         _materialize_layer_projections(
-            pipeline_obj, "episodes", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes"}
 
         layer_artifacts["monthly"] = monthly_artifacts
         _materialize_layer_projections(
-            pipeline_obj, "monthly", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
         layer_artifacts["core"] = core_artifacts
         _materialize_layer_projections(
-            pipeline_obj, "core", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "core",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly", "core"}
 
     def test_flat_file_waits_for_all_sources(
-        self, build_dir, pipeline_obj, episode_artifacts, monthly_artifacts,
+        self,
+        build_dir,
+        pipeline_obj,
+        episode_artifacts,
+        monthly_artifacts,
     ):
         """context-doc (flat_file) is NOT created until core layer is available."""
         build_dir.mkdir(parents=True, exist_ok=True)
@@ -265,29 +348,47 @@ class TestLayerProjectionChain:
 
         layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
         _materialize_layer_projections(
-            pipeline_obj, "episodes", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert not context_path.exists(), "context.md should not exist after only episodes"
 
         layer_artifacts["monthly"] = monthly_artifacts
         _materialize_layer_projections(
-            pipeline_obj, "monthly", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert not context_path.exists(), "context.md should not exist after only monthly"
 
         # Only after core layer is present should the flat file materialize
-        layer_artifacts["core"] = [Artifact(
-            artifact_id="core-memory", artifact_type="core_memory",
-            content="## Identity\nSoftware engineer.",
-            metadata={"layer_name": "core", "layer_level": 3},
-        )]
+        layer_artifacts["core"] = [
+            Artifact(
+                artifact_id="core-memory",
+                artifact_type="core_memory",
+                content="## Identity\nSoftware engineer.",
+                metadata={"layer_name": "core", "layer_level": 3},
+            )
+        ]
         _materialize_layer_projections(
-            pipeline_obj, "core", layer_artifacts, store, build_dir,
+            pipeline_obj,
+            "core",
+            layer_artifacts,
+            store,
+            build_dir,
         )
         assert context_path.exists(), "context.md should exist after core completes"
 
     def test_topical_transform_queries_intermediate_index(
-        self, source_dir, build_dir, mock_llm,
+        self,
+        source_dir,
+        build_dir,
+        mock_llm,
     ):
         """Topical rollup can query the episode search index built after episodes complete.
 
@@ -311,6 +412,7 @@ class TestLayerProjectionChain:
 # ---------------------------------------------------------------------------
 # 2. End-to-end progressive materialization (full pipeline)
 # ---------------------------------------------------------------------------
+
 
 class TestProgressiveMaterialization:
     def test_topical_pipeline_with_cached_episodes(self, source_dir, build_dir, mock_llm):
@@ -350,6 +452,7 @@ class TestProgressiveMaterialization:
 # 2. Projection Caching
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionCaching:
     def test_projection_cache_file_created(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """After a run, .projection_cache.json exists with entries per projection."""
@@ -378,18 +481,27 @@ class TestProjectionCaching:
         # Add a new conversation to force new artifacts
         claude_path = source_dir / "claude_export.json"
         data = json.loads(claude_path.read_text())
-        data["conversations"].append({
-            "uuid": "conv-proj-test-001",
-            "title": "Projection rebuild test",
-            "created_at": "2024-05-01T10:00:00Z",
-            "chat_messages": [
-                {"uuid": "msg-p1", "sender": "human",
-                 "text": "Hello, testing projection rebuild.", "created_at": "2024-05-01T10:00:00Z"},
-                {"uuid": "msg-p2", "sender": "assistant",
-                 "text": "Acknowledged, this is a test conversation.",
-                 "created_at": "2024-05-01T10:01:00Z"},
-            ],
-        })
+        data["conversations"].append(
+            {
+                "uuid": "conv-proj-test-001",
+                "title": "Projection rebuild test",
+                "created_at": "2024-05-01T10:00:00Z",
+                "chat_messages": [
+                    {
+                        "uuid": "msg-p1",
+                        "sender": "human",
+                        "text": "Hello, testing projection rebuild.",
+                        "created_at": "2024-05-01T10:00:00Z",
+                    },
+                    {
+                        "uuid": "msg-p2",
+                        "sender": "assistant",
+                        "text": "Acknowledged, this is a test conversation.",
+                        "created_at": "2024-05-01T10:01:00Z",
+                    },
+                ],
+            }
+        )
         claude_path.write_text(json.dumps(data))
 
         result2 = run(pipeline_obj, source_dir=str(source_dir))
@@ -400,6 +512,7 @@ class TestProjectionCaching:
 # ---------------------------------------------------------------------------
 # 3. Projection Plan
 # ---------------------------------------------------------------------------
+
 
 class TestProjectionPlan:
     def test_plan_includes_projections(self, pipeline_obj, source_dir, build_dir, mock_llm):
@@ -439,6 +552,7 @@ class TestProjectionPlan:
 # 4. Projection Stats
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionStats:
     def test_run_result_has_projection_stats(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """RunResult.projection_stats has one entry per projection."""
@@ -465,6 +579,7 @@ class TestProjectionStats:
 # 5. Topical Rollup Defensive Fallback
 # ---------------------------------------------------------------------------
 
+
 class TestTopicalRollupDefensiveFallback:
     def test_topical_rollup_no_search_db(self, source_dir, build_dir, mock_llm):
         """TopicalRollupTransform succeeds when search_db_path doesn't exist."""
@@ -475,6 +590,7 @@ class TestTopicalRollupDefensiveFallback:
         result = run(monthly, source_dir=str(source_dir))
 
         from synix.build.artifacts import ArtifactStore
+
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
@@ -496,6 +612,7 @@ class TestTopicalRollupDefensiveFallback:
         run(monthly, source_dir=str(source_dir))
 
         from synix.build.artifacts import ArtifactStore
+
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
@@ -508,6 +625,7 @@ class TestTopicalRollupDefensiveFallback:
         conn.close()
 
         from synix.build.transforms import get_transform
+
         transform = get_transform("topical_rollup")
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
@@ -522,6 +640,7 @@ class TestTopicalRollupDefensiveFallback:
 # ---------------------------------------------------------------------------
 # 6. Projection Logger Events
 # ---------------------------------------------------------------------------
+
 
 class TestProjectionLoggerEvents:
     def test_projection_events_in_log_file(self, pipeline_obj, source_dir, build_dir, mock_llm):

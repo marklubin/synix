@@ -34,9 +34,7 @@ class BaseTransform(ABC):
         hash_prefix = hashlib.sha256(content.encode()).hexdigest()[:8]
         return f"{template_name}_v{hash_prefix}"
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """Split inputs into independently-processable work units.
 
         Each unit is (unit_inputs, config_extras). The runner calls split()
@@ -69,9 +67,11 @@ _TRANSFORMS: dict[str, type[BaseTransform]] = {}
 
 def register_transform(name: str):
     """Decorator to register a transform class."""
+
     def wrapper(cls):
         _TRANSFORMS[name] = cls
         return cls
+
     return wrapper
 
 

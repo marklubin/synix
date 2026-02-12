@@ -14,7 +14,7 @@
 <h3 align="center">A build system for agent memory.</h3>
 
 <p align="center">
-  <video src="./examples/02-tv-returns/tv_returns.mp4" width="720" controls></video>
+  <video src="./templates/02-tv-returns/tv_returns.mp4" width="720" controls></video>
 </p>
 
 ## The Problem
@@ -33,7 +33,7 @@ uvx synix search "return policy"
 
 ## Quick Start
 
-`synix init` scaffolds a working project with source files, a multi-layer pipeline, and a validator.
+`uvx synix init` scaffolds a working project with source files, a multi-layer pipeline, and a validator.
 
 ```bash
 uvx synix init my-project
@@ -43,22 +43,22 @@ cd my-project
 Build the pipeline (requires an LLM API key — see pipeline.py for config):
 
 ```bash
-synix build
+uvx synix build
 ```
 
 Browse what was built:
 
 ```bash
-synix list                    # all artifacts, grouped by layer
-synix show final-report       # render an artifact as markdown
-synix show final-report --raw # full JSON with metadata and hashes
+uvx synix list                    # all artifacts, grouped by layer
+uvx synix show final-report       # render an artifact as markdown
+uvx synix show final-report --raw # full JSON with metadata and hashes
 ```
 
 Validate and search:
 
 ```bash
-synix validate                # run validators (e.g. max_length on final_report)
-synix search "hiking"         # full-text search across all indexed layers
+uvx synix validate                # run declared validators
+uvx synix search "hiking"         # full-text search across all indexed layers
 ```
 
 ## Using Your Build Output
@@ -67,8 +67,8 @@ After a build, Synix gives you two things: a search index and flat artifact file
 
 **Search via CLI:**
 ```bash
-synix search "return policy"
-synix search "warranty terms" --top-k 5 --trace
+uvx synix search "return policy"
+uvx synix search "warranty terms" --top-k 5 --trace
 ```
 
 **Use the artifacts directly:**
@@ -202,19 +202,19 @@ Drop files into `source_dir` — the `parse` transform auto-detects format by fi
 
 | Command | What it does |
 |---------|-------------|
-| `synix init <name>` | Scaffold a new project with sources, pipeline, and README. |
-| `synix build` | Run the pipeline. Only rebuilds what changed. |
-| `synix plan` | Dry-run — show what would build without running transforms. |
-| `synix list [layer]` | List all artifacts, optionally filtered by layer. |
-| `synix show <id>` | Display an artifact's content, rendered as markdown. `--raw` for JSON. |
-| `synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
-| `synix validate` | Run declared validators against build artifacts. |
-| `synix fix` | LLM-assisted repair of validation violations. |
-| `synix verify` | Check build integrity (hashes, provenance). |
-| `synix lineage <id>` | Show the full provenance chain for an artifact. |
-| `synix clean` | Delete the build directory. |
+| `uvx synix init <name>` | Scaffold a new project with sources, pipeline, and README. |
+| `uvx synix build` | Run the pipeline. Only rebuilds what changed. |
+| `uvx synix plan` | Dry-run — show what would build without running transforms. |
+| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer. |
+| `uvx synix show <id>` | Display an artifact's content, rendered as markdown. `--raw` for JSON. |
+| `uvx synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
+| `uvx synix validate` | Run declared validators against build artifacts. |
+| `uvx synix fix` | LLM-assisted repair of validation violations. |
+| `uvx synix verify` | Check build integrity (hashes, provenance). |
+| `uvx synix lineage <id>` | Show the full provenance chain for an artifact. |
+| `uvx synix clean` | Delete the build directory. |
 
-All commands default to `./pipeline.py` in the current directory if no pipeline path is given.
+Commands that take a pipeline path (`build`, `plan`, `validate`, `fix`, `clean`) default to `./pipeline.py` in the current directory.
 
 ## Key Capabilities
 

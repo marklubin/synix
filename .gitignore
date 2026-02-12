@@ -61,7 +61,7 @@ exports/
 exports-full/
 
 # Example build outputs
-examples/**/build/
+templates/**/build/
 
 # Demo
 demo.tape

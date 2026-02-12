@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "=== sync templates ==="
+./scripts/sync-templates
+echo ""
+
 echo "=== ruff fix ==="
 uv run ruff check --fix .
 echo ""
@@ -11,6 +15,19 @@ echo ""
 
 echo "=== pytest ==="
 uv run pytest tests/ -v
+echo ""
+
+echo "=== verify templates ==="
+for case_dir in templates/*/; do
+    if [ -f "$case_dir/case.py" ]; then
+        if [ -f "$case_dir/cassettes/llm.yaml" ]; then
+            echo "--- $case_dir ---"
+            uv run synix demo run "$case_dir"
+        else
+            echo "--- $case_dir (skipped — no cassettes) ---"
+        fi
+    fi
+done
 echo ""
 
 echo "=== all checks passed ==="

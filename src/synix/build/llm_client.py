@@ -62,9 +62,7 @@ class LLMClient:
             elif self.config.provider == "deepseek":
                 kwargs["base_url"] = "https://api.deepseek.com"
             elif self.config.provider == "openai-compatible" and not self.config.base_url:
-                raise ValueError(
-                    "openai-compatible provider requires base_url to be set"
-                )
+                raise ValueError("openai-compatible provider requires base_url to be set")
             return openai.OpenAI(**kwargs)
 
         else:
@@ -95,13 +93,9 @@ class LLMClient:
         resolved_temperature = temperature if temperature is not None else self.config.temperature
 
         if self.config.provider == "anthropic":
-            return self._complete_anthropic(
-                messages, resolved_max_tokens, resolved_temperature, artifact_desc
-            )
+            return self._complete_anthropic(messages, resolved_max_tokens, resolved_temperature, artifact_desc)
         else:
-            return self._complete_openai(
-                messages, resolved_max_tokens, resolved_temperature, artifact_desc
-            )
+            return self._complete_openai(messages, resolved_max_tokens, resolved_temperature, artifact_desc)
 
     def _complete_anthropic(
         self,
@@ -127,8 +121,7 @@ class LLMClient:
                     input_tokens=getattr(response.usage, "input_tokens", 0),
                     output_tokens=getattr(response.usage, "output_tokens", 0),
                     total_tokens=(
-                        getattr(response.usage, "input_tokens", 0)
-                        + getattr(response.usage, "output_tokens", 0)
+                        getattr(response.usage, "input_tokens", 0) + getattr(response.usage, "output_tokens", 0)
                     ),
                 )
             except (
@@ -143,13 +136,9 @@ class LLMClient:
                     )
                     time.sleep(5)
                 else:
-                    raise RuntimeError(
-                        f"Failed to process {artifact_desc} after 2 attempts: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"Failed to process {artifact_desc} after 2 attempts: {exc}") from exc
             except anthropic.APIError as exc:
-                raise RuntimeError(
-                    f"LLM API error processing {artifact_desc}: {exc}"
-                ) from exc
+                raise RuntimeError(f"LLM API error processing {artifact_desc}: {exc}") from exc
 
         # Unreachable, but satisfies type checker
         raise RuntimeError(f"Failed to process {artifact_desc}")
@@ -190,13 +179,9 @@ class LLMClient:
                     )
                     time.sleep(5)
                 else:
-                    raise RuntimeError(
-                        f"Failed to process {artifact_desc} after 2 attempts: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"Failed to process {artifact_desc} after 2 attempts: {exc}") from exc
             except openai.APIError as exc:
-                raise RuntimeError(
-                    f"LLM API error processing {artifact_desc}: {exc}"
-                ) from exc
+                raise RuntimeError(f"LLM API error processing {artifact_desc}: {exc}") from exc
 
         # Unreachable, but satisfies type checker
         raise RuntimeError(f"Failed to process {artifact_desc}")

@@ -1,0 +1,36 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: my-first-pipeline                                                                                          │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 5                                                                                                            │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ bios (level 0)  <N> <STATUS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ project_brief (level 0)  <N> <STATUS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ work_styles (level 1)  <N> <STATUS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ team_dynamics (level 2)  <N> <STATUS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ final_report (level 3)  <N> <STATUS>  <TIME>
+    └─ search  <MATERIALIZED>
+    └─ search  <MATERIALIZED>
+                         Build Summary
+╭───────────────┬──────────────┬───────┬────────┬─────────────╮
+│ Layer         │    Level     │ Built │ Cached │     Skipped │
+├───────────────┼──────────────┼───────┼────────┼─────────────┤
+│ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search    │ search_index │       │        │ progressive │
+│ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search    │ search_index │       │        │ progressive │
+│ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search    │ search_index │       │        │ progressive │
+│ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search    │ search_index │       │        │ progressive │
+│ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
+╰───────────────┴──────────────┴───────┴────────┴─────────────╯
+
+Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
+LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>

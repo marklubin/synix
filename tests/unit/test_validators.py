@@ -34,6 +34,7 @@ from synix.core.models import Artifact, Pipeline, ValidatorDecl
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def build_dir(tmp_path):
     d = tmp_path / "build"
@@ -68,6 +69,7 @@ def _make_artifact(aid, atype="episode", content="test", **meta):
 # ---------------------------------------------------------------------------
 # Data model tests
 # ---------------------------------------------------------------------------
+
 
 class TestViolation:
     def test_basic_fields(self):
@@ -123,8 +125,11 @@ class TestValidationResult:
         r = ValidationResult(
             violations=[
                 Violation(
-                    violation_type="test", severity="error",
-                    message="msg", artifact_id="a", field="f",
+                    violation_type="test",
+                    severity="error",
+                    message="msg",
+                    artifact_id="a",
+                    field="f",
                 )
             ],
             validators_run=["test"],
@@ -135,8 +140,11 @@ class TestValidationResult:
         r = ValidationResult(
             violations=[
                 Violation(
-                    violation_type="test", severity="warning",
-                    message="msg", artifact_id="a", field="f",
+                    violation_type="test",
+                    severity="warning",
+                    message="msg",
+                    artifact_id="a",
+                    field="f",
                 )
             ],
             validators_run=["test"],
@@ -147,8 +155,11 @@ class TestValidationResult:
         r = ValidationResult(
             violations=[
                 Violation(
-                    violation_type="mutual_exclusion", severity="error",
-                    message="test", artifact_id="a", field="customer_id",
+                    violation_type="mutual_exclusion",
+                    severity="error",
+                    message="test",
+                    artifact_id="a",
+                    field="customer_id",
                     metadata={"conflicting_values": ["x", "y"]},
                     provenance_trace=[
                         ProvenanceStep("a", "merge", "['x', 'y']"),
@@ -168,6 +179,7 @@ class TestValidationResult:
 # ---------------------------------------------------------------------------
 # Factory function tests
 # ---------------------------------------------------------------------------
+
 
 class TestFactoryFunctions:
     def test_mutual_exclusion_violation(self):
@@ -205,6 +217,7 @@ class TestFactoryFunctions:
 # Registry tests
 # ---------------------------------------------------------------------------
 
+
 class TestRegistry:
     def test_get_mutual_exclusion(self):
         v = get_validator("mutual_exclusion")
@@ -233,10 +246,10 @@ class TestRegistry:
 # ValidationContext.trace_field_origin tests
 # ---------------------------------------------------------------------------
 
+
 class TestTraceFieldOrigin:
     def test_single_artifact_no_parents(self, store, provenance, ctx):
-        art = _make_artifact("t-1", "transcript", customer_id="acme",
-                             layer_name="transcripts")
+        art = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
         store.save_artifact(art, "transcripts", 0)
 
         steps = ctx.trace_field_origin("t-1", "customer_id")
@@ -246,12 +259,10 @@ class TestTraceFieldOrigin:
         assert steps[0].layer == "transcripts"
 
     def test_two_level_chain(self, store, provenance, ctx):
-        t = _make_artifact("t-1", "transcript", customer_id="acme",
-                           layer_name="transcripts")
+        t = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
         store.save_artifact(t, "transcripts", 0)
 
-        ep = _make_artifact("ep-1", "episode", customer_id="acme",
-                            layer_name="episodes")
+        ep = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(ep, "episodes", 1)
 
         provenance.record("ep-1", parent_ids=["t-1"])
@@ -272,17 +283,13 @@ class TestTraceFieldOrigin:
 
     def test_branching_provenance(self, store, provenance, ctx):
         """Merge artifact with two parents from different customers."""
-        t1 = _make_artifact("t-1", "transcript", customer_id="acme",
-                            layer_name="transcripts")
-        t2 = _make_artifact("t-2", "transcript", customer_id="globex",
-                            layer_name="transcripts")
+        t1 = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
+        t2 = _make_artifact("t-2", "transcript", customer_id="globex", layer_name="transcripts")
         store.save_artifact(t1, "transcripts", 0)
         store.save_artifact(t2, "transcripts", 0)
 
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="globex",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
@@ -306,12 +313,11 @@ class TestTraceFieldOrigin:
 # MutualExclusionValidator tests
 # ---------------------------------------------------------------------------
 
+
 class TestMutualExclusionValidator:
     def test_no_violations_single_customer(self, store, provenance, ctx):
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="acme",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
@@ -325,10 +331,8 @@ class TestMutualExclusionValidator:
         assert violations == []
 
     def test_violation_multiple_customers(self, store, provenance, ctx):
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="globex",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
@@ -348,7 +352,9 @@ class TestMutualExclusionValidator:
     def test_source_field_metadata_detected(self, store, provenance, ctx):
         """source_customer_ids in merge artifact metadata also triggers."""
         merge = _make_artifact(
-            "merge-ep-2", "merge", layer_name="merge",
+            "merge-ep-2",
+            "merge",
+            layer_name="merge",
             source_customer_ids=["acme", "globex"],
         )
         store.save_artifact(merge, "merge", 2)
@@ -370,12 +376,9 @@ class TestMutualExclusionValidator:
 
     def test_multiple_merge_artifacts(self, store, provenance, ctx):
         """Only violating merge artifacts are flagged."""
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="globex",
-                             layer_name="episodes")
-        ep3 = _make_artifact("ep-3", "episode", customer_id="acme",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
+        ep3 = _make_artifact("ep-3", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
         store.save_artifact(ep3, "episodes", 1)
@@ -401,10 +404,10 @@ class TestMutualExclusionValidator:
 # RequiredFieldValidator tests
 # ---------------------------------------------------------------------------
 
+
 class TestRequiredFieldValidator:
     def test_no_violations_field_present(self, store, provenance, ctx):
-        art = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
+        art = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
         validator = get_validator("required_field")
@@ -424,8 +427,7 @@ class TestRequiredFieldValidator:
         assert violations[0].artifact_id == "ep-1"
 
     def test_violation_field_empty_string(self, store, provenance, ctx):
-        art = _make_artifact("ep-1", "episode", customer_id="",
-                             layer_name="episodes")
+        art = _make_artifact("ep-1", "episode", customer_id="", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
         validator = get_validator("required_field")
@@ -434,8 +436,7 @@ class TestRequiredFieldValidator:
         assert len(violations) == 1
 
     def test_violation_field_whitespace(self, store, provenance, ctx):
-        art = _make_artifact("ep-1", "episode", customer_id="  ",
-                             layer_name="episodes")
+        art = _make_artifact("ep-1", "episode", customer_id="  ", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
         validator = get_validator("required_field")
@@ -444,11 +445,9 @@ class TestRequiredFieldValidator:
         assert len(violations) == 1
 
     def test_multiple_artifacts_mixed(self, store, provenance, ctx):
-        a1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                            layer_name="episodes")
+        a1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         a2 = _make_artifact("ep-2", "episode", layer_name="episodes")
-        a3 = _make_artifact("ep-3", "episode", customer_id="globex",
-                            layer_name="episodes")
+        a3 = _make_artifact("ep-3", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(a1, "episodes", 1)
         store.save_artifact(a2, "episodes", 1)
         store.save_artifact(a3, "episodes", 1)
@@ -463,6 +462,7 @@ class TestRequiredFieldValidator:
 # ---------------------------------------------------------------------------
 # _gather_artifacts tests
 # ---------------------------------------------------------------------------
+
 
 class TestGatherArtifacts:
     def test_filter_by_layers(self, store):
@@ -511,6 +511,7 @@ class TestGatherArtifacts:
 # run_validators integration tests
 # ---------------------------------------------------------------------------
 
+
 class TestRunValidators:
     def test_no_validators_empty_result(self, store, provenance):
         pipeline = Pipeline("test")
@@ -521,10 +522,8 @@ class TestRunValidators:
 
     def test_mutual_exclusion_end_to_end(self, store, provenance):
         """Full integration: pipeline declares mutual_exclusion validator."""
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="globex",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
@@ -533,10 +532,12 @@ class TestRunValidators:
         provenance.record("merge-1", parent_ids=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="mutual_exclusion",
-            config={"field": "customer_id", "scope": "merge"},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="mutual_exclusion",
+                config={"field": "customer_id", "scope": "merge"},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is False
@@ -546,17 +547,18 @@ class TestRunValidators:
 
     def test_required_field_end_to_end(self, store, provenance):
         """Full integration: pipeline declares required_field validator."""
-        a1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                            layer_name="episodes")
+        a1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         a2 = _make_artifact("ep-2", "episode", layer_name="episodes")
         store.save_artifact(a1, "episodes", 1)
         store.save_artifact(a2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="required_field",
-            config={"field": "customer_id", "layers": ["episodes"]},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="required_field",
+                config={"field": "customer_id", "layers": ["episodes"]},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is False
@@ -565,21 +567,24 @@ class TestRunValidators:
 
     def test_multiple_validators(self, store, provenance):
         """Both validators run; results aggregated."""
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="required_field",
-            config={"field": "customer_id", "layers": ["episodes"]},
-        ))
-        pipeline.add_validator(ValidatorDecl(
-            name="mutual_exclusion",
-            config={"field": "customer_id", "scope": "merge"},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="required_field",
+                config={"field": "customer_id", "layers": ["episodes"]},
+            )
+        )
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="mutual_exclusion",
+                config={"field": "customer_id", "scope": "merge"},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.validators_run) == 2
@@ -589,14 +594,11 @@ class TestRunValidators:
 
     def test_provenance_auto_resolved(self, store, provenance):
         """Violations get provenance traces auto-resolved."""
-        t1 = _make_artifact("t-1", "transcript", customer_id="acme",
-                            layer_name="transcripts")
+        t1 = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
         store.save_artifact(t1, "transcripts", 0)
 
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="globex",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
         provenance.record("ep-1", parent_ids=["t-1"])
@@ -606,10 +608,12 @@ class TestRunValidators:
         provenance.record("merge-1", parent_ids=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="mutual_exclusion",
-            config={"field": "customer_id", "scope": "merge"},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="mutual_exclusion",
+                config={"field": "customer_id", "scope": "merge"},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) == 1
@@ -621,18 +625,18 @@ class TestRunValidators:
 
     def test_all_pass(self, store, provenance):
         """No violations when all artifacts are valid."""
-        ep1 = _make_artifact("ep-1", "episode", customer_id="acme",
-                             layer_name="episodes")
-        ep2 = _make_artifact("ep-2", "episode", customer_id="acme",
-                             layer_name="episodes")
+        ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
+        ep2 = _make_artifact("ep-2", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(
-            name="required_field",
-            config={"field": "customer_id", "layers": ["episodes"]},
-        ))
+        pipeline.add_validator(
+            ValidatorDecl(
+                name="required_field",
+                config={"field": "customer_id", "layers": ["episodes"]},
+            )
+        )
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is True
@@ -649,6 +653,7 @@ class TestRunValidators:
 # ---------------------------------------------------------------------------
 # ValidatorDecl model tests
 # ---------------------------------------------------------------------------
+
 
 class TestValidatorDecl:
     def test_basic(self):
@@ -681,9 +686,11 @@ class TestValidatorDecl:
 # RunResult.validation integration test
 # ---------------------------------------------------------------------------
 
+
 class TestRunResultValidation:
     def test_run_result_has_validation_field(self):
         from synix.build.runner import RunResult
+
         r = RunResult()
         assert r.validation is None
 
@@ -691,6 +698,7 @@ class TestRunResultValidation:
 # ---------------------------------------------------------------------------
 # compute_violation_id tests
 # ---------------------------------------------------------------------------
+
 
 class TestComputeViolationId:
     def test_deterministic(self):
@@ -727,6 +735,7 @@ class TestComputeViolationId:
 # ---------------------------------------------------------------------------
 # PIIValidator tests
 # ---------------------------------------------------------------------------
+
 
 class TestPIIValidator:
     def test_detects_credit_card(self, store, provenance, ctx):
@@ -801,12 +810,17 @@ class TestPIIValidator:
 # ViolationQueue tests
 # ---------------------------------------------------------------------------
 
+
 class TestViolationQueue:
     def test_save_load_roundtrip(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -819,8 +833,12 @@ class TestViolationQueue:
     def test_upsert_new(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -829,15 +847,23 @@ class TestViolationQueue:
     def test_upsert_existing_stays_active(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v1 = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v1)
         # Upsert again with same hash
         v2 = Violation(
-            violation_type="pii", severity="warning", message="test updated",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test updated",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v2)
@@ -846,8 +872,12 @@ class TestViolationQueue:
     def test_ignore(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -857,8 +887,12 @@ class TestViolationQueue:
     def test_is_ignored(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -868,8 +902,12 @@ class TestViolationQueue:
     def test_is_ignored_invalidated_on_hash_change(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -884,13 +922,21 @@ class TestViolationQueue:
     def test_active_filters(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v1 = Violation(
-            violation_type="pii", severity="warning", message="test1",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test1",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         v2 = Violation(
-            violation_type="pii", severity="warning", message="test2",
-            artifact_id="a-2", field="content", violation_id="vid-2",
+            violation_type="pii",
+            severity="warning",
+            message="test2",
+            artifact_id="a-2",
+            field="content",
+            violation_id="vid-2",
             metadata={"content_hash": "hash2"},
         )
         q.upsert(v1)
@@ -903,8 +949,12 @@ class TestViolationQueue:
     def test_resolve(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -913,10 +963,15 @@ class TestViolationQueue:
 
     def test_append_log_writes_jsonl(self, build_dir):
         import json
+
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -931,8 +986,12 @@ class TestViolationQueue:
     def test_upsert_reactivates_ignored_on_hash_change(self, build_dir):
         q = ViolationQueue(build_dir=build_dir)
         v = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash1"},
         )
         q.upsert(v)
@@ -941,8 +1000,12 @@ class TestViolationQueue:
 
         # Upsert with different hash should reactivate
         v2 = Violation(
-            violation_type="pii", severity="warning", message="test",
-            artifact_id="a-1", field="content", violation_id="vid-1",
+            violation_type="pii",
+            severity="warning",
+            message="test",
+            artifact_id="a-1",
+            field="content",
+            violation_id="vid-1",
             metadata={"content_hash": "hash2"},
         )
         q.upsert(v2)
@@ -952,6 +1015,7 @@ class TestViolationQueue:
 # ---------------------------------------------------------------------------
 # _parse_conflict_response tests
 # ---------------------------------------------------------------------------
+
 
 class TestParseConflictResponse:
     def test_valid_json(self):
@@ -992,6 +1056,7 @@ class TestParseConflictResponse:
 # SemanticConflictValidator tests
 # ---------------------------------------------------------------------------
 
+
 def _mock_llm_for_validator(monkeypatch, response_content):
     """Set up monkeypatches so SemanticConflictValidator can create an LLM client.
 
@@ -1012,21 +1077,15 @@ def _mock_llm_for_validator(monkeypatch, response_content):
 
     mock_client = _MockClient()
     # Patch at the source modules since they're imported locally in validate()
-    monkeypatch.setattr(
-        "synix.build.llm_client.LLMClient", lambda cfg: mock_client
-    )
-    monkeypatch.setattr(
-        "synix.core.config.LLMConfig.from_dict", lambda d: None
-    )
+    monkeypatch.setattr("synix.build.llm_client.LLMClient", lambda cfg: mock_client)
+    monkeypatch.setattr("synix.core.config.LLMConfig.from_dict", lambda d: None)
     return mock_client, call_count
 
 
 class TestSemanticConflictValidator:
     def test_no_conflicts(self, store, provenance, ctx, monkeypatch):
         """LLM returns no conflicts -> no violations."""
-        art = _make_artifact("monthly-1", "monthly",
-                             content="Mark likes Python.",
-                             layer_name="monthly")
+        art = _make_artifact("monthly-1", "monthly", content="Mark likes Python.", layer_name="monthly")
         store.save_artifact(art, "monthly", 2)
 
         _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
@@ -1038,21 +1097,25 @@ class TestSemanticConflictValidator:
 
     def test_conflict_found(self, store, provenance, ctx, monkeypatch):
         """LLM finds a conflict -> violation with metadata."""
-        art = _make_artifact("monthly-1", "monthly",
-                             content="Mark owns a BMW. Mark drives a Dodge Neon daily.",
-                             layer_name="monthly")
+        art = _make_artifact(
+            "monthly-1", "monthly", content="Mark owns a BMW. Mark drives a Dodge Neon daily.", layer_name="monthly"
+        )
         store.save_artifact(art, "monthly", 2)
 
-        conflict_json = json.dumps({
-            "conflicts": [{
-                "claim_a": "owns a BMW",
-                "claim_b": "drives a Dodge Neon daily",
-                "claim_a_source_hint": "August conversation",
-                "claim_b_source_hint": "December conversation",
-                "explanation": "Cannot own a BMW and daily-drive a Dodge Neon",
-                "confidence": "high",
-            }]
-        })
+        conflict_json = json.dumps(
+            {
+                "conflicts": [
+                    {
+                        "claim_a": "owns a BMW",
+                        "claim_b": "drives a Dodge Neon daily",
+                        "claim_a_source_hint": "August conversation",
+                        "claim_b_source_hint": "December conversation",
+                        "explanation": "Cannot own a BMW and daily-drive a Dodge Neon",
+                        "confidence": "high",
+                    }
+                ]
+            }
+        )
         _mock_llm_for_validator(monkeypatch, conflict_json)
 
         validator = get_validator("semantic_conflict")
@@ -1070,8 +1133,7 @@ class TestSemanticConflictValidator:
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
         store.save_artifact(art, "monthly", 2)
 
-        conflict = {"conflicts": [{"claim_a": "A", "claim_b": "B",
-                                    "explanation": "x", "confidence": "high"}]}
+        conflict = {"conflicts": [{"claim_a": "A", "claim_b": "B", "explanation": "x", "confidence": "high"}]}
         _mock_llm_for_validator(monkeypatch, json.dumps(conflict))
 
         validator = get_validator("semantic_conflict")
@@ -1084,8 +1146,7 @@ class TestSemanticConflictValidator:
         """Only first max_artifacts are checked."""
         arts = []
         for i in range(5):
-            a = _make_artifact(f"m-{i}", "monthly", content=f"content {i}",
-                               layer_name="monthly")
+            a = _make_artifact(f"m-{i}", "monthly", content=f"content {i}", layer_name="monthly")
             store.save_artifact(a, "monthly", 2)
             arts.append(a)
 

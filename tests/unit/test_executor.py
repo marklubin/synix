@@ -36,13 +36,15 @@ def _make_mock_client(responses: list[str] | None = None, delay: float = 0.0):
     def mock_complete(messages, max_tokens=None, temperature=None, artifact_desc="artifact"):
         idx = call_count["n"]
         call_count["n"] += 1
-        call_log.append({
-            "index": idx,
-            "messages": messages,
-            "artifact_desc": artifact_desc,
-            "thread": threading.current_thread().name,
-            "time": time.monotonic(),
-        })
+        call_log.append(
+            {
+                "index": idx,
+                "messages": messages,
+                "artifact_desc": artifact_desc,
+                "thread": threading.current_thread().name,
+                "time": time.monotonic(),
+            }
+        )
         if delay > 0:
             time.sleep(delay)
         text = responses[idx] if responses and idx < len(responses) else f"response-{idx}"
@@ -181,8 +183,11 @@ class TestSequentialExecutor:
             if idx == 1:
                 raise RuntimeError("request 1 failed")
             return LLMResponse(
-                content=f"ok-{idx}", model="m",
-                input_tokens=1, output_tokens=1, total_tokens=2,
+                content=f"ok-{idx}",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                total_tokens=2,
             )
 
         client = MagicMock()
@@ -254,8 +259,11 @@ class TestConcurrentExecutor:
             with lock:
                 current_concurrent["value"] -= 1
             return LLMResponse(
-                content="ok", model="m",
-                input_tokens=1, output_tokens=1, total_tokens=2,
+                content="ok",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                total_tokens=2,
             )
 
         client = MagicMock()
@@ -266,9 +274,7 @@ class TestConcurrentExecutor:
         results = executor.execute(client, requests)
 
         assert all(r.success for r in results)
-        assert max_concurrent["value"] <= 3, (
-            f"Max concurrent was {max_concurrent['value']}, expected <= 3"
-        )
+        assert max_concurrent["value"] <= 3, f"Max concurrent was {max_concurrent['value']}, expected <= 3"
 
     def test_empty_requests(self):
         """Empty request list returns empty result list."""
@@ -312,8 +318,11 @@ class TestConcurrentExecutor:
             if "artifact-1" in desc:
                 raise RuntimeError("request 1 failed")
             return LLMResponse(
-                content=f"ok-{idx}", model="m",
-                input_tokens=1, output_tokens=1, total_tokens=2,
+                content=f"ok-{idx}",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                total_tokens=2,
             )
 
         client = MagicMock()
@@ -340,8 +349,11 @@ class TestConcurrentExecutor:
             if call_count["n"] <= 2:
                 raise RuntimeError("Failed to process artifact after 2 attempts: rate limit")
             return LLMResponse(
-                content="success after retry", model="m",
-                input_tokens=1, output_tokens=1, total_tokens=2,
+                content="success after retry",
+                model="m",
+                input_tokens=1,
+                output_tokens=1,
+                total_tokens=2,
             )
 
         client = MagicMock()
@@ -359,9 +371,7 @@ class TestConcurrentExecutor:
     def test_retry_exhausted(self, mock_sleep):
         """After max_retries, returns error."""
         client = MagicMock()
-        client.complete.side_effect = RuntimeError(
-            "Failed to process artifact after 2 attempts: 429 rate limit"
-        )
+        client.complete.side_effect = RuntimeError("Failed to process artifact after 2 attempts: 429 rate limit")
         executor = ConcurrentExecutor(max_concurrency=1, max_retries=2, base_delay=0.01)
 
         results = executor.execute(client, _make_requests(1))
@@ -416,8 +426,7 @@ class TestConcurrentExecutor:
         # Concurrent should be meaningfully faster
         # (8 * 0.05 = 0.4s sequential vs ~0.05s concurrent)
         assert conc_time < seq_time * 0.75, (
-            f"Concurrent ({conc_time:.3f}s) not meaningfully faster than "
-            f"sequential ({seq_time:.3f}s)"
+            f"Concurrent ({conc_time:.3f}s) not meaningfully faster than sequential ({seq_time:.3f}s)"
         )
 
     def test_is_llm_executor_subclass(self):
@@ -478,6 +487,7 @@ class TestCLIConcurrencyFlag:
         """synix build --help shows --concurrency option."""
         runner = CliRunner()
         from synix.cli import main
+
         result = runner.invoke(main, ["build", "--help"])
         assert result.exit_code == 0
         assert "--concurrency" in result.output
@@ -487,6 +497,7 @@ class TestCLIConcurrencyFlag:
         """synix run --help shows --concurrency option."""
         runner = CliRunner()
         from synix.cli import main
+
         result = runner.invoke(main, ["run", "--help"])
         assert result.exit_code == 0
         assert "--concurrency" in result.output

@@ -25,9 +25,7 @@ class MockEmbeddingResponse:
     """Mock for OpenAI embeddings.create() response."""
 
     def __init__(self, embeddings: list[list[float]]):
-        self.data = [
-            MockEmbeddingData(emb, idx) for idx, emb in enumerate(embeddings)
-        ]
+        self.data = [MockEmbeddingData(emb, idx) for idx, emb in enumerate(embeddings)]
 
 
 def _deterministic_embedding(text: str) -> list[float]:
@@ -424,7 +422,8 @@ class TestHybridRetrieverWithEmbeddings:
                     content=content,
                     metadata={"layer_name": "episodes"},
                 ),
-                "episodes", 1,
+                "episodes",
+                1,
             )
 
         retriever = HybridRetriever(
@@ -438,10 +437,7 @@ class TestHybridRetrieverWithEmbeddings:
         index, retriever = index_and_retriever
         results = retriever.query("artificial intelligence", mode="semantic", top_k=3)
         assert len(results) > 0
-        assert any(
-            "ai" in r.content.lower() or "machine" in r.content.lower()
-            for r in results[:2]
-        )
+        assert any("ai" in r.content.lower() or "machine" in r.content.lower() for r in results[:2])
         index.close()
 
     def test_hybrid_search_fuses_results(self, index_and_retriever):
@@ -461,10 +457,7 @@ class TestHybridRetrieverWithEmbeddings:
             top_k=3,
         )
         assert len(results) > 0
-        assert any(
-            "anthropic" in r.content.lower() or "claude" in r.content.lower()
-            for r in results[:3]
-        )
+        assert any("anthropic" in r.content.lower() or "claude" in r.content.lower() for r in results[:3])
         index.close()
 
     def test_scoring_fields_populated(self, index_and_retriever):

@@ -59,9 +59,7 @@ class HybridRetriever:
         # Keyed by content hash -> embedding vector.  Populated lazily.
         self._artifact_embeddings: dict[str, list[float]] = {}
 
-    def _get_keyword_results(
-        self, query: str, layers: list[str] | None = None
-    ) -> list[SearchResult]:
+    def _get_keyword_results(self, query: str, layers: list[str] | None = None) -> list[SearchResult]:
         """Run keyword (FTS5) search."""
         return self.search_index.query(
             query,
@@ -69,9 +67,7 @@ class HybridRetriever:
             provenance_tracker=self.provenance_tracker,
         )
 
-    def _get_all_indexed_rows(
-        self, layers: list[str] | None = None
-    ) -> list[dict]:
+    def _get_all_indexed_rows(self, layers: list[str] | None = None) -> list[dict]:
         """Fetch all rows from the search index, optionally filtered by layer.
 
         Returns a list of dicts with keys: content, artifact_id, layer_name,
@@ -93,13 +89,15 @@ class HybridRetriever:
 
         result = []
         for row in rows:
-            result.append({
-                "content": row["content"],
-                "artifact_id": row["artifact_id"],
-                "layer_name": row["layer_name"],
-                "layer_level": int(row["layer_level"]),
-                "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
-            })
+            result.append(
+                {
+                    "content": row["content"],
+                    "artifact_id": row["artifact_id"],
+                    "layer_name": row["layer_name"],
+                    "layer_level": int(row["layer_level"]),
+                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
+                }
+            )
         return result
 
     def _ensure_embeddings_loaded(self, layers: list[str] | None = None) -> dict[str, list[float]]:
@@ -196,17 +194,19 @@ class HybridRetriever:
                 records = self.provenance_tracker.get_chain(row["artifact_id"])
                 chain = [r.artifact_id for r in records]
 
-            results.append(SearchResult(
-                content=row["content"],
-                artifact_id=row["artifact_id"],
-                layer_name=row["layer_name"],
-                layer_level=row["layer_level"],
-                score=sim,
-                provenance_chain=chain,
-                metadata=row["metadata"],
-                search_mode="semantic",
-                semantic_score=sim,
-            ))
+            results.append(
+                SearchResult(
+                    content=row["content"],
+                    artifact_id=row["artifact_id"],
+                    layer_name=row["layer_name"],
+                    layer_level=row["layer_level"],
+                    score=sim,
+                    provenance_chain=chain,
+                    metadata=row["metadata"],
+                    search_mode="semantic",
+                    semantic_score=sim,
+                )
+            )
 
         return results
 
@@ -250,18 +250,20 @@ class HybridRetriever:
         results: list[SearchResult] = []
         for aid in sorted_ids[:top_k]:
             base = result_map[aid]
-            results.append(SearchResult(
-                content=base.content,
-                artifact_id=base.artifact_id,
-                layer_name=base.layer_name,
-                layer_level=base.layer_level,
-                score=scores[aid],
-                provenance_chain=base.provenance_chain,
-                metadata=base.metadata,
-                search_mode=search_mode,
-                keyword_score=keyword_scores.get(aid),
-                semantic_score=semantic_scores.get(aid),
-            ))
+            results.append(
+                SearchResult(
+                    content=base.content,
+                    artifact_id=base.artifact_id,
+                    layer_name=base.layer_name,
+                    layer_level=base.layer_level,
+                    score=scores[aid],
+                    provenance_chain=base.provenance_chain,
+                    metadata=base.metadata,
+                    search_mode=search_mode,
+                    keyword_score=keyword_scores.get(aid),
+                    semantic_score=semantic_scores.get(aid),
+                )
+            )
 
         return results
 
@@ -323,23 +325,25 @@ class HybridRetriever:
 
         # Build semantic SearchResult list (score = weighted, semantic_score = raw sim)
         semantic_results: list[SearchResult] = []
-        for weighted, raw_sim, row in scored[:top_k * 2]:
+        for weighted, raw_sim, row in scored[: top_k * 2]:
             chain: list[str] = []
             if self.provenance_tracker is not None:
                 records = self.provenance_tracker.get_chain(row["artifact_id"])
                 chain = [r.artifact_id for r in records]
 
-            semantic_results.append(SearchResult(
-                content=row["content"],
-                artifact_id=row["artifact_id"],
-                layer_name=row["layer_name"],
-                layer_level=row["layer_level"],
-                score=weighted,
-                provenance_chain=chain,
-                metadata=row["metadata"],
-                search_mode="layered",
-                semantic_score=raw_sim,
-            ))
+            semantic_results.append(
+                SearchResult(
+                    content=row["content"],
+                    artifact_id=row["artifact_id"],
+                    layer_name=row["layer_name"],
+                    layer_level=row["layer_level"],
+                    score=weighted,
+                    provenance_chain=chain,
+                    metadata=row["metadata"],
+                    search_mode="layered",
+                    semantic_score=raw_sim,
+                )
+            )
 
         # Fuse with keyword results
         keyword_results = self._get_keyword_results(query, layers)
@@ -369,9 +373,7 @@ class HybridRetriever:
         """
         valid_modes = ("keyword", "semantic", "hybrid", "layered")
         if mode not in valid_modes:
-            raise ValueError(
-                f"Invalid search mode: {mode!r}. Must be one of {valid_modes!r}."
-            )
+            raise ValueError(f"Invalid search mode: {mode!r}. Must be one of {valid_modes!r}.")
 
         if mode == "keyword":
             results = self._get_keyword_results(q, layers)
@@ -381,8 +383,7 @@ class HybridRetriever:
         if needs_embeddings and self.embedding_provider is None:
             if mode == "semantic":
                 raise ValueError(
-                    "Semantic search requires an embedding provider. "
-                    "Configure embedding_config in your pipeline."
+                    "Semantic search requires an embedding provider. Configure embedding_config in your pipeline."
                 )
             # Hybrid/layered without embeddings falls back to keyword
             results = self._get_keyword_results(q, layers)

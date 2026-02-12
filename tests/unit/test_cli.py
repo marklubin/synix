@@ -165,10 +165,16 @@ def test_verify_with_nonexistent_pipeline(runner, tmp_path):
     """synix verify --pipeline with nonexistent file errors."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
-    result = runner.invoke(main, [
-        "verify", "--build-dir", str(build_dir),
-        "--pipeline", str(tmp_path / "nonexistent.py"),
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "verify",
+            "--build-dir",
+            str(build_dir),
+            "--pipeline",
+            str(tmp_path / "nonexistent.py"),
+        ],
+    )
     # Click validates exists=True before the command runs
     assert result.exit_code != 0
 
@@ -221,6 +227,7 @@ def test_build_does_not_import_search():
     try:
         # Read source files directly to check for search imports
         from pathlib import Path
+
         build_dir = Path(__file__).parent.parent.parent / "src" / "synix" / "build"
         for py_file in build_dir.glob("*.py"):
             source = py_file.read_text()
@@ -235,9 +242,7 @@ def test_build_does_not_import_search():
                     # Allow the lazy import in llm_transforms (topical rollup needs SearchIndex at runtime)
                     if "llm_transforms" in py_file.name and "SearchIndex" in stripped:
                         continue
-                    raise AssertionError(
-                        f"Build module {py_file.name}:{i} directly imports search: {stripped!r}"
-                    )
+                    raise AssertionError(f"Build module {py_file.name}:{i} directly imports search: {stripped!r}")
     finally:
         # Restore modules
         sys.modules.update(saved)

@@ -78,13 +78,19 @@ CLI UX requirements (Rich formatting, colors, progress): [docs/cli-ux.md](docs/c
 
 ## Contributing
 
-**Before pushing any changes**, run the prerelease checks:
+**Before pushing any changes**, run the full release check:
 
 ```bash
-./scripts/prerelease
+uv run release
 ```
 
-This runs `ruff fix` → `ruff check` → `pytest`. All must pass before pushing. CI runs the same checks — if prerelease passes locally, CI will pass.
+This runs: sync templates → ruff fix → ruff check → pytest → verify all demos. All must pass before pushing. CI runs the same checks — if release passes locally, CI will pass.
+
+To run just the demo verifications standalone (faster feedback during UX work):
+
+```bash
+uv run verify-demos
+```
 
 **Workflow changes** (`.github/workflows/`): test locally with [`act`](https://github.com/nektos/act) before pushing:
 
@@ -99,6 +105,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## Critical Rules
 
+- **Customer-facing docs** (READMEs, templates, `synix init` output) must use `uvx synix` for all CLI commands. Internal dev docs (CLAUDE.md, test files) use `uv run synix`.
 - **DO NOT** refactor core engine or abstract prematurely
 - **DO NOT** implement StatefulArtifact, branching, eval harness, or any v0.2 feature
 - **DO NOT** add Postgres, Neo4j, or any external database — SQLite + filesystem only

@@ -1,0 +1,35 @@
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: my-first-pipeline                                                                                          │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 5                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value                     │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic                 │
+│ Model       │ claude-haiku-4-5-20251001 │
+│ Temperature │ 0.3                       │
+│ Max Tokens  │ 1024                      │
+╰─────────────┴───────────────────────────╯
+
+my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
+├── bios  source:parse  <STATS>
+├── project_brief  source:parse  <STATS>
+├── work_styles  transform:work_style  <STATS>
+│   └── ← bios
+├── team_dynamics  transform:dynamics  <STATS>
+│   └── ← work_styles
+└── final_report  transform:report  <STATS>
+    ├── ← team_dynamics
+    ├── ← project_brief
+    └── → search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← bios
+        ├── ← project_brief
+        ├── ← work_styles
+        ├── ← team_dynamics
+        └── ← final_report
+
+<PLAN_SUMMARY>

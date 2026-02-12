@@ -168,9 +168,7 @@ class TestVerifyCLI:
 
     def test_verify_json_output(self, populated_build):
         runner = CliRunner()
-        result = runner.invoke(main, [
-            "verify", "--build-dir", str(populated_build), "--json"
-        ])
+        result = runner.invoke(main, ["verify", "--build-dir", str(populated_build), "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["passed"] is True
@@ -179,8 +177,6 @@ class TestVerifyCLI:
         runner = CliRunner()
         build_dir = tmp_path / "empty_build"
         build_dir.mkdir()
-        result = runner.invoke(main, [
-            "verify", "--build-dir", str(build_dir)
-        ])
+        result = runner.invoke(main, ["verify", "--build-dir", str(build_dir)])
         assert result.exit_code != 0
         assert "FAIL" in result.output

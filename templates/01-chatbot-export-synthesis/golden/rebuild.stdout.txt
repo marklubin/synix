@@ -1,0 +1,20 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: personal-memory                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 4                                                                                                            │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ transcripts (level 0)  <N> <STATUS>  <TIME>
+  ✓ episodes (level 1)  <N> <STATUS>  <TIME>
+    └─ memory-index  <MATERIALIZED>
+       └─ embeddings  6/6  <TIME>  (fastembed, <MATERIALIZED>: 6)
+  ✓ monthly (level 2)  <N> <STATUS>  <TIME>
+    └─ memory-index  <MATERIALIZED>
+       └─ embeddings  11/11  <TIME>  (fastembed, <MATERIALIZED>: 11)
+  core (level 3)  0/1  ⟳ 1 in flight  <TIME>
+
+    ⟳ synthesis  <TIME>
+Pipeline failed: Cassette miss for key <HASH>... (prompt: You are synthesizing all available information into a
+core memory document for a)
+Run with SYNIX_CASSETTE_MODE=record to capture this call.

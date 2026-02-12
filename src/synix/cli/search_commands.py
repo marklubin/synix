@@ -26,7 +26,7 @@ from synix.cli.main import console, get_layer_style
     type=click.Choice(["keyword", "semantic", "hybrid", "layered"], case_sensitive=False),
     default=None,
     help="Search mode: keyword (FTS5), semantic (embeddings), hybrid (both + RRF fusion), "
-         "or layered (hybrid + higher layers boosted). Auto-detects hybrid when embeddings exist.",
+    "or layered (hybrid + higher layers boosted). Auto-detects hybrid when embeddings exist.",
 )
 @click.option("--top-k", default=None, type=int, help="Max results to return")
 @click.option("--trace", is_flag=True, default=False, help="Show provenance chain below each result")
@@ -141,10 +141,7 @@ def search(
         return
 
     mode_label = {"keyword": "keyword", "semantic": "semantic", "hybrid": "hybrid", "layered": "layered"}
-    console.print(
-        f"\n[bold]Search results for:[/bold] \"{query}\" "
-        f"[dim]({mode_label[mode]} mode)[/dim]\n"
-    )
+    console.print(f'\n[bold]Search results for:[/bold] "{query}" [dim]({mode_label[mode]} mode)[/dim]\n')
 
     for i, result in enumerate(results[:effective_top_k], 1):
         level = result.layer_level
@@ -198,7 +195,7 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in rec.parent_artifact_ids:
+                    for parent_id in sorted(rec.parent_artifact_ids):
                         label = f"[dim]{parent_id}[/dim]"
                         child = node.add(label)
                         _build_trace_tree(child, parent_id, visited)
@@ -217,7 +214,7 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in rec.parent_artifact_ids:
+                    for parent_id in sorted(rec.parent_artifact_ids):
                         child = node.add(f"[dim]{parent_id}[/dim]")
                         _add_parents(child, parent_id, visited)
 
@@ -239,7 +236,7 @@ def _build_snippet(content: str, query: str, head_lines: int = 4, context_lines:
 
     if not keywords or not lines:
         # No query terms — just show first chunk
-        preview = "\n".join(lines[:head_lines * 2])
+        preview = "\n".join(lines[: head_lines * 2])
         if len(lines) > head_lines * 2:
             preview += "\n..."
         return Markdown(preview)
@@ -297,7 +294,7 @@ def _build_snippet(content: str, query: str, head_lines: int = 4, context_lines:
                         result_parts.append(highlighted[pos:])
                         break
                     result_parts.append(highlighted[pos:found])
-                    result_parts.append(f"**{highlighted[found:found + len(kw)]}**")
+                    result_parts.append(f"**{highlighted[found : found + len(kw)]}**")
                     pos = found + len(kw)
                 highlighted = "".join(result_parts)
             parts.append(highlighted)

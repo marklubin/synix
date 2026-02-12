@@ -36,7 +36,7 @@ def parse_text(filepath: str | Path) -> list[Artifact]:
     fm_match = _FRONTMATTER_RE.match(raw)
     if fm_match:
         frontmatter = _parse_frontmatter(fm_match.group(1))
-        body = raw[fm_match.end():]
+        body = raw[fm_match.end() :]
 
     # Determine metadata
     title = frontmatter.get("title", _title_from_filename(filepath.stem))
@@ -114,7 +114,7 @@ def _parse_frontmatter(text: str) -> dict:
             continue
 
         key = line[:colon_idx].strip()
-        value = line[colon_idx + 1:].strip()
+        value = line[colon_idx + 1 :].strip()
 
         if not key:
             continue
@@ -131,8 +131,7 @@ def _parse_value(value: str):
         return ""
 
     # Remove surrounding quotes
-    if (value.startswith('"') and value.endswith('"')) or \
-       (value.startswith("'") and value.endswith("'")):
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
 
     # Inline list: [item1, item2, ...]

@@ -30,6 +30,7 @@ from synix.build.llm_client import LLMClient, LLMResponse
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class CassetteMiss(Exception):
     """Raised in replay mode when a cassette key is not found."""
 
@@ -46,6 +47,7 @@ class CassetteMiss(Exception):
 # ---------------------------------------------------------------------------
 # LLM Cassette
 # ---------------------------------------------------------------------------
+
 
 def compute_cassette_key(
     provider: str,
@@ -137,16 +139,16 @@ class CassetteStore:
         with self._lock:
             data = []
             for entry in self._entries.values():
-                data.append({
-                    "key": entry.key,
-                    "request": entry.request,
-                    "response": entry.response,
-                    "meta": entry.meta,
-                })
+                data.append(
+                    {
+                        "key": entry.key,
+                        "request": entry.request,
+                        "response": entry.response,
+                        "meta": entry.meta,
+                    }
+                )
         # Write outside lock
-        self._yaml_path().write_text(
-            yaml.dump(data, default_flow_style=False, allow_unicode=True, width=120)
-        )
+        self._yaml_path().write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True, width=120))
 
 
 class CassetteClientWrapper:
@@ -170,12 +172,8 @@ class CassetteClientWrapper:
         temperature: float | None = None,
         artifact_desc: str = "artifact",
     ) -> LLMResponse:
-        resolved_max_tokens = (
-            max_tokens if max_tokens is not None else self.config.max_tokens
-        )
-        resolved_temperature = (
-            temperature if temperature is not None else self.config.temperature
-        )
+        resolved_max_tokens = max_tokens if max_tokens is not None else self.config.max_tokens
+        resolved_temperature = temperature if temperature is not None else self.config.temperature
 
         key = compute_cassette_key(
             provider=self.config.provider,
@@ -204,9 +202,7 @@ class CassetteClientWrapper:
                 model=resp.get("model", self.config.model),
                 input_tokens=resp.get("input_tokens", 0),
                 output_tokens=resp.get("output_tokens", 0),
-                total_tokens=(
-                    resp.get("input_tokens", 0) + resp.get("output_tokens", 0)
-                ),
+                total_tokens=(resp.get("input_tokens", 0) + resp.get("output_tokens", 0)),
             )
 
         # record mode: check cache first to avoid duplicate API calls
@@ -218,9 +214,7 @@ class CassetteClientWrapper:
                 model=resp.get("model", self.config.model),
                 input_tokens=resp.get("input_tokens", 0),
                 output_tokens=resp.get("output_tokens", 0),
-                total_tokens=(
-                    resp.get("input_tokens", 0) + resp.get("output_tokens", 0)
-                ),
+                total_tokens=(resp.get("input_tokens", 0) + resp.get("output_tokens", 0)),
             )
 
         # Call real API
@@ -238,24 +232,26 @@ class CassetteClientWrapper:
             if isinstance(content, str):
                 preview = content[:200]
 
-        self.store.put(CassetteEntry(
-            key=key,
-            request={
-                "provider": self.config.provider,
-                "model": self.config.model,
-                "prompt_preview": preview,
-                "params": {
-                    "max_tokens": resolved_max_tokens,
-                    "temperature": resolved_temperature,
+        self.store.put(
+            CassetteEntry(
+                key=key,
+                request={
+                    "provider": self.config.provider,
+                    "model": self.config.model,
+                    "prompt_preview": preview,
+                    "params": {
+                        "max_tokens": resolved_max_tokens,
+                        "temperature": resolved_temperature,
+                    },
                 },
-            },
-            response={
-                "text": response.content,
-                "model": response.model,
-                "input_tokens": response.input_tokens,
-                "output_tokens": response.output_tokens,
-            },
-        ))
+                response={
+                    "text": response.content,
+                    "model": response.model,
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                },
+            )
+        )
         self.store.save()
 
         return response
@@ -272,9 +268,7 @@ def maybe_wrap_client(client: LLMClient) -> LLMClient | CassetteClientWrapper:
 
     cassette_dir = os.environ.get("SYNIX_CASSETTE_DIR")
     if not cassette_dir:
-        raise ValueError(
-            f"SYNIX_CASSETTE_MODE={mode} requires SYNIX_CASSETTE_DIR to be set"
-        )
+        raise ValueError(f"SYNIX_CASSETTE_MODE={mode} requires SYNIX_CASSETTE_DIR to be set")
 
     store = CassetteStore(Path(cassette_dir))
     return CassetteClientWrapper(client, mode, store)
@@ -283,6 +277,7 @@ def maybe_wrap_client(client: LLMClient) -> LLMClient | CassetteClientWrapper:
 # ---------------------------------------------------------------------------
 # Embedding Cassette
 # ---------------------------------------------------------------------------
+
 
 class CassetteEmbeddingWrapper:
     """Wraps an EmbeddingProvider for record/replay of embedding calls.
@@ -303,6 +298,7 @@ class CassetteEmbeddingWrapper:
         # Create a shadow EmbeddingProvider that uses the cassette dir for storage
         # Lazy import to avoid build→search dependency (FR-2.3)
         import importlib
+
         _embeddings = importlib.import_module("synix.search.embeddings")
 
         self._shadow = _embeddings.EmbeddingProvider(
@@ -371,9 +367,7 @@ class CassetteEmbeddingWrapper:
                 if progress_callback:
                     progress_callback(cached_count + completed, len(texts))
 
-            new_embeddings = self.real_provider.embed_batch(
-                uncached_texts, _backend_progress
-            )
+            new_embeddings = self.real_provider.embed_batch(uncached_texts, _backend_progress)
             for j, idx in enumerate(uncached_indices):
                 results[idx] = new_embeddings[j]
                 self._shadow._save_embedding(hashes[idx], new_embeddings[j])
@@ -394,8 +388,6 @@ def maybe_wrap_embedding_provider(provider) -> object:
 
     cassette_dir = os.environ.get("SYNIX_CASSETTE_DIR")
     if not cassette_dir:
-        raise ValueError(
-            f"SYNIX_CASSETTE_MODE={mode} requires SYNIX_CASSETTE_DIR to be set"
-        )
+        raise ValueError(f"SYNIX_CASSETTE_MODE={mode} requires SYNIX_CASSETTE_DIR to be set")
 
     return CassetteEmbeddingWrapper(provider, mode, Path(cassette_dir))

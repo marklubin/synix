@@ -49,8 +49,7 @@ class SearchIndex:
         """Insert an artifact into the search index."""
         conn = self._get_conn()
         conn.execute(
-            "INSERT INTO search_index (content, artifact_id, layer_name, layer_level, metadata) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO search_index (content, artifact_id, layer_name, layer_level, metadata) VALUES (?, ?, ?, ?, ?)",
             (
                 artifact.content,
                 artifact.artifact_id,
@@ -62,15 +61,72 @@ class SearchIndex:
         conn.commit()
 
     # Words too common to be useful in OR queries
-    _STOP_WORDS = frozenset({
-        "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-        "do", "does", "did", "have", "has", "had", "i", "me", "my", "we",
-        "you", "your", "he", "she", "it", "they", "them", "this", "that",
-        "what", "which", "who", "whom", "how", "when", "where", "why",
-        "and", "or", "but", "not", "no", "if", "of", "in", "on", "at",
-        "to", "for", "with", "by", "from", "about", "into", "through",
-        "so", "than", "too", "very", "can", "will", "just",
-    })
+    _STOP_WORDS = frozenset(
+        {
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "do",
+            "does",
+            "did",
+            "have",
+            "has",
+            "had",
+            "i",
+            "me",
+            "my",
+            "we",
+            "you",
+            "your",
+            "he",
+            "she",
+            "it",
+            "they",
+            "them",
+            "this",
+            "that",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "how",
+            "when",
+            "where",
+            "why",
+            "and",
+            "or",
+            "but",
+            "not",
+            "no",
+            "if",
+            "of",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "by",
+            "from",
+            "about",
+            "into",
+            "through",
+            "so",
+            "than",
+            "too",
+            "very",
+            "can",
+            "will",
+            "just",
+        }
+    )
 
     @classmethod
     def _sanitize_fts5_query(cls, q: str) -> str:
@@ -85,26 +141,26 @@ class SearchIndex:
         tokens = q.split()
         escaped = []
         for token in tokens:
-            clean = token.replace('"', '')
+            clean = token.replace('"', "")
             if clean:
                 escaped.append(f'"{clean}"')
 
         # For short queries (<=3 terms), use AND (implicit) for precision
         if len(escaped) <= 3:
-            return ' '.join(escaped)
+            return " ".join(escaped)
 
         # For longer natural-language queries, drop stop words and use OR
         content_tokens = []
         for token in tokens:
-            clean = token.replace('"', '').rstrip('?!.,;:')
+            clean = token.replace('"', "").rstrip("?!.,;:")
             if clean and clean.lower() not in cls._STOP_WORDS:
                 content_tokens.append(f'"{clean}"')
 
         if not content_tokens:
             # All stop words — fall back to original escaped tokens with AND
-            return ' '.join(escaped)
+            return " ".join(escaped)
 
-        return ' OR '.join(content_tokens)
+        return " OR ".join(content_tokens)
 
     def query(
         self,
@@ -145,17 +201,19 @@ class SearchIndex:
 
             metadata = json.loads(row["metadata"]) if row["metadata"] else {}
 
-            results.append(SearchResult(
-                content=row["content"],
-                artifact_id=row["artifact_id"],
-                layer_name=row["layer_name"],
-                layer_level=int(row["layer_level"]),
-                score=abs(row["rank"]),
-                provenance_chain=chain,
-                metadata=metadata,
-                search_mode="keyword",
-                keyword_score=abs(row["rank"]),
-            ))
+            results.append(
+                SearchResult(
+                    content=row["content"],
+                    artifact_id=row["artifact_id"],
+                    layer_name=row["layer_name"],
+                    layer_level=int(row["layer_level"]),
+                    score=abs(row["rank"]),
+                    provenance_chain=chain,
+                    metadata=metadata,
+                    search_mode="keyword",
+                    keyword_score=abs(row["rank"]),
+                )
+            )
 
         return results
 
@@ -304,26 +362,21 @@ class SearchIndexProjection(BaseProjection):
 
         progress_cb = None
         if synix_logger:
+
             def progress_cb(completed: int, total: int) -> None:
                 synix_logger.embedding_progress(completed, total)
 
         try:
             provider.embed_batch(texts, progress_callback=progress_cb)
             # Compute cached vs generated counts
-            cached_count = sum(
-                1 for t in texts
-                if provider._load_embedding(provider.content_hash(t)) is not None
-            )
+            cached_count = sum(1 for t in texts if provider._load_embedding(provider.content_hash(t)) is not None)
             logger.info("Generated embeddings for %d artifacts", len(artifacts))
             if synix_logger:
-                synix_logger.embedding_finish(
-                    len(texts), cached=cached_count, generated=len(texts) - cached_count
-                )
+                synix_logger.embedding_finish(len(texts), cached=cached_count, generated=len(texts) - cached_count)
         except Exception:
             # Embedding generation is best-effort; don't fail the whole build
             logger.warning(
-                "Failed to generate embeddings for %d artifacts. "
-                "Keyword search will still work.",
+                "Failed to generate embeddings for %d artifacts. Keyword search will still work.",
                 len(artifacts),
                 exc_info=True,
             )

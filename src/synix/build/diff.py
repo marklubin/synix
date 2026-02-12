@@ -43,12 +43,15 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
     # Content diff
     old_lines = old.content.splitlines(keepends=True)
     new_lines = new.content.splitlines(keepends=True)
-    content_diff = "".join(difflib.unified_diff(
-        old_lines, new_lines,
-        fromfile=f"a/{old.artifact_id}",
-        tofile=f"b/{new.artifact_id}",
-        lineterm="",
-    ))
+    content_diff = "".join(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"a/{old.artifact_id}",
+            tofile=f"b/{new.artifact_id}",
+            lineterm="",
+        )
+    )
 
     # Metadata diff
     metadata_diff = {}
@@ -59,9 +62,9 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
         if old_val != new_val:
             metadata_diff[key] = {"old": old_val, "new": new_val}
 
-    has_changes = bool(content_diff or metadata_diff
-                       or old.content_hash != new.content_hash
-                       or old.prompt_id != new.prompt_id)
+    has_changes = bool(
+        content_diff or metadata_diff or old.content_hash != new.content_hash or old.prompt_id != new.prompt_id
+    )
 
     return ArtifactDiff(
         artifact_id=old.artifact_id,
@@ -75,8 +78,7 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
     )
 
 
-def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path,
-                layer: str | None = None) -> DiffResult:
+def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path, layer: str | None = None) -> DiffResult:
     """Compare artifacts between two build directories."""
     old_store = ArtifactStore(old_build_dir)
     new_store = ArtifactStore(new_build_dir)
@@ -86,10 +88,8 @@ def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path,
 
     # Filter by layer if specified
     if layer:
-        old_ids = {aid for aid in old_ids
-                   if old_store._manifest[aid].get("layer") == layer}
-        new_ids = {aid for aid in new_ids
-                   if new_store._manifest[aid].get("layer") == layer}
+        old_ids = {aid for aid in old_ids if old_store._manifest[aid].get("layer") == layer}
+        new_ids = {aid for aid in new_ids if new_store._manifest[aid].get("layer") == layer}
 
     result = DiffResult()
     result.added = sorted(new_ids - old_ids)
@@ -107,8 +107,9 @@ def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path,
     return result
 
 
-def diff_artifact_by_id(build_dir: str | Path, artifact_id: str,
-                        previous_build_dir: str | Path | None = None) -> ArtifactDiff | None:
+def diff_artifact_by_id(
+    build_dir: str | Path, artifact_id: str, previous_build_dir: str | Path | None = None
+) -> ArtifactDiff | None:
     """Diff a specific artifact against its previous version.
 
     If previous_build_dir is provided, compares across builds.
@@ -139,6 +140,7 @@ def diff_artifact_by_id(build_dir: str | Path, artifact_id: str,
     # Load the previous version
     data = json.loads(version_files[0].read_text())
     from datetime import datetime
+
     old_art = Artifact(
         artifact_id=data["artifact_id"],
         artifact_type=data["artifact_type"],

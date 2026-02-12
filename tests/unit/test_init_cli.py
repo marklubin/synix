@@ -19,11 +19,14 @@ def runner():
 # Unit tests — CLI behaviour
 # ---------------------------------------------------------------------------
 
+
 def test_init_help(runner):
     """synix init --help succeeds."""
     result = runner.invoke(main, ["init", "--help"])
     assert result.exit_code == 0
     assert "PROJECT_NAME" in result.output
+    assert "--template" in result.output
+    assert "--list" in result.output
 
 
 def test_init_creates_project(runner, tmp_path, monkeypatch):
@@ -154,6 +157,7 @@ def test_init_output_message(runner, tmp_path, monkeypatch):
 # Integration test — init + build + validate + search (mocked LLM)
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_response(text):
     """Create a mock LLM response with given text."""
     resp = MagicMock()
@@ -216,28 +220,44 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
         return resp
 
     with patch("synix.build.llm_client.LLMClient.complete", side_effect=mock_complete):
-        result = runner.invoke(main, [
-            "build", pipeline_path,
-            "--source-dir", str(project_dir / "sources"),
-            "--build-dir", str(project_dir / "build"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "build",
+                pipeline_path,
+                "--source-dir",
+                str(project_dir / "sources"),
+                "--build-dir",
+                str(project_dir / "build"),
+            ],
+        )
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
     # Verify all 5 LLM calls were made (3 work_style + 1 dynamics + 1 report)
     assert call_count == 5
 
     # 3. Validate — should pass (mock responses are under 5000 chars)
-    result = runner.invoke(main, [
-        "validate", pipeline_path,
-        "--build-dir", str(project_dir / "build"),
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "validate",
+            pipeline_path,
+            "--build-dir",
+            str(project_dir / "build"),
+        ],
+    )
     assert result.exit_code == 0, f"Validate failed: {result.output}"
 
     # 4. Search — should find hiking (from bios and work_style artifacts)
-    result = runner.invoke(main, [
-        "search", "hiking",
-        "--build-dir", str(project_dir / "build"),
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "hiking",
+            "--build-dir",
+            str(project_dir / "build"),
+        ],
+    )
     assert result.exit_code == 0, f"Search failed: {result.output}"
     assert "hiking" in result.output.lower()
 
@@ -266,17 +286,28 @@ def test_init_validate_fails_on_long_content(runner, tmp_path, monkeypatch):
         return long_resp
 
     with patch("synix.build.llm_client.LLMClient.complete", side_effect=mock_complete):
-        result = runner.invoke(main, [
-            "build", pipeline_path,
-            "--source-dir", str(project_dir / "sources"),
-            "--build-dir", str(project_dir / "build"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "build",
+                pipeline_path,
+                "--source-dir",
+                str(project_dir / "sources"),
+                "--build-dir",
+                str(project_dir / "build"),
+            ],
+        )
         assert result.exit_code == 0
 
     # Validate should fail on the oversized final_report
-    result = runner.invoke(main, [
-        "validate", pipeline_path,
-        "--build-dir", str(project_dir / "build"),
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "validate",
+            pipeline_path,
+            "--build-dir",
+            str(project_dir / "build"),
+        ],
+    )
     assert result.exit_code != 0
     assert "max_length" in result.output.lower() or "6000" in result.output

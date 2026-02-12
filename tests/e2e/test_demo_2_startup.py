@@ -50,8 +50,8 @@ def financial_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo2-financial")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -64,7 +64,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "monthly", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -77,8 +77,8 @@ def financial_pipeline_v2_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("demo2-financial-v2")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -93,7 +93,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "topics", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -161,15 +161,17 @@ class TestDT2FreshBuild:
 
     def test_plan_shows_all_layers_as_new(self, runner, workspace, financial_pipeline_file):
         """synix plan on a fresh workspace shows all layers need building."""
-        result = runner.invoke(main, [
-            "plan", str(financial_pipeline_file),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "plan",
+                str(financial_pipeline_file),
+            ],
+        )
         assert result.exit_code == 0, f"Plan failed: {result.output}"
         assert "Estimated:" in result.output
 
-    def test_fresh_build_produces_correct_artifact_counts(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_fresh_build_produces_correct_artifact_counts(self, runner, workspace, financial_pipeline_file):
         """First build produces: 50 transcripts, 50 episodes, N monthly, 1 core."""
         result = runner.invoke(main, ["build", str(financial_pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
@@ -192,33 +194,26 @@ class TestDT2FreshBuild:
         # Single core memory
         assert layers.get("core", 0) == 1
 
-    def test_verify_passes_after_fresh_build(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_verify_passes_after_fresh_build(self, runner, workspace, financial_pipeline_file):
         """synix verify passes on a clean build."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
         from synix.build.verify import verify_build
+
         result = verify_build(str(workspace["build_dir"]))
         assert result.passed, f"Verify failed: {result.summary}. Details: {[c.message for c in result.failed_checks]}"
 
-    def test_search_index_populated_after_build(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_search_index_populated_after_build(self, runner, workspace, financial_pipeline_file):
         """Search returns results for financial content."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
         search_db = workspace["build_dir"] / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, [
-            "search", "investment", "--build-dir", str(workspace["build_dir"])
-        ])
+        result = runner.invoke(main, ["search", "investment", "--build-dir", str(workspace["build_dir"])])
         assert result.exit_code == 0
 
-    def test_context_doc_created(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_context_doc_created(self, runner, workspace, financial_pipeline_file):
         """Context doc contains the core memory synthesis."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
@@ -227,9 +222,7 @@ class TestDT2FreshBuild:
         content = context_doc.read_text()
         assert len(content) > 0
 
-    def test_all_derived_artifacts_have_provenance(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_all_derived_artifacts_have_provenance(self, runner, workspace, financial_pipeline_file):
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
@@ -238,10 +231,7 @@ class TestDT2FreshBuild:
         provenance = json.loads(provenance_path.read_text())
 
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {
-            aid for aid, info in manifest.items()
-            if info.get("layer") != "transcripts"
-        }
+        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
         missing = [aid for aid in derived if aid not in provenance]
         assert not missing, f"Missing provenance for: {missing}"
 
@@ -255,8 +245,7 @@ class TestDT2ConfigChange:
     """DT-2.2: Config change preserves episodes, rebuilds upper layers."""
 
     def test_config_change_caches_transcripts_and_episodes(
-        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file,
-        mock_anthropic
+        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file, mock_anthropic
     ):
         """After monthly build, topical rebuild reuses transcripts+episodes."""
         # First build: monthly
@@ -292,6 +281,7 @@ class TestDT2ConfigChange:
         runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
 
         from synix.build.verify import verify_build
+
         result = verify_build(str(workspace["build_dir"]))
         assert result.passed, f"Verify failed: {result.summary}"
 
@@ -318,12 +308,8 @@ class TestDT2ParallelPaths:
         assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
 
         manifest_a = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_a = {
-            aid for aid, info in manifest_a.items() if info["layer"] == "transcripts"
-        }
-        episode_ids_a = {
-            aid for aid, info in manifest_a.items() if info["layer"] == "episodes"
-        }
+        transcript_ids_a = {aid for aid, info in manifest_a.items() if info["layer"] == "transcripts"}
+        episode_ids_a = {aid for aid, info in manifest_a.items() if info["layer"] == "episodes"}
         assert len(transcript_ids_a) == 50, "Path A should have 50 transcripts"
         assert len(episode_ids_a) == 50, "Path A should have 50 episodes"
 
@@ -332,12 +318,8 @@ class TestDT2ParallelPaths:
         assert result_b.exit_code == 0, f"Path B build failed: {result_b.output}"
 
         manifest_b = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_b = {
-            aid for aid, info in manifest_b.items() if info["layer"] == "transcripts"
-        }
-        episode_ids_b = {
-            aid for aid, info in manifest_b.items() if info["layer"] == "episodes"
-        }
+        transcript_ids_b = {aid for aid, info in manifest_b.items() if info["layer"] == "transcripts"}
+        episode_ids_b = {aid for aid, info in manifest_b.items() if info["layer"] == "episodes"}
 
         # All transcript and episode IDs from path A must still exist in path B's manifest
         for tid in transcript_ids_a:
@@ -353,9 +335,7 @@ class TestDT2ParallelPaths:
         assert transcript_ids_a == transcript_ids_b, "Transcript IDs should be identical across paths"
         assert episode_ids_a == episode_ids_b, "Episode IDs should be identical across paths"
 
-    def test_independent_search_indexes(
-        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file
-    ):
+    def test_independent_search_indexes(self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file):
         """Each pipeline config produces a search index reflecting its own layer structure."""
         # Build path A (monthly rollups) and search
         result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
@@ -376,9 +356,7 @@ class TestDT2ParallelPaths:
         assert "monthly" in layers_in_results_a, (
             f"Path A search results should include 'monthly' layer, got: {layers_in_results_a}"
         )
-        assert "topics" not in layers_in_results_a, (
-            "Path A search results should NOT include 'topics' layer"
-        )
+        assert "topics" not in layers_in_results_a, "Path A search results should NOT include 'topics' layer"
 
         # Build path B (topical rollups) — rebuilds search index with topics instead of monthly
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
@@ -396,13 +374,9 @@ class TestDT2ParallelPaths:
         assert "topics" in layers_in_results_b, (
             f"Path B search results should include 'topics' layer, got: {layers_in_results_b}"
         )
-        assert "monthly" not in layers_in_results_b, (
-            "Path B search results should NOT include 'monthly' layer"
-        )
+        assert "monthly" not in layers_in_results_b, "Path B search results should NOT include 'monthly' layer"
 
-    def test_cross_path_artifact_diffing(
-        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file
-    ):
+    def test_cross_path_artifact_diffing(self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file):
         """Core memory artifacts differ between monthly and topical pipeline paths."""
         from synix.build.artifacts import ArtifactStore
         from synix.build.diff import diff_artifact
@@ -445,8 +419,7 @@ class TestDT2ParallelPaths:
         assert len(context_b) > 0, "Path B context.md should have content"
 
     def test_incremental_update_both_paths(
-        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file,
-        mock_anthropic
+        self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file, mock_anthropic
     ):
         """Both pipeline paths produce the same base artifacts, different upper layers."""
         # Build path A (monthly)
@@ -491,8 +464,7 @@ class TestDT2ParallelPaths:
         # Path A made LLM calls for: episodes (50) + monthly (N) + core (1) = 50+
         # Path B should only call LLM for: topics (4) + core (1) = 5
         assert new_calls_b < calls_after_a, (
-            f"Path B should make fewer LLM calls than path A. "
-            f"Path A: {calls_after_a}, Path B new calls: {new_calls_b}"
+            f"Path B should make fewer LLM calls than path A. Path A: {calls_after_a}, Path B new calls: {new_calls_b}"
         )
 
 
@@ -504,9 +476,7 @@ class TestDT2ParallelPaths:
 class TestDT2CacheHit:
     """No-change rebuild should be fully cached."""
 
-    def test_second_run_uses_cache(
-        self, runner, workspace, financial_pipeline_file, mock_anthropic
-    ):
+    def test_second_run_uses_cache(self, runner, workspace, financial_pipeline_file, mock_anthropic):
         """Second identical run should not make new LLM calls."""
         # First build
         result1 = runner.invoke(main, ["build", str(financial_pipeline_file)])
@@ -520,18 +490,19 @@ class TestDT2CacheHit:
 
         # Second run should make 0 new LLM calls
         assert calls_after_second == calls_after_first, (
-            f"Expected no new LLM calls on cached rebuild. "
-            f"First: {calls_after_first}, Second: {calls_after_second}"
+            f"Expected no new LLM calls on cached rebuild. First: {calls_after_first}, Second: {calls_after_second}"
         )
 
-    def test_plan_shows_all_cached_on_second_run(
-        self, runner, workspace, financial_pipeline_file
-    ):
+    def test_plan_shows_all_cached_on_second_run(self, runner, workspace, financial_pipeline_file):
         """Plan after a clean build shows everything as cached."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        result = runner.invoke(main, [
-            "plan", str(financial_pipeline_file),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "plan",
+                str(financial_pipeline_file),
+            ],
+        )
         assert result.exit_code == 0
         assert "cached" in result.output.lower()

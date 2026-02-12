@@ -83,34 +83,35 @@ class EpisodeSummaryTransform(BaseTransform):
         results: list[Artifact] = []
         for transcript in inputs:
             prompt = template.replace("{transcript}", transcript.content)
-            conv_id = transcript.metadata.get(
-                "source_conversation_id", transcript.artifact_id
-            )
+            conv_id = transcript.metadata.get("source_conversation_id", transcript.artifact_id)
 
             response = _logged_complete(
-                client, config,
+                client,
+                config,
                 messages=[{"role": "user", "content": prompt}],
                 artifact_desc=f"episode ep-{conv_id}",
             )
 
             ep_metadata = {
-                    "source_conversation_id": conv_id,
-                    "date": transcript.metadata.get("date", ""),
-                    "title": transcript.metadata.get("title", ""),
+                "source_conversation_id": conv_id,
+                "date": transcript.metadata.get("date", ""),
+                "title": transcript.metadata.get("title", ""),
             }
             # Propagate customer_id from source transcript if present
             if transcript.metadata.get("customer_id"):
                 ep_metadata["customer_id"] = transcript.metadata["customer_id"]
 
-            results.append(Artifact(
-                artifact_id=f"ep-{conv_id}",
-                artifact_type="episode",
-                content=response.content,
-                input_hashes=[transcript.content_hash],
-                prompt_id=prompt_id,
-                model_config=model_config,
-                metadata=ep_metadata,
-            ))
+            results.append(
+                Artifact(
+                    artifact_id=f"ep-{conv_id}",
+                    artifact_type="episode",
+                    content=response.content,
+                    input_hashes=[transcript.content_hash],
+                    prompt_id=prompt_id,
+                    model_config=model_config,
+                    metadata=ep_metadata,
+                )
+            )
 
         return results
 
@@ -119,9 +120,7 @@ class EpisodeSummaryTransform(BaseTransform):
 class MonthlyRollupTransform(BaseTransform):
     """Group episodes by month, synthesize each month."""
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """Split episodes into per-month work units."""
         months: dict[str, list[Artifact]] = defaultdict(list)
         for ep in inputs:
@@ -129,14 +128,13 @@ class MonthlyRollupTransform(BaseTransform):
             if month and "-" in month:
                 months[month].append(ep)
             else:
-                print(f"[synix] Warning: episode '{ep.artifact_id}' has no date metadata, "
-                      f"grouping as 'undated'", file=sys.stderr)
+                print(
+                    f"[synix] Warning: episode '{ep.artifact_id}' has no date metadata, grouping as 'undated'",
+                    file=sys.stderr,
+                )
                 months["undated"].append(ep)
 
-        return [
-            (episodes, {"_month_key": month})
-            for month, episodes in sorted(months.items())
-        ]
+        return [(episodes, {"_month_key": month}) for month, episodes in sorted(months.items())]
 
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         month = config.get("_month_key")
@@ -161,26 +159,24 @@ class MonthlyRollupTransform(BaseTransform):
             f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
             for ep in inputs
         )
-        prompt = (
-            template
-            .replace("{month}", mo)
-            .replace("{year}", year)
-            .replace("{episodes}", episodes_text)
-        )
+        prompt = template.replace("{month}", mo).replace("{year}", year).replace("{episodes}", episodes_text)
         response = _logged_complete(
-            client, config,
+            client,
+            config,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc=f"monthly rollup {month}",
         )
-        return [Artifact(
-            artifact_id=f"monthly-{month}",
-            artifact_type="rollup",
-            content=response.content,
-            input_hashes=[ep.content_hash for ep in inputs],
-            prompt_id=prompt_id,
-            model_config=model_config,
-            metadata={"month": month, "episode_count": len(inputs)},
-        )]
+        return [
+            Artifact(
+                artifact_id=f"monthly-{month}",
+                artifact_type="rollup",
+                content=response.content,
+                input_hashes=[ep.content_hash for ep in inputs],
+                prompt_id=prompt_id,
+                model_config=model_config,
+                metadata={"month": month, "episode_count": len(inputs)},
+            )
+        ]
 
 
 @register_transform("topical_rollup")
@@ -192,9 +188,7 @@ class TopicalRollupTransform(BaseTransform):
         topics = sorted(config.get("topics", []))
         return hashlib.sha256(",".join(topics).encode()).hexdigest()[:8]
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """Split into per-topic work units.
 
         Queries the search index in the main thread (thread-safe) to find
@@ -214,9 +208,11 @@ class TopicalRollupTransform(BaseTransform):
             if db_path.exists():
                 try:
                     idx = SearchIndex(db_path)
-                    row = idx._get_conn().execute(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'"
-                    ).fetchone()
+                    row = (
+                        idx._get_conn()
+                        .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
+                        .fetchone()
+                    )
                     if row is not None:
                         index = idx
                 except Exception:
@@ -261,35 +257,32 @@ class TopicalRollupTransform(BaseTransform):
             f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
             for ep in inputs
         )
-        prompt = (
-            template
-            .replace("{topic}", topic.replace("-", " "))
-            .replace("{episodes}", episodes_text)
-        )
+        prompt = template.replace("{topic}", topic.replace("-", " ")).replace("{episodes}", episodes_text)
         slug = topic.lower().replace(" ", "-")
         response = _logged_complete(
-            client, config,
+            client,
+            config,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc=f"topical rollup topic-{slug}",
         )
-        return [Artifact(
-            artifact_id=f"topic-{slug}",
-            artifact_type="rollup",
-            content=response.content,
-            input_hashes=[ep.content_hash for ep in inputs],
-            prompt_id=prompt_id,
-            model_config=model_config,
-            metadata={"topic": topic, "episode_count": len(inputs)},
-        )]
+        return [
+            Artifact(
+                artifact_id=f"topic-{slug}",
+                artifact_type="rollup",
+                content=response.content,
+                input_hashes=[ep.content_hash for ep in inputs],
+                prompt_id=prompt_id,
+                model_config=model_config,
+                metadata={"topic": topic, "episode_count": len(inputs)},
+            )
+        ]
 
 
 @register_transform("core_synthesis")
 class CoreSynthesisTransform(BaseTransform):
     """All rollups → single core memory document."""
 
-    def split(
-        self, inputs: list[Artifact], config: dict
-    ) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """N:1 — all inputs in a single unit (no parallelism)."""
         return [(inputs, {})]
 
@@ -309,28 +302,26 @@ class CoreSynthesisTransform(BaseTransform):
         max_tokens = context_budget if context_budget else model_config.get("max_tokens", 2048)
 
         rollups_text = "\n\n---\n\n".join(
-            f"### {r.metadata.get('month', r.metadata.get('topic', r.artifact_id))}\n{r.content}"
-            for r in inputs
+            f"### {r.metadata.get('month', r.metadata.get('topic', r.artifact_id))}\n{r.content}" for r in inputs
         )
-        prompt = (
-            template
-            .replace("{context_budget}", str(context_budget))
-            .replace("{rollups}", rollups_text)
-        )
+        prompt = template.replace("{context_budget}", str(context_budget)).replace("{rollups}", rollups_text)
 
         response = _logged_complete(
-            client, config,
+            client,
+            config,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc="core memory synthesis",
             max_tokens=max_tokens,
         )
 
-        return [Artifact(
-            artifact_id="core-memory",
-            artifact_type="core_memory",
-            content=response.content,
-            input_hashes=[r.content_hash for r in inputs],
-            prompt_id=prompt_id,
-            model_config=model_config,
-            metadata={"context_budget": context_budget, "input_count": len(inputs)},
-        )]
+        return [
+            Artifact(
+                artifact_id="core-memory",
+                artifact_type="core_memory",
+                content=response.content,
+                input_hashes=[r.content_hash for r in inputs],
+                prompt_id=prompt_id,
+                model_config=model_config,
+                metadata={"context_budget": context_budget, "input_count": len(inputs)},
+            )
+        ]

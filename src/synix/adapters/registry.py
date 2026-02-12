@@ -28,12 +28,14 @@ def register_adapter(extensions: list[str]):
         def parse_text(filepath: Path) -> list[Artifact]:
             ...
     """
+
     def decorator(fn: Callable[[Path], list[Artifact]]):
         for ext in extensions:
             normalized = ext if ext.startswith(".") else f".{ext}"
             _ADAPTERS[normalized] = fn
             _ALL_EXTENSIONS.add(normalized)
         return fn
+
     return decorator
 
 

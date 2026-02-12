@@ -109,30 +109,42 @@ class TestNeedsRebuild:
         # Level 1 artifact (episode)
         store.save_artifact(
             Artifact(
-                artifact_id="ep-001", artifact_type="episode", content="episode v1",
-                input_hashes=["sha256:transcript1"], prompt_id="ep_v1",
+                artifact_id="ep-001",
+                artifact_type="episode",
+                content="episode v1",
+                input_hashes=["sha256:transcript1"],
+                prompt_id="ep_v1",
             ),
-            layer_name="episodes", layer_level=1,
+            layer_name="episodes",
+            layer_level=1,
         )
         ep_hash = store.get_content_hash("ep-001")
 
         # Level 2 artifact (monthly) depends on episode hash
         store.save_artifact(
             Artifact(
-                artifact_id="monthly-2025-01", artifact_type="rollup", content="monthly v1",
-                input_hashes=[ep_hash], prompt_id="monthly_v1",
+                artifact_id="monthly-2025-01",
+                artifact_type="rollup",
+                content="monthly v1",
+                input_hashes=[ep_hash],
+                prompt_id="monthly_v1",
             ),
-            layer_name="monthly", layer_level=2,
+            layer_name="monthly",
+            layer_level=2,
         )
         monthly_hash = store.get_content_hash("monthly-2025-01")
 
         # Level 3 artifact (core) depends on monthly hash
         store.save_artifact(
             Artifact(
-                artifact_id="core-memory", artifact_type="core_memory", content="core v1",
-                input_hashes=[monthly_hash], prompt_id="core_v1",
+                artifact_id="core-memory",
+                artifact_type="core_memory",
+                content="core v1",
+                input_hashes=[monthly_hash],
+                prompt_id="core_v1",
             ),
-            layer_name="core", layer_level=3,
+            layer_name="core",
+            layer_level=3,
         )
 
         # If episode rebuilds with new content, its hash changes

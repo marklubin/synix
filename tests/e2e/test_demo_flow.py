@@ -49,8 +49,8 @@ def pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("test-monthly")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -63,7 +63,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "monthly", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -76,8 +76,8 @@ def topical_pipeline_file(workspace):
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("test-topical")
-pipeline.source_dir = "{workspace['source_dir']}"
-pipeline.build_dir = "{workspace['build_dir']}"
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
@@ -92,7 +92,7 @@ pipeline.add_projection(Projection(name="memory-index", projection_type="search_
     {{"layer": "topics", "search": ["fulltext"]}},
     {{"layer": "core", "search": ["fulltext"]}},
 ]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace['build_dir'] / 'context.md'}"}}))
+pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
 """)
     return path
 
@@ -155,15 +155,15 @@ def _mock_response(text: str):
 class TestDemoFlow:
     """The exact demo recording sequence, automated."""
 
-    def test_full_demo_sequence(
-        self, runner, workspace, pipeline_file, topical_pipeline_file, mock_anthropic
-    ):
+    def test_full_demo_sequence(self, runner, workspace, pipeline_file, topical_pipeline_file, mock_anthropic):
         """Run the entire demo: run → search → run (cached) → config change → run → search."""
         build_dir = str(workspace["build_dir"])
 
         # ---- Step 1: First run — full build ----
         result1 = runner.invoke(main, ["run", str(pipeline_file)])
-        assert result1.exit_code == 0, f"Run 1 failed: {result1.output}\n{result1.stderr if hasattr(result1, 'stderr') else ''}"
+        assert result1.exit_code == 0, (
+            f"Run 1 failed: {result1.output}\n{result1.stderr if hasattr(result1, 'stderr') else ''}"
+        )
         assert "Build Summary" in result1.output
 
         # Verify artifacts were built
@@ -237,9 +237,7 @@ class TestDemoFlow:
         assert search_db.exists(), "Search DB should exist after run"
 
         # Query should return results
-        result = runner.invoke(
-            main, ["search", "programming", "--build-dir", str(workspace["build_dir"])]
-        )
+        result = runner.invoke(main, ["search", "programming", "--build-dir", str(workspace["build_dir"])])
         assert result.exit_code == 0
 
     def test_context_doc_created(self, runner, workspace, pipeline_file):
@@ -263,10 +261,7 @@ class TestDemoFlow:
 
         # Every episode, monthly, and core artifact should have provenance
         manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {
-            aid for aid, info in manifest.items()
-            if info.get("layer") != "transcripts"
-        }
+        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
         for aid in derived:
             assert aid in provenance, f"Missing provenance for {aid}"
 
@@ -274,9 +269,7 @@ class TestDemoFlow:
         """Lineage command should show provenance tree."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        result = runner.invoke(
-            main, ["lineage", "core-memory", "--build-dir", str(workspace["build_dir"])]
-        )
+        result = runner.invoke(main, ["lineage", "core-memory", "--build-dir", str(workspace["build_dir"])])
         assert result.exit_code == 0
         assert "core-memory" in result.output
 
@@ -290,12 +283,8 @@ class TestDemoFlow:
 
         # Capture manifest after first run
         manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids = {
-            aid for aid, info in manifest1.items() if info["layer"] == "transcripts"
-        }
-        episode_ids = {
-            aid for aid, info in manifest1.items() if info["layer"] == "episodes"
-        }
+        transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
+        episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
 
         # Second run with topical pipeline
         result2 = runner.invoke(main, ["run", str(topical_pipeline_file)])

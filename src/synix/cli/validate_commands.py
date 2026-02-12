@@ -42,10 +42,7 @@ def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
 
     build_path = Path(pipeline.build_dir)
     if not build_path.exists():
-        console.print(
-            f"[red]Build directory not found:[/red] {build_path}\n"
-            "Run [bold]synix build[/bold] first."
-        )
+        console.print(f"[red]Build directory not found:[/red] {build_path}\nRun [bold]synix build[/bold] first.")
         sys.exit(1)
 
     _run_validate_mode(pipeline, build_path, output_json)
@@ -74,13 +71,8 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
         artifacts = _gather_artifacts(store, decl.config)
 
         if not output_json:
-            label = (
-                f"[bold]{decl.name}[/bold] "
-                f"[dim]({len(artifacts)} artifact(s))[/dim]"
-            )
-            spinner_msg = (
-                f"Running [bold]{decl.name}[/bold] on {len(artifacts)} artifact(s)..."
-            )
+            label = f"[bold]{decl.name}[/bold] [dim]({len(artifacts)} artifact(s))[/dim]"
+            spinner_msg = f"Running [bold]{decl.name}[/bold] on {len(artifacts)} artifact(s)..."
 
         start = time.monotonic()
 
@@ -109,9 +101,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
                 status = f"[yellow]{warnings} warning(s)[/yellow]"
             else:
                 status = "[green]passed[/green]"
-            console.print(
-                f"  {label}  {status}  [dim]{elapsed:.1f}s[/dim]"
-            )
+            console.print(f"  {label}  {status}  [dim]{elapsed:.1f}s[/dim]")
 
     return result
 
@@ -126,13 +116,15 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
     provenance = ProvenanceTracker(build_path)
 
     if not output_json:
-        console.print(Panel(
-            f"[bold]Pipeline:[/bold] {pipeline.name}\n"
-            f"[bold]Build:[/bold] {build_path}\n"
-            f"[bold]Validators:[/bold] {len(pipeline.validators)}",
-            title="[bold cyan]Synix Validate[/bold cyan]",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel(
+                f"[bold]Pipeline:[/bold] {pipeline.name}\n"
+                f"[bold]Build:[/bold] {build_path}\n"
+                f"[bold]Validators:[/bold] {len(pipeline.validators)}",
+                title="[bold cyan]Synix Validate[/bold cyan]",
+                border_style="cyan",
+            )
+        )
 
     if not pipeline.validators:
         if not output_json:
@@ -232,16 +224,18 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
             panel_content = body
 
         console.print()
-        console.print(Panel(
-            panel_content,
-            title=(
-                f"[red bold]ERROR[/red bold]"
-                f" [dim]|[/dim] [red]{type_label}[/red]"
-                f" [dim]|[/dim] [red]{v.artifact_id}[/red]"
-            ),
-            border_style="red",
-            padding=(0, 1),
-        ))
+        console.print(
+            Panel(
+                panel_content,
+                title=(
+                    f"[red bold]ERROR[/red bold]"
+                    f" [dim]|[/dim] [red]{type_label}[/red]"
+                    f" [dim]|[/dim] [red]{v.artifact_id}[/red]"
+                ),
+                border_style="red",
+                padding=(0, 1),
+            )
+        )
 
     # Warnings — compact bullet list
     if warnings:
@@ -249,20 +243,14 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         console.print("[yellow bold]Warnings[/yellow bold]")
         for v in warnings:
             type_label = v.violation_type.replace("_", " ")
-            console.print(
-                f"  [yellow]\u2022[/yellow] [dim]{type_label}[/dim]  "
-                f"{v.artifact_id}: {v.message}"
-            )
+            console.print(f"  [yellow]\u2022[/yellow] [dim]{type_label}[/dim]  {v.artifact_id}: {v.message}")
 
     error_count = sum(1 for v in result.violations if v.severity == "error")
     warn_count = sum(1 for v in result.violations if v.severity == "warning")
     console.print(
-        f"\n[bold]Total:[/bold] {len(result.violations)} violation(s) "
-        f"({error_count} errors, {warn_count} warnings)"
+        f"\n[bold]Total:[/bold] {len(result.violations)} violation(s) ({error_count} errors, {warn_count} warnings)"
     )
-    console.print(
-        f"[dim]Violations saved to {build_path / 'violations_state.json'}[/dim]"
-    )
+    console.print(f"[dim]Violations saved to {build_path / 'violations_state.json'}[/dim]")
 
     if any(v.severity == "error" for v in result.violations):
         sys.exit(1)

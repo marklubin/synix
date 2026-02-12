@@ -155,10 +155,7 @@ class TestTurnDetection:
     def test_human_ai_markers(self, tmp_path):
         """Human: and AI: markers are also detected as turns."""
         filepath = tmp_path / "chat.txt"
-        filepath.write_text(
-            "Human: What is Python used for\n\n"
-            "AI: Python is a general-purpose programming language.\n"
-        )
+        filepath.write_text("Human: What is Python used for\n\nAI: Python is a general-purpose programming language.\n")
         artifacts = parse_text(filepath)
         assert artifacts[0].metadata.get("has_turns") is True
         assert artifacts[0].metadata["message_count"] == 2
@@ -166,11 +163,7 @@ class TestTurnDetection:
     def test_system_marker_detected(self, tmp_path):
         """System: marker is also detected as a turn."""
         filepath = tmp_path / "system-chat.txt"
-        filepath.write_text(
-            "System: You are a helpful assistant.\n\n"
-            "User: Hello\n\n"
-            "Assistant: Hi there\n"
-        )
+        filepath.write_text("System: You are a helpful assistant.\n\nUser: Hello\n\nAssistant: Hi there\n")
         artifacts = parse_text(filepath)
         assert artifacts[0].metadata["message_count"] == 3
 
@@ -218,18 +211,14 @@ class TestEdgeCases:
     def test_frontmatter_with_quotes(self, tmp_path):
         """Frontmatter values with quotes are parsed correctly."""
         filepath = tmp_path / "quoted.md"
-        filepath.write_text(
-            '---\ntitle: "My Quoted Title"\ndate: 2025-03-01\n---\n\nSome content here.\n'
-        )
+        filepath.write_text('---\ntitle: "My Quoted Title"\ndate: 2025-03-01\n---\n\nSome content here.\n')
         artifacts = parse_text(filepath)
         assert artifacts[0].metadata["title"] == "My Quoted Title"
 
     def test_tags_as_comma_string(self, tmp_path):
         """Tags specified as comma-separated string are parsed as list."""
         filepath = tmp_path / "comma-tags.md"
-        filepath.write_text(
-            "---\ntitle: Test\ntags: work, personal, ideas\n---\n\nContent.\n"
-        )
+        filepath.write_text("---\ntitle: Test\ntags: work, personal, ideas\n---\n\nContent.\n")
         artifacts = parse_text(filepath)
         tags = artifacts[0].metadata["tags"]
         assert isinstance(tags, list)

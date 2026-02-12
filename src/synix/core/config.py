@@ -45,7 +45,7 @@ class LLMConfig:
     temperature: float = 0.3
     max_tokens: int = 1024
     base_url: str | None = None  # For OpenAI-compatible APIs (Ollama, vLLM, DeepSeek)
-    api_key: str | None = None   # Override; defaults to env var
+    api_key: str | None = None  # Override; defaults to env var
 
     @classmethod
     def from_dict(cls, data: dict) -> LLMConfig:

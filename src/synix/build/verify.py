@@ -93,11 +93,13 @@ def verify_build(build_dir: str | Path, checks: list[str] | None = None) -> Veri
             check_result = all_checks[check_name](build_path)
             result.checks.append(check_result)
         else:
-            result.checks.append(VerifyCheck(
-                name=check_name,
-                passed=False,
-                message=f"Unknown check: {check_name}",
-            ))
+            result.checks.append(
+                VerifyCheck(
+                    name=check_name,
+                    passed=False,
+                    message=f"Unknown check: {check_name}",
+                )
+            )
 
     return result
 
@@ -280,9 +282,7 @@ def _check_search_index(build_path: Path) -> VerifyCheck:
     try:
         conn = sqlite3.connect(str(db_path))
         # Check table exists
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         table_names = [t[0] for t in tables]
 
         if "search_index" not in table_names:
@@ -326,9 +326,7 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
             continue
         expected_hash = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
         if artifact.content_hash != expected_hash:
-            mismatches.append(
-                f"{aid}: stored={artifact.content_hash[:20]}... computed={expected_hash[:20]}..."
-            )
+            mismatches.append(f"{aid}: stored={artifact.content_hash[:20]}... computed={expected_hash[:20]}...")
 
     if mismatches:
         return VerifyCheck(
@@ -407,8 +405,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
 
     # Find all merge artifacts
     merge_artifact_ids = [
-        aid for aid, entry in manifest.items()
-        if aid.startswith("merge-") or entry.get("artifact_type") == "merge"
+        aid for aid, entry in manifest.items() if aid.startswith("merge-") or entry.get("artifact_type") == "merge"
     ]
 
     if not merge_artifact_ids:
@@ -454,8 +451,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
         if len(customer_ids) > 1:
             sorted_customers = sorted(customer_ids)
             violations.append(
-                f"{merge_id}: contains records from {len(customer_ids)} customers "
-                f"({', '.join(sorted_customers)})"
+                f"{merge_id}: contains records from {len(customer_ids)} customers ({', '.join(sorted_customers)})"
             )
             affected_customers.update(customer_ids)
 

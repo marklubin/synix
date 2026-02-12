@@ -38,28 +38,48 @@ def pipeline_obj(build_dir):
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
     p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                      transform="episode_summary", grouping="by_conversation"))
-    p.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
-                      transform="monthly_rollup", grouping="by_month"))
-    p.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
-                      transform="core_synthesis", grouping="single", context_budget=10000))
+    p.add_layer(
+        Layer(
+            name="episodes",
+            level=1,
+            depends_on=["transcripts"],
+            transform="episode_summary",
+            grouping="by_conversation",
+        )
+    )
+    p.add_layer(
+        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
+    )
+    p.add_layer(
+        Layer(
+            name="core",
+            level=3,
+            depends_on=["monthly"],
+            transform="core_synthesis",
+            grouping="single",
+            context_budget=10000,
+        )
+    )
 
-    p.add_projection(Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext"]},
-            {"layer": "monthly", "search": ["fulltext"]},
-            {"layer": "core", "search": ["fulltext"]},
-        ],
-    ))
-    p.add_projection(Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": str(build_dir / "context.md")},
-    ))
+    p.add_projection(
+        Projection(
+            name="memory-index",
+            projection_type="search_index",
+            sources=[
+                {"layer": "episodes", "search": ["fulltext"]},
+                {"layer": "monthly", "search": ["fulltext"]},
+                {"layer": "core", "search": ["fulltext"]},
+            ],
+        )
+    )
+    p.add_projection(
+        Projection(
+            name="context-doc",
+            projection_type="flat_file",
+            sources=[{"layer": "core"}],
+            config={"output_path": str(build_dir / "context.md")},
+        )
+    )
 
     return p
 

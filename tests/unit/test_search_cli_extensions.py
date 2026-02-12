@@ -131,11 +131,17 @@ def test_customer_flag_exists(runner):
 
 def test_step_filters_results(runner, populated_build_dir):
     """--step filters results to the specified layer."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--step", "episodes",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--step",
+            "episodes",
+        ],
+    )
     assert result.exit_code == 0
     # Should have episode results but not monthly
     assert "episodes" in result.output
@@ -144,12 +150,19 @@ def test_step_filters_results(runner, populated_build_dir):
 
 def test_step_and_layers_combine(runner, populated_build_dir):
     """--step and --layers combine their filter sets."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--layers", "episodes",
-        "--step", "monthly",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--layers",
+            "episodes",
+            "--step",
+            "monthly",
+        ],
+    )
     assert result.exit_code == 0
     # Should include both episode and monthly results
     assert "episodes" in result.output or "monthly" in result.output
@@ -157,22 +170,32 @@ def test_step_and_layers_combine(runner, populated_build_dir):
 
 def test_trace_shows_provenance(runner, populated_build_dir):
     """With --trace, output contains provenance tree."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--trace",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--trace",
+        ],
+    )
     assert result.exit_code == 0
     assert "Provenance" in result.output
 
 
 def test_trace_shows_tree_characters(runner, populated_build_dir):
     """With --trace, output contains tree-drawing characters."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--trace",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--trace",
+        ],
+    )
     assert result.exit_code == 0
     # Rich Tree uses box-drawing characters; look for any parent artifact IDs
     # that would appear in the provenance tree
@@ -181,11 +204,17 @@ def test_trace_shows_tree_characters(runner, populated_build_dir):
 
 def test_customer_filters_results(runner, populated_build_dir):
     """--customer filters results by customer_id metadata."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--customer", "acme-corp",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--customer",
+            "acme-corp",
+        ],
+    )
     assert result.exit_code == 0
     # Should have results for acme-corp
     assert "ep-conv001" in result.output or "monthly-2024-03" in result.output
@@ -200,34 +229,53 @@ def test_customer_filters_results(runner, populated_build_dir):
 
 def test_customer_no_match(runner, populated_build_dir):
     """--customer with no matching results shows appropriate message."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--customer", "nonexistent-customer",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--customer",
+            "nonexistent-customer",
+        ],
+    )
     assert result.exit_code == 0
     assert "No results for customer" in result.output
 
 
 def test_step_no_match(runner, populated_build_dir):
     """--step with a layer that has no matches returns no results."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--step", "core",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--step",
+            "core",
+        ],
+    )
     assert result.exit_code == 0
     assert "No results for" in result.output
 
 
 def test_customer_and_step_combined(runner, populated_build_dir):
     """--customer and --step can be combined."""
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(populated_build_dir),
-        "--step", "episodes",
-        "--customer", "acme-corp",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(populated_build_dir),
+            "--step",
+            "episodes",
+            "--customer",
+            "acme-corp",
+        ],
+    )
     assert result.exit_code == 0
     # Only acme-corp episodes should show
     assert "ep-conv002" not in result.output
@@ -251,11 +299,16 @@ def test_trace_without_provenance_data(runner, tmp_path):
     index.insert(artifact, "episodes", 1)
     index.close()
 
-    result = runner.invoke(main, [
-        "search", "machine learning",
-        "--build-dir", str(build_dir),
-        "--trace",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search",
+            "machine learning",
+            "--build-dir",
+            str(build_dir),
+            "--trace",
+        ],
+    )
     assert result.exit_code == 0
     # Should still show results, just without provenance tree
     assert "orphan-001" in result.output

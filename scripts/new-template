@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Usage: ./scripts/new-template <name>
+# Creates templates/<name>/ with the standard template structure.
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <name>"
+    echo "Example: $0 04-my-new-template"
+    exit 1
+fi
+
+name=$1
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+dir="$REPO_ROOT/templates/$name"
+
+if [ -d "$dir" ]; then
+    echo "Error: $dir already exists"
+    exit 1
+fi
+
+mkdir -p "$dir"/sources
+
+# Copy shared .env.example
+cp "$REPO_ROOT/src/synix/templates/.env.example" "$dir/"
+
+# Create skeleton pipeline.py
+cat > "$dir/pipeline.py" << 'PIPELINE'
+from synix import Layer, Pipeline, Projection
+
+pipeline = Pipeline("my-pipeline")
+pipeline.source_dir = "./sources"
+pipeline.build_dir = "./build"
+pipeline.llm_config = {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "temperature": 0.3,
+    "max_tokens": 1024,
+}
+
+# Add layers here:
+# pipeline.add_layer(Layer(name="...", level=0, transform="parse"))
+
+# Add projections here:
+# pipeline.add_projection(Projection(
+#     name="search",
+#     projection_type="search_index",
+#     sources=[{"layer": "...", "search": ["fulltext"]}],
+# ))
+PIPELINE
+
+# Create skeleton README.md
+cat > "$dir/README.md" << README
+# $name
+
+TODO: Describe what this template demonstrates.
+
+## Sample Data
+
+TODO: Describe the input data in \`sources/\`.
+
+## Run
+
+\`\`\`bash
+cd templates/$name
+cp .env.example .env     # add your API key
+uvx synix build pipeline.py
+uvx synix search 'query'
+\`\`\`
+README
+
+echo "Created template at $dir"
+echo "Next steps:"
+echo "  1. Add source data to $dir/sources/"
+echo "  2. Edit $dir/pipeline.py"
+echo "  3. Edit $dir/README.md"

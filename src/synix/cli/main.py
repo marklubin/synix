@@ -13,10 +13,10 @@ console = Console()
 
 # Color scheme per layer level
 LAYER_COLORS = {
-    0: "dim",       # transcripts
-    1: "blue",      # episodes
-    2: "green",     # monthly/topics
-    3: "yellow",    # core
+    0: "dim",  # transcripts
+    1: "blue",  # episodes
+    2: "green",  # monthly/topics
+    3: "yellow",  # core
 }
 
 
@@ -31,7 +31,9 @@ def is_demo_mode() -> bool:
 
 
 def _resolve_pipeline_path(
-    ctx: click.Context, param: click.Parameter, value: str | None,
+    ctx: click.Context,
+    param: click.Parameter,
+    value: str | None,
 ) -> str:
     """Click callback: default to ./pipeline.py when no argument is given."""
     if value is not None:

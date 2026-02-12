@@ -24,6 +24,7 @@ from synix.core.config import EmbeddingConfig, LLMConfig
 # compute_cassette_key tests
 # ---------------------------------------------------------------------------
 
+
 class TestComputeCassetteKey:
     def test_deterministic(self):
         """Same inputs produce the same key."""
@@ -64,6 +65,7 @@ class TestComputeCassetteKey:
 # CassetteStore tests
 # ---------------------------------------------------------------------------
 
+
 class TestCassetteStore:
     def test_empty_dir_no_crash(self, tmp_path):
         store = CassetteStore(tmp_path / "cassettes")
@@ -84,12 +86,14 @@ class TestCassetteStore:
     def test_save_and_reload(self, tmp_path):
         """Save to YAML, create new store from same dir, entries persist."""
         store1 = CassetteStore(tmp_path)
-        store1.put(CassetteEntry(
-            key="key1",
-            request={"model": "test"},
-            response={"text": "response1"},
-            meta={"note": "test entry"},
-        ))
+        store1.put(
+            CassetteEntry(
+                key="key1",
+                request={"model": "test"},
+                response={"text": "response1"},
+                meta={"note": "test entry"},
+            )
+        )
         store1.save()
 
         # Reload from disk
@@ -102,10 +106,12 @@ class TestCassetteStore:
     def test_multiple_entries_roundtrip(self, tmp_path):
         store = CassetteStore(tmp_path)
         for i in range(5):
-            store.put(CassetteEntry(
-                key=f"key{i}",
-                response={"text": f"response{i}"},
-            ))
+            store.put(
+                CassetteEntry(
+                    key=f"key{i}",
+                    response={"text": f"response{i}"},
+                )
+            )
         store.save()
 
         store2 = CassetteStore(tmp_path)
@@ -118,6 +124,7 @@ class TestCassetteStore:
 # ---------------------------------------------------------------------------
 # CassetteClientWrapper tests
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_client(response_text="Mock response"):
     """Create a mock LLMClient that returns a fixed response."""
@@ -149,15 +156,17 @@ class TestCassetteClientWrapper:
         # Pre-populate store
         messages = [{"role": "user", "content": "Hello"}]
         key = compute_cassette_key("anthropic", "claude-test", messages, 1024, 0.3)
-        store.put(CassetteEntry(
-            key=key,
-            response={
-                "text": "Cached hello",
-                "model": "claude-test",
-                "input_tokens": 5,
-                "output_tokens": 10,
-            },
-        ))
+        store.put(
+            CassetteEntry(
+                key=key,
+                response={
+                    "text": "Cached hello",
+                    "model": "claude-test",
+                    "input_tokens": 5,
+                    "output_tokens": 10,
+                },
+            )
+        )
 
         wrapper = CassetteClientWrapper(mock_client, "replay", store)
         result = wrapper.complete(messages=messages)
@@ -229,6 +238,7 @@ class TestCassetteClientWrapper:
 # maybe_wrap_client tests
 # ---------------------------------------------------------------------------
 
+
 class TestMaybeWrapClient:
     def test_off_returns_original(self):
         mock_client = _make_mock_client()
@@ -269,6 +279,7 @@ class TestMaybeWrapClient:
 # Embedding cassette tests
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_embedding_provider(tmp_path):
     """Create a mock EmbeddingProvider."""
     config = EmbeddingConfig(
@@ -282,9 +293,7 @@ def _make_mock_embedding_provider(tmp_path):
     provider.embeddings_dir = tmp_path / "embeddings"
     provider.manifest_path = tmp_path / "embeddings" / "manifest.json"
     provider.content_hash.side_effect = lambda text: (
-        __import__("hashlib").sha256(
-            f"fastembed:test-model:{text}".encode()
-        ).hexdigest()
+        __import__("hashlib").sha256(f"fastembed:test-model:{text}".encode()).hexdigest()
     )
     provider.embed.side_effect = lambda text: [0.1, 0.2, 0.3]
     provider.embed_batch.side_effect = lambda texts, cb=None: [[0.1, 0.2, 0.3]] * len(texts)
@@ -350,6 +359,7 @@ class TestCassetteEmbeddingWrapper:
 # ---------------------------------------------------------------------------
 # maybe_wrap_embedding_provider tests
 # ---------------------------------------------------------------------------
+
 
 class TestMaybeWrapEmbeddingProvider:
     def test_off_returns_original(self, tmp_path):

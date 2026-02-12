@@ -50,8 +50,7 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
                 elif isinstance(raw_content, list):
                     # List of content blocks — extract text from each
                     text = " ".join(
-                        block.get("text", "") if isinstance(block, dict) else str(block)
-                        for block in raw_content
+                        block.get("text", "") if isinstance(block, dict) else str(block) for block in raw_content
                     )
                 else:
                     text = ""
@@ -88,18 +87,20 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
         if last_dt is not None:
             last_message_date = last_dt.strftime("%Y-%m-%d")
 
-        artifacts.append(Artifact(
-            artifact_id=f"t-claude-{uuid}",
-            artifact_type="transcript",
-            content=content,
-            metadata={
-                "source": "claude",
-                "source_conversation_id": uuid,
-                "title": title,
-                "date": date_str,
-                "last_message_date": last_message_date,
-                "message_count": len(chat_messages),
-            },
-        ))
+        artifacts.append(
+            Artifact(
+                artifact_id=f"t-claude-{uuid}",
+                artifact_type="transcript",
+                content=content,
+                metadata={
+                    "source": "claude",
+                    "source_conversation_id": uuid,
+                    "title": title,
+                    "date": date_str,
+                    "last_message_date": last_message_date,
+                    "message_count": len(chat_messages),
+                },
+            )
+        )
 
     return artifacts

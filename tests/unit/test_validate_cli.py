@@ -31,7 +31,7 @@ from synix.core.models import Pipeline, Layer, ValidatorDecl
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
-pipeline.source_dir = "{tmp_path / 'exports'}"
+pipeline.source_dir = "{tmp_path / "exports"}"
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
 pipeline.add_validator(ValidatorDecl(
     name="pii",
@@ -51,7 +51,7 @@ from synix.core.models import Pipeline, Layer, ValidatorDecl, FixerDecl
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
-pipeline.source_dir = "{tmp_path / 'exports'}"
+pipeline.source_dir = "{tmp_path / "exports"}"
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
 pipeline.add_validator(ValidatorDecl(
     name="pii",
@@ -97,10 +97,15 @@ class TestValidateCommand:
         assert result.exit_code != 0
 
     def test_nonexistent_build_dir_errors(self, runner, simple_pipeline, tmp_path):
-        result = runner.invoke(main, [
-            "validate", str(simple_pipeline),
-            "--build-dir", str(tmp_path / "no_such_dir"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(simple_pipeline),
+                "--build-dir",
+                str(tmp_path / "no_such_dir"),
+            ],
+        )
         assert result.exit_code != 0
         assert "not found" in result.output.lower() or "Build directory" in result.output
 
@@ -129,9 +134,14 @@ class TestValidateCommand:
 
     def test_validate_json_output(self, runner, simple_pipeline, build_dir):
         """--json produces parseable JSON."""
-        result = runner.invoke(main, [
-            "validate", str(simple_pipeline), "--json",
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(simple_pipeline),
+                "--json",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "passed" in data
@@ -152,9 +162,14 @@ class TestValidateCommand:
         )
         store.save_artifact(art, "episodes", 1)
 
-        result = runner.invoke(main, [
-            "validate", str(simple_pipeline), "--json",
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(simple_pipeline),
+                "--json",
+            ],
+        )
         data = json.loads(result.output)
         assert len(data["violations"]) >= 1
         assert "violation_id" in data["violations"][0]
@@ -192,5 +207,3 @@ class TestValidateCommand:
 
         runner.invoke(main, ["validate", str(simple_pipeline)])
         assert (build_dir / "violations.jsonl").exists()
-
-

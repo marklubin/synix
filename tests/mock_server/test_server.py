@@ -54,10 +54,14 @@ def _get(base_url: str, path: str, headers: dict | None = None, timeout: float =
 
 class TestChatCompletions:
     def test_basic_response(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/chat/completions", {
-            "model": "claude-sonnet-4-5",
-            "messages": [{"role": "user", "content": "Hello, how are you?"}],
-        })
+        status, resp = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Hello, how are you?"}],
+            },
+        )
         assert status == 200
         assert resp["object"] == "chat.completion"
         assert resp["id"].startswith("chatcmpl-")
@@ -69,42 +73,62 @@ class TestChatCompletions:
         assert resp["usage"]["total_tokens"] == resp["usage"]["prompt_tokens"] + resp["usage"]["completion_tokens"]
 
     def test_episode_summary_detection(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/chat/completions", {
-            "model": "claude-sonnet-4-5",
-            "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
-        })
+        status, resp = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
+            },
+        )
         assert status == 200
         content = resp["choices"][0]["message"]["content"]
         assert "summary" in content.lower() or "technical" in content.lower()
 
     def test_monthly_rollup_detection(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/chat/completions", {
-            "model": "claude-sonnet-4-5",
-            "messages": [{"role": "user", "content": "Create a monthly rollup overview."}],
-        })
+        status, resp = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Create a monthly rollup overview."}],
+            },
+        )
         assert status == 200
         content = resp["choices"][0]["message"]["content"]
         assert "month" in content.lower() or "themes" in content.lower()
 
     def test_core_memory_detection(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/chat/completions", {
-            "model": "claude-sonnet-4-5",
-            "messages": [{"role": "user", "content": "Create a core memory document."}],
-        })
+        status, resp = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Create a core memory document."}],
+            },
+        )
         assert status == 200
         content = resp["choices"][0]["message"]["content"]
         assert "Identity" in content or "Profile" in content
 
     def test_model_switching_default_vs_gpt4o(self, server: MockLLMServer):
         """Different models should return qualitatively different responses."""
-        _, resp_default = _post(server.base_url, "/chat/completions", {
-            "model": "claude-sonnet-4-5",
-            "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
-        })
-        _, resp_gpt4o = _post(server.base_url, "/chat/completions", {
-            "model": "gpt-4o",
-            "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
-        })
+        _, resp_default = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "claude-sonnet-4-5",
+                "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
+            },
+        )
+        _, resp_gpt4o = _post(
+            server.base_url,
+            "/chat/completions",
+            {
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "Write an episode summary of the conversation."}],
+            },
+        )
         content_default = resp_default["choices"][0]["message"]["content"]
         content_gpt4o = resp_gpt4o["choices"][0]["message"]["content"]
         # They should be different (gpt-4o uses the structured fixture set)
@@ -126,10 +150,14 @@ class TestChatCompletions:
 
 class TestEmbeddings:
     def test_single_text(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/embeddings", {
-            "model": "text-embedding-3-small",
-            "input": "Hello world",
-        })
+        status, resp = _post(
+            server.base_url,
+            "/embeddings",
+            {
+                "model": "text-embedding-3-small",
+                "input": "Hello world",
+            },
+        )
         assert status == 200
         assert resp["object"] == "list"
         assert len(resp["data"]) == 1
@@ -138,14 +166,19 @@ class TestEmbeddings:
         assert len(embedding) == 256
         # Check it's normalized (L2 norm ≈ 1.0)
         import math
+
         norm = math.sqrt(sum(x * x for x in embedding))
         assert abs(norm - 1.0) < 1e-6
 
     def test_batch_texts(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/embeddings", {
-            "model": "text-embedding-3-small",
-            "input": ["Hello world", "Goodbye world"],
-        })
+        status, resp = _post(
+            server.base_url,
+            "/embeddings",
+            {
+                "model": "text-embedding-3-small",
+                "input": ["Hello world", "Goodbye world"],
+            },
+        )
         assert status == 200
         assert len(resp["data"]) == 2
         assert resp["data"][0]["index"] == 0
@@ -161,11 +194,15 @@ class TestEmbeddings:
         assert resp1["data"][0]["embedding"] == resp2["data"][0]["embedding"]
 
     def test_custom_dimensions(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/embeddings", {
-            "model": "text-embedding-3-small",
-            "input": "test",
-            "dimensions": 128,
-        })
+        status, resp = _post(
+            server.base_url,
+            "/embeddings",
+            {
+                "model": "text-embedding-3-small",
+                "input": "test",
+                "dimensions": 128,
+            },
+        )
         assert status == 200
         assert len(resp["data"][0]["embedding"]) == 128
 
@@ -184,11 +221,15 @@ class TestEmbeddings:
 
 class TestBatchAPI:
     def test_create_batch(self, server: MockLLMServer):
-        status, resp = _post(server.base_url, "/batches", {
-            "input_file_id": "file-abc123",
-            "endpoint": "/v1/chat/completions",
-            "completion_window": "24h",
-        })
+        status, resp = _post(
+            server.base_url,
+            "/batches",
+            {
+                "input_file_id": "file-abc123",
+                "endpoint": "/v1/chat/completions",
+                "completion_window": "24h",
+            },
+        )
         assert status == 200
         assert resp["id"].startswith("batch_")
         assert resp["status"] == "completed"
@@ -196,10 +237,14 @@ class TestBatchAPI:
 
     def test_get_batch_status(self, server: MockLLMServer):
         # Create a batch first
-        _, create_resp = _post(server.base_url, "/batches", {
-            "input_file_id": "file-abc123",
-            "endpoint": "/v1/chat/completions",
-        })
+        _, create_resp = _post(
+            server.base_url,
+            "/batches",
+            {
+                "input_file_id": "file-abc123",
+                "endpoint": "/v1/chat/completions",
+            },
+        )
         batch_id = create_resp["id"]
 
         # Poll status
@@ -211,10 +256,14 @@ class TestBatchAPI:
 
     def test_get_batch_results(self, server: MockLLMServer):
         # Create batch
-        _, create_resp = _post(server.base_url, "/batches", {
-            "input_file_id": "file-abc123",
-            "endpoint": "/v1/chat/completions",
-        })
+        _, create_resp = _post(
+            server.base_url,
+            "/batches",
+            {
+                "input_file_id": "file-abc123",
+                "endpoint": "/v1/chat/completions",
+            },
+        )
         output_file_id = create_resp["output_file_id"]
 
         # Get results file
@@ -235,10 +284,14 @@ class TestBatchAPI:
     def test_full_batch_cycle(self, server: MockLLMServer):
         """Full create → poll → retrieve results cycle."""
         # Create
-        _, batch = _post(server.base_url, "/batches", {
-            "input_file_id": "file-test",
-            "endpoint": "/v1/chat/completions",
-        })
+        _, batch = _post(
+            server.base_url,
+            "/batches",
+            {
+                "input_file_id": "file-test",
+                "endpoint": "/v1/chat/completions",
+            },
+        )
         assert batch["status"] == "completed"
 
         # Poll
@@ -260,7 +313,8 @@ class TestBatchAPI:
 class TestErrorInjection:
     def test_rate_limit_429(self, server: MockLLMServer):
         status, resp = _post(
-            server.base_url, "/chat/completions",
+            server.base_url,
+            "/chat/completions",
             {"model": "test", "messages": [{"role": "user", "content": "hi"}]},
             headers={"X-Mock-Error": "429"},
         )
@@ -269,7 +323,8 @@ class TestErrorInjection:
 
     def test_server_error_500(self, server: MockLLMServer):
         status, resp = _post(
-            server.base_url, "/chat/completions",
+            server.base_url,
+            "/chat/completions",
             {"model": "test", "messages": [{"role": "user", "content": "hi"}]},
             headers={"X-Mock-Error": "500"},
         )
@@ -279,7 +334,8 @@ class TestErrorInjection:
     def test_latency_injection(self, server: MockLLMServer):
         start = time.monotonic()
         status, _ = _post(
-            server.base_url, "/chat/completions",
+            server.base_url,
+            "/chat/completions",
             {"model": "test", "messages": [{"role": "user", "content": "hi"}]},
             headers={"X-Mock-Latency-Ms": "200"},
         )
@@ -291,7 +347,8 @@ class TestErrorInjection:
         """Timeout injection should cause the request to hang (client should timeout)."""
         with pytest.raises((urllib.error.URLError, TimeoutError, OSError)):
             _post(
-                server.base_url, "/chat/completions",
+                server.base_url,
+                "/chat/completions",
                 {"model": "test", "messages": [{"role": "user", "content": "hi"}]},
                 headers={"X-Mock-Error": "timeout"},
                 timeout=0.5,  # Client timeout shorter than server's 30s hang
@@ -300,7 +357,8 @@ class TestErrorInjection:
     def test_error_injection_on_get(self, server: MockLLMServer):
         """Error injection should work on GET endpoints too."""
         status, raw = _get(
-            server.base_url, "/batches/batch_test",
+            server.base_url,
+            "/batches/batch_test",
             headers={"X-Mock-Error": "500"},
         )
         resp = json.loads(raw)
@@ -342,10 +400,14 @@ class TestHealthAndEdgeCases:
         import concurrent.futures
 
         def make_request(i):
-            return _post(server.base_url, "/chat/completions", {
-                "model": "claude-sonnet-4-5",
-                "messages": [{"role": "user", "content": f"Request {i}"}],
-            })
+            return _post(
+                server.base_url,
+                "/chat/completions",
+                {
+                    "model": "claude-sonnet-4-5",
+                    "messages": [{"role": "user", "content": f"Request {i}"}],
+                },
+            )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futures = [executor.submit(make_request, i) for i in range(10)]
