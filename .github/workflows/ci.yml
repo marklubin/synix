@@ -21,11 +21,21 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest tests/ -v
 
+  discover-examples:
+    runs-on: ubuntu-latest
+    outputs:
+      examples: ${{ steps.find.outputs.examples }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: echo "examples=$(ls -d examples/*/  | sed 's|/$||' | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+
   demo-smoke:
     runs-on: ubuntu-latest
+    needs: discover-examples
     strategy:
       matrix:
-        example: [examples/01-chatbot-export-synthesis, examples/02-tv-returns, examples/03-team-report]
+        example: ${{ fromJson(needs.discover-examples.outputs.examples) }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

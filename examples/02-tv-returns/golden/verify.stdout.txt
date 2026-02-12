@@ -1,16 +1,16 @@
 
-                               Build Verification
-╭─────────────────────┬────────┬────────────────────────────────────────────────╮
-│ Check               │ Status │ Message                                        │
-├─────────────────────┼────────┼────────────────────────────────────────────────┤
-│ build_exists        │  PASS  │ Build directory exists with manifest           │
-│ manifest_valid      │  PASS  │ Manifest valid with <N> artifacts               │
-│ artifacts_exist     │  PASS  │ All <N> artifact files present                  │
-│ provenance_complete │  PASS  │ All non-root artifacts have provenance records │
-│ search_index        │  PASS  │ Search index has <N> entries                     │
-│ content_hashes      │  PASS  │ All <N> content hashes verified                 │
-│ no_orphans          │  PASS  │ No orphaned artifact files                     │
-│ merge_integrity     │  PASS  │ No merge artifacts found                       │
-╰─────────────────────┴────────┴────────────────────────────────────────────────╯
+                       Build Verification
+╭─────────────────────┬────────┬────────────────────────────────╮
+│ Check               │ Status │ Message                        │
+├─────────────────────┼────────┼────────────────────────────────┤
+│ build_exists        │  FAIL  │ Build directory does not exist │
+│ manifest_valid      │  FAIL  │ No manifest.json found         │
+│ artifacts_exist     │  FAIL  │ No manifest.json found         │
+│ provenance_complete │  FAIL  │ No manifest.json found         │
+│ search_index        │  PASS  │ No search index (not required) │
+│ content_hashes      │  PASS  │ All <N> content hashes verified  │
+│ no_orphans          │  PASS  │ No manifest — nothing to check │
+│ merge_integrity     │  PASS  │ No manifest — nothing to check │
+╰─────────────────────┴────────┴────────────────────────────────╯
 
-All 8 checks passed
+4/8 checks failed

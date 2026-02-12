@@ -78,13 +78,18 @@ def init(project_name: str, template: str, list_templates: bool):
 
     shutil.copytree(template_dir, target)
 
+    # Copy shared .env.example from templates root
+    shared_env = _get_templates_root() / ".env.example"
+    if shared_env.exists():
+        shutil.copy2(shared_env, target / ".env.example")
+
     console.print(
         f"[green]Created project[/green] [bold]{project_name}/[/bold] "
         f"[dim](template: {template})[/dim]\n"
         f"\n"
         f"  cd {project_name}\n"
         f"  cp .env.example .env   [dim]# add your API key[/dim]\n"
-        f"  synix build\n"
-        f"  synix validate\n"
-        f"  synix search 'hiking'"
+        f"  uvx synix build\n"
+        f"  uvx synix validate\n"
+        f"  uvx synix search 'hiking'"
     )

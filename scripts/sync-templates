@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Copies user-facing files from examples/ into src/synix/templates/
 # for wheel packaging. Run before release.
+#
+# Why this exists: `synix init` copies from src/synix/templates/ which is
+# bundled in the pip package. Examples contain extra dev-only files (cassettes,
+# goldens, case.py) that shouldn't ship. This script copies only user-facing
+# files to keep them in sync.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -11,12 +16,13 @@ for example in "$REPO_ROOT"/examples/*/; do
     dest="$REPO_ROOT/src/synix/templates/$name"
     rm -rf "$dest"
     mkdir -p "$dest"
-    # Copy only user-facing files
+    # Copy only user-facing files (not .env.example — shared at templates root)
     cp "$example/pipeline.py" "$dest/" 2>/dev/null || true
     # Example 01 has two pipeline files
     cp "$example"/pipeline_*.py "$dest/" 2>/dev/null || true
-    cp "$example/.env.example" "$dest/" 2>/dev/null || true
     cp "$example/README.md" "$dest/" 2>/dev/null || true
+    # Copy transforms.py if present (example 02)
+    cp "$example/transforms.py" "$dest/" 2>/dev/null || true
     if [ -d "$example/sources" ]; then
         cp -r "$example/sources" "$dest/"
     fi

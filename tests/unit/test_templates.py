@@ -11,7 +11,8 @@ EXAMPLES_DIR = REPO_ROOT / "examples"
 TEMPLATES_DIR = REPO_ROOT / "src" / "synix" / "templates"
 
 # Files that sync-templates copies from examples into templates
-USER_FACING_FILES = ["pipeline.py", ".env.example", "README.md"]
+# (.env.example is shared at templates root, not per-template)
+USER_FACING_FILES = ["pipeline.py", "README.md"]
 
 
 def _template_dirs():
@@ -96,6 +97,23 @@ class TestTemplatesMatchExamples:
                 assert template_file.read_text() == example_file.read_text(), (
                     f"Template {template_dir.name}/sources/{relative} differs. Run scripts/sync-templates."
                 )
+
+    def test_shared_env_example_exists(self):
+        """Shared .env.example should exist at templates root."""
+        shared_env = TEMPLATES_DIR / ".env.example"
+        assert shared_env.exists(), (
+            "Missing src/synix/templates/.env.example — this is the shared .env.example for all templates."
+        )
+        content = shared_env.read_text()
+        assert "ANTHROPIC_API_KEY" in content
+
+    def test_no_per_template_env_example(self):
+        """Per-template .env.example should not exist (use shared one)."""
+        for template_dir in _template_dirs():
+            assert not (template_dir / ".env.example").exists(), (
+                f"Template {template_dir.name} has per-template .env.example — "
+                f"use shared templates/.env.example instead."
+            )
 
     def test_no_non_user_facing_files_in_templates(self):
         """Templates should NOT contain case.py, cassettes/, golden/, etc."""

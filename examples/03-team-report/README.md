@@ -30,13 +30,40 @@ sources/
 cd examples/03-team-report
 cp .env.example .env     # add your API key
 
-synix build pipeline.py
-synix validate pipeline.py
-synix search 'hiking'
+uvx synix build pipeline.py
+uvx synix validate pipeline.py
+uvx synix search 'hiking'
 ```
 
-## Use Your Own Data
+## Try It Yourself
 
-- Replace the markdown files in `sources/bios/` with your team members' backgrounds
-- Edit `sources/brief/project_brief.md` with your project description
-- The pipeline will infer work styles, analyze team dynamics, and generate a staffing report tailored to your inputs
+### Add yourself to the team
+
+Create `sources/bios/yourname.md`:
+
+```markdown
+# Your Name
+
+Senior frontend engineer, 6 years experience. Built design systems at two
+startups. Passionate about animation and micro-interactions. Prefers
+pair programming and async standups over daily meetings.
+```
+
+Then rebuild — only the new bio and downstream layers recompute:
+
+```bash
+uvx synix build pipeline.py    # bios: 1 new, 3 cached
+uvx synix search 'frontend'
+```
+
+### Change the project
+
+Edit `sources/brief/project_brief.md` with your own project description. The pipeline will regenerate work style matches, team dynamics, and the staffing report based on the new brief.
+
+### Customize the pipeline
+
+Open `pipeline.py` to see how layers, transforms, and validators are wired. Key things to try:
+
+- Add a new layer (e.g., `skills_matrix` that cross-references bios against the project brief)
+- Change the LLM model or temperature in `pipeline.llm_config`
+- Add a validator (e.g., `pii` to check for email addresses in bios)

@@ -26,16 +26,16 @@ cd examples/01-chatbot-export-synthesis
 cp .env.example .env       # add your API key
 
 # Full build — transcripts -> episodes -> monthly rollups -> core memory
-synix build pipeline_monthly.py
+uvx synix build pipeline_monthly.py
 
 # Search your memory
-synix search "what do I think about anthropic?"
+uvx synix search "what do I think about anthropic?"
 
 # View the generated context document
 cat build/context.md
 
 # Swap to topic-based rollups (episodes cached, only rollups + core rebuild)
-synix build pipeline_topical.py
+uvx synix build pipeline_topical.py
 ```
 
 ## Pipelines
@@ -47,8 +47,33 @@ Run monthly first, then topical to see incremental rebuild in action.
 
 ## Use Your Own Data
 
-**ChatGPT:** Settings -> Data Controls -> Export data. Download the zip, extract `conversations.json`, and copy it into `sources/`.
+### ChatGPT
 
-**Claude:** Settings -> Export data. Download and copy the JSON file into `sources/`.
+1. Go to [chatgpt.com/settings](https://chatgpt.com/#settings/DataControls) → **Data Controls** → **Export data**
+2. Click **Export** — you'll receive an email within a few minutes
+3. Download the zip from the email link, then:
+
+```bash
+unzip chatgpt-export-*.zip -d /tmp/chatgpt-export
+cp /tmp/chatgpt-export/conversations.json sources/
+```
+
+### Claude
+
+1. Go to [claude.ai/settings](https://claude.ai/settings) → **Export data**
+2. Click **Export** — you'll receive an email within a few minutes
+3. Download the zip from the email link, then:
+
+```bash
+unzip Claude-export-*.zip -d /tmp/claude-export
+cp /tmp/claude-export/*.json sources/
+```
+
+### Build
+
+```bash
+uvx synix build pipeline_monthly.py
+uvx synix search "your query here"
+```
 
 The parse transform auto-detects ChatGPT vs Claude export format.

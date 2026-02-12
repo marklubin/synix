@@ -105,6 +105,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## Critical Rules
 
+- **Customer-facing docs** (READMEs, examples, `synix init` output) must use `uvx synix` for all CLI commands. Internal dev docs (CLAUDE.md, test files) use `uv run synix`.
 - **DO NOT** refactor core engine or abstract prematurely
 - **DO NOT** implement StatefulArtifact, branching, eval harness, or any v0.2 feature
 - **DO NOT** add Postgres, Neo4j, or any external database — SQLite + filesystem only
