@@ -1,0 +1,89 @@
+name: Blind PR Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+env:
+  APPROVED_CONTRIBUTORS: '["marklubin"]'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.check.outputs.approved }}
+    steps:
+      - id: check
+        run: |
+          ACTOR="${{ github.actor }}"
+          if echo '${{ env.APPROVED_CONTRIBUTORS }}' | jq -e ". | index(\"$ACTOR\")" > /dev/null 2>&1; then
+            echo "approved=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Blind review approved for $ACTOR"
+          else
+            echo "approved=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping blind review — $ACTOR is not in approved list"
+          fi
+
+  review-claude:
+    needs: gate
+    if: needs.gate.outputs.approved == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .github/scripts/blind_review.py
+            .github/prompts/claude_review.md
+            .github/prompts/openai_review.md
+            README.md
+            docs/DESIGN.md
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install anthropic requests
+
+      - run: python .github/scripts/blind_review.py
+        env:
+          PROVIDER: claude
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+
+  review-openai:
+    needs: gate
+    if: needs.gate.outputs.approved == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .github/scripts/blind_review.py
+            .github/prompts/claude_review.md
+            .github/prompts/openai_review.md
+            README.md
+            docs/DESIGN.md
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install openai requests
+
+      - run: python .github/scripts/blind_review.py
+        env:
+          PROVIDER: openai
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
