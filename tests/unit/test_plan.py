@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from synix import Layer, Pipeline, Projection
 from synix.build.artifacts import ArtifactStore
-from synix.build.plan import BuildPlan, StepPlan, plan_build
+from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
 from synix.cli import main
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
@@ -293,8 +293,8 @@ class TestPlanBuildPartialRebuild:
         # Transcripts should detect new source
         transcript_step = next(s for s in plan.steps if s.name == "transcripts")
         assert transcript_step.status == "rebuild"
-        assert "changed" in transcript_step.reason
-        # Only 1 artifact changed, the rest should be cached
+        assert "added" in transcript_step.reason
+        # Only 1 artifact added, the rest should be cached
         assert transcript_step.rebuild_count == 1
         assert transcript_step.cached_count == 8
 
@@ -655,3 +655,209 @@ class TestPlanEdgeCases:
 
         topics_step = next(s for s in plan.steps if s.name == "topics")
         assert topics_step.artifact_count == 3  # one per topic
+
+
+class TestComputeSourceInfo:
+    """Tests for _compute_source_info() — human-readable source directory summary."""
+
+    def test_nonexistent_dir(self, tmp_path):
+        result = _compute_source_info(str(tmp_path / "nope"))
+        assert result is None
+
+    def test_empty_dir(self, tmp_path):
+        d = tmp_path / "empty"
+        d.mkdir()
+        result = _compute_source_info(str(d))
+        assert result is None
+
+    def test_single_extension(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "a.md").write_text("hello")
+        (d / "b.md").write_text("world")
+        result = _compute_source_info(str(d))
+        assert result == f"{d} (2 .md files)"
+
+    def test_single_file(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "only.md").write_text("hi")
+        result = _compute_source_info(str(d))
+        assert result == f"{d} (1 .md file)"
+
+    def test_multiple_extensions(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "a.md").write_text("x")
+        (d / "b.json").write_text("{}")
+        (d / "c.json").write_text("{}")
+        result = _compute_source_info(str(d))
+        # Sorted by count descending: 2 .json first, then 1 .md
+        assert "2 .json" in result
+        assert "1 .md" in result
+        assert "files)" in result
+
+    def test_unsupported_files(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "a.md").write_text("x")
+        (d / "data.csv").write_text("x")
+        (d / "image.png").write_bytes(b"\x89PNG")
+        result = _compute_source_info(str(d))
+        assert "1 .md" in result
+        assert "2 unsupported" in result
+
+    def test_only_unsupported_files(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "data.csv").write_text("x")
+        result = _compute_source_info(str(d))
+        assert result is not None
+        assert "1 unsupported" in result
+        assert "file)" in result  # singular
+
+    def test_hidden_files_excluded(self, tmp_path):
+        d = tmp_path / "src"
+        d.mkdir()
+        (d / "a.md").write_text("x")
+        (d / ".DS_Store").write_bytes(b"\x00")
+        (d / ".gitkeep").write_text("")
+        result = _compute_source_info(str(d))
+        assert "1 .md file" in result
+        assert "unsupported" not in result
+
+    def test_nested_single_level(self, tmp_path):
+        d = tmp_path / "src"
+        sub = d / "sub"
+        sub.mkdir(parents=True)
+        (sub / "a.md").write_text("x")
+        result = _compute_source_info(str(d))
+        assert "nested" in result
+        assert "deep" not in result
+
+    def test_nested_deep(self, tmp_path):
+        d = tmp_path / "src"
+        deep = d / "a" / "b"
+        deep.mkdir(parents=True)
+        (deep / "x.md").write_text("x")
+        result = _compute_source_info(str(d))
+        assert "2 deep" in result
+
+
+class TestEditDetection:
+    """Tests for modified/added/removed detection in _plan_parse_layer."""
+
+    @pytest.fixture
+    def text_source(self, tmp_path):
+        """Source dir with text files (easier to control artifact_id stability)."""
+        src = tmp_path / "sources"
+        src.mkdir()
+        (src / "alpha.md").write_text("Alpha content v1\n")
+        (src / "beta.md").write_text("Beta content v1\n")
+        (src / "gamma.md").write_text("Gamma content v1\n")
+        return src
+
+    @pytest.fixture
+    def text_pipeline(self, tmp_path, text_source):
+        """Parse-only pipeline (no LLM layers)."""
+        p = Pipeline("edit-test")
+        p.source_dir = str(text_source)
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+        p.add_layer(Layer(name="docs", level=0, transform="parse"))
+        return p
+
+    def _initial_build(self, text_pipeline, text_source):
+        """Run parse-only build to populate the artifact store."""
+        from synix.build.runner import run
+
+        run(text_pipeline, source_dir=str(text_source))
+
+    def test_modified_detected(self, text_pipeline, text_source):
+        """Editing a file (same artifact_id, different hash) shows 'modified'."""
+        self._initial_build(text_pipeline, text_source)
+
+        # Modify content of alpha.md (artifact_id t-text-alpha stays the same)
+        (text_source / "alpha.md").write_text("Alpha content v2 — edited\n")
+
+        plan = plan_build(text_pipeline)
+        docs_step = next(s for s in plan.steps if s.name == "docs")
+        assert docs_step.status == "rebuild"
+        assert "1 modified" in docs_step.reason
+        assert docs_step.rebuild_count == 1
+        assert docs_step.cached_count == 2
+
+    def test_removed_detected(self, text_pipeline, text_source):
+        """Deleting a source file shows 'removed'."""
+        self._initial_build(text_pipeline, text_source)
+
+        # Remove gamma.md
+        (text_source / "gamma.md").unlink()
+
+        plan = plan_build(text_pipeline)
+        docs_step = next(s for s in plan.steps if s.name == "docs")
+        assert docs_step.status == "rebuild"
+        assert "1 removed" in docs_step.reason
+        assert docs_step.rebuild_count == 0
+        assert docs_step.cached_count == 2
+
+    def test_mixed_modified_added_removed(self, text_pipeline, text_source):
+        """Simultaneous edit, add, and remove detected correctly."""
+        self._initial_build(text_pipeline, text_source)
+
+        # Modify alpha
+        (text_source / "alpha.md").write_text("Alpha v2\n")
+        # Remove beta
+        (text_source / "beta.md").unlink()
+        # Add delta
+        (text_source / "delta.md").write_text("Delta content\n")
+
+        plan = plan_build(text_pipeline)
+        docs_step = next(s for s in plan.steps if s.name == "docs")
+        assert docs_step.status == "rebuild"
+        assert "1 modified" in docs_step.reason
+        assert "1 added" in docs_step.reason
+        assert "1 removed" in docs_step.reason
+        assert docs_step.rebuild_count == 2  # modified + added
+        assert docs_step.cached_count == 1  # gamma unchanged
+
+    def test_all_cached_no_changes(self, text_pipeline, text_source):
+        """No changes → all cached."""
+        self._initial_build(text_pipeline, text_source)
+
+        plan = plan_build(text_pipeline)
+        docs_step = next(s for s in plan.steps if s.name == "docs")
+        assert docs_step.status == "cached"
+        assert docs_step.rebuild_count == 0
+        assert docs_step.cached_count == 3
+
+
+class TestSourceInfo:
+    """Tests for source_info field on StepPlan."""
+
+    def test_source_info_populated(self, pipeline_obj):
+        """Parse layer step should have source_info populated."""
+        plan = plan_build(pipeline_obj)
+        transcript_step = next(s for s in plan.steps if s.name == "transcripts")
+        assert transcript_step.source_info is not None
+        assert ".json" in transcript_step.source_info
+
+    def test_source_info_none_for_llm_layers(self, pipeline_obj):
+        """LLM layers should not have source_info."""
+        plan = plan_build(pipeline_obj)
+        episode_step = next(s for s in plan.steps if s.name == "episodes")
+        assert episode_step.source_info is None
+
+    def test_source_info_empty_dir(self, tmp_path):
+        """Empty source dir → source_info is None."""
+        empty_src = tmp_path / "empty"
+        empty_src.mkdir()
+        p = Pipeline("si-test")
+        p.source_dir = str(empty_src)
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+        p.add_layer(Layer(name="docs", level=0, transform="parse"))
+
+        plan = plan_build(p)
+        docs_step = plan.steps[0]
+        assert docs_step.source_info is None

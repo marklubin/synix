@@ -6,6 +6,7 @@ and matches golden outputs, with no real LLM calls required.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,11 @@ def synix_bin():
 
 def test_demo_run_replays_from_cassettes(tmp_path, synix_bin):
     """synix demo run replays the team_report case from cassettes and passes goldens."""
+    # Clean stale build dir (may be left by other tests)
+    build_dir = CASE_DIR / "build"
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+
     # Run in a subprocess so env vars are isolated
     result = subprocess.run(
         [synix_bin, "demo", "run", str(CASE_DIR)],

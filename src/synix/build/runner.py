@@ -17,6 +17,7 @@ import synix.build.merge_transform  # noqa: F401
 import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
 from synix.build.dag import needs_rebuild, resolve_build_order
+from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
 from synix.build.transforms import get_transform
@@ -136,25 +137,15 @@ def run(
         transform_config["search_db_path"] = str(build_dir / "search.db")
         # Get the transform
         transform = get_transform(layer.transform)
-        prompt_id = None
-        if layer.level > 0:
-            try:
-                prompt_id = transform.get_prompt_id(_transform_to_prompt_name(layer.transform))
-            except (FileNotFoundError, OSError):
-                prompt_id = layer.transform
 
-        # Compute transform-specific cache key
-        transform_cache_key = transform.get_cache_key(transform_config)
-        # Only use model_config for cache comparison on LLM layers (level > 0).
-        # Parse transforms (level 0) don't use LLM and store model_config=None.
-        model_config = transform_config.get("llm_config", {}) if layer.level > 0 else None
+        # Compute transform fingerprint (unified identity for source code + prompt + config + model)
+        prompt_name = _transform_to_prompt_name(layer.transform) if layer.level > 0 else None
+        transform_fp = transform.compute_fingerprint(transform_config, prompt_name) if layer.level > 0 else None
 
         # For non-parse layers, check if we can skip the transform entirely.
-        # If existing artifacts have matching input hashes, prompt_id, model_config,
-        # and transform cache key, reuse them without calling the LLM.
         layer_built: list[Artifact] = []
 
-        if layer.level > 0 and _layer_fully_cached(layer, inputs, prompt_id, model_config, transform_cache_key, store):
+        if layer.level > 0 and _layer_fully_cached(layer, inputs, store, transform_fp):
             # All cached — load existing artifacts
             existing = store.list_artifacts(layer.name)
             for art in existing:
@@ -171,18 +162,25 @@ def run(
 
             # Helper to save a single artifact immediately (save-as-you-go)
             def _save_artifact(artifact: Artifact) -> None:
-                if needs_rebuild(
+                # Compute per-artifact build fingerprint
+                build_fp = None
+                if transform_fp is not None:
+                    build_fp = compute_build_fingerprint(transform_fp, artifact.input_hashes)
+
+                rebuild, _reasons = needs_rebuild(
                     artifact.artifact_id,
                     artifact.input_hashes,
-                    prompt_id,
                     store,
-                    current_model_config=model_config,
-                    current_transform_cache_key=transform_cache_key,
-                ):
+                    current_build_fingerprint=build_fp,
+                )
+                if rebuild:
                     artifact.metadata["layer_name"] = layer.name
                     artifact.metadata["layer_level"] = layer.level
-                    if transform_cache_key:
-                        artifact.metadata["transform_cache_key"] = transform_cache_key
+                    # Store fingerprints for future cache comparisons
+                    if build_fp is not None:
+                        artifact.metadata["build_fingerprint"] = build_fp.to_dict()
+                    if transform_fp is not None:
+                        artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
                     store.save_artifact(artifact, layer.name, layer.level)
                     parent_ids = _get_parent_artifact_ids(artifact, inputs)
                     provenance.record(
@@ -262,25 +260,25 @@ def run(
 def _layer_fully_cached(
     layer: Layer,
     inputs: list[Artifact],
-    prompt_id: str | None,
-    model_config: dict | None,
-    transform_cache_key: str,
     store: ArtifactStore,
+    transform_fp: Fingerprint | None = None,
 ) -> bool:
     """Check if a layer can be entirely skipped (all artifacts cached)."""
     existing = store.list_artifacts(layer.name)
     if not existing:
         return False
 
-    for art in existing:
-        if art.prompt_id != prompt_id:
-            return False
-        if model_config is not None and (art.model_config or {}) != model_config:
-            return False
-        if transform_cache_key:
-            if art.metadata.get("transform_cache_key", "") != transform_cache_key:
+    # Check transform identity via fingerprint
+    if transform_fp is not None:
+        for art in existing:
+            stored_tfp_data = art.metadata.get("transform_fingerprint")
+            if stored_tfp_data is None:
+                return False
+            stored_tfp = Fingerprint.from_dict(stored_tfp_data)
+            if not transform_fp.matches(stored_tfp):
                 return False
 
+    # Check that all current inputs are covered by existing artifacts
     covered_input_hashes: set[str] = set()
     for art in existing:
         covered_input_hashes.update(art.input_hashes)

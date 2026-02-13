@@ -268,12 +268,14 @@ def run_alias(
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--save", is_flag=True, help="Save plan as artifact in the build directory")
+@click.option("--explain-cache", is_flag=True, help="Show per-layer cache decision breakdown")
 def plan(
     pipeline_path: str,
     source_dir: str | None,
     build_dir: str | None,
     output_json: bool,
     save: bool,
+    explain_cache: bool,
 ):
     """Show what a pipeline build would do without executing.
 
@@ -385,7 +387,15 @@ def plan(
             status_parts.append(f"[{status_style}]{step.artifact_count} cached[/{status_style}]")
         status_str = "  ".join(status_parts)
 
+        # Inline cache reason when --explain-cache
+        if explain_cache and step.status in ("new", "rebuild") and step.reason not in ("new",):
+            status_str += f" [dim]— {step.reason}[/dim]"
+
         layer_node = tree.add(f"[{layer_style}][bold]{step.name}[/bold][/{layer_style}]  {type_label}  {status_str}")
+
+        # Show source info for parse layers
+        if step.source_info:
+            layer_node.add(f"[dim]← {step.source_info}[/dim]")
 
         # Show inputs (← depends_on)
         if layer_obj and layer_obj.depends_on:
@@ -393,6 +403,16 @@ def plan(
                 dep_step = step_lookup.get(dep)
                 dep_style = get_layer_style(dep_step.level) if dep_step else "dim"
                 layer_node.add(f"[dim]← [{dep_style}]{dep}[/{dep_style}][/dim]")
+
+        # Inline cache fingerprint breakdown when --explain-cache and cached
+        if explain_cache and step.status == "cached" and step.fingerprint:
+            from synix.build.fingerprint import Fingerprint
+
+            fp = Fingerprint.from_dict(step.fingerprint)
+            if fp:
+                scheme_ver = fp.scheme.split(":")[-1]
+                component_names = " ".join(sorted(fp.components.keys()))
+                layer_node.add(f"[dim]cache: all components match ({scheme_ver}: {component_names})[/dim]")
 
         # Show projections on their final trigger layer
         for proj_name, _, _ in proj_triggers.get(step.name, []):
@@ -449,8 +469,60 @@ def plan(
     console.print()
     console.print(f"[bold]Estimated:[/bold] {' · '.join(summary_parts)}")
 
+    # ── Source-change warnings ───────────────────────────────────
+    _display_source_change_warnings(build_plan, pipeline)
+
     if save:
         _save_plan_artifact(build_plan, pipeline)
+
+
+def _display_source_change_warnings(build_plan, pipeline):
+    """Emit warnings when transform source code changed (detected via fingerprint)."""
+    from synix.build.fingerprint import Fingerprint
+
+    build_dir = pipeline.build_dir
+    if not build_dir:
+        return
+
+    from pathlib import Path
+
+    from synix.build.artifacts import ArtifactStore
+
+    build_path = Path(build_dir)
+    if not build_path.exists():
+        return
+
+    store = ArtifactStore(build_path)
+    layer_lookup = {layer.name: layer for layer in pipeline.layers}
+
+    for step in build_plan.steps:
+        if step.level == 0 or step.fingerprint is None:
+            continue
+        layer_obj = layer_lookup.get(step.name)
+        if layer_obj is None:
+            continue
+
+        current_fp = Fingerprint.from_dict(step.fingerprint)
+        if current_fp is None:
+            continue
+
+        # Check if existing artifacts have a different source component
+        existing = store.list_artifacts(step.name)
+        for art in existing:
+            stored_tfp_data = art.metadata.get("transform_fingerprint")
+            if stored_tfp_data is None:
+                continue
+            stored_fp = Fingerprint.from_dict(stored_tfp_data)
+            if stored_fp is None:
+                continue
+            stored_source = stored_fp.components.get("source")
+            current_source = current_fp.components.get("source")
+            if stored_source and current_source and stored_source != current_source:
+                console.print(
+                    f"\n[yellow]Warning:[/yellow] Transform source changed for "
+                    f"[bold]{layer_obj.transform}[/bold] (layer '{step.name}') — rebuild required"
+                )
+                break  # One warning per layer
 
 
 def _display_llm_config(build_plan):

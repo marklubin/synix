@@ -448,6 +448,38 @@ class TestProgressiveMaterialization:
         index.close()
 
 
+class TestProgressProjectionFinish:
+    """Regression test: progressive projection_finish must update the running entry, not a stale done one."""
+
+    def test_repeated_projection_finish_updates_running_entry(self):
+        """When the same projection is started multiple times (progressive search_index),
+        projection_finish must mark the currently-running entry as done, not re-mark
+        a previously-completed one."""
+        from synix.cli.progress import BuildProgress
+
+        progress = BuildProgress()
+
+        # Simulate progressive materialization: same projection started twice
+        # (once after layer "bios", once after layer "work_styles")
+        progress.layer_finish("bios", built=3, cached=0)
+        progress.projection_start("search", triggered_by="bios")
+        progress.projection_finish("search", triggered_by="bios")
+
+        progress.layer_finish("work_styles", built=3, cached=0)
+        progress.projection_start("search", triggered_by="work_styles")
+        progress.projection_finish("search", triggered_by="work_styles")
+
+        # Both entries should be "done", not stuck at "running"
+        for ps in progress._projection_states:
+            assert ps["status"] == "done", f"Projection entry stuck at '{ps['status']}' (expected 'done')"
+
+        # Verify entries filed under correct layers
+        assert len(progress._layer_projections["bios"]) == 1
+        assert progress._layer_projections["bios"][0]["status"] == "done"
+        assert len(progress._layer_projections["work_styles"]) == 1
+        assert progress._layer_projections["work_styles"][0]["status"] == "done"
+
+
 # ---------------------------------------------------------------------------
 # 2. Projection Caching
 # ---------------------------------------------------------------------------

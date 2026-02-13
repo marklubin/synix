@@ -103,6 +103,16 @@ Store local secrets in `.secrets` (gitignored):
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+## PR & Issue Workflow
+
+Every PR must link to the GitHub issues it addresses:
+
+1. **Before creating a PR**, check open issues: `gh issue list --state open --json number,title`
+2. **Review each issue** against the PR's changes — map features to issues
+3. **Include `Closes #N`** in the PR body for each issue fully resolved by the PR
+4. **Reference without closing** (`#N`) for issues only partially addressed
+5. **PR body format**: `Closes #N` directives at the top, then `## Summary` with bullet points linking each feature back to its issue number
+
 ## Critical Rules
 
 - **Customer-facing docs** (READMEs, templates, `synix init` output) must use `uvx synix` for all CLI commands. Internal dev docs (CLAUDE.md, test files) use `uv run synix`.
@@ -114,6 +124,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 - Write tests BEFORE or ALONGSIDE the module, never after
 - Mock the LLM for unit and integration tests — only E2E hits real API
 - Use `tmp_path` for all filesystem tests — no shared state
+- **Every functional behavior change must have e2e test coverage** — unit tests alone are insufficient. If a change affects CLI output, plan display, cache detection, or artifact metadata, write an e2e test that exercises the full path.
+- **Always consider template/demo impact** — changes to transforms, plan output, artifact metadata, or CLI formatting will affect golden files in `templates/*/golden/`. Regenerate goldens (`uv run synix demo run <template> --update-goldens`) and verify normalization rules in `demo_commands.py._normalize_output()` still cover new output patterns.
 
 ## Reference Docs
 

@@ -13,6 +13,7 @@ import synix.build.llm_transforms  # noqa: F401
 import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
 from synix.build.dag import resolve_build_order
+from synix.build.fingerprint import Fingerprint
 from synix.build.transforms import get_transform
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import Artifact, Layer, Pipeline
@@ -42,6 +43,8 @@ class StepPlan:
     cached_count: int = 0  # artifacts that are already up-to-date
     resolved_llm_config: dict | None = None  # resolved LLM config for this layer (None for parse layers)
     parallel_units: int = 1  # number of parallel work units from split()
+    fingerprint: dict | None = None  # current transform fingerprint (for --explain-cache)
+    source_info: str | None = None  # e.g. "./sources/bios (3 .md files)" for parse layers
 
 
 @dataclass
@@ -210,17 +213,10 @@ def _plan_layer(
 
     # Get the transform
     transform = get_transform(layer.transform)
-    prompt_id = None
-    prompt_from_file = False  # True if prompt_id was resolved from a prompt file
-    if layer.level > 0:
-        try:
-            prompt_id = transform.get_prompt_id(_transform_to_prompt_name(layer.transform))
-            prompt_from_file = True
-        except (FileNotFoundError, OSError):
-            prompt_id = layer.transform
 
-    transform_cache_key = transform.get_cache_key(transform_config)
-    model_config = transform_config.get("llm_config", {}) if layer.level > 0 else None
+    # Compute transform fingerprint (unified identity for source code + prompt + config + model)
+    prompt_name = _transform_to_prompt_name(layer.transform) if layer.level > 0 else None
+    transform_fp = transform.compute_fingerprint(transform_config, prompt_name) if layer.level > 0 else None
 
     # Resolve the per-layer LLM config for display
     resolved_llm = _resolve_layer_llm_config(layer, pipeline)
@@ -243,10 +239,6 @@ def _plan_layer(
     step = _plan_llm_layer(
         layer,
         inputs,
-        prompt_id,
-        prompt_from_file,
-        model_config,
-        transform_cache_key,
         store,
         layer_artifacts,
         upstream_dirty,
@@ -254,8 +246,11 @@ def _plan_layer(
         output_tokens_per_call,
         input_token_price,
         output_token_price,
+        transform_fp,
     )
     step.resolved_llm_config = resolved_llm
+    if transform_fp is not None:
+        step.fingerprint = transform_fp.to_dict()
 
     # Estimate parallel unit count from split() if the layer will be built
     if step.status != "cached" and inputs:
@@ -266,6 +261,47 @@ def _plan_layer(
             step.parallel_units = 1
 
     return step
+
+
+def _compute_source_info(source_dir: str) -> str | None:
+    """Compute human-readable source info string for a parse layer."""
+    source_path = Path(source_dir)
+    if not source_path.exists():
+        return None
+
+    from synix.adapters.registry import get_supported_extensions
+
+    extensions = get_supported_extensions()
+
+    # Count all files recursively (excluding hidden/dot files)
+    all_files = [f for f in source_path.rglob("*") if f.is_file() and not f.name.startswith(".")]
+    supported_files = [f for f in all_files if f.suffix.lower() in extensions]
+    unsupported_count = len(all_files) - len(supported_files)
+
+    # Count supported files by extension
+    ext_counts: dict[str, int] = {}
+    for f in supported_files:
+        ext = f.suffix.lower()
+        ext_counts[ext] = ext_counts.get(ext, 0) + 1
+
+    if not ext_counts and unsupported_count == 0:
+        return None
+
+    parts = [f"{count} {ext}" for ext, count in sorted(ext_counts.items(), key=lambda x: (-x[1], x[0]))]
+    total = sum(ext_counts.values())
+    if unsupported_count > 0:
+        parts.append(f"{unsupported_count} unsupported")
+        total += unsupported_count
+    file_word = "file" if total == 1 else "files"
+
+    # Note subdirectory depth when source spans nested dirs
+    subdirs = [d for d in source_path.rglob("*") if d.is_dir() and not d.name.startswith(".")]
+    depth_label = ""
+    if subdirs:
+        max_depth = max((len(d.relative_to(source_path).parts) for d in subdirs), default=0)
+        depth_label = f", {max_depth} deep" if max_depth > 1 else ", nested"
+
+    return f"{source_dir} ({', '.join(parts)} {file_word}{depth_label})"
 
 
 def _plan_parse_layer(
@@ -285,6 +321,9 @@ def _plan_parse_layer(
     layer_artifacts[layer.name] = artifacts
     artifact_count = len(artifacts)
 
+    # Compute source info for display
+    source_info = _compute_source_info(transform_config["source_dir"])
+
     if store is None:
         # No build dir yet -- everything is new
         return StepPlan(
@@ -298,18 +337,25 @@ def _plan_parse_layer(
             estimated_tokens=0,
             estimated_cost=0.0,
             reason="new",
+            source_info=source_info,
         )
 
-    # Check how many are cached vs new
+    # Compare by artifact_id to detect modifications (same id, different content)
     existing = store.list_artifacts(layer.name)
-    existing_hashes = {a.content_hash for a in existing}
-    new_hashes = {a.content_hash for a in artifacts}
+    existing_by_id = {a.artifact_id: a.content_hash for a in existing}
+    new_by_id = {a.artifact_id: a.content_hash for a in artifacts}
 
-    new_count = len(new_hashes - existing_hashes)
-    removed_count = len(existing_hashes - new_hashes)
-    cached_count = len(new_hashes & existing_hashes)
+    added_ids = set(new_by_id) - set(existing_by_id)
+    removed_ids = set(existing_by_id) - set(new_by_id)
+    common_ids = set(new_by_id) & set(existing_by_id)
+    modified_ids = {aid for aid in common_ids if new_by_id[aid] != existing_by_id[aid]}
 
-    if new_count == 0 and removed_count == 0 and len(existing) == len(artifacts):
+    added = len(added_ids)
+    removed = len(removed_ids)
+    modified = len(modified_ids)
+    cached_count = len(common_ids) - modified
+
+    if added == 0 and removed == 0 and modified == 0:
         return StepPlan(
             name=layer.name,
             level=layer.level,
@@ -321,7 +367,10 @@ def _plan_parse_layer(
             estimated_tokens=0,
             estimated_cost=0.0,
             reason="all cached",
+            source_info=source_info,
         )
+
+    rebuild_count = modified + added
 
     if len(existing) == 0:
         status = "new"
@@ -329,10 +378,12 @@ def _plan_parse_layer(
     else:
         status = "rebuild"
         parts = []
-        if new_count > 0:
-            parts.append(f"{new_count} changed")
-        if removed_count > 0:
-            parts.append(f"{removed_count} removed")
+        if modified > 0:
+            parts.append(f"{modified} modified")
+        if added > 0:
+            parts.append(f"{added} added")
+        if removed > 0:
+            parts.append(f"{removed} removed")
         reason = ", ".join(parts) if parts else "sources changed"
 
     return StepPlan(
@@ -340,22 +391,19 @@ def _plan_parse_layer(
         level=layer.level,
         status=status,
         artifact_count=artifact_count,
-        rebuild_count=new_count,
+        rebuild_count=rebuild_count,
         cached_count=cached_count,
         estimated_llm_calls=0,
         estimated_tokens=0,
         estimated_cost=0.0,
         reason=reason,
+        source_info=source_info,
     )
 
 
 def _plan_llm_layer(
     layer: Layer,
     inputs: list[Artifact],
-    prompt_id: str | None,
-    prompt_from_file: bool,
-    model_config: dict | None,
-    transform_cache_key: str,
     store: ArtifactStore | None,
     layer_artifacts: dict[str, list[Artifact]],
     upstream_dirty: bool,
@@ -363,6 +411,7 @@ def _plan_llm_layer(
     output_tokens_per_call: int,
     input_token_price: float,
     output_token_price: float,
+    transform_fp: Fingerprint | None = None,
 ) -> StepPlan:
     """Plan an LLM (level > 0) layer by checking cache state."""
     tokens_per_call = input_tokens_per_call + output_tokens_per_call
@@ -390,12 +439,10 @@ def _plan_llm_layer(
 
     existing = store.list_artifacts(layer.name)
 
-    # Check if the whole layer is fully cached (same logic as runner._layer_fully_cached)
+    # Check if the whole layer is fully cached
     # If upstream has pending rebuilds, those artifacts will get new hashes —
     # so even if current input hashes match, the layer will need rebuilding.
-    fully_cached = not upstream_dirty and _is_layer_fully_cached(
-        layer, existing, inputs, prompt_id, model_config, transform_cache_key
-    )
+    fully_cached = not upstream_dirty and _is_layer_fully_cached(layer, existing, inputs, transform_fp)
 
     if fully_cached:
         layer_artifacts[layer.name] = existing
@@ -413,16 +460,15 @@ def _plan_llm_layer(
         )
 
     # Not fully cached — check per-artifact to get accurate rebuild count.
-    # Determine whether the rebuild is due to a global change (prompt, model,
-    # transform config) or just changed inputs. If global, everything rebuilds.
-    # If only inputs changed, check which existing artifacts are still valid.
-    global_change = _has_global_change(existing, prompt_id, prompt_from_file, model_config, transform_cache_key)
+    # Determine whether the rebuild is due to a global change (transform
+    # identity) or just changed inputs. If global, everything rebuilds.
+    global_change = _has_global_change(existing, transform_fp)
 
     rebuild_count = 0
     cached_count = 0
 
     if global_change:
-        # Prompt, model, or transform config changed — all artifacts rebuild
+        # Transform identity changed — all artifacts rebuild
         estimated_count = _estimate_artifact_count(layer, inputs)
         rebuild_count = estimated_count
         cached_count = 0
@@ -443,11 +489,8 @@ def _plan_llm_layer(
                     if upstream_dirty and len(unit_inputs) > 1:
                         # N:1 unit whose input hashes look cached, but upstream
                         # has pending rebuilds that will change those hashes.
-                        # The current hashes are stale — mark as rebuild.
                         rebuild_count += 1
                     else:
-                        # 1:1 unit or no upstream dirty — hash check is reliable
-                        # because parse layers produce fresh hashes directly.
                         cached_count += 1
                 else:
                     rebuild_count += 1
@@ -459,7 +502,7 @@ def _plan_llm_layer(
     total_count = rebuild_count + cached_count
 
     # Determine reason for rebuild
-    reason = _determine_rebuild_reason(existing, inputs, prompt_id, model_config, transform_cache_key)
+    reason = _determine_rebuild_reason(existing, inputs, transform_fp)
 
     status = "rebuild" if existing else "new"
     if not existing:
@@ -486,23 +529,23 @@ def _is_layer_fully_cached(
     layer: Layer,
     existing: list[Artifact],
     inputs: list[Artifact],
-    prompt_id: str | None,
-    model_config: dict | None,
-    transform_cache_key: str,
+    transform_fp: Fingerprint | None = None,
 ) -> bool:
     """Check if a layer is fully cached — same logic as runner._layer_fully_cached."""
     if not existing:
         return False
 
-    for art in existing:
-        if art.prompt_id != prompt_id:
-            return False
-        if model_config is not None and (art.model_config or {}) != model_config:
-            return False
-        if transform_cache_key:
-            if art.metadata.get("transform_cache_key", "") != transform_cache_key:
+    # Check transform identity via fingerprint
+    if transform_fp is not None:
+        for art in existing:
+            stored_tfp_data = art.metadata.get("transform_fingerprint")
+            if stored_tfp_data is None:
+                return False
+            stored_tfp = Fingerprint.from_dict(stored_tfp_data)
+            if not transform_fp.matches(stored_tfp):
                 return False
 
+    # Check that all current inputs are covered by existing artifacts
     covered_input_hashes: set[str] = set()
     for art in existing:
         covered_input_hashes.update(art.input_hashes)
@@ -516,48 +559,20 @@ def _is_layer_fully_cached(
 
 def _has_global_change(
     existing: list[Artifact],
-    prompt_id: str | None,
-    prompt_from_file: bool,
-    model_config: dict | None,
-    transform_cache_key: str,
+    transform_fp: Fingerprint | None = None,
 ) -> bool:
-    """Check if prompt, model, or transform config changed (affects all artifacts).
-
-    For built-in transforms, prompt_id is a file-content hash that changes when
-    the prompt template is edited — a mismatch means a real change.
-    For custom transforms, the plan falls back to the transform name which won't
-    match the custom prompt_id set by execute(). In that case, check consistency
-    among existing artifacts instead.
-    """
+    """Check if transform identity changed (affects all artifacts)."""
     if not existing:
         return False
 
-    # Check model config
-    if model_config is not None:
+    if transform_fp is not None:
         for art in existing:
-            if (art.model_config or {}) != model_config:
+            stored_tfp_data = art.metadata.get("transform_fingerprint")
+            if stored_tfp_data is None:
                 return True
-
-    # Check transform cache key
-    if transform_cache_key:
-        for art in existing:
-            if art.metadata.get("transform_cache_key", "") != transform_cache_key:
+            stored_tfp = Fingerprint.from_dict(stored_tfp_data)
+            if not transform_fp.matches(stored_tfp):
                 return True
-
-    # Check prompt_id
-    if prompt_from_file:
-        # Built-in transform: prompt_id is a content hash of the prompt file.
-        # Any mismatch means the prompt was edited — a real global change.
-        for art in existing:
-            if art.prompt_id != prompt_id:
-                return True
-    else:
-        # Custom transform: plan fell back to transform name, which won't match
-        # the custom prompt_id. Instead, check if existing artifacts are
-        # self-consistent (all same prompt_id = nothing changed).
-        stored_prompt_ids = {art.prompt_id for art in existing}
-        if len(stored_prompt_ids) > 1:
-            return True  # inconsistent — something changed
 
     return False
 
@@ -565,32 +580,26 @@ def _has_global_change(
 def _determine_rebuild_reason(
     existing: list[Artifact],
     inputs: list[Artifact],
-    prompt_id: str | None,
-    model_config: dict | None,
-    transform_cache_key: str,
+    transform_fp: Fingerprint | None = None,
 ) -> str:
     """Determine why a layer needs rebuild."""
     if not existing:
         return "new"
 
-    reasons = []
+    reasons: list[str] = []
 
-    # Check prompt change
-    prompt_mismatch = any(art.prompt_id != prompt_id for art in existing)
-    if prompt_mismatch:
-        reasons.append("prompt changed")
-
-    # Check model config change
-    if model_config is not None:
-        config_mismatch = any((art.model_config or {}) != model_config for art in existing)
-        if config_mismatch:
-            reasons.append("model config changed")
-
-    # Check transform cache key change
-    if transform_cache_key:
-        key_mismatch = any(art.metadata.get("transform_cache_key", "") != transform_cache_key for art in existing)
-        if key_mismatch:
-            reasons.append("transform config changed")
+    # Check transform identity via fingerprint
+    if transform_fp is not None:
+        for art in existing:
+            stored_tfp_data = art.metadata.get("transform_fingerprint")
+            if stored_tfp_data is None:
+                reasons.append("no stored fingerprint")
+                break
+            stored_tfp = Fingerprint.from_dict(stored_tfp_data)
+            if stored_tfp is not None and not transform_fp.matches(stored_tfp):
+                fp_reasons = transform_fp.explain_diff(stored_tfp)
+                reasons.extend(fp_reasons)
+                break
 
     # Check input changes
     covered_input_hashes: set[str] = set()

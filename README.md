@@ -205,8 +205,9 @@ Drop files into `source_dir` — the `parse` transform auto-detects format by fi
 | `uvx synix init <name>` | Scaffold a new project with sources, pipeline, and README. |
 | `uvx synix build` | Run the pipeline. Only rebuilds what changed. |
 | `uvx synix plan` | Dry-run — show what would build without running transforms. |
-| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer. |
-| `uvx synix show <id>` | Display an artifact's content, rendered as markdown. `--raw` for JSON. |
+| `uvx synix plan --explain-cache` | Plan with inline cache decision reasons per artifact. |
+| `uvx synix list [layer]` | List all artifacts with short content hashes, optionally filtered by layer. |
+| `uvx synix show <id>` | Display an artifact's content. Resolves by ID or hash prefix. `--raw` for JSON. |
 | `uvx synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
 | `uvx synix validate` | Run declared validators against build artifacts. |
 | `uvx synix fix` | LLM-assisted repair of validation violations. |
@@ -220,9 +221,15 @@ Commands that take a pipeline path (`build`, `plan`, `validate`, `fix`, `clean`)
 
 **Incremental rebuilds** — Change a prompt or add new conversations. Only downstream artifacts reprocess.
 
+**Fingerprint-based caching** — Every artifact stores a build fingerprint capturing inputs, prompt, model config, transform config, and transform source code. Change any component and only affected artifacts rebuild. See [docs/cache-semantics.md](docs/cache-semantics.md) for the full rebuild trigger matrix.
+
+**Cache explainability** — `uvx synix plan --explain-cache` shows inline reasons for every cache hit or miss directly in the plan tree, so you can see exactly which fingerprint component caused a rebuild.
+
 **Altitude-aware search** — Query episode summaries, monthly rollups, or core memory. Drill into provenance from any result.
 
 **Full provenance** — Every artifact chains back to the source conversations that produced it, through every transform in between.
+
+**Git-like artifact resolution** — `uvx synix show` resolves artifacts by unique prefix of artifact ID or content hash, just like `git show` resolves commits.
 
 **Validation and repair** — Detect semantic contradictions and PII leaks across artifacts, then fix them with LLM-assisted rewrites.
 
@@ -239,6 +246,22 @@ Commands that take a pipeline path (`build`, `plan`, `validate`, `fix`, `clean`)
 | **Schema** | Fixed | Fixed | Fixed | Fixed | You define it |
 
 Synix is not a memory store. It's the build system that produces one.
+
+## Known Limitations
+
+These are the highest-priority open issues. See the [issue tracker](https://github.com/marklubin/synix/issues) for the full backlog.
+
+| Issue | Priority | Description |
+|-------|----------|-------------|
+| [#53](https://github.com/marklubin/synix/issues/53) | P0 | **Parser metadata passthrough** — YAML frontmatter fields in source files are not propagated to artifact metadata. Custom fields like `author` or `date` are silently dropped. |
+| [#52](https://github.com/marklubin/synix/issues/52) | P0 | **Validate/verify and trace artifacts** — Trace artifacts from provenance tracking can trigger false positives in validators that expect only content artifacts. |
+| [#57](https://github.com/marklubin/synix/issues/57) | P1 | **Rich search output** — Search results show artifact IDs but not inline content snippets or provenance context. Requires multiple commands to get the full picture. |
+| [#56](https://github.com/marklubin/synix/issues/56) | P1 | **Provenance summarization** — Lineage output is raw dependency chains. No summarized view or filtering for large graphs. |
+| [#55](https://github.com/marklubin/synix/issues/55) | P1 | **Pipeline-relative imports** — Custom transforms using relative imports fail when the pipeline file is outside the project root. |
+| [#54](https://github.com/marklubin/synix/issues/54) | P1 | **Non-interactive automation mode** — No `--quiet` / `--json` output mode for CI or scripted usage. Rich formatting assumes a TTY. |
+| [#33](https://github.com/marklubin/synix/issues/33) | — | **Embedding failures are silent** — If embedding generation fails, search indexing silently falls back to keyword-only instead of erroring. |
+
+**Removed source files are not cleaned up** — Deleting a source file does not remove its downstream artifacts. Run `uvx synix clean` and rebuild to purge orphans.
 
 ## Links
 

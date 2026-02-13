@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security issue
+    url: mailto:marklubin@pm.me
+    about: Report security vulnerabilities privately by email.

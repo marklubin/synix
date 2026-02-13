@@ -26,6 +26,9 @@ class ParseTransform(BaseTransform):
 
         # Sort for deterministic ordering and parse each file
         for filepath in sorted(set(files)):
-            artifacts.extend(parse_file(filepath))
+            rel_path = str(filepath.relative_to(source_dir))
+            for art in parse_file(filepath):
+                art.metadata["source_path"] = rel_path
+                artifacts.append(art)
 
         return artifacts

@@ -103,8 +103,10 @@ class BuildProgress:
 
     def projection_finish(self, name: str, triggered_by: str | None = None) -> None:
         with self._lock:
+            # Find the running entry (not an already-finished one from a prior
+            # progressive materialization of the same projection).
             for ps in self._projection_states:
-                if ps["name"] == name:
+                if ps["name"] == name and ps["status"] == "running":
                     ps["status"] = "done"
                     break
 
