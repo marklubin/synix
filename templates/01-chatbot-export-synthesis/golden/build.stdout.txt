@@ -12,9 +12,26 @@
   ✓ monthly (level 2)  <N> <STATUS>  <TIME>
     └─ memory-index  <MATERIALIZED>
        └─ embeddings  11/11  <TIME>  (fastembed, <MATERIALIZED>: 11)
-  core (level 3)  0/1  ⟳ 1 in flight  <TIME>
+  ✓ core (level 3)  <N> <STATUS>  <TIME>
+    └─ memory-index  <MATERIALIZED>
+       └─ embeddings  12/12  <TIME>  (fastembed, <MATERIALIZED>: 12)
+    └─ context-doc  <MATERIALIZED>
+    └─ memory-index  <MATERIALIZED>
+       └─ embeddings  12/12  <TIME>  (fastembed, <MATERIALIZED>: 12)
+    └─ context-doc  <MATERIALIZED>
+                          Build Summary
+╭──────────────────┬──────────────┬───────┬────────┬─────────────╮
+│ Layer            │    Level     │ Built │ Cached │     Skipped │
+├──────────────────┼──────────────┼───────┼────────┼─────────────┤
+│ transcripts      │  <N>  │  <N>  │  <N>  │  <N>  │
+│ episodes         │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → memory-index │ search_index │       │        │ progressive │
+│ monthly          │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → memory-index │ search_index │       │        │ progressive │
+│ core             │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → memory-index │ search_index │       │        │ <MATERIALIZED> │
+│   → context-doc  │  flat_file   │       │        │ <MATERIALIZED> │
+╰──────────────────┴──────────────┴───────┴────────┴─────────────╯
 
-    ⟳ synthesis  <TIME>
-Pipeline failed: Cassette miss for key <HASH>... (prompt: You are synthesizing all available information into a
-core memory document for a)
-Run with SYNIX_CASSETTE_MODE=record to capture this call.
+Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
+LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>

@@ -26,6 +26,7 @@ personal-memory  claude-haiku-4-5-20251001 (anthropic)
 │   └── cache: all components match (v1: model prompt source)
 └── core  transform:core_synthesis  <STATS>
     ├── ← monthly
+    ├── cache: all components match (v1: config model prompt source)
     ├── → memory-index  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
     │   ├── ← episodes
     │   ├── ← monthly

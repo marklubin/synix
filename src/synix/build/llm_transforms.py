@@ -155,8 +155,11 @@ class MonthlyRollupTransform(BaseTransform):
             year, mo = "unknown", "undated"
         else:
             year, mo = month.split("-")
+        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        sorted_inputs = sorted(inputs, key=lambda ep: ep.artifact_id)
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}" for ep in inputs
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            for ep in sorted_inputs
         )
         prompt = template.replace("{month}", mo).replace("{year}", year).replace("{episodes}", episodes_text)
         response = _logged_complete(
@@ -252,8 +255,11 @@ class TopicalRollupTransform(BaseTransform):
         client = _get_llm_client(config)
         model_config = config.get("llm_config", {})
 
+        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        sorted_inputs = sorted(inputs, key=lambda ep: ep.artifact_id)
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}" for ep in inputs
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            for ep in sorted_inputs
         )
         prompt = template.replace("{topic}", topic.replace("-", " ")).replace("{episodes}", episodes_text)
         slug = topic.lower().replace(" ", "-")
@@ -299,8 +305,10 @@ class CoreSynthesisTransform(BaseTransform):
         # Derive max_tokens from context_budget; fall back to model_config
         max_tokens = context_budget if context_budget else model_config.get("max_tokens", 2048)
 
+        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        sorted_inputs = sorted(inputs, key=lambda r: r.artifact_id)
         rollups_text = "\n\n---\n\n".join(
-            f"### {r.metadata.get('month', r.metadata.get('topic', r.label))}\n{r.content}" for r in inputs
+            f"### {r.metadata.get('month', r.metadata.get('topic', r.label))}\n{r.content}" for r in sorted_inputs
         )
         prompt = template.replace("{context_budget}", str(context_budget)).replace("{rollups}", rollups_text)
 
