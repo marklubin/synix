@@ -69,9 +69,9 @@ def parse_text(filepath: str | Path) -> list[Artifact]:
     # Count messages if conversation format
     message_count = len(_TURN_RE.findall(body)) if has_turns else 0
 
-    # Sanitize filename stem for artifact ID
+    # Sanitize filename stem for label
     safe_stem = _sanitize_id(filepath.stem)
-    artifact_id = f"t-text-{safe_stem}"
+    label = f"t-text-{safe_stem}"
 
     metadata: dict = {
         "source": "text",
@@ -87,7 +87,7 @@ def parse_text(filepath: str | Path) -> list[Artifact]:
 
     return [
         Artifact(
-            artifact_id=artifact_id,
+            label=label,
             artifact_type="transcript",
             content=content,
             metadata=metadata,

@@ -60,6 +60,91 @@ class TestTransformRegistry:
             assert isinstance(transform, BaseTransform)
 
 
+class TestParseTransformSourcePath:
+    """Tests for source_path metadata on parsed artifacts."""
+
+    def test_source_path_set_on_flat_dir(self, tmp_path):
+        """Artifacts from a flat source dir get source_path = filename."""
+        src = tmp_path / "sources"
+        src.mkdir()
+        (src / "alpha.md").write_text("Alpha content\n")
+        (src / "beta.md").write_text("Beta content\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        for art in artifacts:
+            assert "source_path" in art.metadata
+        paths = {a.metadata["source_path"] for a in artifacts}
+        assert "alpha.md" in paths
+        assert "beta.md" in paths
+
+    def test_source_path_relative_to_source_dir(self, tmp_path):
+        """Artifacts from nested dirs get relative paths."""
+        src = tmp_path / "sources"
+        sub = src / "team-a"
+        sub.mkdir(parents=True)
+        (sub / "alice.md").write_text("Alice bio\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].metadata["source_path"] == "team-a/alice.md"
+
+    def test_source_path_preserves_deep_nesting(self, tmp_path):
+        """Deep nesting is preserved in source_path."""
+        src = tmp_path / "sources"
+        deep = src / "dept" / "eng" / "backend"
+        deep.mkdir(parents=True)
+        (deep / "notes.md").write_text("Backend notes\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].metadata["source_path"] == "dept/eng/backend/notes.md"
+
+    def test_source_path_on_json_exports(self, tmp_path):
+        """JSON export artifacts also get source_path."""
+        src = tmp_path / "sources"
+        src.mkdir()
+        # Minimal Claude export
+        export = {
+            "conversations": [
+                {
+                    "uuid": "conv-001",
+                    "title": "Test",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "chat_messages": [
+                        {
+                            "uuid": "msg-001",
+                            "sender": "human",
+                            "text": "Hello",
+                            "created_at": "2024-01-01T00:00:00Z",
+                        },
+                        {
+                            "uuid": "msg-002",
+                            "sender": "assistant",
+                            "text": "Hi there",
+                            "created_at": "2024-01-01T00:01:00Z",
+                        },
+                    ],
+                }
+            ]
+        }
+        import json
+
+        (src / "export.json").write_text(json.dumps(export))
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) >= 1
+        for art in artifacts:
+            assert art.metadata["source_path"] == "export.json"
+
+
 class TestEpisodeSummaryTransform:
     """Tests for episode summary LLM transform."""
 
@@ -85,10 +170,10 @@ class TestEpisodeSummaryTransform:
         assert len(results) == 1
         ep = results[0]
         assert ep.artifact_type == "episode"
-        assert ep.artifact_id.startswith("ep-")
+        assert ep.label.startswith("ep-")
         assert ep.prompt_id is not None
         assert ep.prompt_id.startswith("episode_summary_v")
-        assert ep.content_hash.startswith("sha256:")
+        assert ep.artifact_id.startswith("sha256:")
         assert ep.metadata["source_conversation_id"] == transcripts[0].metadata["source_conversation_id"]
 
     def test_episode_summary_multiple_inputs(self, mock_llm, sample_artifacts):
@@ -108,7 +193,7 @@ class TestMonthlyRollupTransform:
         """6 episodes across 2 months → 2 rollups."""
         episodes = [
             Artifact(
-                artifact_id=f"ep-{i}",
+                label=f"ep-{i}",
                 artifact_type="episode",
                 content=f"Episode {i} content about technical topics.",
                 metadata={"date": date, "title": f"Episode {i}"},
@@ -140,7 +225,7 @@ class TestMonthlyRollupTransform:
         """Rollup artifacts have correct type and ID format."""
         episodes = [
             Artifact(
-                artifact_id="ep-1",
+                label="ep-1",
                 artifact_type="episode",
                 content="Content here.",
                 metadata={"date": "2024-03-15", "title": "Test"},
@@ -151,7 +236,7 @@ class TestMonthlyRollupTransform:
 
         assert len(results) == 1
         assert results[0].artifact_type == "rollup"
-        assert results[0].artifact_id == "monthly-2024-03"
+        assert results[0].label == "monthly-2024-03"
 
 
 class TestTopicalRollupTransform:
@@ -161,13 +246,13 @@ class TestTopicalRollupTransform:
         """3 topics configured → 3 topic artifacts."""
         episodes = [
             Artifact(
-                artifact_id="ep-1",
+                label="ep-1",
                 artifact_type="episode",
                 content="Discussion about career and AI projects.",
                 metadata={"date": "2024-03-15", "title": "Career chat"},
             ),
             Artifact(
-                artifact_id="ep-2",
+                label="ep-2",
                 artifact_type="episode",
                 content="Discussion about health and exercise.",
                 metadata={"date": "2024-03-16", "title": "Health chat"},
@@ -186,14 +271,14 @@ class TestTopicalRollupTransform:
 
         assert len(results) == 3
         assert len(mock_llm) == 3
-        topic_ids = {r.artifact_id for r in results}
-        assert topic_ids == {"topic-career", "topic-health", "topic-ai-projects"}
+        topic_labels = {r.label for r in results}
+        assert topic_labels == {"topic-career", "topic-health", "topic-ai-projects"}
 
     def test_topical_rollup_uses_all_episodes_without_search(self, mock_llm):
         """Without search_db_path, all episodes used for each topic."""
         episodes = [
             Artifact(
-                artifact_id=f"ep-{i}",
+                label=f"ep-{i}",
                 artifact_type="episode",
                 content=f"Content {i}",
                 metadata={"date": "2024-03-15", "title": f"Ep {i}"},
@@ -211,8 +296,8 @@ class TestTopicalRollupTransform:
         )
 
         assert len(results) == 1
-        # All 3 episodes should be in input_hashes
-        assert len(results[0].input_hashes) == 3
+        # All 3 episodes should be in input_ids
+        assert len(results[0].input_ids) == 3
 
 
 class TestCoreSynthesisTransform:
@@ -222,7 +307,7 @@ class TestCoreSynthesisTransform:
         """Always produces exactly 1 artifact."""
         rollups = [
             Artifact(
-                artifact_id=f"monthly-2024-0{i}",
+                label=f"monthly-2024-0{i}",
                 artifact_type="rollup",
                 content=f"Rollup for month {i}.",
                 metadata={"month": f"2024-0{i}"},
@@ -234,7 +319,7 @@ class TestCoreSynthesisTransform:
         results = transform.execute(rollups, {"llm_config": {}, "context_budget": 5000})
 
         assert len(results) == 1
-        assert results[0].artifact_id == "core-memory"
+        assert results[0].label == "core-memory"
         assert results[0].artifact_type == "core_memory"
         assert results[0].metadata["context_budget"] == 5000
         assert results[0].metadata["input_count"] == 3
@@ -243,7 +328,7 @@ class TestCoreSynthesisTransform:
         """Core synthesis artifact has a valid prompt_id."""
         rollups = [
             Artifact(
-                artifact_id="monthly-2024-01",
+                label="monthly-2024-01",
                 artifact_type="rollup",
                 content="Rollup content.",
                 metadata={"month": "2024-01"},

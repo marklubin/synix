@@ -14,10 +14,10 @@ from synix import Artifact
 from synix.search.indexer import SearchIndex, SearchIndexProjection, ShadowIndexManager
 
 
-def _make_artifact(artifact_id: str, content: str, layer: str = "episodes") -> Artifact:
+def _make_artifact(label: str, content: str, layer: str = "episodes") -> Artifact:
     """Helper to create a test artifact."""
     return Artifact(
-        artifact_id=artifact_id,
+        label=label,
         artifact_type="episode",
         content=content,
         metadata={"layer_name": layer, "layer_level": 1},
@@ -46,11 +46,11 @@ class TestShadowIndexSwap:
         # Verify data is queryable in the final index
         results = proj.query("machine learning")
         assert len(results) == 1
-        assert results[0].artifact_id == "ep-001"
+        assert results[0].label == "ep-001"
 
         results2 = proj.query("distributed systems")
         assert len(results2) == 1
-        assert results2[0].artifact_id == "ep-002"
+        assert results2[0].label == "ep-002"
 
         proj.close()
 
@@ -108,7 +108,7 @@ class TestShadowIndexSwap:
         verify_index = SearchIndex(old_db_path)
         results = verify_index.query("Rust")
         assert len(results) == 1
-        assert results[0].artifact_id == "old-001"
+        assert results[0].label == "old-001"
 
         # New data should NOT be in the index
         new_results = verify_index.query("New data")
@@ -135,7 +135,7 @@ class TestShadowIndexSwap:
 
         results = proj.query("Python")
         assert len(results) == 1
-        assert results[0].artifact_id == "ep-001"
+        assert results[0].label == "ep-001"
 
         proj.close()
 
@@ -162,7 +162,7 @@ class TestShadowIndexSwap:
         reader = SearchIndex(tmp_build_dir / "search.db")
         results = reader.query("Docker")
         assert len(results) == 1
-        assert results[0].artifact_id == "old-001"
+        assert results[0].label == "old-001"
 
         # New content should NOT be visible in the main index yet
         new_results = reader.query("Kubernetes")
@@ -176,7 +176,7 @@ class TestShadowIndexSwap:
         reader2 = SearchIndex(tmp_build_dir / "search.db")
         new_results2 = reader2.query("Kubernetes")
         assert len(new_results2) == 1
-        assert new_results2[0].artifact_id == "new-001"
+        assert new_results2[0].label == "new-001"
         reader2.close()
 
     def test_rollback_cleans_up_shadow(self, tmp_build_dir):

@@ -196,13 +196,13 @@ class TestLayerProjectionChain:
         """Fake episode artifacts with the metadata the index needs."""
         return [
             Artifact(
-                artifact_id="ep-conv001",
+                label="ep-conv001",
                 artifact_type="episode",
                 content="Discussion about Python programming and web development.",
                 metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "Python chat"},
             ),
             Artifact(
-                artifact_id="ep-conv002",
+                label="ep-conv002",
                 artifact_type="episode",
                 content="Machine learning model training and evaluation.",
                 metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "ML chat"},
@@ -213,7 +213,7 @@ class TestLayerProjectionChain:
     def monthly_artifacts(self):
         return [
             Artifact(
-                artifact_id="monthly-2024-03",
+                label="monthly-2024-03",
                 artifact_type="rollup",
                 content="March themes: programming and ML.",
                 metadata={"layer_name": "monthly", "layer_level": 2, "month": "2024-03"},
@@ -224,7 +224,7 @@ class TestLayerProjectionChain:
     def core_artifacts(self):
         return [
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content="## Identity\nSoftware engineer focused on AI.",
                 metadata={"layer_name": "core", "layer_level": 3},
@@ -369,7 +369,7 @@ class TestLayerProjectionChain:
         # Only after core layer is present should the flat file materialize
         layer_artifacts["core"] = [
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content="## Identity\nSoftware engineer.",
                 metadata={"layer_name": "core", "layer_level": 3},
@@ -446,6 +446,38 @@ class TestProgressiveMaterialization:
         assert isinstance(results, list)
         assert len(results) > 0
         index.close()
+
+
+class TestProgressProjectionFinish:
+    """Regression test: progressive projection_finish must update the running entry, not a stale done one."""
+
+    def test_repeated_projection_finish_updates_running_entry(self):
+        """When the same projection is started multiple times (progressive search_index),
+        projection_finish must mark the currently-running entry as done, not re-mark
+        a previously-completed one."""
+        from synix.cli.progress import BuildProgress
+
+        progress = BuildProgress()
+
+        # Simulate progressive materialization: same projection started twice
+        # (once after layer "bios", once after layer "work_styles")
+        progress.layer_finish("bios", built=3, cached=0)
+        progress.projection_start("search", triggered_by="bios")
+        progress.projection_finish("search", triggered_by="bios")
+
+        progress.layer_finish("work_styles", built=3, cached=0)
+        progress.projection_start("search", triggered_by="work_styles")
+        progress.projection_finish("search", triggered_by="work_styles")
+
+        # Both entries should be "done", not stuck at "running"
+        for ps in progress._projection_states:
+            assert ps["status"] == "done", f"Projection entry stuck at '{ps['status']}' (expected 'done')"
+
+        # Verify entries filed under correct layers
+        assert len(progress._layer_projections["bios"]) == 1
+        assert progress._layer_projections["bios"][0]["status"] == "done"
+        assert len(progress._layer_projections["work_styles"]) == 1
+        assert progress._layer_projections["work_styles"][0]["status"] == "done"
 
 
 # ---------------------------------------------------------------------------

@@ -45,7 +45,7 @@ def provenance(build_dir):
 
 def _make_artifact(aid, atype="episode", content="test content", **meta):
     return Artifact(
-        artifact_id=aid,
+        label=aid,
         artifact_type=atype,
         content=content,
         metadata=meta,
@@ -60,14 +60,14 @@ def _make_artifact(aid, atype="episode", content="test content", **meta):
 class TestFixAction:
     def test_basic_fields(self):
         a = FixAction(
-            artifact_id="art-1",
+            label="art-1",
             action="rewrite",
-            original_content_hash="sha256:abc",
+            original_artifact_id="sha256:abc",
             new_content="new content",
-            new_content_hash="sha256:def",
+            new_artifact_id="sha256:def",
             description="test fix",
         )
-        assert a.artifact_id == "art-1"
+        assert a.label == "art-1"
         assert a.action == "rewrite"
         assert a.interactive is False
         assert a.llm_explanation == ""
@@ -76,11 +76,11 @@ class TestFixAction:
 
     def test_interactive_flag(self):
         a = FixAction(
-            artifact_id="art-1",
+            label="art-1",
             action="rewrite",
-            original_content_hash="",
+            original_artifact_id="",
             new_content="",
-            new_content_hash="",
+            new_artifact_id="",
             description="",
             interactive=True,
         )
@@ -171,7 +171,7 @@ class TestRunFixers:
             handles_violation_types = ["match_type"]
 
             def fix(self, violation, ctx):
-                return FixAction(violation.artifact_id, "skip", "", "", "", "skipped")
+                return FixAction(violation.label, "skip", "", "", "", "skipped")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(FixerDecl(name="test_match_fixer"))
@@ -184,7 +184,7 @@ class TestRunFixers:
         )
         result = run_fixers(vr, pipeline, store, provenance)
         assert len(result.actions) == 1
-        assert result.actions[0].artifact_id == "art-1"
+        assert result.actions[0].label == "art-1"
         assert "test_match_fixer" in result.fixers_run
 
     def test_fixer_error_captured(self, store, provenance):
@@ -211,16 +211,16 @@ class TestRunFixers:
     def test_downstream_invalidation_computed(self, store, provenance):
         """Verify that run_fixers populates downstream_invalidated on actions."""
         # Set up provenance: child depends on parent
-        provenance.record("parent-1", parent_ids=[])
-        provenance.record("child-1", parent_ids=["parent-1"])
-        provenance.record("child-2", parent_ids=["parent-1"])
+        provenance.record("parent-1", parent_labels=[])
+        provenance.record("child-1", parent_labels=["parent-1"])
+        provenance.record("child-2", parent_labels=["parent-1"])
 
         @register_fixer("test_downstream_fixer")
         class DownstreamFixer(BaseFixer):
             handles_violation_types = ["downstream_type"]
 
             def fix(self, violation, ctx):
-                return FixAction(violation.artifact_id, "rewrite", "", "new", "", "fixed")
+                return FixAction(violation.label, "rewrite", "", "new", "", "fixed")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(FixerDecl(name="test_downstream_fixer"))
@@ -243,15 +243,15 @@ class TestRunFixers:
 
 class TestFindDownstream:
     def test_finds_children(self, provenance):
-        provenance.record("child-1", parent_ids=["parent-1"])
-        provenance.record("child-2", parent_ids=["parent-1"])
-        provenance.record("unrelated", parent_ids=["other"])
+        provenance.record("child-1", parent_labels=["parent-1"])
+        provenance.record("child-2", parent_labels=["parent-1"])
+        provenance.record("unrelated", parent_labels=["other"])
 
         downstream = _find_downstream_artifacts("parent-1", provenance)
         assert set(downstream) == {"child-1", "child-2"}
 
     def test_no_children(self, provenance):
-        provenance.record("leaf", parent_ids=["some-parent"])
+        provenance.record("leaf", parent_labels=["some-parent"])
         downstream = _find_downstream_artifacts("leaf", provenance)
         assert downstream == []
 
@@ -265,14 +265,14 @@ class TestApplyFix:
     def test_rewrites_artifact(self, store, provenance):
         art = _make_artifact("art-1", "episode", "original content", layer_name="episodes", layer_level=1)
         store.save_artifact(art, "episodes", 1)
-        provenance.record("art-1", parent_ids=["t-1"])
+        provenance.record("art-1", parent_labels=["t-1"])
 
         action = FixAction(
-            artifact_id="art-1",
+            label="art-1",
             action="rewrite",
-            original_content_hash=art.content_hash,
+            original_artifact_id=art.artifact_id,
             new_content="fixed content",
-            new_content_hash="sha256:new",
+            new_artifact_id="sha256:new",
             description="test fix",
             evidence_source_ids=["evidence-1"],
         )
@@ -281,7 +281,7 @@ class TestApplyFix:
         reloaded = store.load_artifact("art-1")
         assert reloaded is not None
         assert reloaded.content == "fixed content"
-        assert "sha256:" in reloaded.content_hash
+        assert "sha256:" in reloaded.artifact_id
 
         # Provenance preserves original parents (evidence sources are
         # reference context, not true input lineage)
@@ -290,11 +290,11 @@ class TestApplyFix:
 
     def test_missing_artifact_noop(self, store, provenance):
         action = FixAction(
-            artifact_id="nonexistent",
+            label="nonexistent",
             action="rewrite",
-            original_content_hash="",
+            original_artifact_id="",
             new_content="new",
-            new_content_hash="",
+            new_artifact_id="",
             description="",
         )
         # Should not raise
@@ -324,8 +324,8 @@ class _MockLLMClient:
 
 
 class _MockSearchResult:
-    def __init__(self, artifact_id, content):
-        self.artifact_id = artifact_id
+    def __init__(self, label, content):
+        self.label = label
         self.content = content
 
 
@@ -345,19 +345,19 @@ class _MockSearchIndex:
 
 
 class TestSemanticEnrichmentFixer:
-    def _make_violation(self, artifact_id="a-1"):
+    def _make_violation(self, label="a-1"):
         return Violation(
             violation_type="semantic_conflict",
             severity="warning",
             message="Contradiction",
-            artifact_id=artifact_id,
+            label=label,
             field="content",
             metadata={
                 "claim_a": "likes cats",
                 "claim_b": "hates cats",
                 "claim_a_source_hint": "conversation about pets",
                 "claim_b_source_hint": "conversation about animals",
-                "content_hash": "hash1",
+                "artifact_id": "hash1",
             },
             violation_id="vid-1",
         )
@@ -426,7 +426,7 @@ class TestSemanticEnrichmentFixer:
         """Full flow: fix then apply, verify provenance includes evidence."""
         art = _make_artifact("a-1", "episode", "Original content.", layer_name="episodes", layer_level=1)
         store.save_artifact(art, "episodes", 1)
-        provenance.record("a-1", parent_ids=["t-1"])
+        provenance.record("a-1", parent_labels=["t-1"])
 
         mock_llm = _MockLLMClient('{"status": "resolved", "content": "Fixed content.", "explanation": "resolved"}')
         mock_search = _MockSearchIndex(

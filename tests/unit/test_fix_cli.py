@@ -101,13 +101,13 @@ class TestFixCommand:
 
         # Save an artifact with original content
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="SSN: 123-45-6789",
             metadata={"layer_name": "episodes"},
         )
         store.save_artifact(art, "episodes", 1)
-        original_hash = store.get_content_hash("ep-1")
+        original_hash = store.get_artifact_id("ep-1")
 
         # Persist a violation against the original hash
         queue = ViolationQueue.load(build_dir)
@@ -116,9 +116,9 @@ class TestFixCommand:
                 violation_type="pii",
                 severity="warning",
                 message="PII detected (ssn)",
-                artifact_id="ep-1",
+                label="ep-1",
                 field="content",
-                metadata={"content_hash": original_hash},
+                metadata={"artifact_id": original_hash},
                 violation_id="test-vid-1",
             )
         )
@@ -129,7 +129,7 @@ class TestFixCommand:
 
         # "Rebuild" the artifact with different content
         art2 = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="No PII here, all clean.",
             metadata={"layer_name": "episodes"},
@@ -160,13 +160,13 @@ class TestFixCommand:
 
         store = ArtifactStore(build_dir)
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="SSN: 123-45-6789",
             metadata={"layer_name": "episodes"},
         )
         store.save_artifact(art, "episodes", 1)
-        content_hash = store.get_content_hash("ep-1")
+        content_hash = store.get_artifact_id("ep-1")
 
         queue = ViolationQueue.load(build_dir)
         queue.upsert(
@@ -174,9 +174,9 @@ class TestFixCommand:
                 violation_type="pii",
                 severity="warning",
                 message="PII detected",
-                artifact_id="ep-1",
+                label="ep-1",
                 field="content",
-                metadata={"content_hash": content_hash},
+                metadata={"artifact_id": content_hash},
                 violation_id="test-vid-2",
             )
         )

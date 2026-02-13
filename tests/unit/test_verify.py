@@ -25,7 +25,7 @@ def populated_build(tmp_path):
 
     # Create transcript (level 0 — no provenance needed)
     t1 = Artifact(
-        artifact_id="t-001",
+        label="t-001",
         artifact_type="transcript",
         content="User: Hello\n\nAssistant: Hi there!",
         metadata={"source": "chatgpt", "date": "2025-01-15"},
@@ -34,29 +34,29 @@ def populated_build(tmp_path):
 
     # Create episode (level 1 — needs provenance)
     ep1 = Artifact(
-        artifact_id="ep-001",
+        label="ep-001",
         artifact_type="episode",
         content="This conversation was about greetings.",
-        input_hashes=[t1.content_hash],
+        input_ids=[t1.artifact_id],
         prompt_id="episode_summary_v1",
         model_config={"model": "test"},
         metadata={"source_conversation_id": "001"},
     )
     store.save_artifact(ep1, "episodes", 1)
-    provenance.record("ep-001", parent_ids=["t-001"], prompt_id="episode_summary_v1")
+    provenance.record("ep-001", parent_labels=["t-001"], prompt_id="episode_summary_v1")
 
     # Create core memory (level 3)
     core = Artifact(
-        artifact_id="core-memory",
+        label="core-memory",
         artifact_type="core_memory",
         content="Mark is a software engineer.",
-        input_hashes=[ep1.content_hash],
+        input_ids=[ep1.artifact_id],
         prompt_id="core_memory_v1",
         model_config={"model": "test"},
         metadata={},
     )
     store.save_artifact(core, "core", 3)
-    provenance.record("core-memory", parent_ids=["ep-001"], prompt_id="core_memory_v1")
+    provenance.record("core-memory", parent_labels=["ep-001"], prompt_id="core_memory_v1")
 
     return build_dir
 
@@ -106,13 +106,13 @@ class TestVerifyBuild:
         assert "1" in check.message  # 1 artifact missing provenance
 
     def test_content_hash_mismatch(self, populated_build):
-        """Tamper with artifact content without updating hash."""
+        """Tamper with artifact content without updating artifact_id."""
         manifest = json.loads((populated_build / "manifest.json").read_text())
         for aid, entry in manifest.items():
             art_path = populated_build / entry["path"]
             data = json.loads(art_path.read_text())
             data["content"] = "TAMPERED CONTENT"
-            # Don't update content_hash — this should fail verification
+            # Don't update artifact_id — this should fail verification
             art_path.write_text(json.dumps(data))
             break
 

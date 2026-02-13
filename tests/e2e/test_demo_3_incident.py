@@ -508,12 +508,12 @@ class TestDT3MergeTransform:
         assert len(chain) >= 1, "Provenance chain should not be empty"
 
         # The chain should reach transcript-level artifacts
-        chain_artifact_ids = {rec.artifact_id for rec in chain}
+        chain_artifact_ids = {rec.label for rec in chain}
         # Also collect all parent IDs referenced in the chain
         all_referenced_ids: set[str] = set()
         for rec in chain:
-            all_referenced_ids.add(rec.artifact_id)
-            all_referenced_ids.update(rec.parent_artifact_ids)
+            all_referenced_ids.add(rec.label)
+            all_referenced_ids.update(rec.parent_labels)
 
         # Verify that some of the referenced IDs are transcript-level artifacts
         transcript_ids_in_chain = {

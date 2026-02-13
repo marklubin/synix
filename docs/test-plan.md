@@ -50,9 +50,9 @@ def tmp_build_dir(tmp_path):
 def sample_artifacts():
     """Pre-built artifacts for testing downstream modules."""
     return [
-        Artifact(artifact_id="t-001", artifact_type="transcript", content="...", ...),
-        Artifact(artifact_id="t-002", artifact_type="transcript", content="...", ...),
-        Artifact(artifact_id="ep-001", artifact_type="episode", content="...", ...),
+        Artifact(label="t-001", artifact_type="transcript", content="...", ...),
+        Artifact(label="t-002", artifact_type="transcript", content="...", ...),
+        Artifact(label="ep-001", artifact_type="episode", content="...", ...),
     ]
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def sample_pipeline(tmp_build_dir):
 - `test_save_and_load_roundtrip` — save artifact, load by ID, content matches
 - `test_load_nonexistent_returns_none`
 - `test_list_by_layer` — save 5 artifacts across 3 layers, list each correctly
-- `test_content_hash_computed` — hash is SHA256 of content
+- `test_artifact_id_computed` — artifact_id is SHA256 of content
 - `test_manifest_persistence` — save artifacts, reload store, manifest intact
 - `test_overwrite_artifact` — save same ID twice, latest wins
 

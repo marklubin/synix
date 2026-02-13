@@ -17,6 +17,7 @@
 
 personal-memory  claude-haiku-4-5-20251001 (anthropic)
 ├── transcripts  source:parse  <STATS>
+│   └── ← ./sources (2 .json files)
 ├── episodes  transform:episode_summary  <STATS>
 │   └── ← transcripts
 ├── monthly  transform:monthly_rollup  <STATS>

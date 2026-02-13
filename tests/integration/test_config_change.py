@@ -175,7 +175,7 @@ class TestConfigChange:
 
         index1 = SearchIndex(build_dir / "search.db")
         results1 = index1.query("programming")
-        ids1 = {r.artifact_id for r in results1}
+        ids1 = {r.label for r in results1}
         index1.close()
 
         topical = _topical_pipeline(build_dir)
@@ -183,7 +183,7 @@ class TestConfigChange:
 
         index2 = SearchIndex(build_dir / "search.db")
         results2 = index2.query("programming")
-        ids2 = {r.artifact_id for r in results2}
+        ids2 = {r.label for r in results2}
         index2.close()
 
         # The rollup artifact IDs should differ (monthly-* vs topic-*)

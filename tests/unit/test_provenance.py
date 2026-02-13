@@ -10,8 +10,8 @@ class TestProvenanceTracker:
         """Record provenance, get_parents returns correct IDs."""
         tracker = ProvenanceTracker(tmp_build_dir)
         tracker.record(
-            artifact_id="ep-conv001",
-            parent_ids=["t-chatgpt-conv001"],
+            label="ep-conv001",
+            parent_labels=["t-chatgpt-conv001"],
             prompt_id="episode_summary_v1",
             model_config={"model": "claude-sonnet-4-20250514"},
         )
@@ -27,16 +27,16 @@ class TestProvenanceTracker:
         tracker = ProvenanceTracker(tmp_build_dir)
 
         # transcript has no parents (root)
-        tracker.record("t-001", parent_ids=[])
+        tracker.record("t-001", parent_labels=[])
         # episode depends on transcript
-        tracker.record("ep-001", parent_ids=["t-001"], prompt_id="episode_v1")
+        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="episode_v1")
         # monthly depends on episode
-        tracker.record("monthly-2025-01", parent_ids=["ep-001"], prompt_id="monthly_v1")
+        tracker.record("monthly-2025-01", parent_labels=["ep-001"], prompt_id="monthly_v1")
         # core depends on monthly
-        tracker.record("core-memory", parent_ids=["monthly-2025-01"], prompt_id="core_v1")
+        tracker.record("core-memory", parent_labels=["monthly-2025-01"], prompt_id="core_v1")
 
         chain = tracker.get_chain("core-memory")
-        chain_ids = [r.artifact_id for r in chain]
+        chain_ids = [r.label for r in chain]
 
         assert "core-memory" in chain_ids
         assert "monthly-2025-01" in chain_ids
@@ -50,15 +50,15 @@ class TestProvenanceTracker:
 
         # 5 episodes, each from a transcript
         for i in range(5):
-            tracker.record(f"t-{i}", parent_ids=[])
-            tracker.record(f"ep-{i}", parent_ids=[f"t-{i}"], prompt_id="episode_v1")
+            tracker.record(f"t-{i}", parent_labels=[])
+            tracker.record(f"ep-{i}", parent_labels=[f"t-{i}"], prompt_id="episode_v1")
 
         # Monthly rollup depends on all 5 episodes
         episode_ids = [f"ep-{i}" for i in range(5)]
-        tracker.record("monthly-2025-01", parent_ids=episode_ids, prompt_id="monthly_v1")
+        tracker.record("monthly-2025-01", parent_labels=episode_ids, prompt_id="monthly_v1")
 
         chain = tracker.get_chain("monthly-2025-01")
-        chain_ids = {r.artifact_id for r in chain}
+        chain_ids = {r.label for r in chain}
 
         # Should include: monthly + 5 episodes + 5 transcripts = 11
         assert "monthly-2025-01" in chain_ids
@@ -72,7 +72,7 @@ class TestProvenanceTracker:
         tracker1 = ProvenanceTracker(tmp_build_dir)
         tracker1.record(
             "ep-001",
-            parent_ids=["t-001", "t-002"],
+            parent_labels=["t-001", "t-002"],
             prompt_id="episode_v1",
             model_config={"model": "claude-sonnet-4-20250514"},
         )

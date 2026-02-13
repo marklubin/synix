@@ -346,7 +346,7 @@ class TestCassetteEmbeddingWrapper:
             wrapper.embed("unknown text")
 
     def test_content_hash_passthrough(self, tmp_path):
-        """Wrapper preserves content_hash() from real provider."""
+        """Wrapper preserves content_hash() method from real provider."""
         cassette_dir = tmp_path / "cassettes"
         provider = _make_mock_embedding_provider(tmp_path / "build")
         wrapper = CassetteEmbeddingWrapper(provider, "record", cassette_dir)

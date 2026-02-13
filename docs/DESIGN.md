@@ -380,7 +380,7 @@ Combine records from multiple sources with deduplication. Merge sits at the top 
 ```python
 pipeline.merge("unified",
     from_=["chatgpt", "claude"],
-    dedupe="content_hash",      # default: exact content match
+    dedupe="artifact_id",       # default: exact content match
     # dedupe="metadata_match",  # match on specific fields
     # dedupe="fuzzy",           # similarity threshold (future)
     conflict="prefer_latest"    # or: prefer_first, keep_all
@@ -388,7 +388,7 @@ pipeline.merge("unified",
 ```
 
 Dedup options:
-- `content_hash` — SHA-256 of content. Exact duplicates only. Fast and safe.
+- `artifact_id` — SHA-256 of content. Exact duplicates only. Fast and safe.
 - `metadata_match` — Match on specified fields (e.g., `conversation_id`). For when same conversation appears in multiple exports with different formatting.
 - `fuzzy` (future) — Semantic similarity above threshold. Dangerous — requires careful tuning.
 

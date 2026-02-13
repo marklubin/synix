@@ -31,7 +31,7 @@ from synix.core.models import Artifact, Pipeline
 class ProvenanceStep:
     """A single node in a provenance trace with field value at that node."""
 
-    artifact_id: str
+    label: str
     layer: str
     field_value: str | None = None
 
@@ -43,7 +43,7 @@ class Violation:
     violation_type: str  # "mutual_exclusion", "required_field", custom
     severity: str  # "error", "warning"
     message: str  # human-readable summary
-    artifact_id: str  # artifact that violated
+    label: str  # artifact that violated
     field: str  # metadata field involved
     metadata: dict = field(default_factory=dict)
     provenance_trace: list[ProvenanceStep] = field(default_factory=list)
@@ -58,7 +58,7 @@ class ValidationContext:
     provenance: ProvenanceTracker
     pipeline: Pipeline | None = None
 
-    def trace_field_origin(self, artifact_id: str, field_name: str) -> list[ProvenanceStep]:
+    def trace_field_origin(self, label: str, field_name: str) -> list[ProvenanceStep]:
         """BFS walk provenance, collecting the field value at each node.
 
         Returns a list of ProvenanceStep from the starting artifact down
@@ -66,7 +66,7 @@ class ValidationContext:
         """
         steps: list[ProvenanceStep] = []
         visited: set[str] = set()
-        queue: deque[str] = deque([artifact_id])
+        queue: deque[str] = deque([label])
 
         while queue:
             current_id = queue.popleft()
@@ -85,7 +85,7 @@ class ValidationContext:
 
             steps.append(
                 ProvenanceStep(
-                    artifact_id=current_id,
+                    label=current_id,
                     layer=layer,
                     field_value=field_value,
                 )
@@ -120,12 +120,12 @@ class ValidationResult:
                     "violation_type": v.violation_type,
                     "severity": v.severity,
                     "message": v.message,
-                    "artifact_id": v.artifact_id,
+                    "label": v.label,
                     "field": v.field,
                     "metadata": v.metadata,
                     "provenance_trace": [
                         {
-                            "artifact_id": s.artifact_id,
+                            "label": s.label,
                             "layer": s.layer,
                             "field_value": s.field_value,
                         }
@@ -143,7 +143,7 @@ class ValidationResult:
 
 
 def mutual_exclusion_violation(
-    artifact_id: str,
+    label: str,
     field_name: str,
     values: list[str],
     *,
@@ -156,14 +156,14 @@ def mutual_exclusion_violation(
         violation_type="mutual_exclusion",
         severity=severity,
         message=msg,
-        artifact_id=artifact_id,
+        label=label,
         field=field_name,
         metadata={"conflicting_values": values},
     )
 
 
 def required_field_violation(
-    artifact_id: str,
+    label: str,
     field_name: str,
     *,
     severity: str = "error",
@@ -175,7 +175,7 @@ def required_field_violation(
         violation_type="required_field",
         severity=severity,
         message=msg,
-        artifact_id=artifact_id,
+        label=label,
         field=field_name,
         metadata={},
     )
@@ -186,28 +186,28 @@ def required_field_violation(
 # ---------------------------------------------------------------------------
 
 
-def compute_violation_id(violation_type: str, artifact_id: str, claim_a: str = "", claim_b: str = "") -> str:
+def compute_violation_id(violation_type: str, label: str, claim_a: str = "", claim_b: str = "") -> str:
     """Stable ID for deduplication. Normalized: lowercase, stripped, sorted claims."""
     claims = sorted([claim_a.strip().lower(), claim_b.strip().lower()])
-    raw = f"{violation_type}|{artifact_id}|{claims[0]}|{claims[1]}"
+    raw = f"{violation_type}|{label}|{claims[0]}|{claims[1]}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def _store_llm_trace(store: ArtifactStore, artifact_id: str, prompt: str, response: str, trace_type: str) -> None:
+def _store_llm_trace(store: ArtifactStore, label: str, prompt: str, response: str, trace_type: str) -> None:
     """Save an LLM interaction as a system artifact for auditability."""
     trace = Artifact(
-        artifact_id=f"trace-{trace_type}-{artifact_id}-{uuid4().hex[:8]}",
+        label=f"trace-{trace_type}-{label}-{uuid4().hex[:8]}",
         artifact_type="llm_trace",
         content=json.dumps(
             {
                 "trace_type": trace_type,
-                "target_artifact": artifact_id,
+                "target_artifact": label,
                 "prompt": prompt,
                 "response": response,
                 "timestamp": datetime.now().isoformat(),
             }
         ),
-        metadata={"trace_type": trace_type, "target_artifact": artifact_id},
+        metadata={"trace_type": trace_type, "target_artifact": label},
     )
     store.save_artifact(trace, layer_name="traces", layer_level=99)
 
@@ -248,39 +248,39 @@ class ViolationQueue:
     def upsert(self, violation: Violation) -> None:
         vid = violation.violation_id
         if not vid:
-            vid = compute_violation_id(violation.violation_type, violation.artifact_id)
+            vid = compute_violation_id(violation.violation_type, violation.label)
         existing = self._state.get(vid)
-        # Get content hash from violation metadata or artifact_id
-        content_hash = violation.metadata.get("content_hash", "")
+        # Get artifact_id (hash) from violation metadata
+        artifact_id = violation.metadata.get("artifact_id", "")
         self._state[vid] = {
             "violation_id": vid,
             "status": "active"
             if (
                 existing is None
                 or existing.get("status") != "ignored"
-                or existing.get("last_seen_hash") != content_hash
+                or existing.get("last_seen_hash") != artifact_id
             )
             else "ignored",
-            "last_seen_hash": content_hash,
+            "last_seen_hash": artifact_id,
             "violation": {
                 "violation_type": violation.violation_type,
                 "severity": violation.severity,
                 "message": violation.message,
-                "artifact_id": violation.artifact_id,
+                "label": violation.label,
                 "field": violation.field,
                 "metadata": violation.metadata,
                 "violation_id": vid,
             },
         }
         # Reset ignored status if content changed
-        if existing and existing.get("status") == "ignored" and existing.get("last_seen_hash") != content_hash:
+        if existing and existing.get("status") == "ignored" and existing.get("last_seen_hash") != artifact_id:
             self._state[vid]["status"] = "active"
         self._append_log(
             {
                 "event": "detected",
                 "violation_id": vid,
                 "timestamp": datetime.now().isoformat(),
-                "artifact_id": violation.artifact_id,
+                "label": violation.label,
                 "type": violation.violation_type,
             }
         )
@@ -324,8 +324,8 @@ class ViolationQueue:
                 continue
             # Version check: if artifact was rebuilt, violation is stale
             if store is not None:
-                artifact_id = entry["violation"].get("artifact_id", "")
-                current_hash = store.get_content_hash(artifact_id)
+                label = entry["violation"].get("label", "")
+                current_hash = store.get_artifact_id(label)
                 if current_hash and current_hash != entry.get("last_seen_hash"):
                     entry["status"] = "expired"
                     self._append_log(
@@ -397,7 +397,7 @@ class MutualExclusionValidator(BaseValidator):
         violations: list[Violation] = []
 
         for artifact in artifacts:
-            parent_ids = ctx.provenance.get_parents(artifact.artifact_id)
+            parent_ids = ctx.provenance.get_parents(artifact.label)
             values: set[str] = set()
 
             for pid in parent_ids:
@@ -418,7 +418,7 @@ class MutualExclusionValidator(BaseValidator):
             if len(values) > 1:
                 violations.append(
                     mutual_exclusion_violation(
-                        artifact_id=artifact.artifact_id,
+                        label=artifact.label,
                         field_name=self._field_name,
                         values=sorted(values),
                     )
@@ -444,7 +444,7 @@ class RequiredFieldValidator(BaseValidator):
             if raw is None or (isinstance(raw, str) and not raw.strip()):
                 violations.append(
                     required_field_violation(
-                        artifact_id=artifact.artifact_id,
+                        label=artifact.label,
                         field_name=self._field_name,
                     )
                 )
@@ -497,18 +497,18 @@ class PIIValidator(BaseValidator):
                 matches = pattern.findall(artifact.content)
                 for match in matches:
                     redacted = self._redact(match, pattern_name)
-                    vid = compute_violation_id("pii", artifact.artifact_id, pattern_name, match)
+                    vid = compute_violation_id("pii", artifact.label, pattern_name, match)
                     violations.append(
                         Violation(
                             violation_type="pii",
                             severity=severity,
                             message=f"PII detected ({pattern_name}): {redacted}",
-                            artifact_id=artifact.artifact_id,
+                            label=artifact.label,
                             field="content",
                             metadata={
                                 "pattern": pattern_name,
                                 "redacted_value": redacted,
-                                "content_hash": artifact.content_hash,
+                                "artifact_id": artifact.artifact_id,
                             },
                             violation_id=vid,
                         )
@@ -600,11 +600,11 @@ class SemanticConflictValidator(BaseValidator):
                 prompt = prompt_template.replace("{content}", artifact.content)
                 response = client.complete(
                     messages=[{"role": "user", "content": prompt}],
-                    artifact_desc=f"conflict check for {artifact.artifact_id}",
+                    artifact_desc=f"conflict check for {artifact.label}",
                 )
 
                 # Store LLM trace
-                _store_llm_trace(ctx.store, artifact.artifact_id, prompt, response.content, "semantic_conflict_check")
+                _store_llm_trace(ctx.store, artifact.label, prompt, response.content, "semantic_conflict_check")
 
                 conflicts = _parse_conflict_response(response.content)
 
@@ -625,12 +625,12 @@ class SemanticConflictValidator(BaseValidator):
                                 try:
                                     results = search_index.query(query_text)
                                     for r in results[:3]:
-                                        if r.artifact_id not in source_ids:
-                                            source_ids.append(r.artifact_id)
+                                        if r.label not in source_ids:
+                                            source_ids.append(r.label)
                                 except Exception:
                                     pass
 
-                    vid = compute_violation_id("semantic_conflict", artifact.artifact_id, claim_a, claim_b)
+                    vid = compute_violation_id("semantic_conflict", artifact.label, claim_a, claim_b)
 
                     severity = "error" if confidence == "high" else "warning"
 
@@ -641,7 +641,7 @@ class SemanticConflictValidator(BaseValidator):
                             violation_type="semantic_conflict",
                             severity=severity,
                             message=message,
-                            artifact_id=artifact.artifact_id,
+                            label=artifact.label,
                             field="content",
                             metadata={
                                 "title": title,
@@ -652,7 +652,7 @@ class SemanticConflictValidator(BaseValidator):
                                 "explanation": explanation,
                                 "confidence": confidence,
                                 "source_ids": source_ids,
-                                "content_hash": artifact.content_hash,
+                                "artifact_id": artifact.artifact_id,
                             },
                             violation_id=vid,
                         )
@@ -696,12 +696,12 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
         return artifacts
 
     if scope:
-        # Gather artifacts whose ID starts with scope prefix or artifact_type matches
+        # Gather artifacts whose label starts with scope prefix or artifact_type matches
         all_artifacts: list[Artifact] = []
         for aid in store._manifest:
             art = store.load_artifact(aid)
             if art is not None:
-                if art.artifact_id.startswith(scope + "-") or art.artifact_type == scope:
+                if art.label.startswith(scope + "-") or art.artifact_type == scope:
                     all_artifacts.append(art)
         return all_artifacts
 
@@ -746,7 +746,7 @@ def run_validators(
         # Auto-resolve provenance for violations without traces
         for v in violations:
             if not v.provenance_trace:
-                v.provenance_trace = ctx.trace_field_origin(v.artifact_id, v.field)
+                v.provenance_trace = ctx.trace_field_origin(v.label, v.field)
 
         result.violations.extend(violations)
         result.validators_run.append(decl.name)

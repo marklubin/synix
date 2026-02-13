@@ -10,7 +10,7 @@ class SearchResult:
     """A single search result with provenance chain."""
 
     content: str
-    artifact_id: str
+    label: str
     layer_name: str
     layer_level: int
     score: float

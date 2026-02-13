@@ -70,7 +70,7 @@ class HybridRetriever:
     def _get_all_indexed_rows(self, layers: list[str] | None = None) -> list[dict]:
         """Fetch all rows from the search index, optionally filtered by layer.
 
-        Returns a list of dicts with keys: content, artifact_id, layer_name,
+        Returns a list of dicts with keys: content, label, layer_name,
         layer_level, metadata.
         """
         import json
@@ -79,12 +79,12 @@ class HybridRetriever:
         if layers:
             placeholders = ",".join("?" for _ in layers)
             sql = (
-                f"SELECT content, artifact_id, layer_name, layer_level, metadata "
+                f"SELECT content, label, layer_name, layer_level, metadata "
                 f"FROM search_index WHERE layer_name IN ({placeholders})"
             )
             rows = conn.execute(sql, layers).fetchall()
         else:
-            sql = "SELECT content, artifact_id, layer_name, layer_level, metadata FROM search_index"
+            sql = "SELECT content, label, layer_name, layer_level, metadata FROM search_index"
             rows = conn.execute(sql).fetchall()
 
         result = []
@@ -92,7 +92,7 @@ class HybridRetriever:
             result.append(
                 {
                     "content": row["content"],
-                    "artifact_id": row["artifact_id"],
+                    "label": row["label"],
                     "layer_name": row["layer_name"],
                     "layer_level": int(row["layer_level"]),
                     "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
@@ -191,13 +191,13 @@ class HybridRetriever:
         for sim, row in scored[:top_k]:
             chain: list[str] = []
             if self.provenance_tracker is not None:
-                records = self.provenance_tracker.get_chain(row["artifact_id"])
-                chain = [r.artifact_id for r in records]
+                records = self.provenance_tracker.get_chain(row["label"])
+                chain = [r.label for r in records]
 
             results.append(
                 SearchResult(
                     content=row["content"],
-                    artifact_id=row["artifact_id"],
+                    label=row["label"],
                     layer_name=row["layer_name"],
                     layer_level=row["layer_level"],
                     score=sim,
@@ -224,25 +224,25 @@ class HybridRetriever:
         """
         k = self.RRF_K
 
-        # Map artifact_id -> (rrf_score, SearchResult)
+        # Map label -> (rrf_score, SearchResult)
         scores: dict[str, float] = {}
         result_map: dict[str, SearchResult] = {}
         keyword_scores: dict[str, float] = {}
         semantic_scores: dict[str, float] = {}
 
         for rank, r in enumerate(keyword_results, start=1):
-            scores[r.artifact_id] = scores.get(r.artifact_id, 0.0) + 1.0 / (k + rank)
-            result_map[r.artifact_id] = r
+            scores[r.label] = scores.get(r.label, 0.0) + 1.0 / (k + rank)
+            result_map[r.label] = r
             if r.keyword_score is not None:
-                keyword_scores[r.artifact_id] = r.keyword_score
+                keyword_scores[r.label] = r.keyword_score
 
         for rank, r in enumerate(semantic_results, start=1):
-            scores[r.artifact_id] = scores.get(r.artifact_id, 0.0) + 1.0 / (k + rank)
+            scores[r.label] = scores.get(r.label, 0.0) + 1.0 / (k + rank)
             # Prefer the semantic result object if not already present (it has sim score)
-            if r.artifact_id not in result_map:
-                result_map[r.artifact_id] = r
+            if r.label not in result_map:
+                result_map[r.label] = r
             if r.semantic_score is not None:
-                semantic_scores[r.artifact_id] = r.semantic_score
+                semantic_scores[r.label] = r.semantic_score
 
         # Sort by RRF score descending
         sorted_ids = sorted(scores, key=lambda aid: scores[aid], reverse=True)
@@ -253,7 +253,7 @@ class HybridRetriever:
             results.append(
                 SearchResult(
                     content=base.content,
-                    artifact_id=base.artifact_id,
+                    label=base.label,
                     layer_name=base.layer_name,
                     layer_level=base.layer_level,
                     score=scores[aid],
@@ -328,13 +328,13 @@ class HybridRetriever:
         for weighted, raw_sim, row in scored[: top_k * 2]:
             chain: list[str] = []
             if self.provenance_tracker is not None:
-                records = self.provenance_tracker.get_chain(row["artifact_id"])
-                chain = [r.artifact_id for r in records]
+                records = self.provenance_tracker.get_chain(row["label"])
+                chain = [r.label for r in records]
 
             semantic_results.append(
                 SearchResult(
                     content=row["content"],
-                    artifact_id=row["artifact_id"],
+                    label=row["label"],
                     layer_name=row["layer_name"],
                     layer_level=row["layer_level"],
                     score=weighted,

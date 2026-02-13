@@ -1,20 +1,19 @@
-```
 # synix
 
-> A build system for agent memory — declarative pipelines transform conversations into searchable, hierarchical memory with full provenance tracking.
+> A build system for agent memory
 
 ## What it does
 
-Synix takes raw conversation exports (ChatGPT, Claude, text files) and processes them through configurable DAGs of LLM transforms and aggregates to produce memory artifacts at multiple levels of abstraction. Think `make` or `dbt`, but for AI agent memory. Change a pipeline config, only affected layers rebuild. The fundamental output is system prompt + RAG, built from conversations with full lineage tracking.
+Synix transforms raw conversation exports into searchable, hierarchical memory with full provenance tracking. Define your memory architecture in Python (transcripts → episodes → rollups → core), run the build, then search at different levels of abstraction. Change a config, only affected layers rebuild incrementally.
 
 ## Key concepts
 
 - **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core).  
-- **Pipeline** — Python-defined layers, transforms, grouping strategies, and projections.
-- **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search index, markdown context doc).
-- **Provenance** — every artifact traces back to source conversations through full dependency chain.
-- **Cache/Rebuild** — hash comparison determines what needs rebuilding when inputs or prompts change.
+- **Layer** — named level in the memory hierarchy. Layers form a DAG (transcripts → episodes → rollups → core).
+- **Pipeline** — declared in Python. Defines layers, transforms, grouping strategies, and projections.
+- **Projection** — materializes artifacts into usable outputs (search index via SQLite FTS5, context doc as markdown).
+- **Provenance** — every artifact traces back to its inputs. Always included in search results.
+- **Cache/Rebuild** — hash comparison: if inputs or prompt changed, rebuild. Otherwise skip.
 
 ## Installation and quick start
 
@@ -26,12 +25,11 @@ pip install synix
 uvx synix init my-project
 cd my-project
 
-# Build the pipeline (requires LLM API key in pipeline.py)
+# Build the pipeline
 uvx synix build
 
-# Search and explore
+# Search and validate
 uvx synix search "hiking"
-uvx synix show final-report
 uvx synix validate
 ```
 
@@ -41,10 +39,11 @@ uvx synix validate
 uvx synix init <name>           # Scaffold new project
 uvx synix build                 # Run pipeline, only rebuild what changed
 uvx synix plan                  # Dry-run showing what would build
+uvx synix plan --explain-cache  # Plan with inline cache decision reasons
 uvx synix search "query"        # Full-text search with provenance
-uvx synix show <artifact-id>    # Display artifact content
+uvx synix show <id-or-prefix>   # Display artifact (resolves by label or artifact ID prefix)
 uvx synix validate              # Run declared validators
-uvx synix list [layer]          # Browse artifacts by layer
+uvx synix list [layer]          # Browse artifacts with short artifact IDs
 uvx synix lineage <id>          # Show provenance tree
 uvx synix clean                 # Delete build directory
 ```
@@ -55,19 +54,20 @@ uvx synix clean                 # Delete build directory
 src/synix/
 ├── cli.py              # Click CLI commands
 ├── pipeline/
-│   ├── config.py       # Parse Python pipeline → Pipeline/Layer objects  
+│   ├── config.py       # Parse pipeline Python module into objects
 │   ├── dag.py          # DAG resolution, build order, rebuild detection
-│   └── runner.py       # Execute pipeline, cache artifacts, track provenance
+│   └── runner.py       # Execute pipeline, walk DAG, cache artifacts
 ├── artifacts/
-│   ├── store.py        # Filesystem-backed artifact storage
-│   └── provenance.py   # Lineage tracking and queries
+│   ├── store.py        # Artifact storage (filesystem-backed)
+│   └── provenance.py   # Provenance tracking and lineage queries
 ├── transforms/
-│   ├── parse.py        # ChatGPT/Claude JSON → transcript artifacts
-│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)  
+│   ├── base.py         # Base transform interface
+│   ├── parse.py        # Source parsers (ChatGPT/Claude JSON → transcripts)
+│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)
 │   └── prompts/        # Prompt templates as text files
 ├── projections/
-│   ├── search_index.py # SQLite FTS5 materialization and query
-│   └── flat_file.py    # Render artifacts as markdown context docs
+│   ├── search_index.py # SQLite FTS5 materialization and querying
+│   └── flat_file.py    # Render core memory as context document
 └── sources/
     ├── chatgpt.py      # ChatGPT export parser
     └── claude.py       # Claude export parser
@@ -75,37 +75,51 @@ src/synix/
 
 ## Pipeline definition
 
-Pipelines are Python code for maximum flexibility:
+Pipelines are Python files defining memory architecture:
 
 ```python
 from synix import Pipeline, Layer, Projection
 
-pipeline = Pipeline("my-memory")
+pipeline = Pipeline("personal-memory")
 pipeline.source_dir = "./exports"
 pipeline.llm_config = {"model": "claude-sonnet-4", "temperature": 0.3}
 
-# Memory hierarchy
-pipeline.add_layer(Layer("transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer("episodes", level=1, depends_on=["transcripts"], 
-                         transform="episode_summary", grouping="by_conversation"))
-pipeline.add_layer(Layer("monthly", level=2, depends_on=["episodes"],
-                         transform="monthly_rollup", grouping="by_month")) 
-pipeline.add_layer(Layer("core", level=3, depends_on=["monthly"],
-                         transform="core_synthesis", grouping="single"))
+# Memory hierarchy layers
+pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+pipeline.add_layer(Layer(
+    name="episodes", level=1, depends_on=["transcripts"],
+    transform="episode_summary", grouping="by_conversation"
+))
+pipeline.add_layer(Layer(
+    name="monthly", level=2, depends_on=["episodes"],
+    transform="monthly_rollup", grouping="by_month"
+))
+pipeline.add_layer(Layer(
+    name="core", level=3, depends_on=["monthly"],
+    transform="core_synthesis", grouping="single"
+))
 
-# Search and context outputs
-pipeline.add_projection(Projection("memory-index", projection_type="search_index",
-                                   sources=[{"layer": "episodes"}, {"layer": "monthly"}]))
-pipeline.add_projection(Projection("context-doc", projection_type="flat_file", 
-                                   sources=[{"layer": "core"}]))
+# Output projections
+pipeline.add_projection(Projection(
+    name="memory-index", projection_type="search_index",
+    sources=[{"layer": "episodes"}, {"layer": "monthly"}, {"layer": "core"}]
+))
 ```
+
+## Known limitations
+
+- **Removed source files leave orphans** — deleting a source file does not remove downstream artifacts. Run `clean` and rebuild.
+- **YAML frontmatter fields dropped** — parser does not pass through custom frontmatter metadata to artifacts (#53).
+- **Trace artifacts affect validators** — provenance trace artifacts can trigger false positives in content validators (#52).
+- **No CI/automation output mode** — Rich formatting assumes a TTY; no `--quiet` or `--json` flag for scripted usage (#54).
+- **Relative imports in custom transforms** — fail when pipeline file is outside project root (#55).
+- **Search shows labels only** — no inline content snippets or provenance in search results (#57).
+- **Embedding failures are silent** — search indexing falls back to keyword-only without warning (#33).
 
 ## Important constraints
 
-- **SQLite + filesystem only** — no external databases, no Docker, no web server
-- **Python 3.11+** — uses modern type hints and dataclasses
-- **UV-native** — `uv sync`, `uv run synix`, `uv run pytest` 
-- **LLM API key required** — set `ANTHROPIC_API_KEY` or configure in pipeline
-- **No branching/StatefulArtifact in v0.9** — core build system only
-- **No web UI** — CLI and Python API only
-```
+- SQLite + filesystem only (no external databases)
+- Requires LLM API key (OpenAI, Anthropic, or compatible)
+- Python 3.11+ required
+- No web UI (CLI and Python API only)
+- Sources must be ChatGPT JSON, Claude JSON, or text/markdown files

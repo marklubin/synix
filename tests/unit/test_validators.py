@@ -59,7 +59,7 @@ def ctx(store, provenance):
 
 def _make_artifact(aid, atype="episode", content="test", **meta):
     return Artifact(
-        artifact_id=aid,
+        label=aid,
         artifact_type=atype,
         content=content,
         metadata=meta,
@@ -77,26 +77,26 @@ class TestViolation:
             violation_type="mutual_exclusion",
             severity="error",
             message="test message",
-            artifact_id="art-1",
+            label="art-1",
             field="customer_id",
         )
         assert v.violation_type == "mutual_exclusion"
         assert v.severity == "error"
-        assert v.artifact_id == "art-1"
+        assert v.label == "art-1"
         assert v.field == "customer_id"
         assert v.provenance_trace == []
         assert v.metadata == {}
 
     def test_with_provenance_trace(self):
         steps = [
-            ProvenanceStep(artifact_id="a", layer="merge", field_value="acme"),
-            ProvenanceStep(artifact_id="b", layer="episode", field_value="acme"),
+            ProvenanceStep(label="a", layer="merge", field_value="acme"),
+            ProvenanceStep(label="b", layer="episode", field_value="acme"),
         ]
         v = Violation(
             violation_type="test",
             severity="warning",
             message="msg",
-            artifact_id="a",
+            label="a",
             field="f",
             provenance_trace=steps,
         )
@@ -106,11 +106,11 @@ class TestViolation:
 
 class TestProvenanceStep:
     def test_defaults(self):
-        s = ProvenanceStep(artifact_id="x", layer="episodes")
+        s = ProvenanceStep(label="x", layer="episodes")
         assert s.field_value is None
 
     def test_with_value(self):
-        s = ProvenanceStep(artifact_id="x", layer="episodes", field_value="acme")
+        s = ProvenanceStep(label="x", layer="episodes", field_value="acme")
         assert s.field_value == "acme"
 
 
@@ -128,7 +128,7 @@ class TestValidationResult:
                     violation_type="test",
                     severity="error",
                     message="msg",
-                    artifact_id="a",
+                    label="a",
                     field="f",
                 )
             ],
@@ -143,7 +143,7 @@ class TestValidationResult:
                     violation_type="test",
                     severity="warning",
                     message="msg",
-                    artifact_id="a",
+                    label="a",
                     field="f",
                 )
             ],
@@ -158,7 +158,7 @@ class TestValidationResult:
                     violation_type="mutual_exclusion",
                     severity="error",
                     message="test",
-                    artifact_id="a",
+                    label="a",
                     field="customer_id",
                     metadata={"conflicting_values": ["x", "y"]},
                     provenance_trace=[
@@ -172,7 +172,7 @@ class TestValidationResult:
         assert d["passed"] is False
         assert len(d["violations"]) == 1
         assert d["violations"][0]["violation_type"] == "mutual_exclusion"
-        assert d["violations"][0]["provenance_trace"][0]["artifact_id"] == "a"
+        assert d["violations"][0]["provenance_trace"][0]["label"] == "a"
         assert "mutual_exclusion" in d["validators_run"]
 
 
@@ -186,7 +186,7 @@ class TestFactoryFunctions:
         v = mutual_exclusion_violation("art-1", "customer_id", ["acme", "globex"])
         assert v.violation_type == "mutual_exclusion"
         assert v.severity == "error"
-        assert v.artifact_id == "art-1"
+        assert v.label == "art-1"
         assert v.field == "customer_id"
         assert v.metadata["conflicting_values"] == ["acme", "globex"]
         assert "customer_id" in v.message
@@ -204,7 +204,7 @@ class TestFactoryFunctions:
         v = required_field_violation("art-2", "customer_id")
         assert v.violation_type == "required_field"
         assert v.severity == "error"
-        assert v.artifact_id == "art-2"
+        assert v.label == "art-2"
         assert v.field == "customer_id"
         assert "customer_id" in v.message
 
@@ -254,7 +254,7 @@ class TestTraceFieldOrigin:
 
         steps = ctx.trace_field_origin("t-1", "customer_id")
         assert len(steps) == 1
-        assert steps[0].artifact_id == "t-1"
+        assert steps[0].label == "t-1"
         assert steps[0].field_value == "acme"
         assert steps[0].layer == "transcripts"
 
@@ -265,11 +265,11 @@ class TestTraceFieldOrigin:
         ep = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(ep, "episodes", 1)
 
-        provenance.record("ep-1", parent_ids=["t-1"])
+        provenance.record("ep-1", parent_labels=["t-1"])
 
         steps = ctx.trace_field_origin("ep-1", "customer_id")
         assert len(steps) == 2
-        ids = [s.artifact_id for s in steps]
+        ids = [s.label for s in steps]
         assert "ep-1" in ids
         assert "t-1" in ids
 
@@ -293,15 +293,15 @@ class TestTraceFieldOrigin:
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
 
-        provenance.record("ep-1", parent_ids=["t-1"])
-        provenance.record("ep-2", parent_ids=["t-2"])
+        provenance.record("ep-1", parent_labels=["t-1"])
+        provenance.record("ep-2", parent_labels=["t-2"])
 
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
 
         steps = ctx.trace_field_origin("merge-ep-1", "customer_id")
-        ids = {s.artifact_id for s in steps}
+        ids = {s.label for s in steps}
         assert "merge-ep-1" in ids
         assert "ep-1" in ids
         assert "ep-2" in ids
@@ -323,7 +323,7 @@ class TestMutualExclusionValidator:
 
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
 
         validator = get_validator("mutual_exclusion")
         validator._field_name = "customer_id"
@@ -338,14 +338,14 @@ class TestMutualExclusionValidator:
 
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
 
         validator = get_validator("mutual_exclusion")
         validator._field_name = "customer_id"
         violations = validator.validate([merge], ctx)
         assert len(violations) == 1
         assert violations[0].violation_type == "mutual_exclusion"
-        assert violations[0].artifact_id == "merge-ep-1"
+        assert violations[0].label == "merge-ep-1"
         assert "acme" in violations[0].metadata["conflicting_values"]
         assert "globex" in violations[0].metadata["conflicting_values"]
 
@@ -386,18 +386,18 @@ class TestMutualExclusionValidator:
         # merge-1: cross-customer (violation)
         m1 = _make_artifact("merge-1", "merge", layer_name="merge")
         store.save_artifact(m1, "merge", 2)
-        provenance.record("merge-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
 
         # merge-2: single customer (no violation)
         m2 = _make_artifact("merge-2", "merge", layer_name="merge")
         store.save_artifact(m2, "merge", 2)
-        provenance.record("merge-2", parent_ids=["ep-1", "ep-3"])
+        provenance.record("merge-2", parent_labels=["ep-1", "ep-3"])
 
         validator = get_validator("mutual_exclusion")
         validator._field_name = "customer_id"
         violations = validator.validate([m1, m2], ctx)
         assert len(violations) == 1
-        assert violations[0].artifact_id == "merge-1"
+        assert violations[0].label == "merge-1"
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +424,7 @@ class TestRequiredFieldValidator:
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].violation_type == "required_field"
-        assert violations[0].artifact_id == "ep-1"
+        assert violations[0].label == "ep-1"
 
     def test_violation_field_empty_string(self, store, provenance, ctx):
         art = _make_artifact("ep-1", "episode", customer_id="", layer_name="episodes")
@@ -456,7 +456,7 @@ class TestRequiredFieldValidator:
         validator._field_name = "customer_id"
         violations = validator.validate([a1, a2, a3], ctx)
         assert len(violations) == 1
-        assert violations[0].artifact_id == "ep-2"
+        assert violations[0].label == "ep-2"
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +473,7 @@ class TestGatherArtifacts:
 
         result = _gather_artifacts(store, {"layers": ["episodes"]})
         assert len(result) == 1
-        assert result[0].artifact_id == "ep-1"
+        assert result[0].label == "ep-1"
 
     def test_filter_by_scope_prefix(self, store):
         a1 = _make_artifact("merge-1", "merge", layer_name="merge")
@@ -483,7 +483,7 @@ class TestGatherArtifacts:
 
         result = _gather_artifacts(store, {"scope": "merge"})
         assert len(result) == 1
-        assert result[0].artifact_id == "merge-1"
+        assert result[0].label == "merge-1"
 
     def test_no_filter_returns_all(self, store):
         a1 = _make_artifact("ep-1", "episode", layer_name="episodes")
@@ -503,8 +503,8 @@ class TestGatherArtifacts:
         store.save_artifact(a3, "merge", 2)
 
         result = _gather_artifacts(store, {"layers": ["episodes", "merge"]})
-        ids = {a.artifact_id for a in result}
-        assert ids == {"ep-1", "m-1"}
+        labels = {a.label for a in result}
+        assert labels == {"ep-1", "m-1"}
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +529,7 @@ class TestRunValidators:
 
         merge = _make_artifact("merge-1", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
         pipeline.add_validator(
@@ -543,7 +543,7 @@ class TestRunValidators:
         assert result.passed is False
         assert "mutual_exclusion" in result.validators_run
         assert len(result.violations) == 1
-        assert result.violations[0].artifact_id == "merge-1"
+        assert result.violations[0].label == "merge-1"
 
     def test_required_field_end_to_end(self, store, provenance):
         """Full integration: pipeline declares required_field validator."""
@@ -563,7 +563,7 @@ class TestRunValidators:
         result = run_validators(pipeline, store, provenance)
         assert result.passed is False
         assert len(result.violations) == 1
-        assert result.violations[0].artifact_id == "ep-2"
+        assert result.violations[0].label == "ep-2"
 
     def test_multiple_validators(self, store, provenance):
         """Both validators run; results aggregated."""
@@ -601,11 +601,11 @@ class TestRunValidators:
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
-        provenance.record("ep-1", parent_ids=["t-1"])
+        provenance.record("ep-1", parent_labels=["t-1"])
 
         merge = _make_artifact("merge-1", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-1", parent_ids=["ep-1", "ep-2"])
+        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
         pipeline.add_validator(
@@ -619,7 +619,7 @@ class TestRunValidators:
         assert len(result.violations) == 1
         trace = result.violations[0].provenance_trace
         assert len(trace) >= 2  # at least merge-1 and parents
-        trace_ids = {s.artifact_id for s in trace}
+        trace_ids = {s.label for s in trace}
         assert "merge-1" in trace_ids
         assert "ep-1" in trace_ids
 
@@ -818,10 +818,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.save_state()
@@ -836,10 +836,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         assert len(q.active()) == 1
@@ -850,10 +850,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v1)
         # Upsert again with same hash
@@ -861,10 +861,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test updated",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v2)
         assert len(q.active()) == 1
@@ -875,10 +875,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.ignore("vid-1")
@@ -890,10 +890,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.ignore("vid-1")
@@ -905,10 +905,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.ignore("vid-1")
@@ -925,19 +925,19 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test1",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         v2 = Violation(
             violation_type="pii",
             severity="warning",
             message="test2",
-            artifact_id="a-2",
+            label="a-2",
             field="content",
             violation_id="vid-2",
-            metadata={"content_hash": "hash2"},
+            metadata={"artifact_id": "hash2"},
         )
         q.upsert(v1)
         q.upsert(v2)
@@ -952,10 +952,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.resolve("vid-1", fix_action="redacted")
@@ -969,10 +969,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         log_path = build_dir / "violations.jsonl"
@@ -989,10 +989,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash1"},
+            metadata={"artifact_id": "hash1"},
         )
         q.upsert(v)
         q.ignore("vid-1")
@@ -1003,10 +1003,10 @@ class TestViolationQueue:
             violation_type="pii",
             severity="warning",
             message="test",
-            artifact_id="a-1",
+            label="a-1",
             field="content",
             violation_id="vid-1",
-            metadata={"content_hash": "hash2"},
+            metadata={"artifact_id": "hash2"},
         )
         q.upsert(v2)
         assert len(q.active()) == 1

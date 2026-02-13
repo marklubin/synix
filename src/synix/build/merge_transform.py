@@ -146,8 +146,8 @@ def _generate_group_key(artifacts: list[Artifact]) -> str:
     if top_words:
         return "_".join(top_words)
 
-    # Fallback: use first artifact's ID
-    return artifacts[0].artifact_id.replace(":", "_")
+    # Fallback: use first artifact's label
+    return artifacts[0].label.replace(":", "_")
 
 
 def _build_merge_groups(
@@ -163,7 +163,7 @@ def _build_merge_groups(
     if n == 0:
         return []
 
-    # Pre-tokenize all inputs once to avoid O(n²) re-tokenization
+    # Pre-tokenize all inputs once to avoid O(n^2) re-tokenization
     token_sets = [_tokenize_combined(inp.content) for inp in inputs]
 
     # Union-find for clustering
@@ -257,12 +257,12 @@ class MergeTransform(BaseTransform):
 
             # Multiple artifacts -- create merged artifact
             group_key = _generate_group_key(group_artifacts)
-            artifact_id = f"merge-{group_key}"
+            label = f"merge-{group_key}"
 
             # Build merged content with source attribution headers
             content_parts: list[str] = []
             for art in group_artifacts:
-                header = f"--- Source: {art.artifact_id}"
+                header = f"--- Source: {art.label}"
                 customer_id = art.metadata.get("customer_id")
                 if customer_id:
                     header += f" (customer: {customer_id})"
@@ -271,7 +271,7 @@ class MergeTransform(BaseTransform):
             merged_content = "\n\n".join(content_parts)
 
             # Collect metadata
-            source_ids = [art.artifact_id for art in group_artifacts]
+            source_labels = [art.label for art in group_artifacts]
             source_customer_ids = list(
                 {
                     art.metadata.get("customer_id", "unknown")
@@ -291,14 +291,14 @@ class MergeTransform(BaseTransform):
 
             results.append(
                 Artifact(
-                    artifact_id=artifact_id,
+                    label=label,
                     artifact_type="merge",
                     content=merged_content,
-                    input_hashes=[art.content_hash for art in group_artifacts],
+                    input_ids=[art.artifact_id for art in group_artifacts],
                     prompt_id=None,
                     model_config=None,
                     metadata={
-                        "source_artifact_ids": source_ids,
+                        "source_labels": source_labels,
                         "source_customer_ids": source_customer_ids,
                         "similarity_score": round(avg_similarity, 4),
                         "merge_count": len(group_artifacts),

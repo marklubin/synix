@@ -675,7 +675,7 @@ class TestLLMClientBackwardCompat:
         assert len(results) == 1
         ep = results[0]
         assert ep.artifact_type == "episode"
-        assert ep.content_hash.startswith("sha256:")
+        assert ep.artifact_id.startswith("sha256:")
         assert len(mock_llm) == 1  # LLM was called exactly once
 
     def test_pipeline_llm_config_without_provider(self, mock_llm, sample_artifacts):

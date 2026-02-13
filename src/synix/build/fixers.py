@@ -28,11 +28,11 @@ from synix.core.models import Pipeline
 class FixAction:
     """A proposed fix for a violation."""
 
-    artifact_id: str
+    label: str
     action: str  # "rewrite", "redact", "skip", "unresolved"
-    original_content_hash: str
+    original_artifact_id: str
     new_content: str  # proposed new content (empty for unresolved)
-    new_content_hash: str
+    new_artifact_id: str
     description: str
     downstream_invalidated: list[str] = field(default_factory=list)
     evidence_source_ids: list[str] = field(default_factory=list)
@@ -115,13 +115,13 @@ def get_fixer(name: str) -> BaseFixer:
 
 
 def _find_downstream_artifacts(
-    artifact_id: str,
+    label: str,
     provenance: ProvenanceTracker,
 ) -> list[str]:
-    """Find all artifacts that have artifact_id as a parent (direct children)."""
+    """Find all artifacts that have label as a parent (direct children)."""
     downstream: list[str] = []
     for aid, rec in provenance._records.items():
-        if artifact_id in rec.get("parent_artifact_ids", []):
+        if label in rec.get("parent_labels", []):
             downstream.append(aid)
     return downstream
 
@@ -139,32 +139,32 @@ def apply_fix(
     """Apply an approved fix: rewrite artifact content and update provenance.
 
     - Loads the existing artifact
-    - Updates content and content_hash
+    - Updates content and artifact_id
     - Saves via store.save_artifact() (atomic write)
     - Records new provenance with evidence_source_ids as parents
     """
-    artifact = store.load_artifact(action.artifact_id)
+    artifact = store.load_artifact(action.label)
     if artifact is None:
         return
 
     # Get layer info from manifest
-    manifest_entry = store._manifest.get(action.artifact_id, {})
+    manifest_entry = store._manifest.get(action.label, {})
     layer_name = manifest_entry.get("layer", artifact.metadata.get("layer_name", "unknown"))
     layer_level = manifest_entry.get("level", artifact.metadata.get("layer_level", 0))
 
     # Update artifact content
     artifact.content = action.new_content
-    artifact.content_hash = f"sha256:{hashlib.sha256(action.new_content.encode()).hexdigest()}"
+    artifact.artifact_id = f"sha256:{hashlib.sha256(action.new_content.encode()).hexdigest()}"
 
     # Save updated artifact
     store.save_artifact(artifact, layer_name, layer_level)
 
     # Re-record provenance with existing parents (evidence sources are
     # reference context for the fixer, not true input lineage).
-    existing_parents = provenance.get_parents(action.artifact_id)
+    existing_parents = provenance.get_parents(action.label)
     provenance.record(
-        action.artifact_id,
-        parent_ids=existing_parents,
+        action.label,
+        parent_labels=existing_parents,
         prompt_id=artifact.prompt_id,
         model_config=artifact.model_config,
     )
@@ -218,18 +218,18 @@ def run_fixers(
             current += 1
             if on_progress:
                 on_progress(
-                    f"Fixing {violation.artifact_id} ({decl.name})",
+                    f"Fixing {violation.label} ({decl.name})",
                     current,
                     total_fixable,
                 )
             try:
                 action = fixer.fix(violation, ctx)
                 # Compute downstream invalidation
-                action.downstream_invalidated = _find_downstream_artifacts(action.artifact_id, provenance)
+                action.downstream_invalidated = _find_downstream_artifacts(action.label, provenance)
                 result.actions.append(action)
                 result.rebuild_required.extend(action.downstream_invalidated)
             except Exception as exc:
-                result.errors.append(f"Fixer {decl.name} error on {violation.artifact_id}: {exc}")
+                result.errors.append(f"Fixer {decl.name} error on {violation.label}: {exc}")
 
         result.fixers_run.append(decl.name)
 
@@ -256,24 +256,24 @@ class SemanticEnrichmentFixer(BaseFixer):
     interactive = True
 
     def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
-        artifact = ctx.store.load_artifact(violation.artifact_id)
+        artifact = ctx.store.load_artifact(violation.label)
         if artifact is None:
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="skip",
-                original_content_hash="",
+                original_artifact_id="",
                 new_content="",
-                new_content_hash="",
+                new_artifact_id="",
                 description="Artifact not found",
             )
 
         if ctx.llm_client is None:
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="skip",
-                original_content_hash=artifact.content_hash,
+                original_artifact_id=artifact.artifact_id,
                 new_content="",
-                new_content_hash="",
+                new_artifact_id="",
                 description="No LLM client available",
             )
 
@@ -304,10 +304,10 @@ class SemanticEnrichmentFixer(BaseFixer):
                 try:
                     results = ctx.search_index.query(query)
                     for r in results[:max_context]:
-                        if r.artifact_id not in seen_ids:
-                            seen_ids.add(r.artifact_id)
-                            evidence_source_ids.append(r.artifact_id)
-                            source_texts.append(f"[{r.artifact_id}]: {r.content[:500]}")
+                        if r.label not in seen_ids:
+                            seen_ids.add(r.label)
+                            evidence_source_ids.append(r.label)
+                            source_texts.append(f"[{r.label}]: {r.content[:500]}")
                 except Exception:
                     continue
 
@@ -327,21 +327,21 @@ class SemanticEnrichmentFixer(BaseFixer):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=8192,
                 temperature=temperature,
-                artifact_desc=f"enrichment fix for {violation.artifact_id}",
+                artifact_desc=f"enrichment fix for {violation.label}",
             )
             response_text = response.content
         except Exception as exc:
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="skip",
-                original_content_hash=artifact.content_hash,
+                original_artifact_id=artifact.artifact_id,
                 new_content="",
-                new_content_hash="",
+                new_artifact_id="",
                 description=f"LLM error: {exc}",
             )
 
         # Store trace
-        _store_llm_trace(ctx.store, violation.artifact_id, prompt, response_text, "semantic_enrichment")
+        _store_llm_trace(ctx.store, violation.label, prompt, response_text, "semantic_enrichment")
 
         # Parse response — handle both closed and unclosed code blocks
         match = re.search(r"```(?:json)?\s*\n?(.*?)(?:\n?```|$)", response_text, re.DOTALL)
@@ -351,11 +351,11 @@ class SemanticEnrichmentFixer(BaseFixer):
             data = json.loads(text)
         except json.JSONDecodeError:
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="unresolved",
-                original_content_hash=artifact.content_hash,
+                original_artifact_id=artifact.artifact_id,
                 new_content="",
-                new_content_hash="",
+                new_artifact_id="",
                 description="Could not parse LLM response",
                 llm_explanation=response_text[:500],
             )
@@ -367,11 +367,11 @@ class SemanticEnrichmentFixer(BaseFixer):
         if status == "resolved" and new_content:
             new_hash = f"sha256:{hashlib.sha256(new_content.encode()).hexdigest()}"
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="rewrite",
-                original_content_hash=artifact.content_hash,
+                original_artifact_id=artifact.artifact_id,
                 new_content=new_content,
-                new_content_hash=new_hash,
+                new_artifact_id=new_hash,
                 description=explanation,
                 evidence_source_ids=evidence_source_ids,
                 interactive=True,
@@ -379,11 +379,11 @@ class SemanticEnrichmentFixer(BaseFixer):
             )
         else:
             return FixAction(
-                artifact_id=violation.artifact_id,
+                label=violation.label,
                 action="unresolved",
-                original_content_hash=artifact.content_hash,
+                original_artifact_id=artifact.artifact_id,
                 new_content="",
-                new_content_hash="",
+                new_artifact_id="",
                 description=explanation or "Could not resolve contradiction",
                 llm_explanation=explanation,
             )

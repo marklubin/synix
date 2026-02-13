@@ -27,10 +27,10 @@ class TestParseTextPlain:
         assert art.artifact_type == "transcript"
         assert art.metadata["source"] == "text"
 
-    def test_plain_text_artifact_id(self):
-        """Artifact ID uses t-text- prefix with sanitized filename stem."""
+    def test_plain_text_label(self):
+        """Label uses t-text- prefix with sanitized filename stem."""
         artifacts = parse_text(FIXTURES_DIR / "journal.txt")
-        assert artifacts[0].artifact_id == "t-text-journal"
+        assert artifacts[0].label == "t-text-journal"
 
     def test_plain_text_content(self):
         """Content preserves original text."""
@@ -56,10 +56,10 @@ class TestParseTextPlain:
         artifacts = parse_text(FIXTURES_DIR / "journal.txt")
         assert "has_turns" not in artifacts[0].metadata
 
-    def test_plain_text_content_hash(self):
-        """Content hash is auto-computed by Artifact.__post_init__."""
+    def test_plain_text_artifact_id(self):
+        """Artifact ID is auto-computed by Artifact.__post_init__."""
         artifacts = parse_text(FIXTURES_DIR / "journal.txt")
-        assert artifacts[0].content_hash.startswith("sha256:")
+        assert artifacts[0].artifact_id.startswith("sha256:")
 
 
 class TestParseMarkdownFrontmatter:
@@ -106,7 +106,7 @@ class TestParseMarkdownFrontmatter:
     def test_artifact_id_from_filename(self):
         """Artifact ID derived from filename stem."""
         artifacts = parse_text(FIXTURES_DIR / "2025-01-15-meeting-notes.md")
-        assert artifacts[0].artifact_id == "t-text-2025-01-15-meeting-notes"
+        assert artifacts[0].label == "t-text-2025-01-15-meeting-notes"
 
 
 class TestDateInference:
@@ -202,7 +202,7 @@ class TestEdgeCases:
         filepath = tmp_path / "meeting (draft) v2.txt"
         filepath.write_text("Some meeting notes.\n")
         artifacts = parse_text(filepath)
-        art_id = artifacts[0].artifact_id
+        art_id = artifacts[0].label
         assert art_id.startswith("t-text-")
         assert "(" not in art_id
         assert ")" not in art_id
@@ -298,7 +298,7 @@ class TestRegistryBackwardCompat:
         chatgpt_path = Path(__file__).parent.parent / "synix" / "fixtures" / "chatgpt_export.json"
         artifacts = parse_file(chatgpt_path)
         assert len(artifacts) > 0
-        assert all(a.artifact_id.startswith("t-chatgpt-") for a in artifacts)
+        assert all(a.label.startswith("t-chatgpt-") for a in artifacts)
         assert all(a.metadata["source"] == "chatgpt" for a in artifacts)
 
     def test_claude_json_via_registry(self):
@@ -306,7 +306,7 @@ class TestRegistryBackwardCompat:
         claude_path = Path(__file__).parent.parent / "synix" / "fixtures" / "claude_export.json"
         artifacts = parse_file(claude_path)
         assert len(artifacts) > 0
-        assert all(a.artifact_id.startswith("t-claude-") for a in artifacts)
+        assert all(a.label.startswith("t-claude-") for a in artifacts)
         assert all(a.metadata["source"] == "claude" for a in artifacts)
 
     def test_unrecognized_json_returns_empty(self, tmp_path):

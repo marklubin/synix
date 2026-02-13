@@ -35,28 +35,28 @@ class MockEpisodeTransform(BaseTransform):
             with self._lock:
                 self.call_log.append(
                     {
-                        "artifact_id": inp.artifact_id,
+                        "label": inp.label,
                         "thread": threading.current_thread().name,
                         "time": time.monotonic(),
                     }
                 )
 
-            if inp.artifact_id in self.fail_ids:
-                raise RuntimeError(f"Transform failed for {inp.artifact_id}")
+            if inp.label in self.fail_ids:
+                raise RuntimeError(f"Transform failed for {inp.label}")
 
             if self.delay > 0:
                 time.sleep(self.delay)
 
             results.append(
                 Artifact(
-                    artifact_id=f"ep-{inp.artifact_id}",
+                    label=f"ep-{inp.label}",
                     artifact_type="episode",
                     content=f"Summary of {inp.content}",
-                    input_hashes=[inp.content_hash],
+                    input_ids=[inp.artifact_id],
                     prompt_id="test_prompt_v1",
                     model_config={"model": "test", "temperature": 0.3},
                     metadata={
-                        "source_conversation_id": inp.artifact_id,
+                        "source_conversation_id": inp.label,
                         "date": inp.metadata.get("date", "2024-01-01"),
                     },
                 )
@@ -67,7 +67,7 @@ class MockEpisodeTransform(BaseTransform):
 def _make_transcript(tid: str, content: str = "", date: str = "2024-01-15") -> Artifact:
     """Create a transcript artifact for testing."""
     return Artifact(
-        artifact_id=tid,
+        label=tid,
         artifact_type="transcript",
         content=content or f"Conversation {tid}",
         metadata={
@@ -124,14 +124,14 @@ class TestExecuteTransformConcurrent:
         assert len(concurrent_results) == len(sequential_results)
 
         # Same artifact IDs in the same order
-        seq_ids = [a.artifact_id for a in sequential_results]
-        conc_ids = [a.artifact_id for a in concurrent_results]
+        seq_ids = [a.label for a in sequential_results]
+        conc_ids = [a.label for a in concurrent_results]
         assert conc_ids == seq_ids
 
         # Same content
         for seq, conc in zip(sequential_results, concurrent_results):
             assert seq.content == conc.content
-            assert seq.input_hashes == conc.input_hashes
+            assert seq.input_ids == conc.input_ids
             assert seq.prompt_id == conc.prompt_id
 
     def test_preserves_input_order(self):
@@ -144,7 +144,7 @@ class TestExecuteTransformConcurrent:
         results = _execute_transform_concurrent(transform, units, config, concurrency=5)
 
         expected_ids = [f"ep-t-{i}" for i in range(10)]
-        actual_ids = [a.artifact_id for a in results]
+        actual_ids = [a.label for a in results]
         assert actual_ids == expected_ids
 
     def test_single_input(self):
@@ -157,7 +157,7 @@ class TestExecuteTransformConcurrent:
         results = _execute_transform_concurrent(transform, units, config, concurrency=4)
 
         assert len(results) == 1
-        assert results[0].artifact_id == "ep-t-only"
+        assert results[0].label == "ep-t-only"
 
     def test_uses_multiple_threads(self):
         """Concurrent execution actually uses multiple threads."""
@@ -261,12 +261,12 @@ class TestConcurrentBuildSameResults:
         store_seq = ArtifactStore(build_dir_seq)
         store_conc = ArtifactStore(build_dir_conc)
 
-        ep_seq = sorted(store_seq.list_artifacts("episodes"), key=lambda a: a.artifact_id)
-        ep_conc = sorted(store_conc.list_artifacts("episodes"), key=lambda a: a.artifact_id)
+        ep_seq = sorted(store_seq.list_artifacts("episodes"), key=lambda a: a.label)
+        ep_conc = sorted(store_conc.list_artifacts("episodes"), key=lambda a: a.label)
 
         assert len(ep_seq) == len(ep_conc)
         for a, b in zip(ep_seq, ep_conc):
-            assert a.artifact_id == b.artifact_id
+            assert a.label == b.label
             # Content should match (same mock LLM)
             assert a.content == b.content
             assert a.prompt_id == b.prompt_id
@@ -294,10 +294,10 @@ class TestConcurrentBuildRespectsLimit:
                         current_concurrent["value"] -= 1
                     results.append(
                         Artifact(
-                            artifact_id=f"ep-{inp.artifact_id}",
+                            label=f"ep-{inp.label}",
                             artifact_type="episode",
                             content=f"Summary of {inp.content}",
-                            input_hashes=[inp.content_hash],
+                            input_ids=[inp.artifact_id],
                         )
                     )
                 return results
@@ -363,7 +363,7 @@ class TestConcurrentBuildDefaultSequential:
         # Direct sequential call should work fine
         results = transform.execute(inputs, config)
         assert len(results) == 1
-        assert results[0].artifact_id == "ep-t-only"
+        assert results[0].label == "ep-t-only"
 
 
 class TestConcurrentErrorsDontCrash:
@@ -382,7 +382,7 @@ class TestConcurrentErrorsDontCrash:
 
         # Check that other inputs were still processed
         # (they ran in parallel, so they should have completed before the error was raised)
-        processed_ids = {entry["artifact_id"] for entry in transform.call_log}
+        processed_ids = {entry["label"] for entry in transform.call_log}
         # At minimum, several inputs should have been submitted before the error
         assert len(processed_ids) >= 2, f"Expected at least 2 inputs to be processed, got: {processed_ids}"
 
@@ -494,7 +494,7 @@ class TestTransformSplit:
         assert len(units) == 5
         for i, (unit_inputs, config_extras) in enumerate(units):
             assert len(unit_inputs) == 1
-            assert unit_inputs[0].artifact_id == f"t-{i}"
+            assert unit_inputs[0].label == f"t-{i}"
             assert config_extras == {}
 
     def test_monthly_rollup_split_groups_by_month(self):
@@ -580,10 +580,10 @@ class TestTransformSplit:
                     self.seen_configs.append(dict(config))
                 return [
                     Artifact(
-                        artifact_id=f"out-{config.get('_month_key', 'unknown')}",
+                        label=f"out-{config.get('_month_key', 'unknown')}",
                         artifact_type="test",
                         content="test",
-                        input_hashes=[inp.content_hash for inp in inputs],
+                        input_ids=[inp.artifact_id for inp in inputs],
                     )
                 ]
 

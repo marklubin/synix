@@ -113,7 +113,7 @@ class TestProjections:
         assert len(chain) > 0
 
         # The chain should include the core artifact
-        chain_ids = [r.artifact_id for r in chain]
+        chain_ids = [r.label for r in chain]
         assert "core-memory" in chain_ids
 
         # Should trace through monthly rollups

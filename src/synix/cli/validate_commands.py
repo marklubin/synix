@@ -87,7 +87,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
         # Auto-resolve provenance for violations without traces
         for v in violations:
             if not v.provenance_trace:
-                v.provenance_trace = ctx.trace_field_origin(v.artifact_id, v.field)
+                v.provenance_trace = ctx.trace_field_origin(v.label, v.field)
 
         result.violations.extend(violations)
         result.validators_run.append(decl.name)
@@ -215,10 +215,10 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
             provenance_tree = Tree("[dim]Provenance[/dim]")
             parent = provenance_tree
             for step in v.provenance_trace:
-                label = f"[bold]{step.artifact_id}[/bold] [dim]({step.layer})[/dim]"
+                step_display = f"[bold]{step.label}[/bold] [dim]({step.layer})[/dim]"
                 if step.field_value:
-                    label += f"  {v.field}: {step.field_value}"
-                parent = parent.add(label)
+                    step_display += f"  {v.field}: {step.field_value}"
+                parent = parent.add(step_display)
             panel_content = Group(body, "", provenance_tree)
         else:
             panel_content = body
@@ -230,7 +230,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
                 title=(
                     f"[red bold]ERROR[/red bold]"
                     f" [dim]|[/dim] [red]{type_label}[/red]"
-                    f" [dim]|[/dim] [red]{v.artifact_id}[/red]"
+                    f" [dim]|[/dim] [red]{v.label}[/red]"
                 ),
                 border_style="red",
                 padding=(0, 1),
@@ -243,7 +243,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         console.print("[yellow bold]Warnings[/yellow bold]")
         for v in warnings:
             type_label = v.violation_type.replace("_", " ")
-            console.print(f"  [yellow]\u2022[/yellow] [dim]{type_label}[/dim]  {v.artifact_id}: {v.message}")
+            console.print(f"  [yellow]\u2022[/yellow] [dim]{type_label}[/dim]  {v.label}: {v.message}")
 
     error_count = sum(1 for v in result.violations if v.severity == "error")
     warn_count = sum(1 for v in result.violations if v.severity == "warning")

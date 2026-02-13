@@ -25,7 +25,7 @@ def sample_artifacts():
     """Pre-built artifacts for testing downstream modules."""
     return [
         Artifact(
-            artifact_id="t-chatgpt-conv001",
+            label="t-chatgpt-conv001",
             artifact_type="transcript",
             content="user: What is ML?\n\nassistant: Machine learning is...\n\n",
             metadata={
@@ -37,7 +37,7 @@ def sample_artifacts():
             },
         ),
         Artifact(
-            artifact_id="t-chatgpt-conv002",
+            label="t-chatgpt-conv002",
             artifact_type="transcript",
             content="user: Explain Docker\n\nassistant: Docker packages apps...\n\n",
             metadata={
@@ -49,7 +49,7 @@ def sample_artifacts():
             },
         ),
         Artifact(
-            artifact_id="t-claude-conv003",
+            label="t-claude-conv003",
             artifact_type="transcript",
             content="user: What is Rust ownership?\n\nassistant: Rust's ownership...\n\n",
             metadata={
@@ -61,10 +61,10 @@ def sample_artifacts():
             },
         ),
         Artifact(
-            artifact_id="ep-conv001",
+            label="ep-conv001",
             artifact_type="episode",
             content="In this conversation, the user discussed machine learning fundamentals...",
-            input_hashes=["sha256:abc123"],
+            input_ids=["sha256:abc123"],
             prompt_id="episode_summary_v1",
             metadata={
                 "source_conversation_id": "conv001",
@@ -72,10 +72,10 @@ def sample_artifacts():
             },
         ),
         Artifact(
-            artifact_id="ep-conv002",
+            label="ep-conv002",
             artifact_type="episode",
             content="The user asked about Docker containerization...",
-            input_hashes=["sha256:def456"],
+            input_ids=["sha256:def456"],
             prompt_id="episode_summary_v1",
             metadata={
                 "source_conversation_id": "conv002",

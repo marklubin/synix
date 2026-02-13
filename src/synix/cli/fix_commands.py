@@ -94,7 +94,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
                 violation_type=vd.get("violation_type", ""),
                 severity=vd.get("severity", "warning"),
                 message=vd.get("message", ""),
-                artifact_id=vd.get("artifact_id", ""),
+                label=vd.get("label", vd.get("artifact_id", "")),
                 field=vd.get("field", ""),
                 metadata=vd.get("metadata", {}),
                 violation_id=vd.get("violation_id", ""),
@@ -168,7 +168,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
             "fixers_run": fix_result.fixers_run,
             "actions": [
                 {
-                    "artifact_id": a.artifact_id,
+                    "label": a.label,
                     "action": a.action,
                     "description": a.description,
                     "interactive": a.interactive,
@@ -193,17 +193,17 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
     denied_count = 0
     ignored_count = 0
 
-    # Index violations by artifact_id for lookup
-    violations_by_artifact: dict[str, Violation] = {}
+    # Index violations by label for lookup
+    violations_by_label: dict[str, Violation] = {}
     for v in result.violations:
-        violations_by_artifact.setdefault(v.artifact_id, v)
+        violations_by_label.setdefault(v.label, v)
 
     for action in fix_result.actions:
         if action.action == "skip":
-            console.print(f"\n[dim]Skipping {action.artifact_id}: {action.description}[/dim]")
+            console.print(f"\n[dim]Skipping {action.label}: {action.description}[/dim]")
             continue
 
-        violation = violations_by_artifact.get(action.artifact_id)
+        violation = violations_by_label.get(action.label)
         if action.action == "rewrite":
             _display_rewrite_proposal(action, violation, store, provenance)
         elif action.action == "unresolved":
@@ -221,27 +221,27 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
                 apply_fix(action, store, provenance)
                 # Find violation_id for this action
                 for v in result.violations:
-                    if v.artifact_id == action.artifact_id:
+                    if v.label == action.label:
                         queue.resolve(v.violation_id, fix_action="rewrite")
                         break
-                console.print(f"[green]Applied fix to {action.artifact_id}[/green]")
+                console.print(f"[green]Applied fix to {action.label}[/green]")
             else:
                 # Unresolved: accept original as-is
                 for v in result.violations:
-                    if v.artifact_id == action.artifact_id:
+                    if v.label == action.label:
                         queue.resolve(v.violation_id, fix_action="accept_original")
                         break
-                console.print(f"[green]Accepted original for {action.artifact_id}[/green]")
+                console.print(f"[green]Accepted original for {action.label}[/green]")
             applied_count += 1
         elif choice == "d":
-            console.print(f"[yellow]Denied fix for {action.artifact_id}[/yellow]")
+            console.print(f"[yellow]Denied fix for {action.label}[/yellow]")
             denied_count += 1
         elif choice == "i":
             for v in result.violations:
-                if v.artifact_id == action.artifact_id:
+                if v.label == action.label:
                     queue.ignore(v.violation_id)
                     break
-            console.print(f"[dim]Ignored {action.artifact_id} (won't resurface for same content)[/dim]")
+            console.print(f"[dim]Ignored {action.label} (won't resurface for same content)[/dim]")
             ignored_count += 1
 
     queue.save_state()
@@ -267,10 +267,10 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
 
 def _build_fix_investigation_tree(action, violation, store, provenance):
     """Build a tree showing the investigation path from conflict to sources."""
-    tree = Tree(f"[bold]{action.artifact_id}[/bold] [dim](conflict detected)[/dim]")
+    tree = Tree(f"[bold]{action.label}[/bold] [dim](conflict detected)[/dim]")
 
     # Walk provenance to show parents
-    parent_ids = provenance.get_parents(action.artifact_id)
+    parent_ids = provenance.get_parents(action.label)
     if parent_ids:
         parents_branch = tree.add("[dim]parents[/dim]")
         for pid in parent_ids:
@@ -314,7 +314,7 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
             if explanation:
                 lines.append(f"[dim]Reasoning:[/dim]  {explanation}")
     else:
-        lines.append(f"[bold]Fix proposal for {action.artifact_id}[/bold]")
+        lines.append(f"[bold]Fix proposal for {action.label}[/bold]")
 
     body = "\n".join(lines)
 
@@ -332,7 +332,7 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
     console.print(
         Panel(
             panel_content,
-            title=f"[cyan]Fix: {action.artifact_id}[/cyan]",
+            title=f"[cyan]Fix: {action.label}[/cyan]",
             border_style="cyan",
             padding=(0, 1),
         )
@@ -371,7 +371,7 @@ def _display_unresolved(action, violation=None, store=None, provenance=None):
                 lines.append(f'[dim]Claim A:[/dim]  "{claim_a}"')
                 lines.append(f'[dim]Claim B:[/dim]  "{claim_b}"')
     else:
-        lines.append(f"[bold yellow]Cannot auto-resolve: {action.artifact_id}[/bold yellow]")
+        lines.append(f"[bold yellow]Cannot auto-resolve: {action.label}[/bold yellow]")
 
     if action.llm_explanation:
         lines.append("")
@@ -393,7 +393,7 @@ def _display_unresolved(action, violation=None, store=None, provenance=None):
     console.print(
         Panel(
             panel_content,
-            title=f"[yellow]Unresolved: {action.artifact_id}[/yellow]",
+            title=f"[yellow]Unresolved: {action.label}[/yellow]",
             border_style="yellow",
             padding=(0, 1),
         )

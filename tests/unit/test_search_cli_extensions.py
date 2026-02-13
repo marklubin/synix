@@ -29,7 +29,7 @@ def populated_build_dir(tmp_path):
 
     # Transcript artifact
     t1 = Artifact(
-        artifact_id="t-conv001",
+        label="t-conv001",
         artifact_type="transcript",
         content="user: Tell me about machine learning\nassistant: Machine learning is a subset of AI",
         metadata={
@@ -45,7 +45,7 @@ def populated_build_dir(tmp_path):
 
     # Episode artifact
     ep1 = Artifact(
-        artifact_id="ep-conv001",
+        label="ep-conv001",
         artifact_type="episode",
         content="In this conversation about machine learning, the user discussed fundamentals of AI",
         metadata={
@@ -59,7 +59,7 @@ def populated_build_dir(tmp_path):
 
     # Another episode with different customer
     ep2 = Artifact(
-        artifact_id="ep-conv002",
+        label="ep-conv002",
         artifact_type="episode",
         content="Discussion about machine learning applications in healthcare and diagnostics",
         metadata={
@@ -73,7 +73,7 @@ def populated_build_dir(tmp_path):
 
     # Monthly rollup artifact
     m1 = Artifact(
-        artifact_id="monthly-2024-03",
+        label="monthly-2024-03",
         artifact_type="rollup",
         content="In March 2024 the main themes were machine learning and AI development",
         metadata={
@@ -85,10 +85,10 @@ def populated_build_dir(tmp_path):
     store.save_artifact(m1, layer_name="monthly", layer_level=2)
 
     # Record provenance chains
-    provenance.record("t-conv001", parent_ids=[], prompt_id=None)
-    provenance.record("ep-conv001", parent_ids=["t-conv001"], prompt_id="episode_summary_v1")
-    provenance.record("ep-conv002", parent_ids=[], prompt_id="episode_summary_v1")
-    provenance.record("monthly-2024-03", parent_ids=["ep-conv001", "ep-conv002"], prompt_id="monthly_rollup_v1")
+    provenance.record("t-conv001", parent_labels=[], prompt_id=None)
+    provenance.record("ep-conv001", parent_labels=["t-conv001"], prompt_id="episode_summary_v1")
+    provenance.record("ep-conv002", parent_labels=[], prompt_id="episode_summary_v1")
+    provenance.record("monthly-2024-03", parent_labels=["ep-conv001", "ep-conv002"], prompt_id="monthly_rollup_v1")
 
     # Build search index
     db_path = build_dir / "search.db"
@@ -288,7 +288,7 @@ def test_trace_without_provenance_data(runner, tmp_path):
 
     # Create a search index with an artifact that has no provenance
     artifact = Artifact(
-        artifact_id="orphan-001",
+        label="orphan-001",
         artifact_type="episode",
         content="An orphaned artifact about machine learning with no provenance",
         metadata={"layer_name": "episodes"},

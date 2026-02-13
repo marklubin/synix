@@ -23,9 +23,9 @@ def assert_artifact_exists(store, step: str, record_id: str) -> None:
         record_id: The artifact ID or a substring to match.
     """
     artifacts = store.list_artifacts(step)
-    matching = [a for a in artifacts if record_id in a.artifact_id]
+    matching = [a for a in artifacts if record_id in a.label]
     assert matching, (
-        f"No artifact matching '{record_id}' found in step '{step}'. Available: {[a.artifact_id for a in artifacts]}"
+        f"No artifact matching '{record_id}' found in step '{step}'. Available: {[a.label for a in artifacts]}"
     )
 
 
@@ -77,7 +77,7 @@ def assert_provenance_chain(provenance_tracker, artifact_id: str, expected_chain
         expected_chain: List of artifact IDs expected in the chain (in any order).
     """
     chain = provenance_tracker.get_chain(artifact_id)
-    chain_ids = [r.artifact_id for r in chain]
+    chain_ids = [r.label for r in chain]
     for expected_id in expected_chain:
         assert any(expected_id in cid for cid in chain_ids), (
             f"Expected '{expected_id}' in provenance chain for '{artifact_id}'. Actual chain: {chain_ids}"
@@ -106,7 +106,7 @@ def assert_search_returns(
         top_k: Number of top results to check.
     """
     results = search_fn(query, index_name=index_name, top_k=top_k)
-    result_ids = [r.artifact_id for r in results[:top_k]]
+    result_ids = [r.label for r in results[:top_k]]
     for expected_id in expected_ids:
         assert any(expected_id in rid for rid in result_ids), (
             f"Expected '{expected_id}' in search results for query '{query}' (index: {index_name}). Got: {result_ids}"
@@ -131,8 +131,8 @@ def assert_search_indexes_are_independent(
     """
     results_a = search_fn(query, index_name=index_a, top_k=20)
     results_b = search_fn(query, index_name=index_b, top_k=20)
-    ids_a = {r.artifact_id for r in results_a}
-    ids_b = {r.artifact_id for r in results_b}
+    ids_a = {r.label for r in results_a}
+    ids_b = {r.label for r in results_b}
     overlap = ids_a & ids_b
     assert not overlap, (
         f"Search indexes '{index_a}' and '{index_b}' share artifact IDs: {overlap}. Indexes should be independent."
@@ -258,11 +258,11 @@ def assert_steps_share_sources(store, step_a: str, step_b: str) -> None:
     # Collect all input hashes referenced by each step
     hashes_a = set()
     for a in artifacts_a:
-        hashes_a.update(a.input_hashes)
+        hashes_a.update(a.input_ids)
 
     hashes_b = set()
     for b in artifacts_b:
-        hashes_b.update(b.input_hashes)
+        hashes_b.update(b.input_ids)
 
     assert hashes_a == hashes_b, (
         f"Steps '{step_a}' and '{step_b}' reference different source hashes. "
@@ -279,8 +279,8 @@ def assert_steps_have_distinct_artifacts(store, step_a: str, step_b: str) -> Non
         step_a: First step name.
         step_b: Second step name.
     """
-    ids_a = {a.artifact_id for a in store.list_artifacts(step_a)}
-    ids_b = {a.artifact_id for a in store.list_artifacts(step_b)}
+    ids_a = {a.label for a in store.list_artifacts(step_a)}
+    ids_b = {a.label for a in store.list_artifacts(step_b)}
     overlap = ids_a & ids_b
     assert not overlap, f"Steps '{step_a}' and '{step_b}' share artifact IDs: {overlap}. Expected distinct artifacts."
 

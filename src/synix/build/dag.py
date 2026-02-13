@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 
+from synix.build.fingerprint import Fingerprint
 from synix.core.models import Layer, Pipeline
 
 
@@ -44,33 +45,37 @@ def resolve_build_order(pipeline: Pipeline) -> list[Layer]:
 
 
 def needs_rebuild(
-    artifact_id: str,
-    current_input_hashes: list[str],
-    current_prompt_id: str | None,
+    label: str,
+    current_input_ids: list[str],
     store,
-    current_model_config: dict | None = None,
-    current_transform_cache_key: str = "",
-) -> bool:
+    current_build_fingerprint: Fingerprint | None = None,
+) -> tuple[bool, list[str]]:
     """Check if an artifact needs to be rebuilt.
 
-    Compares input hashes, prompt_id, model_config, and transform-specific
-    cache key against the stored artifact.
+    Returns (needs_rebuild, reasons) where reasons is a list of human-readable
+    strings explaining why a rebuild is needed.
+
+    Uses build fingerprint comparison: the fingerprint encodes transform identity
+    (source code, prompt, model, config) plus input IDs into a single digest.
     """
-    existing = store.load_artifact(artifact_id)
+    existing = store.load_artifact(label)
     if existing is None:
-        return True
-    if sorted(existing.input_hashes) != sorted(current_input_hashes):
-        return True
-    if existing.prompt_id != current_prompt_id:
-        return True
-    # Check model config (model name, temperature, etc.)
-    if current_model_config is not None:
-        existing_mc = existing.model_config or {}
-        if existing_mc != current_model_config:
-            return True
-    # Check transform-specific cache key stored in metadata
-    if current_transform_cache_key:
-        existing_key = (existing.metadata or {}).get("transform_cache_key", "")
-        if existing_key != current_transform_cache_key:
-            return True
-    return False
+        return (True, ["new artifact"])
+
+    if current_build_fingerprint is not None:
+        stored_fp_data = (existing.metadata or {}).get("build_fingerprint")
+        stored_fp = Fingerprint.from_dict(stored_fp_data) if stored_fp_data else None
+
+        if stored_fp is None:
+            return (True, ["no stored fingerprint"])
+
+        if current_build_fingerprint.matches(stored_fp):
+            return (False, [])
+
+        reasons = current_build_fingerprint.explain_diff(stored_fp)
+        return (True, reasons)
+
+    # No fingerprint provided — can only check input IDs
+    if sorted(existing.input_ids) != sorted(current_input_ids):
+        return (True, ["inputs changed"])
+    return (False, [])

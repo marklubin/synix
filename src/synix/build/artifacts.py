@@ -30,21 +30,21 @@ class ArtifactStore:
 
     def save_artifact(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Save an artifact to the build directory."""
-        # Ensure content hash is computed
-        if not artifact.content_hash and artifact.content:
-            artifact.content_hash = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
+        # Ensure artifact ID (content hash) is computed
+        if not artifact.artifact_id and artifact.content:
+            artifact.artifact_id = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
 
         # Create layer directory
         layer_dir = self.build_dir / f"layer{layer_level}-{layer_name}"
         layer_dir.mkdir(parents=True, exist_ok=True)
 
         # Serialize artifact to JSON
-        artifact_path = layer_dir / f"{artifact.artifact_id}.json"
+        artifact_path = layer_dir / f"{artifact.label}.json"
         artifact_data = {
-            "artifact_id": artifact.artifact_id,
+            "label": artifact.label,
             "artifact_type": artifact.artifact_type,
-            "content_hash": artifact.content_hash,
-            "input_hashes": artifact.input_hashes,
+            "artifact_id": artifact.artifact_id,
+            "input_ids": artifact.input_ids,
             "prompt_id": artifact.prompt_id,
             "model_config": artifact.model_config,
             "created_at": artifact.created_at.isoformat(),
@@ -53,19 +53,19 @@ class ArtifactStore:
         }
         atomic_write(artifact_path, json.dumps(artifact_data, indent=2))
 
-        # Update manifest
-        rel_path = f"layer{layer_level}-{layer_name}/{artifact.artifact_id}.json"
-        self._manifest[artifact.artifact_id] = {
+        # Update manifest (keyed by label)
+        rel_path = f"layer{layer_level}-{layer_name}/{artifact.label}.json"
+        self._manifest[artifact.label] = {
             "path": rel_path,
-            "content_hash": artifact.content_hash,
+            "artifact_id": artifact.artifact_id,
             "layer": layer_name,
             "level": layer_level,
         }
         self._save_manifest()
 
-    def load_artifact(self, artifact_id: str) -> Artifact | None:
-        """Load an artifact by ID. Returns None if not found."""
-        entry = self._manifest.get(artifact_id)
+    def load_artifact(self, label: str) -> Artifact | None:
+        """Load an artifact by label. Returns None if not found."""
+        entry = self._manifest.get(label)
         if entry is None:
             return None
 
@@ -75,10 +75,10 @@ class ArtifactStore:
 
         data = json.loads(artifact_path.read_text())
         return Artifact(
-            artifact_id=data["artifact_id"],
+            label=data["label"],
             artifact_type=data["artifact_type"],
-            content_hash=data["content_hash"],
-            input_hashes=data.get("input_hashes", []),
+            artifact_id=data["artifact_id"],
+            input_ids=data.get("input_ids", []),
             prompt_id=data.get("prompt_id"),
             model_config=data.get("model_config"),
             created_at=datetime.fromisoformat(data["created_at"]),
@@ -89,16 +89,54 @@ class ArtifactStore:
     def list_artifacts(self, layer: str) -> list[Artifact]:
         """Return all artifacts for a given layer name."""
         artifacts = []
-        for artifact_id, entry in self._manifest.items():
+        for label, entry in self._manifest.items():
             if entry["layer"] == layer:
-                artifact = self.load_artifact(artifact_id)
+                artifact = self.load_artifact(label)
                 if artifact is not None:
                     artifacts.append(artifact)
         return artifacts
 
-    def get_content_hash(self, artifact_id: str) -> str | None:
-        """Quick hash lookup from manifest without loading full artifact."""
-        entry = self._manifest.get(artifact_id)
+    def get_artifact_id(self, label: str) -> str | None:
+        """Quick artifact ID (hash) lookup from manifest without loading full artifact."""
+        entry = self._manifest.get(label)
         if entry is None:
             return None
-        return entry["content_hash"]
+        return entry["artifact_id"]
+
+    def resolve_prefix(self, prefix: str) -> str | None:
+        """Resolve a prefix to a full label (git-like semantics).
+
+        Matches against labels first, then artifact IDs (hashes).
+        Returns the full label on unique match, None if no match.
+        Raises ValueError on ambiguous match (multiple candidates).
+        """
+        # Strip sha256: prefix if user pasted a full hash
+        hash_prefix = prefix.removeprefix("sha256:")
+
+        # 1. Exact match on label
+        if prefix in self._manifest:
+            return prefix
+
+        # 2. Prefix match on label
+        label_matches = [lbl for lbl in self._manifest if lbl.startswith(prefix)]
+        if len(label_matches) == 1:
+            return label_matches[0]
+        if len(label_matches) > 1:
+            labels = ", ".join(sorted(label_matches)[:5])
+            msg = f"ambiguous prefix '{prefix}' matches {len(label_matches)} labels: {labels}"
+            raise ValueError(msg)
+
+        # 3. Prefix match on artifact ID (hash) (with or without sha256: prefix)
+        hash_matches = [
+            lbl
+            for lbl, entry in self._manifest.items()
+            if entry["artifact_id"].removeprefix("sha256:").startswith(hash_prefix)
+        ]
+        if len(hash_matches) == 1:
+            return hash_matches[0]
+        if len(hash_matches) > 1:
+            labels = ", ".join(sorted(hash_matches)[:5])
+            msg = f"ambiguous hash prefix '{prefix}' matches {len(hash_matches)} artifacts: {labels}"
+            raise ValueError(msg)
+
+        return None

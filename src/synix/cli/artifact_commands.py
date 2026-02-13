@@ -38,11 +38,11 @@ def list_artifacts(layer: str | None, build_dir: str):
 
     # Group by layer, sorted by level
     by_layer: dict[str, list[tuple[str, dict]]] = {}
-    for artifact_id, info in manifest.items():
+    for art_label, info in manifest.items():
         layer_name = info.get("layer", "unknown")
         if layer and layer_name != layer:
             continue
-        by_layer.setdefault(layer_name, []).append((artifact_id, info))
+        by_layer.setdefault(layer_name, []).append((art_label, info))
 
     if not by_layer:
         if layer:
@@ -63,20 +63,24 @@ def list_artifacts(layer: str | None, build_dir: str):
 
         table = Table(
             title=f"[{style} bold]{layer_name}[/{style} bold] (L{level}) — {len(entries)} artifacts",
-            box=box.SIMPLE,
+            box=box.ROUNDED,
             show_header=True,
-            pad_edge=False,
         )
-        table.add_column("Artifact ID", style="bold", no_wrap=True)
-        table.add_column("Date", style="dim", no_wrap=True)
+        table.add_column("Label", style="bold", no_wrap=True)
+        table.add_column("Artifact ID", style="dim", no_wrap=True)
+        table.add_column("Date", no_wrap=True)
         table.add_column("Title / Summary", max_width=60)
 
         # Load each artifact to get metadata for display
-        for artifact_id, _info in sorted(entries, key=lambda x: x[0]):
-            artifact = store.load_artifact(artifact_id)
+        for art_label, _info in sorted(entries, key=lambda x: x[0]):
+            artifact = store.load_artifact(art_label)
             if artifact is None:
-                table.add_row(artifact_id, "-", "[dim]<missing>[/dim]")
+                table.add_row(art_label, "-", "-", "[dim]<missing>[/dim]")
                 continue
+
+            # Short artifact ID (7 chars like git)
+            raw_id = (artifact.artifact_id or "").removeprefix("sha256:")
+            short_id = raw_id[:7] if raw_id else "-"
 
             # Extract date and title from metadata
             date = artifact.metadata.get("date", "")
@@ -92,7 +96,7 @@ def list_artifacts(layer: str | None, build_dir: str):
                 if len(title) > 60:
                     title = title[:57] + "..."
 
-            table.add_row(artifact_id, str(date), title)
+            table.add_row(art_label, short_id, str(date), title)
 
         console.print(table)
         console.print()
@@ -117,19 +121,30 @@ def show_artifact(artifact_id: str, build_dir: str, raw: bool):
         sys.exit(1)
 
     store = ArtifactStore(build_dir)
-    artifact = store.load_artifact(artifact_id)
 
-    if artifact is None:
+    # Resolve prefix (git-like: artifact ID prefix or content hash prefix)
+    try:
+        resolved_id = store.resolve_prefix(artifact_id)
+    except ValueError as e:
+        console.print(f"[red]Ambiguous:[/red] {e}")
+        sys.exit(1)
+
+    if resolved_id is None:
         console.print(f"[red]Artifact not found:[/red] {artifact_id}")
+        sys.exit(1)
+
+    artifact = store.load_artifact(resolved_id)
+    if artifact is None:
+        console.print(f"[red]Artifact not found:[/red] {resolved_id}")
         sys.exit(1)
 
     if raw:
         # Show full JSON representation
         data = {
-            "artifact_id": artifact.artifact_id,
+            "label": artifact.label,
             "artifact_type": artifact.artifact_type,
-            "content_hash": artifact.content_hash,
-            "input_hashes": artifact.input_hashes,
+            "artifact_id": artifact.artifact_id,
+            "input_ids": artifact.input_ids,
             "prompt_id": artifact.prompt_id,
             "model_config": artifact.model_config,
             "created_at": artifact.created_at.isoformat(),
