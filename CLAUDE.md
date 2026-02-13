@@ -103,6 +103,16 @@ Store local secrets in `.secrets` (gitignored):
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+## PR & Issue Workflow
+
+Every PR must link to the GitHub issues it addresses:
+
+1. **Before creating a PR**, check open issues: `gh issue list --state open --json number,title`
+2. **Review each issue** against the PR's changes — map features to issues
+3. **Include `Closes #N`** in the PR body for each issue fully resolved by the PR
+4. **Reference without closing** (`#N`) for issues only partially addressed
+5. **PR body format**: `Closes #N` directives at the top, then `## Summary` with bullet points linking each feature back to its issue number
+
 ## Critical Rules
 
 - **Customer-facing docs** (READMEs, templates, `synix init` output) must use `uvx synix` for all CLI commands. Internal dev docs (CLAUDE.md, test files) use `uv run synix`.
