@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -175,12 +175,12 @@ def format_comment(
     prompt_file: str,
 ) -> str:
     """Format the review as a PR comment."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     if provider == "claude":
-        header = f"**Architectural Review** — Claude Opus | Blind review (docs + diff only)"
+        header = "**Architectural Review** — Claude Opus | Blind review (docs + diff only)"
     else:
-        header = f"**Red Team Review** — OpenAI o3 | Adversarial review (docs + diff only)"
+        header = "**Red Team Review** — OpenAI o3 | Adversarial review (docs + diff only)"
 
     diff_note = f"{diff_shown:,} lines"
     if diff_shown < diff_total:
