@@ -1,52 +1,50 @@
 # synix
 
-> A build system for agent memory
+> Build system for agent memory with declarative pipelines, incremental rebuilds, and full provenance tracking
 
 ## What it does
 
-Synix transforms raw conversation exports into searchable, hierarchical memory with full provenance tracking. Define your memory architecture in Python (transcripts → episodes → rollups → core), run the build, then search at different levels of abstraction. Change a config, only affected layers rebuild incrementally.
+Synix transforms raw conversations into searchable, hierarchical memory with full lineage tracking. Define your memory architecture in Python pipelines, change a config to only rebuild affected layers, and trace any artifact back to its source conversations. Think `make` or `dbt`, but for AI agent memory.
 
 ## Key concepts
 
-- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — named level in the memory hierarchy. Layers form a DAG (transcripts → episodes → rollups → core).
-- **Pipeline** — declared in Python. Defines layers, transforms, grouping strategies, and projections.
-- **Projection** — materializes artifacts into usable outputs (search index via SQLite FTS5, context doc as markdown).
-- **Provenance** — every artifact traces back to its inputs. Always included in search results.
-- **Cache/Rebuild** — hash comparison: if inputs or prompt changed, rebuild. Otherwise skip.
+- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory) with SHA256 content addressing
+- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core)  
+- **Pipeline** — Python-declared layers, transforms, grouping strategies, and projections
+- **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search index, markdown context doc)
+- **Provenance** — every artifact traces back to inputs, always included in search results
+- **Fingerprint-based caching** — hash comparison of inputs + prompts + config determines rebuild necessity
 
 ## Installation and quick start
 
 ```bash
-# Install
-pip install synix
-
-# Initialize project with sample data
+# Install and scaffold a working project
 uvx synix init my-project
 cd my-project
 
-# Build the pipeline
+# Build the pipeline (requires LLM API key in .env)
 uvx synix build
 
-# Search and validate
+# Browse and search
+uvx synix list
 uvx synix search "hiking"
 uvx synix validate
 ```
 
 ## CLI commands
 
-```bash
-uvx synix init <name>           # Scaffold new project
-uvx synix build                 # Run pipeline, only rebuild what changed
-uvx synix plan                  # Dry-run showing what would build
-uvx synix plan --explain-cache  # Plan with inline cache decision reasons
-uvx synix search "query"        # Full-text search with provenance
-uvx synix show <id-or-prefix>   # Display artifact (resolves by label or artifact ID prefix)
-uvx synix validate              # Run declared validators
-uvx synix list [layer]          # Browse artifacts with short artifact IDs
-uvx synix lineage <id>          # Show provenance tree
-uvx synix clean                 # Delete build directory
-```
+| Command | Description |
+|---------|-------------|
+| `uvx synix init <name>` | Scaffold new project with sources, pipeline, and README |
+| `uvx synix build [pipeline.py]` | Run pipeline with incremental rebuilds |
+| `uvx synix plan [--explain-cache]` | Dry-run showing what would build with cache decisions |
+| `uvx synix list [layer]` | List artifacts with short IDs, optionally filtered by layer |
+| `uvx synix show <id>` | Display artifact content by label/ID prefix, `--raw` for JSON |
+| `uvx synix search <query>` | Full-text search with `--mode hybrid`, `--trace` for provenance |
+| `uvx synix validate` | Run declared validators against build artifacts |
+| `uvx synix verify` | Check build integrity (hashes, provenance) |
+| `uvx synix lineage <id>` | Show full provenance chain for an artifact |
+| `uvx synix clean` | Delete build directory |
 
 ## Architecture overview
 
@@ -55,71 +53,70 @@ src/synix/
 ├── cli.py              # Click CLI commands
 ├── pipeline/
 │   ├── config.py       # Parse pipeline Python module into objects
-│   ├── dag.py          # DAG resolution, build order, rebuild detection
-│   └── runner.py       # Execute pipeline, walk DAG, cache artifacts
+│   ├── dag.py          # DAG resolution, build order, rebuild detection  
+│   └── runner.py       # Execute pipeline, walk DAG, run transforms, cache artifacts
 ├── artifacts/
 │   ├── store.py        # Artifact storage (filesystem-backed)
-│   └── provenance.py   # Provenance tracking and lineage queries
+│   └── provenance.py   # Provenance tracking and lineage chains
 ├── transforms/
 │   ├── base.py         # Base transform interface
 │   ├── parse.py        # Source parsers (ChatGPT/Claude JSON → transcripts)
 │   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)
 │   └── prompts/        # Prompt templates as text files
 ├── projections/
-│   ├── search_index.py # SQLite FTS5 materialization and querying
+│   ├── search_index.py # SQLite FTS5 materialization and query
 │   └── flat_file.py    # Render core memory as context document
 └── sources/
-    ├── chatgpt.py      # ChatGPT export parser
+    ├── chatgpt.py      # ChatGPT export parser  
     └── claude.py       # Claude export parser
 ```
 
 ## Pipeline definition
-
-Pipelines are Python files defining memory architecture:
 
 ```python
 from synix import Pipeline, Layer, Projection
 
 pipeline = Pipeline("personal-memory")
 pipeline.source_dir = "./exports"
-pipeline.llm_config = {"model": "claude-sonnet-4", "temperature": 0.3}
+pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3}
 
-# Memory hierarchy layers
+# Layer 0: parse source files
 pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+
+# Layer 1: summarize conversations  
 pipeline.add_layer(Layer(
     name="episodes", level=1, depends_on=["transcripts"],
     transform="episode_summary", grouping="by_conversation"
 ))
+
+# Layer 2: monthly rollups
 pipeline.add_layer(Layer(
-    name="monthly", level=2, depends_on=["episodes"],
+    name="monthly", level=2, depends_on=["episodes"], 
     transform="monthly_rollup", grouping="by_month"
 ))
+
+# Layer 3: core memory synthesis
 pipeline.add_layer(Layer(
     name="core", level=3, depends_on=["monthly"],
-    transform="core_synthesis", grouping="single"
+    transform="core_synthesis", grouping="single", context_budget=10000
 ))
 
-# Output projections
+# Search index projection
 pipeline.add_projection(Projection(
     name="memory-index", projection_type="search_index",
-    sources=[{"layer": "episodes"}, {"layer": "monthly"}, {"layer": "core"}]
+    sources=[
+        {"layer": "episodes", "search": ["fulltext"]},
+        {"layer": "monthly", "search": ["fulltext"]}, 
+        {"layer": "core", "search": ["fulltext"]}
+    ]
 ))
 ```
-
-## Known limitations
-
-- **Removed source files leave orphans** — deleting a source file does not remove downstream artifacts. Run `clean` and rebuild.
-- **YAML frontmatter fields dropped** — parser does not pass through custom frontmatter metadata to artifacts (#53).
-- **Trace artifacts affect validators** — provenance trace artifacts can trigger false positives in content validators (#52).
-- **No CI/automation output mode** — Rich formatting assumes a TTY; no `--quiet` or `--json` flag for scripted usage (#54).
-- **Relative imports in custom transforms** — fail when pipeline file is outside project root (#55).
-- **Search shows labels only** — no inline content snippets or provenance in search results (#57).
-- **Embedding failures are silent** — search indexing falls back to keyword-only without warning (#33).
 
 ## Important constraints
 
 - SQLite + filesystem only (no external databases)
-- Requires LLM API key (OpenAI, Anthropic, or compatible)
-- Python 3.11+ required
 - No web UI (CLI and Python API only)
-- Sources must be ChatGPT JSON, Claude JSON, or text/markdown files
+- Python 3.11+ required
+- Requires LLM API key (Anthropic, OpenAI, or OpenAI-compatible)
+- UV-native project (`uv sync`, `uv run synix`)
+- Single-user local operation (no multi-tenant hosted version)
