@@ -102,3 +102,41 @@ class ArtifactStore:
         if entry is None:
             return None
         return entry["content_hash"]
+
+    def resolve_prefix(self, prefix: str) -> str | None:
+        """Resolve a prefix to a full artifact_id (git-like semantics).
+
+        Matches against artifact IDs first, then content hashes.
+        Returns the full artifact_id on unique match, None if no match.
+        Raises ValueError on ambiguous match (multiple candidates).
+        """
+        # Strip sha256: prefix if user pasted a full hash
+        hash_prefix = prefix.removeprefix("sha256:")
+
+        # 1. Exact match on artifact_id
+        if prefix in self._manifest:
+            return prefix
+
+        # 2. Prefix match on artifact_id
+        id_matches = [aid for aid in self._manifest if aid.startswith(prefix)]
+        if len(id_matches) == 1:
+            return id_matches[0]
+        if len(id_matches) > 1:
+            ids = ", ".join(sorted(id_matches)[:5])
+            msg = f"ambiguous prefix '{prefix}' matches {len(id_matches)} artifact IDs: {ids}"
+            raise ValueError(msg)
+
+        # 3. Prefix match on content_hash (with or without sha256: prefix)
+        hash_matches = [
+            aid
+            for aid, entry in self._manifest.items()
+            if entry["content_hash"].removeprefix("sha256:").startswith(hash_prefix)
+        ]
+        if len(hash_matches) == 1:
+            return hash_matches[0]
+        if len(hash_matches) > 1:
+            ids = ", ".join(sorted(hash_matches)[:5])
+            msg = f"ambiguous hash prefix '{prefix}' matches {len(hash_matches)} artifacts: {ids}"
+            raise ValueError(msg)
+
+        return None

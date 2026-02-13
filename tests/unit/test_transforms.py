@@ -60,6 +60,91 @@ class TestTransformRegistry:
             assert isinstance(transform, BaseTransform)
 
 
+class TestParseTransformSourcePath:
+    """Tests for source_path metadata on parsed artifacts."""
+
+    def test_source_path_set_on_flat_dir(self, tmp_path):
+        """Artifacts from a flat source dir get source_path = filename."""
+        src = tmp_path / "sources"
+        src.mkdir()
+        (src / "alpha.md").write_text("Alpha content\n")
+        (src / "beta.md").write_text("Beta content\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        for art in artifacts:
+            assert "source_path" in art.metadata
+        paths = {a.metadata["source_path"] for a in artifacts}
+        assert "alpha.md" in paths
+        assert "beta.md" in paths
+
+    def test_source_path_relative_to_source_dir(self, tmp_path):
+        """Artifacts from nested dirs get relative paths."""
+        src = tmp_path / "sources"
+        sub = src / "team-a"
+        sub.mkdir(parents=True)
+        (sub / "alice.md").write_text("Alice bio\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].metadata["source_path"] == "team-a/alice.md"
+
+    def test_source_path_preserves_deep_nesting(self, tmp_path):
+        """Deep nesting is preserved in source_path."""
+        src = tmp_path / "sources"
+        deep = src / "dept" / "eng" / "backend"
+        deep.mkdir(parents=True)
+        (deep / "notes.md").write_text("Backend notes\n")
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].metadata["source_path"] == "dept/eng/backend/notes.md"
+
+    def test_source_path_on_json_exports(self, tmp_path):
+        """JSON export artifacts also get source_path."""
+        src = tmp_path / "sources"
+        src.mkdir()
+        # Minimal Claude export
+        export = {
+            "conversations": [
+                {
+                    "uuid": "conv-001",
+                    "title": "Test",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "chat_messages": [
+                        {
+                            "uuid": "msg-001",
+                            "sender": "human",
+                            "text": "Hello",
+                            "created_at": "2024-01-01T00:00:00Z",
+                        },
+                        {
+                            "uuid": "msg-002",
+                            "sender": "assistant",
+                            "text": "Hi there",
+                            "created_at": "2024-01-01T00:01:00Z",
+                        },
+                    ],
+                }
+            ]
+        }
+        import json
+
+        (src / "export.json").write_text(json.dumps(export))
+
+        transform = get_transform("parse")
+        artifacts = transform.execute([], {"source_dir": str(src)})
+
+        assert len(artifacts) >= 1
+        for art in artifacts:
+            assert art.metadata["source_path"] == "export.json"
+
+
 class TestEpisodeSummaryTransform:
     """Tests for episode summary LLM transform."""
 

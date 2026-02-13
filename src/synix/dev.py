@@ -33,12 +33,20 @@ def _find_demo_cases() -> list[Path]:
 
 def verify_demos() -> None:
     """Run demo verification for all example cases."""
+    import shutil
+
     synix_bin = Path(sys.executable).parent / "synix"
     cases = _find_demo_cases()
 
     if not cases:
         print("No demo cases found.")
         sys.exit(1)
+
+    # Clean stale build directories (e.g. left behind by pytest)
+    for case_dir in cases:
+        build_dir = case_dir / "build"
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
 
     failed = []
     for case_dir in cases:

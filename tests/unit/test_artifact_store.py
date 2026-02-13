@@ -122,3 +122,65 @@ class TestArtifactStore:
         assert loaded is not None
         assert loaded.content == "version 2"
         assert store.get_content_hash("overwrite-me") != original_hash
+
+
+class TestResolvePrefix:
+    """Tests for git-like prefix resolution on artifact IDs and content hashes."""
+
+    def _store_with_artifacts(self, tmp_build_dir):
+        store = ArtifactStore(tmp_build_dir)
+        store.save_artifact(
+            Artifact(artifact_id="t-text-alice", artifact_type="transcript", content="Alice bio"),
+            layer_name="bios",
+            layer_level=0,
+        )
+        store.save_artifact(
+            Artifact(artifact_id="t-text-bob", artifact_type="transcript", content="Bob bio"),
+            layer_name="bios",
+            layer_level=0,
+        )
+        store.save_artifact(
+            Artifact(artifact_id="ep-alice-001", artifact_type="episode", content="Episode about Alice"),
+            layer_name="episodes",
+            layer_level=1,
+        )
+        return store
+
+    def test_exact_match(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        assert store.resolve_prefix("t-text-alice") == "t-text-alice"
+
+    def test_id_prefix_unique(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        assert store.resolve_prefix("ep-") == "ep-alice-001"
+
+    def test_id_prefix_ambiguous(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        import pytest
+
+        with pytest.raises(ValueError, match="ambiguous"):
+            store.resolve_prefix("t-text-")
+
+    def test_hash_prefix_unique(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        # Get the actual hash of alice and use its first 8 chars
+        full_hash = store.get_content_hash("t-text-alice").removeprefix("sha256:")
+        prefix = full_hash[:8]
+        resolved = store.resolve_prefix(prefix)
+        assert resolved == "t-text-alice"
+
+    def test_hash_prefix_with_sha256_prefix(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        full_hash = store.get_content_hash("t-text-bob")
+        # Pass the full "sha256:abcd..." format with a prefix
+        short = full_hash[:15]  # "sha256:abcdef12"
+        resolved = store.resolve_prefix(short)
+        assert resolved == "t-text-bob"
+
+    def test_no_match(self, tmp_build_dir):
+        store = self._store_with_artifacts(tmp_build_dir)
+        assert store.resolve_prefix("zzz-nonexistent") is None
+
+    def test_empty_store(self, tmp_build_dir):
+        store = ArtifactStore(tmp_build_dir)
+        assert store.resolve_prefix("anything") is None

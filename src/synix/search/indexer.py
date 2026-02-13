@@ -45,9 +45,14 @@ class SearchIndex:
         """)
         conn.commit()
 
+    # Keys stripped from metadata before indexing (internal build state, not searchable)
+    _METADATA_INDEX_EXCLUDE = {"build_fingerprint", "transform_fingerprint"}
+
     def insert(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Insert an artifact into the search index."""
         conn = self._get_conn()
+        # Strip internal build metadata that shouldn't affect search ranking
+        search_metadata = {k: v for k, v in artifact.metadata.items() if k not in self._METADATA_INDEX_EXCLUDE}
         conn.execute(
             "INSERT INTO search_index (content, artifact_id, layer_name, layer_level, metadata) VALUES (?, ?, ?, ?, ?)",
             (
@@ -55,7 +60,7 @@ class SearchIndex:
                 artifact.artifact_id,
                 layer_name,
                 str(layer_level),
-                json.dumps(artifact.metadata),
+                json.dumps(search_metadata),
             ),
         )
         conn.commit()

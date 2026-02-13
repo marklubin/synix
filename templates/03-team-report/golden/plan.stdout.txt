@@ -17,7 +17,9 @@
 
 my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 ├── bios  source:parse  <STATS>
+│   └── ← ./sources/bios (3 .md files)
 ├── project_brief  source:parse  <STATS>
+│   └── ← ./sources/brief (1 .md file)
 ├── work_styles  transform:work_style  <STATS>
 │   └── ← bios
 ├── team_dynamics  transform:dynamics  <STATS>

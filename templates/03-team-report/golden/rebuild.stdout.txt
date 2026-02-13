@@ -33,4 +33,3 @@
 ╰───────────────┴──────────────┴───────┴────────┴─────────────╯
 
 Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
-LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>

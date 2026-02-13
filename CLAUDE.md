@@ -114,6 +114,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 - Write tests BEFORE or ALONGSIDE the module, never after
 - Mock the LLM for unit and integration tests — only E2E hits real API
 - Use `tmp_path` for all filesystem tests — no shared state
+- **Every functional behavior change must have e2e test coverage** — unit tests alone are insufficient. If a change affects CLI output, plan display, cache detection, or artifact metadata, write an e2e test that exercises the full path.
+- **Always consider template/demo impact** — changes to transforms, plan output, artifact metadata, or CLI formatting will affect golden files in `templates/*/golden/`. Regenerate goldens (`uv run synix demo run <template> --update-goldens`) and verify normalization rules in `demo_commands.py._normalize_output()` still cover new output patterns.
 
 ## Reference Docs
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
 from synix.core.models import Artifact
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -59,6 +61,48 @@ class BaseTransform(ABC):
         Default returns empty string (no extra cache key).
         """
         return ""
+
+    def compute_fingerprint(self, config: dict, prompt_name: str | None = None) -> Fingerprint:
+        """Compute this transform's identity fingerprint.
+
+        Default components:
+          source  -- hash of this class's source code
+          prompt  -- hash of prompt template (if prompt_name given)
+          config  -- result of get_cache_key() (transform-specific config)
+          model   -- hash of llm_config dict (if present)
+
+        Subclasses can override to add/change components.
+        """
+        components: dict[str, str] = {}
+
+        # Source code of the concrete transform class
+        try:
+            components["source"] = fingerprint_value(inspect.getsource(type(self)))
+        except (OSError, TypeError):
+            components["source"] = fingerprint_value(type(self).__qualname__)
+
+        # Prompt template
+        if prompt_name:
+            try:
+                components["prompt"] = fingerprint_value(self.load_prompt(prompt_name))
+            except (FileNotFoundError, OSError):
+                pass
+
+        # Transform-specific config (reuses existing get_cache_key override point)
+        cache_key = self.get_cache_key(config)
+        if cache_key:
+            components["config"] = cache_key  # already a hash from subclass
+
+        # Model config
+        llm_config = config.get("llm_config")
+        if llm_config:
+            components["model"] = fingerprint_value(llm_config)
+
+        return Fingerprint(
+            scheme="synix:transform:v1",
+            digest=compute_digest(components),
+            components=components,
+        )
 
 
 # Transform registry

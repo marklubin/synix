@@ -63,6 +63,9 @@ exports-full/
 # Example build outputs
 templates/**/build/
 
+# Default synix init directory
+synix/
+
 # Demo
 demo.tape
 demo.mp4

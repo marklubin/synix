@@ -1,8 +1,8 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
-│ Pipeline: personal-memory                                                                                            │
+│ Pipeline: my-first-pipeline                                                                                          │
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
-│ Layers: 4                                                                                                            │
+│ Layers: 5                                                                                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
              LLM Configuration
@@ -15,21 +15,26 @@
 │ Max Tokens  │ 1024                      │
 ╰─────────────┴───────────────────────────╯
 
-personal-memory  claude-haiku-4-5-20251001 (anthropic)
-├── transcripts  source:parse  <STATS>
-│   └── ← ./sources (2 .json files)
-├── episodes  transform:episode_summary  <STATS>
-│   └── ← transcripts
-├── monthly  transform:monthly_rollup  <STATS>
-│   └── ← episodes
-└── core  transform:core_synthesis  <STATS>
-    ├── ← monthly
-    ├── → memory-index  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
-    │   ├── ← episodes
-    │   ├── ← monthly
-    │   ├── ← core
-    │   └── embeddings  bge-small-en-v1.5  d  (fastembed)
-    └── → context-doc  flat_file (markdown)  <MATERIALIZED>  <N> indexed
-        └── ← core
+my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
+├── bios  source:parse  <STATS>
+│   └── ← ./sources/bios (3 .md files)
+├── project_brief  source:parse  <STATS>
+│   └── ← ./sources/brief (1 .md file)
+├── work_styles  transform:work_style  <STATS>
+│   ├── ← bios
+│   └── cache: all components match (v1: model source)
+├── team_dynamics  transform:dynamics  <STATS>
+│   ├── ← work_styles
+│   └── cache: all components match (v1: model source)
+└── final_report  transform:report  <STATS>
+    ├── ← team_dynamics
+    ├── ← project_brief
+    ├── cache: all components match (v1: model source)
+    └── → search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← bios
+        ├── ← project_brief
+        ├── ← work_styles
+        ├── ← team_dynamics
+        └── ← final_report
 
 <PLAN_SUMMARY>
