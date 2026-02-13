@@ -228,9 +228,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
             Panel(
                 panel_content,
                 title=(
-                    f"[red bold]ERROR[/red bold]"
-                    f" [dim]|[/dim] [red]{type_label}[/red]"
-                    f" [dim]|[/dim] [red]{v.label}[/red]"
+                    f"[red bold]ERROR[/red bold] [dim]|[/dim] [red]{type_label}[/red] [dim]|[/dim] [red]{v.label}[/red]"
                 ),
                 border_style="red",
                 padding=(0, 1),

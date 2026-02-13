@@ -256,9 +256,7 @@ class ViolationQueue:
             "violation_id": vid,
             "status": "active"
             if (
-                existing is None
-                or existing.get("status") != "ignored"
-                or existing.get("last_seen_hash") != artifact_id
+                existing is None or existing.get("status") != "ignored" or existing.get("last_seen_hash") != artifact_id
             )
             else "ignored",
             "last_seen_hash": artifact_id,

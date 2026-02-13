@@ -34,3 +34,23 @@ jobs:
           python-version: "3.12"
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  smoke-test:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - name: Wait for PyPI propagation
+        run: sleep 30
+      - name: Install synix from PyPI
+        run: uv tool install synix
+      - name: Verify CLI commands
+        run: |
+          synix --help
+          synix init smoke-test
+          cd smoke-test
+          synix plan
+          synix list
+          synix clean

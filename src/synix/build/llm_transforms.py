@@ -156,8 +156,7 @@ class MonthlyRollupTransform(BaseTransform):
         else:
             year, mo = month.split("-")
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
-            for ep in inputs
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}" for ep in inputs
         )
         prompt = template.replace("{month}", mo).replace("{year}", year).replace("{episodes}", episodes_text)
         response = _logged_complete(
@@ -254,8 +253,7 @@ class TopicalRollupTransform(BaseTransform):
         model_config = config.get("llm_config", {})
 
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
-            for ep in inputs
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}" for ep in inputs
         )
         prompt = template.replace("{topic}", topic.replace("-", " ")).replace("{episodes}", episodes_text)
         slug = topic.lower().replace(" ", "-")

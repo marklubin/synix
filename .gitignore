@@ -63,8 +63,8 @@ exports-full/
 # Example build outputs
 templates/**/build/
 
-# Default synix init directory
-synix/
+# Default synix init directory (created by `synix init` with no args)
+/synix/
 
 # Demo
 demo.tape

@@ -45,10 +45,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/synix"]
 
-[tool.hatch.build]
-include = ["src/synix/**"]
-exclude = ["src/synix/**/__pycache__/**"]
-
 [tool.hatch.version]
 path = "src/synix/__init__.py"
 

@@ -170,8 +170,7 @@ def search(
         score_display = "".join(score_parts)
 
         footer = Text.from_markup(
-            f"[dim]Label:[/dim] {result.label}  "
-            f"[dim]Score:[/dim] {score_display}  [dim]Mode:[/dim] {search_mode_label}"
+            f"[dim]Label:[/dim] {result.label}  [dim]Score:[/dim] {score_display}  [dim]Mode:[/dim] {search_mode_label}"
         )
 
         panel = Panel(
