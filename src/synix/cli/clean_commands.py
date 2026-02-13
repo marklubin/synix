@@ -1,4 +1,4 @@
-"""Clean command — remove build artifacts."""
+"""Clean command — remove build artifacts from a completed pipeline run."""
 
 from __future__ import annotations
 
