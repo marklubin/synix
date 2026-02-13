@@ -83,7 +83,7 @@ class TestEmbeddingProvider:
         assert len(result) == 4
         assert all(isinstance(x, float) for x in result)
 
-    def test_embed_caching_by_content_hash(self, provider):
+    def test_embed_caching_by_artifact_id(self, provider):
         """Second call with same text uses cache, not API."""
         result1 = provider.embed("cached text")
         result2 = provider.embed("cached text")
@@ -169,7 +169,7 @@ class TestEmbeddingProvider:
         assert mock_openai_client.embeddings.create.call_count == 0
 
     def test_content_hash_deterministic(self, provider):
-        """content_hash produces consistent results."""
+        """content_hash() produces consistent results."""
         h1 = provider.content_hash("test")
         h2 = provider.content_hash("test")
         h3 = provider.content_hash("different")
@@ -227,7 +227,7 @@ class TestEmbeddingProvider:
         assert len(calls) > 0
         assert calls[-1][1] == 3  # total is always 3
 
-    def test_content_hash_includes_model(self, tmp_build_dir):
+    def test_content_hash_includes_model_in_cache_key(self, tmp_build_dir):
         """Different models produce different cache keys for the same text."""
         config_a = EmbeddingConfig(provider="openai", model="model-a", dimensions=4)
         config_b = EmbeddingConfig(provider="openai", model="model-b", dimensions=4)
@@ -238,7 +238,7 @@ class TestEmbeddingProvider:
         h_b = provider_b.content_hash("same text")
         assert h_a != h_b
 
-    def test_content_hash_includes_provider(self, tmp_build_dir):
+    def test_content_hash_includes_provider_in_cache_key(self, tmp_build_dir):
         """Different providers produce different cache keys for the same text."""
         config_a = EmbeddingConfig(provider="fastembed", model="BAAI/bge-small-en-v1.5")
         config_b = EmbeddingConfig(provider="openai", model="BAAI/bge-small-en-v1.5")
@@ -417,7 +417,7 @@ class TestHybridRetrieverWithEmbeddings:
         for i, content in enumerate(contents):
             index.insert(
                 Artifact(
-                    artifact_id=f"ep-{i:03d}",
+                    label=f"ep-{i:03d}",
                     artifact_type="episode",
                     content=content,
                     metadata={"layer_name": "episodes"},

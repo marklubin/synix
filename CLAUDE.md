@@ -48,16 +48,16 @@ src/synix/
 ## Key Module Interfaces
 
 **pipeline/runner.py** calls:
-- `artifacts.store.{save,load}_artifact()`, `get_content_hash()` — cache checking
+- `artifacts.store.{save,load}_artifact()`, `get_artifact_id()` — cache checking
 - `transforms.*.execute(inputs, config) -> Artifact`
 - `projections.*.materialize(artifacts, config)` — after build
-- `artifacts.provenance.record(artifact_id, parent_ids, prompt_id, model_config)`
+- `artifacts.provenance.record(label, parent_ids, prompt_id, model_config)`
 
 **cli.py** calls:
 - `pipeline.config.load(path) -> Pipeline`
 - `pipeline.runner.run(pipeline, source_dir) -> RunResult`
 - `projections.search_index.query(query, layers) -> list[SearchResult]`
-- `artifacts.provenance.get_chain(artifact_id) -> list[ProvenanceRecord]`
+- `artifacts.provenance.get_chain(label) -> list[ProvenanceRecord]`
 
 ## CLI Commands
 

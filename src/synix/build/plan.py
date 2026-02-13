@@ -340,20 +340,20 @@ def _plan_parse_layer(
             source_info=source_info,
         )
 
-    # Compare by artifact_id to detect modifications (same id, different content)
+    # Compare by label to detect modifications (same label, different artifact ID)
     existing = store.list_artifacts(layer.name)
-    existing_by_id = {a.artifact_id: a.content_hash for a in existing}
-    new_by_id = {a.artifact_id: a.content_hash for a in artifacts}
+    existing_by_label = {a.label: a.artifact_id for a in existing}
+    new_by_label = {a.label: a.artifact_id for a in artifacts}
 
-    added_ids = set(new_by_id) - set(existing_by_id)
-    removed_ids = set(existing_by_id) - set(new_by_id)
-    common_ids = set(new_by_id) & set(existing_by_id)
-    modified_ids = {aid for aid in common_ids if new_by_id[aid] != existing_by_id[aid]}
+    added_labels = set(new_by_label) - set(existing_by_label)
+    removed_labels = set(existing_by_label) - set(new_by_label)
+    common_labels = set(new_by_label) & set(existing_by_label)
+    modified_labels = {lbl for lbl in common_labels if new_by_label[lbl] != existing_by_label[lbl]}
 
-    added = len(added_ids)
-    removed = len(removed_ids)
-    modified = len(modified_ids)
-    cached_count = len(common_ids) - modified
+    added = len(added_labels)
+    removed = len(removed_labels)
+    modified = len(modified_labels)
+    cached_count = len(common_labels) - modified
 
     if added == 0 and removed == 0 and modified == 0:
         return StepPlan(
@@ -441,7 +441,7 @@ def _plan_llm_layer(
 
     # Check if the whole layer is fully cached
     # If upstream has pending rebuilds, those artifacts will get new hashes —
-    # so even if current input hashes match, the layer will need rebuilding.
+    # so even if current input IDs match, the layer will need rebuilding.
     fully_cached = not upstream_dirty and _is_layer_fully_cached(layer, existing, inputs, transform_fp)
 
     if fully_cached:
@@ -477,18 +477,18 @@ def _plan_llm_layer(
         try:
             transform = get_transform(layer.transform)
             units = transform.split(inputs, {})
-            # Build a set of all input hashes covered by existing artifacts
+            # Build a set of all input IDs covered by existing artifacts
             existing_by_inputs: dict[tuple[str, ...], bool] = {}
             for art in existing:
-                key = tuple(sorted(art.input_hashes))
+                key = tuple(sorted(art.input_ids))
                 existing_by_inputs[key] = True
 
             for unit_inputs, _ in units:
-                input_hashes = tuple(sorted(a.content_hash for a in unit_inputs))
-                if input_hashes in existing_by_inputs:
+                input_ids = tuple(sorted(a.artifact_id for a in unit_inputs))
+                if input_ids in existing_by_inputs:
                     if upstream_dirty and len(unit_inputs) > 1:
-                        # N:1 unit whose input hashes look cached, but upstream
-                        # has pending rebuilds that will change those hashes.
+                        # N:1 unit whose input IDs look cached, but upstream
+                        # has pending rebuilds that will change those IDs.
                         rebuild_count += 1
                     else:
                         cached_count += 1
@@ -546,12 +546,12 @@ def _is_layer_fully_cached(
                 return False
 
     # Check that all current inputs are covered by existing artifacts
-    covered_input_hashes: set[str] = set()
+    covered_input_ids: set[str] = set()
     for art in existing:
-        covered_input_hashes.update(art.input_hashes)
+        covered_input_ids.update(art.input_ids)
 
-    current_input_hashes = {a.content_hash for a in inputs}
-    if not current_input_hashes.issubset(covered_input_hashes):
+    current_input_ids = {a.artifact_id for a in inputs}
+    if not current_input_ids.issubset(covered_input_ids):
         return False
 
     return True
@@ -602,12 +602,12 @@ def _determine_rebuild_reason(
                 break
 
     # Check input changes
-    covered_input_hashes: set[str] = set()
+    covered_input_ids: set[str] = set()
     for art in existing:
-        covered_input_hashes.update(art.input_hashes)
-    current_input_hashes = {a.content_hash for a in inputs}
-    if not current_input_hashes.issubset(covered_input_hashes):
-        new_inputs = current_input_hashes - covered_input_hashes
+        covered_input_ids.update(art.input_ids)
+    current_input_ids = {a.artifact_id for a in inputs}
+    if not current_input_ids.issubset(covered_input_ids):
+        new_inputs = current_input_ids - covered_input_ids
         reasons.append(f"{len(new_inputs)} new input(s)")
 
     return ", ".join(reasons) if reasons else "inputs changed"

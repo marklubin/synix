@@ -131,14 +131,14 @@ class TestFullPipelineRun:
         # Episodes should have provenance pointing to transcripts
         episodes = store.list_artifacts("episodes")
         for ep in episodes:
-            parents = provenance.get_parents(ep.artifact_id)
-            assert len(parents) > 0, f"Episode {ep.artifact_id} has no provenance parents"
+            parents = provenance.get_parents(ep.label)
+            assert len(parents) > 0, f"Episode {ep.label} has no provenance parents"
 
         # Core should have provenance
         core = store.list_artifacts("core")
         for c in core:
-            parents = provenance.get_parents(c.artifact_id)
-            assert len(parents) > 0, f"Core {c.artifact_id} has no provenance parents"
+            parents = provenance.get_parents(c.label)
+            assert len(parents) > 0, f"Core {c.label} has no provenance parents"
 
     def test_search_returns_results_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Pipeline run → search works."""

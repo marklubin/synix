@@ -37,10 +37,10 @@ class DemoLoadProductOffersTransform(BaseTransform):
 
             artifacts.append(
                 Artifact(
-                    artifact_id=f"product-offer-{sku}",
+                    label=f"product-offer-{sku}",
                     artifact_type="product_offer_view",
                     content=content,
-                    input_hashes=[combined_hash],
+                    input_ids=[combined_hash],
                     metadata={
                         "sku": sku,
                         "product_name": product["name"],
@@ -69,10 +69,10 @@ class DemoLoadPoliciesTransform(BaseTransform):
 
             artifacts.append(
                 Artifact(
-                    artifact_id=f"policy-{name}",
+                    label=f"policy-{name}",
                     artifact_type="policy",
                     content=content,
-                    input_hashes=[file_hash],
+                    input_ids=[file_hash],
                     metadata={"policy_name": name},
                 )
             )
@@ -109,14 +109,14 @@ class DemoExtractPoliciesTransform(BaseTransform):
                 client,
                 config,
                 messages=[{"role": "user", "content": prompt}],
-                artifact_desc=f"policy extraction {policy.artifact_id}",
+                artifact_desc=f"policy extraction {policy.label}",
             )
             results.append(
                 Artifact(
-                    artifact_id=f"idx-{policy.metadata['policy_name']}",
+                    label=f"idx-{policy.metadata['policy_name']}",
                     artifact_type="policy_index",
                     content=response.content,
-                    input_hashes=[policy.content_hash],
+                    input_ids=[policy.artifact_id],
                     prompt_id=prompt_id,
                     model_config=model_config,
                     metadata={"policy_name": policy.metadata["policy_name"]},
@@ -132,11 +132,11 @@ class DemoEnrichCSBriefTransform(BaseTransform):
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         products = sorted(
             [a for a in inputs if a.artifact_type == "product_offer_view"],
-            key=lambda a: a.artifact_id,
+            key=lambda a: a.label,
         )
         policies = sorted(
             [a for a in inputs if a.artifact_type == "policy_index"],
-            key=lambda a: a.artifact_id,
+            key=lambda a: a.label,
         )
         return [([product] + policies, {}) for product in products]
 
@@ -149,15 +149,15 @@ class DemoEnrichCSBriefTransform(BaseTransform):
 
         products = sorted(
             [a for a in inputs if a.artifact_type == "product_offer_view"],
-            key=lambda a: a.artifact_id,
+            key=lambda a: a.label,
         )
         policies = sorted(
             [a for a in inputs if a.artifact_type == "policy_index"],
-            key=lambda a: a.artifact_id,
+            key=lambda a: a.label,
         )
 
         policies_text = "\n\n---\n\n".join(
-            f"### {p.metadata.get('policy_name', p.artifact_id)}\n{p.content}" for p in policies
+            f"### {p.metadata.get('policy_name', p.label)}\n{p.content}" for p in policies
         )
 
         artifacts = []
@@ -197,10 +197,10 @@ class DemoEnrichCSBriefTransform(BaseTransform):
             sku = product.metadata["sku"]
             artifacts.append(
                 Artifact(
-                    artifact_id=f"cs-brief-{sku}",
+                    label=f"cs-brief-{sku}",
                     artifact_type="cs_product_brief",
                     content=response.content,
-                    input_hashes=([product.content_hash] + [p.content_hash for p in policies]),
+                    input_ids=([product.artifact_id] + [p.artifact_id for p in policies]),
                     prompt_id=prompt_id,
                     model_config=model_config,
                     metadata={

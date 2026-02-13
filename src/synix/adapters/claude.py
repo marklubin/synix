@@ -89,7 +89,7 @@ def parse_claude(filepath: str | Path) -> list[Artifact]:
 
         artifacts.append(
             Artifact(
-                artifact_id=f"t-claude-{uuid}",
+                label=f"t-claude-{uuid}",
                 artifact_type="transcript",
                 content=content,
                 metadata={

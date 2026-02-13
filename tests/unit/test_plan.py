@@ -323,12 +323,12 @@ class TestPlanBuildPartialRebuild:
             assert episode_step.status == "rebuild"
 
             # Monthly and core should also need rebuild due to cascade
-            # (their existing artifacts have input_hashes from old episodes,
-            # but we can't predict the new hashes, so the layer won't be fully cached)
+            # (their existing artifacts have input_ids from old episodes,
+            # but we can't predict the new artifact_ids, so the layer won't be fully cached)
             monthly_step = next(s for s in plan.steps if s.name == "monthly")
             # Monthly might show as cached because episodes' *existing* artifacts
             # (the old cached ones) still match. The real cascade happens at run time
-            # when new episode artifacts produce new content_hashes.
+            # when new episode artifacts produce new artifact_ids.
             # However, if episodes rebuild, the plan should detect that downstream
             # layers cannot be fully cached since episode artifacts in the store
             # are stale (prompt mismatch). Let's verify the plan at least flags

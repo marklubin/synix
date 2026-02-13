@@ -109,14 +109,14 @@ class TestMergeSimilarArtifacts:
     def test_merge_similar_artifacts(self):
         """Two artifacts with very similar content get merged."""
         art_a = Artifact(
-            artifact_id="extract-conv_8834",
+            label="extract-conv_8834",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. "
             "Customer reported unable to complete payment transaction.",
             metadata={"customer_id": "alice", "week": "47"},
         )
         art_b = Artifact(
-            artifact_id="extract-conv_8891",
+            label="extract-conv_8891",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. "
             "Customer experienced payment failure during transaction.",
@@ -136,20 +136,20 @@ class TestMergeSimilarArtifacts:
         assert len(results) == 1
         merged = results[0]
         assert merged.artifact_type == "merge"
-        assert merged.artifact_id.startswith("merge-")
+        assert merged.label.startswith("merge-")
         assert "extract-conv_8834" in merged.content
         assert "extract-conv_8891" in merged.content
 
     def test_no_merge_below_threshold(self):
         """Dissimilar artifacts stay separate."""
         art_a = Artifact(
-            artifact_id="extract-conv_001",
+            label="extract-conv_001",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process",
             metadata={"customer_id": "alice"},
         )
         art_b = Artifact(
-            artifact_id="extract-conv_002",
+            label="extract-conv_002",
             artifact_type="extract",
             content="Weather forecast shows sunny skies tomorrow afternoon",
             metadata={"customer_id": "bob"},
@@ -170,13 +170,13 @@ class TestMergeSimilarArtifacts:
     def test_constraint_prevents_merge(self):
         """customer_id constraint keeps different customers apart even if similar."""
         art_a = Artifact(
-            artifact_id="extract-conv_8834",
+            label="extract-conv_8834",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. Customer reported payment failure.",
             metadata={"customer_id": "alice", "week": "47"},
         )
         art_b = Artifact(
-            artifact_id="extract-conv_8891",
+            label="extract-conv_8891",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401 during checkout process week 47. Customer reported payment failure.",
             metadata={"customer_id": "bob", "week": "47"},
@@ -194,21 +194,21 @@ class TestMergeSimilarArtifacts:
         # Should stay separate despite high similarity
         assert len(results) == 2
         # Each should be passed through as-is (singletons)
-        ids = {r.artifact_id for r in results}
-        assert "extract-conv_8834" in ids
-        assert "extract-conv_8891" in ids
+        labels = {r.label for r in results}
+        assert "extract-conv_8834" in labels
+        assert "extract-conv_8891" in labels
 
     def test_threshold_affects_grouping(self):
         """Lower threshold = more merging, higher threshold = less merging."""
         # Create artifacts with moderate similarity
         art_a = Artifact(
-            artifact_id="a",
+            label="a",
             artifact_type="extract",
             content="BillingEngine error ERR-4401 during checkout process failed payment",
             metadata={},
         )
         art_b = Artifact(
-            artifact_id="b",
+            label="b",
             artifact_type="extract",
             content="BillingEngine error ERR-4401 during payment checkout issue reported",
             metadata={},
@@ -247,13 +247,13 @@ class TestMergeMetadata:
     def test_merge_metadata_tracks_sources(self):
         """Merged artifact metadata includes source artifact IDs and customer IDs."""
         art_a = Artifact(
-            artifact_id="extract-conv_100",
+            label="extract-conv_100",
             artifact_type="extract",
             content="Same product same error same week BillingEngine ERR-4401",
             metadata={"customer_id": "alice"},
         )
         art_b = Artifact(
-            artifact_id="extract-conv_200",
+            label="extract-conv_200",
             artifact_type="extract",
             content="Same product same error same week BillingEngine ERR-4401",
             metadata={"customer_id": "bob"},
@@ -270,8 +270,8 @@ class TestMergeMetadata:
 
         assert len(results) == 1
         merged = results[0]
-        assert "extract-conv_100" in merged.metadata["source_artifact_ids"]
-        assert "extract-conv_200" in merged.metadata["source_artifact_ids"]
+        assert "extract-conv_100" in merged.metadata["source_labels"]
+        assert "extract-conv_200" in merged.metadata["source_labels"]
         assert set(merged.metadata["source_customer_ids"]) == {"alice", "bob"}
         assert merged.metadata["merge_count"] == 2
         assert 0.0 <= merged.metadata["similarity_score"] <= 1.0
@@ -279,13 +279,13 @@ class TestMergeMetadata:
     def test_singleton_groups_pass_through(self):
         """Artifacts with no similar peers are returned as-is (not wrapped)."""
         art_a = Artifact(
-            artifact_id="extract-conv_001",
+            label="extract-conv_001",
             artifact_type="extract",
             content="BillingEngine threw ERR-4401",
             metadata={"customer_id": "alice"},
         )
         art_b = Artifact(
-            artifact_id="extract-conv_002",
+            label="extract-conv_002",
             artifact_type="extract",
             content="Completely unrelated shipping delay weather topic",
             metadata={"customer_id": "bob"},
@@ -301,23 +301,23 @@ class TestMergeMetadata:
         )
 
         assert len(results) == 2
-        # Singletons should retain their original artifact_id and type
-        result_ids = {r.artifact_id for r in results}
-        assert "extract-conv_001" in result_ids
-        assert "extract-conv_002" in result_ids
+        # Singletons should retain their original label and type
+        result_labels = {r.label for r in results}
+        assert "extract-conv_001" in result_labels
+        assert "extract-conv_002" in result_labels
         for r in results:
             assert r.artifact_type == "extract"  # original type preserved
 
-    def test_merge_input_hashes(self):
-        """Merged artifact tracks content hashes of all source artifacts."""
+    def test_merge_input_ids(self):
+        """Merged artifact tracks artifact IDs of all source artifacts."""
         art_a = Artifact(
-            artifact_id="a",
+            label="a",
             artifact_type="extract",
             content="Same exact content for merge test purposes here",
             metadata={},
         )
         art_b = Artifact(
-            artifact_id="b",
+            label="b",
             artifact_type="extract",
             content="Same exact content for merge test purposes here",
             metadata={},
@@ -334,9 +334,9 @@ class TestMergeMetadata:
 
         assert len(results) == 1
         merged = results[0]
-        assert len(merged.input_hashes) == 2
-        assert art_a.content_hash in merged.input_hashes
-        assert art_b.content_hash in merged.input_hashes
+        assert len(merged.input_ids) == 2
+        assert art_a.artifact_id in merged.input_ids
+        assert art_b.artifact_id in merged.input_ids
 
 
 class TestMergeCacheKey:
@@ -405,7 +405,7 @@ class TestMergeEdgeCases:
     def test_single_input(self):
         """Single artifact passes through unchanged."""
         art = Artifact(
-            artifact_id="extract-only",
+            label="extract-only",
             artifact_type="extract",
             content="Some content here",
             metadata={"customer_id": "alice"},
@@ -413,13 +413,13 @@ class TestMergeEdgeCases:
         transform = get_transform("merge")
         results = transform.execute([art], {"similarity_threshold": 0.85})
         assert len(results) == 1
-        assert results[0].artifact_id == "extract-only"
+        assert results[0].label == "extract-only"
 
     def test_three_way_merge(self):
         """Three highly similar artifacts can merge into one group."""
         arts = [
             Artifact(
-                artifact_id=f"extract-{i}",
+                label=f"extract-{i}",
                 artifact_type="extract",
                 content="BillingEngine ERR-4401 checkout failure payment process week 47",
                 metadata={"customer_id": f"customer_{i}"},
@@ -443,13 +443,13 @@ class TestMergeEdgeCases:
     def test_constraint_with_missing_metadata_field(self):
         """Constraint on a field that doesn't exist in metadata doesn't block merge."""
         art_a = Artifact(
-            artifact_id="a",
+            label="a",
             artifact_type="extract",
             content="Same content for test BillingEngine ERR-4401",
             metadata={},  # No customer_id
         )
         art_b = Artifact(
-            artifact_id="b",
+            label="b",
             artifact_type="extract",
             content="Same content for test BillingEngine ERR-4401",
             metadata={},  # No customer_id
@@ -472,12 +472,8 @@ class TestMergeEdgeCases:
         transform = get_transform("merge")
         # Create artifacts with identical content (similarity = 1.0 > 0.85 default)
         arts = [
-            Artifact(
-                artifact_id="a", artifact_type="extract", content="Exact same content here for testing", metadata={}
-            ),
-            Artifact(
-                artifact_id="b", artifact_type="extract", content="Exact same content here for testing", metadata={}
-            ),
+            Artifact(label="a", artifact_type="extract", content="Exact same content here for testing", metadata={}),
+            Artifact(label="b", artifact_type="extract", content="Exact same content here for testing", metadata={}),
         ]
         results = transform.execute(arts, {})
         assert len(results) == 1  # merged with default threshold
@@ -489,7 +485,7 @@ class TestBuildMergeGroups:
     def test_all_similar_one_group(self):
         """All similar artifacts form one group."""
         arts = [
-            Artifact(artifact_id=f"a{i}", artifact_type="x", content="Same content repeated here", metadata={})
+            Artifact(label=f"a{i}", artifact_type="x", content="Same content repeated here", metadata={})
             for i in range(4)
         ]
         groups = _build_merge_groups(arts, threshold=0.5, constraint_fields=[])
@@ -500,7 +496,7 @@ class TestBuildMergeGroups:
         """Two clusters of similar artifacts form two groups."""
         cluster_a = [
             Artifact(
-                artifact_id=f"billing-{i}",
+                label=f"billing-{i}",
                 artifact_type="x",
                 content="BillingEngine ERR-4401 checkout failure payment",
                 metadata={},
@@ -509,7 +505,7 @@ class TestBuildMergeGroups:
         ]
         cluster_b = [
             Artifact(
-                artifact_id=f"shipping-{i}",
+                label=f"shipping-{i}",
                 artifact_type="x",
                 content="Shipping delay warehouse logistics tracking number",
                 metadata={},

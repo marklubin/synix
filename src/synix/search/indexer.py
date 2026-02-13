@@ -37,7 +37,7 @@ class SearchIndex:
         conn.execute("""
             CREATE VIRTUAL TABLE search_index USING fts5(
                 content,
-                artifact_id,
+                label,
                 layer_name,
                 layer_level,
                 metadata
@@ -54,10 +54,10 @@ class SearchIndex:
         # Strip internal build metadata that shouldn't affect search ranking
         search_metadata = {k: v for k, v in artifact.metadata.items() if k not in self._METADATA_INDEX_EXCLUDE}
         conn.execute(
-            "INSERT INTO search_index (content, artifact_id, layer_name, layer_level, metadata) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO search_index (content, label, layer_name, layer_level, metadata) VALUES (?, ?, ?, ?, ?)",
             (
                 artifact.content,
-                artifact.artifact_id,
+                artifact.label,
                 layer_name,
                 str(layer_level),
                 json.dumps(search_metadata),
@@ -180,7 +180,7 @@ class SearchIndex:
         if layers:
             placeholders = ",".join("?" for _ in layers)
             sql = (
-                f"SELECT content, artifact_id, layer_name, layer_level, metadata, rank "
+                f"SELECT content, label, layer_name, layer_level, metadata, rank "
                 f"FROM search_index "
                 f"WHERE search_index MATCH ? AND layer_name IN ({placeholders}) "
                 f"ORDER BY rank"
@@ -188,7 +188,7 @@ class SearchIndex:
             params = [safe_q, *layers]
         else:
             sql = (
-                "SELECT content, artifact_id, layer_name, layer_level, metadata, rank "
+                "SELECT content, label, layer_name, layer_level, metadata, rank "
                 "FROM search_index "
                 "WHERE search_index MATCH ? "
                 "ORDER BY rank"
@@ -201,15 +201,15 @@ class SearchIndex:
         for row in rows:
             chain: list[str] = []
             if provenance_tracker is not None:
-                records = provenance_tracker.get_chain(row["artifact_id"])
-                chain = [r.artifact_id for r in records]
+                records = provenance_tracker.get_chain(row["label"])
+                chain = [r.label for r in records]
 
             metadata = json.loads(row["metadata"]) if row["metadata"] else {}
 
             results.append(
                 SearchResult(
                     content=row["content"],
-                    artifact_id=row["artifact_id"],
+                    label=row["label"],
                     layer_name=row["layer_name"],
                     layer_level=int(row["layer_level"]),
                     score=abs(row["rank"]),

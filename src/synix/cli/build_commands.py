@@ -228,13 +228,13 @@ def _display_validation_results(validation):
         console.print(f"\n[bold]{name}[/bold] violations:")
         for v in viol_list:
             severity_style = "red" if v.severity == "error" else "yellow"
-            console.print(f"  [{severity_style}]{v.artifact_id}[/{severity_style}]: {v.message}")
+            console.print(f"  [{severity_style}]{v.label}[/{severity_style}]: {v.message}")
 
             if v.provenance_trace:
                 console.print("    [dim]Provenance:[/dim]")
                 for step in v.provenance_trace:
                     val_str = f"  {v.field}: {step.field_value}" if step.field_value else ""
-                    console.print(f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}")
+                    console.print(f"      {step.label} [dim]({step.layer})[/dim]{val_str}")
 
 
 # Hidden alias for backward compatibility
@@ -616,7 +616,7 @@ def _save_plan_artifact(build_plan, pipeline):
 
     content = build_plan.to_json()
     artifact = Artifact(
-        artifact_id="build-plan",
+        label="build-plan",
         artifact_type="build_plan",
         content=content,
         metadata={

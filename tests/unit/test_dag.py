@@ -85,10 +85,10 @@ class TestNeedsRebuild:
         build_fp = compute_build_fingerprint(transform_fp, ["sha256:input1"])
 
         artifact = Artifact(
-            artifact_id="ep-001",
+            label="ep-001",
             artifact_type="episode",
             content="cached content",
-            input_hashes=["sha256:input1"],
+            input_ids=["sha256:input1"],
             prompt_id="ep_v1",
             metadata={"build_fingerprint": build_fp.to_dict()},
         )
@@ -105,10 +105,10 @@ class TestNeedsRebuild:
         old_build_fp = compute_build_fingerprint(old_transform_fp, ["sha256:input1"])
 
         artifact = Artifact(
-            artifact_id="ep-001",
+            label="ep-001",
             artifact_type="episode",
             content="cached content",
-            input_hashes=["sha256:input1"],
+            input_ids=["sha256:input1"],
             prompt_id="ep_v1",
             metadata={"build_fingerprint": old_build_fp.to_dict()},
         )
@@ -126,10 +126,10 @@ class TestNeedsRebuild:
         store = ArtifactStore(tmp_build_dir)
 
         artifact = Artifact(
-            artifact_id="ep-001",
+            label="ep-001",
             artifact_type="episode",
             content="old content",
-            input_hashes=["sha256:input1"],
+            input_ids=["sha256:input1"],
             prompt_id="ep_v1",
         )
         store.save_artifact(artifact, layer_name="episodes", layer_level=1)
@@ -150,10 +150,10 @@ class TestNeedsRebuild:
             components={"transform": "aaa", "inputs": "bbb"},
         )
         artifact = Artifact(
-            artifact_id="ep-001",
+            label="ep-001",
             artifact_type="episode",
             content="old content",
-            input_hashes=["sha256:input1"],
+            input_ids=["sha256:input1"],
             prompt_id="ep_v1",
             metadata={"build_fingerprint": old_fp.to_dict()},
         )
@@ -170,10 +170,10 @@ class TestNeedsRebuild:
         """Without fingerprint, input hash change is detected."""
         store = ArtifactStore(tmp_build_dir)
         artifact = Artifact(
-            artifact_id="ep-001",
+            label="ep-001",
             artifact_type="episode",
             content="cached content",
-            input_hashes=["sha256:input1"],
+            input_ids=["sha256:input1"],
             prompt_id="ep_v1",
         )
         store.save_artifact(artifact, layer_name="episodes", layer_level=1)
@@ -187,8 +187,8 @@ class TestNeedsRebuild:
         assert result is True
         assert "inputs changed" in reasons
 
-    def test_cascade_via_input_hashes(self, tmp_build_dir):
-        """Changing level 1 forces rebuild of 2 and 3 via changed input hashes."""
+    def test_cascade_via_input_ids(self, tmp_build_dir):
+        """Changing level 1 forces rebuild of 2 and 3 via changed input ids."""
         store = ArtifactStore(tmp_build_dir)
         transform_fp = self._make_transform_fp()
 
@@ -196,42 +196,42 @@ class TestNeedsRebuild:
         build_fp1 = compute_build_fingerprint(transform_fp, ["sha256:transcript1"])
         store.save_artifact(
             Artifact(
-                artifact_id="ep-001",
+                label="ep-001",
                 artifact_type="episode",
                 content="episode v1",
-                input_hashes=["sha256:transcript1"],
+                input_ids=["sha256:transcript1"],
                 prompt_id="ep_v1",
                 metadata={"build_fingerprint": build_fp1.to_dict()},
             ),
             layer_name="episodes",
             layer_level=1,
         )
-        ep_hash = store.get_content_hash("ep-001")
+        ep_hash = store.get_artifact_id("ep-001")
 
         # Level 2
         build_fp2 = compute_build_fingerprint(transform_fp, [ep_hash])
         store.save_artifact(
             Artifact(
-                artifact_id="monthly-2025-01",
+                label="monthly-2025-01",
                 artifact_type="rollup",
                 content="monthly v1",
-                input_hashes=[ep_hash],
+                input_ids=[ep_hash],
                 prompt_id="monthly_v1",
                 metadata={"build_fingerprint": build_fp2.to_dict()},
             ),
             layer_name="monthly",
             layer_level=2,
         )
-        monthly_hash = store.get_content_hash("monthly-2025-01")
+        monthly_hash = store.get_artifact_id("monthly-2025-01")
 
         # Level 3
         build_fp3 = compute_build_fingerprint(transform_fp, [monthly_hash])
         store.save_artifact(
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content="core v1",
-                input_hashes=[monthly_hash],
+                input_ids=[monthly_hash],
                 prompt_id="core_v1",
                 metadata={"build_fingerprint": build_fp3.to_dict()},
             ),
@@ -239,7 +239,7 @@ class TestNeedsRebuild:
             layer_level=3,
         )
 
-        # If episode rebuilds, monthly sees changed input hash
+        # If episode rebuilds, monthly sees changed input id
         new_ep_hash = "sha256:new_episode_hash"
         new_build_fp2 = compute_build_fingerprint(transform_fp, [new_ep_hash])
         result, _ = needs_rebuild("monthly-2025-01", [new_ep_hash], store, current_build_fingerprint=new_build_fp2)

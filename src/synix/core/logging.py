@@ -226,45 +226,45 @@ class SynixLogger:
 
     # -- Artifact events --
 
-    def artifact_built(self, layer_name: str, artifact_id: str) -> None:
+    def artifact_built(self, layer_name: str, label: str) -> None:
         """Log that an artifact was built (not cached)."""
         with self._lock:
             step = self.run_log.get_or_create_step(layer_name)
-            step.rebuilt_ids.append(artifact_id)
+            step.rebuilt_ids.append(label)
 
         self._write_event(
             {
                 "event": "artifact_built",
                 "layer": layer_name,
-                "artifact_id": artifact_id,
+                "label": label,
             }
         )
 
         self._console_print(
-            f"      [green]+[/green] {artifact_id}",
+            f"      [green]+[/green] {label}",
             Verbosity.VERBOSE,
         )
 
-    def artifact_cached(self, layer_name: str, artifact_id: str) -> None:
+    def artifact_cached(self, layer_name: str, label: str) -> None:
         """Log that an artifact was found in cache."""
         with self._lock:
             step = self.run_log.get_or_create_step(layer_name)
             step.cache_hits += 1
-            step.cached_ids.append(artifact_id)
+            step.cached_ids.append(label)
 
         self._write_event(
             {
                 "event": "artifact_cached",
                 "layer": layer_name,
-                "artifact_id": artifact_id,
+                "label": label,
             }
         )
 
         if self.progress:
-            self.progress.artifact_cached(artifact_id)
+            self.progress.artifact_cached(label)
 
         self._console_print(
-            f"      [cyan]=[/cyan] {artifact_id} (cached)",
+            f"      [cyan]=[/cyan] {label} (cached)",
             Verbosity.VERBOSE,
         )
 

@@ -51,7 +51,7 @@ Browse what was built:
 ```bash
 uvx synix list                    # all artifacts, grouped by layer
 uvx synix show final-report       # render an artifact as markdown
-uvx synix show final-report --raw # full JSON with metadata and hashes
+uvx synix show final-report --raw # full JSON with metadata and artifact IDs
 ```
 
 Validate and search:
@@ -77,7 +77,7 @@ Build output lives in `./build/` — JSON files per artifact, a `manifest.json` 
 
 ```bash
 ls build/layer2-cs_product_brief/
-sqlite3 build/search.db "SELECT artifact_id, layer_name FROM search_index LIMIT 5"
+sqlite3 build/search.db "SELECT label, layer_name FROM search_index LIMIT 5"
 ```
 
 ## Defining a Pipeline
@@ -206,8 +206,8 @@ Drop files into `source_dir` — the `parse` transform auto-detects format by fi
 | `uvx synix build` | Run the pipeline. Only rebuilds what changed. |
 | `uvx synix plan` | Dry-run — show what would build without running transforms. |
 | `uvx synix plan --explain-cache` | Plan with inline cache decision reasons per artifact. |
-| `uvx synix list [layer]` | List all artifacts with short content hashes, optionally filtered by layer. |
-| `uvx synix show <id>` | Display an artifact's content. Resolves by ID or hash prefix. `--raw` for JSON. |
+| `uvx synix list [layer]` | List all artifacts with short artifact IDs, optionally filtered by layer. |
+| `uvx synix show <id>` | Display an artifact's content. Resolves by label or artifact ID prefix. `--raw` for JSON. |
 | `uvx synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
 | `uvx synix validate` | Run declared validators against build artifacts. |
 | `uvx synix fix` | LLM-assisted repair of validation violations. |
@@ -229,7 +229,7 @@ Commands that take a pipeline path (`build`, `plan`, `validate`, `fix`, `clean`)
 
 **Full provenance** — Every artifact chains back to the source conversations that produced it, through every transform in between.
 
-**Git-like artifact resolution** — `uvx synix show` resolves artifacts by unique prefix of artifact ID or content hash, just like `git show` resolves commits.
+**Git-like artifact resolution** — `uvx synix show` resolves artifacts by unique prefix of label or artifact ID, just like `git show` resolves commits.
 
 **Validation and repair** — Detect semantic contradictions and PII leaks across artifacts, then fix them with LLM-assisted rewrites.
 
@@ -255,7 +255,7 @@ These are the highest-priority open issues. See the [issue tracker](https://gith
 |-------|----------|-------------|
 | [#53](https://github.com/marklubin/synix/issues/53) | P0 | **Parser metadata passthrough** — YAML frontmatter fields in source files are not propagated to artifact metadata. Custom fields like `author` or `date` are silently dropped. |
 | [#52](https://github.com/marklubin/synix/issues/52) | P0 | **Validate/verify and trace artifacts** — Trace artifacts from provenance tracking can trigger false positives in validators that expect only content artifacts. |
-| [#57](https://github.com/marklubin/synix/issues/57) | P1 | **Rich search output** — Search results show artifact IDs but not inline content snippets or provenance context. Requires multiple commands to get the full picture. |
+| [#57](https://github.com/marklubin/synix/issues/57) | P1 | **Rich search output** — Search results show artifact labels but not inline content snippets or provenance context. Requires multiple commands to get the full picture. |
 | [#56](https://github.com/marklubin/synix/issues/56) | P1 | **Provenance summarization** — Lineage output is raw dependency chains. No summarized view or filtering for large graphs. |
 | [#55](https://github.com/marklubin/synix/issues/55) | P1 | **Pipeline-relative imports** — Custom transforms using relative imports fail when the pipeline file is outside the project root. |
 | [#54](https://github.com/marklubin/synix/issues/54) | P1 | **Non-interactive automation mode** — No `--quiet` / `--json` output mode for CI or scripted usage. Rich formatting assumes a TTY. |

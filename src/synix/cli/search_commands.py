@@ -123,7 +123,7 @@ def search(
         store = ArtifactStore(build_dir)
         filtered = []
         for result in results:
-            artifact = store.load_artifact(result.artifact_id)
+            artifact = store.load_artifact(result.label)
             if artifact is not None:
                 if artifact.metadata.get("customer_id") == customer:
                     filtered.append(result)
@@ -170,7 +170,7 @@ def search(
         score_display = "".join(score_parts)
 
         footer = Text.from_markup(
-            f"[dim]Artifact:[/dim] {result.artifact_id}  "
+            f"[dim]Label:[/dim] {result.label}  "
             f"[dim]Score:[/dim] {score_display}  [dim]Mode:[/dim] {search_mode_label}"
         )
 
@@ -195,16 +195,16 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in sorted(rec.parent_artifact_ids):
-                        label = f"[dim]{parent_id}[/dim]"
-                        child = node.add(label)
-                        _build_trace_tree(child, parent_id, visited)
+                    for parent_label in sorted(rec.parent_labels):
+                        tree_label = f"[dim]{parent_label}[/dim]"
+                        child = node.add(tree_label)
+                        _build_trace_tree(child, parent_label, visited)
 
-            _build_trace_tree(prov_tree, result.artifact_id)
+            _build_trace_tree(prov_tree, result.label)
             console.print(prov_tree)
         elif not trace and result.provenance_chain:
             # Legacy behavior: show simple provenance tree without --trace
-            tree = Tree(f"[dim]{result.artifact_id}[/dim]")
+            tree = Tree(f"[dim]{result.label}[/dim]")
 
             def _add_parents(node, aid, visited=None):
                 if visited is None:
@@ -214,11 +214,11 @@ def search(
                 visited.add(aid)
                 rec = provenance.get_record(aid)
                 if rec:
-                    for parent_id in sorted(rec.parent_artifact_ids):
-                        child = node.add(f"[dim]{parent_id}[/dim]")
-                        _add_parents(child, parent_id, visited)
+                    for parent_label in sorted(rec.parent_labels):
+                        child = node.add(f"[dim]{parent_label}[/dim]")
+                        _add_parents(child, parent_label, visited)
 
-            _add_parents(tree, result.artifact_id)
+            _add_parents(tree, result.label)
             console.print(tree)
 
         console.print()

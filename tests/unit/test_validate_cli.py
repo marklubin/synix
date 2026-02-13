@@ -122,7 +122,7 @@ class TestValidateCommand:
 
         store = ArtifactStore(build_dir)
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="Email me at user@example.com for details.",
             metadata={"layer_name": "episodes"},
@@ -155,7 +155,7 @@ class TestValidateCommand:
 
         store = ArtifactStore(build_dir)
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="SSN: 123-45-6789",
             metadata={"layer_name": "episodes"},
@@ -181,7 +181,7 @@ class TestValidateCommand:
 
         store = ArtifactStore(build_dir)
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="Credit card: 4111-1111-1111-1111",
             metadata={"layer_name": "episodes"},
@@ -198,7 +198,7 @@ class TestValidateCommand:
 
         store = ArtifactStore(build_dir)
         art = Artifact(
-            artifact_id="ep-1",
+            label="ep-1",
             artifact_type="episode",
             content="Phone: (555) 123-4567",
             metadata={"layer_name": "episodes"},

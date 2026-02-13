@@ -405,13 +405,11 @@ class TestDT2ParallelPaths:
 
         # The core artifacts should differ because they were synthesized from
         # different level-2 inputs (monthly rollups vs topical rollups).
-        # Even with mocked LLM, the input_hashes differ, so they get rebuilt.
+        # Even with mocked LLM, the input_ids differ, so they get rebuilt.
         artifact_diff = diff_artifact(core_a, core_b)
 
-        # Core was rebuilt, so at minimum input_hashes differ (different parents)
-        assert core_a.input_hashes != core_b.input_hashes, (
-            "Core input_hashes should differ between monthly and topical paths"
-        )
+        # Core was rebuilt, so at minimum input_ids differ (different parents)
+        assert core_a.input_ids != core_b.input_ids, "Core input_ids should differ between monthly and topical paths"
 
         # Context doc should also reflect the rebuild (content may or may not differ
         # with mocked LLM, but the file was rewritten)

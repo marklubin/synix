@@ -196,13 +196,13 @@ class TestLayerProjectionChain:
         """Fake episode artifacts with the metadata the index needs."""
         return [
             Artifact(
-                artifact_id="ep-conv001",
+                label="ep-conv001",
                 artifact_type="episode",
                 content="Discussion about Python programming and web development.",
                 metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "Python chat"},
             ),
             Artifact(
-                artifact_id="ep-conv002",
+                label="ep-conv002",
                 artifact_type="episode",
                 content="Machine learning model training and evaluation.",
                 metadata={"layer_name": "episodes", "layer_level": 1, "date": "2024-03", "title": "ML chat"},
@@ -213,7 +213,7 @@ class TestLayerProjectionChain:
     def monthly_artifacts(self):
         return [
             Artifact(
-                artifact_id="monthly-2024-03",
+                label="monthly-2024-03",
                 artifact_type="rollup",
                 content="March themes: programming and ML.",
                 metadata={"layer_name": "monthly", "layer_level": 2, "month": "2024-03"},
@@ -224,7 +224,7 @@ class TestLayerProjectionChain:
     def core_artifacts(self):
         return [
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content="## Identity\nSoftware engineer focused on AI.",
                 metadata={"layer_name": "core", "layer_level": 3},
@@ -369,7 +369,7 @@ class TestLayerProjectionChain:
         # Only after core layer is present should the flat file materialize
         layer_artifacts["core"] = [
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content="## Identity\nSoftware engineer.",
                 metadata={"layer_name": "core", "layer_level": 3},

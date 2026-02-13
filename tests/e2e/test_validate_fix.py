@@ -42,7 +42,7 @@ def provenance(build_dir):
 
 def _make_artifact(aid, content, atype="episode", layer_name="episodes", **meta):
     return Artifact(
-        artifact_id=aid,
+        label=aid,
         artifact_type=atype,
         content=content,
         metadata={"layer_name": layer_name, **meta},
@@ -73,7 +73,7 @@ class TestPIIDetectionE2E:
             layer_name="episodes",
         )
         store.save_artifact(episode, "episodes", 1)
-        provenance.record("ep-1", parent_ids=["t-1"])
+        provenance.record("ep-1", parent_labels=["t-1"])
 
         pipeline = Pipeline("test")
         pipeline.add_validator(
@@ -87,10 +87,10 @@ class TestPIIDetectionE2E:
         assert len(result.violations) >= 1
         ssn_viols = [v for v in result.violations if v.metadata.get("pattern") == "ssn"]
         assert len(ssn_viols) == 1
-        assert ssn_viols[0].artifact_id == "ep-1"
+        assert ssn_viols[0].label == "ep-1"
 
         # Provenance trace should include ep-1 and t-1
-        trace_ids = {s.artifact_id for s in ssn_viols[0].provenance_trace}
+        trace_ids = {s.label for s in ssn_viols[0].provenance_trace}
         assert "ep-1" in trace_ids
 
 
@@ -139,10 +139,10 @@ class TestViolationQueueE2E:
             violation_type="pii",
             severity="warning",
             message="PII detected",
-            artifact_id="ep-1",
+            label="ep-1",
             field="content",
             violation_id=vid,
-            metadata={"content_hash": "sha256:abc"},
+            metadata={"artifact_id": "sha256:abc"},
         )
         queue.upsert(v1)
         queue.upsert(v1)
@@ -160,10 +160,10 @@ class TestViolationQueueE2E:
             violation_type="pii",
             severity="warning",
             message="PII",
-            artifact_id="ep-1",
+            label="ep-1",
             field="content",
             violation_id=vid,
-            metadata={"content_hash": "sha256:abc"},
+            metadata={"artifact_id": "sha256:abc"},
         )
         queue.upsert(v)
         queue.ignore(vid)
@@ -181,10 +181,10 @@ class TestViolationQueueE2E:
             violation_type="pii",
             severity="warning",
             message="PII",
-            artifact_id="ep-1",
+            label="ep-1",
             field="content",
             violation_id=vid,
-            metadata={"content_hash": "sha256:old"},
+            metadata={"artifact_id": "sha256:old"},
         )
         queue.upsert(v)
         queue.ignore(vid)
@@ -221,7 +221,7 @@ class TestSemanticFixCycleE2E:
         ep2 = _make_artifact("ep-dec", "Mark drives a Dodge Neon.", layer_name="episodes")
         store.save_artifact(ep1, "episodes", 1)
         store.save_artifact(ep2, "episodes", 1)
-        provenance.record("monthly-dec", parent_ids=["ep-aug", "ep-dec"])
+        provenance.record("monthly-dec", parent_labels=["ep-aug", "ep-dec"])
 
         # Core depends on monthly
         core = _make_artifact(
@@ -231,7 +231,7 @@ class TestSemanticFixCycleE2E:
             layer_name="core",
         )
         store.save_artifact(core, "core", 3)
-        provenance.record("core-1", parent_ids=["monthly-dec"])
+        provenance.record("core-1", parent_labels=["monthly-dec"])
 
         # Patch LLM to use mock conflict client
         self._patch_llm(monkeypatch, _make_mock_conflict_client())
@@ -288,7 +288,7 @@ class TestSemanticFixCycleE2E:
 
             # Mark resolved in queue
             for v in result.violations:
-                if v.artifact_id == action.artifact_id:
+                if v.label == action.label:
                     queue.resolve(v.violation_id, fix_action="rewrite")
             break
 
@@ -316,7 +316,7 @@ class TestSemanticFixCycleE2E:
             layer_name="monthly",
         )
         store.save_artifact(monthly, "monthly", 2)
-        original_hash = monthly.content_hash
+        original_hash = monthly.artifact_id
 
         # Patch LLM to use mock conflict client
         self._patch_llm(monkeypatch, _make_mock_conflict_client())
@@ -362,7 +362,7 @@ class TestSemanticFixCycleE2E:
 
         # Verify: artifact unchanged
         reloaded = store.load_artifact("monthly-1")
-        assert reloaded.content_hash == original_hash
+        assert reloaded.artifact_id == original_hash
 
         # Verify: resolved in queue
         queue2 = ViolationQueue.load(build_dir)

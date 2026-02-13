@@ -85,7 +85,7 @@ def parse_chatgpt(filepath: str | Path) -> list[Artifact]:
 
         artifacts.append(
             Artifact(
-                artifact_id=f"t-chatgpt-{conv_id}",
+                label=f"t-chatgpt-{conv_id}",
                 artifact_type="transcript",
                 content=content,
                 metadata=metadata,

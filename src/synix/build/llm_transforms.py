@@ -83,7 +83,7 @@ class EpisodeSummaryTransform(BaseTransform):
         results: list[Artifact] = []
         for transcript in inputs:
             prompt = template.replace("{transcript}", transcript.content)
-            conv_id = transcript.metadata.get("source_conversation_id", transcript.artifact_id)
+            conv_id = transcript.metadata.get("source_conversation_id", transcript.label)
 
             response = _logged_complete(
                 client,
@@ -103,10 +103,10 @@ class EpisodeSummaryTransform(BaseTransform):
 
             results.append(
                 Artifact(
-                    artifact_id=f"ep-{conv_id}",
+                    label=f"ep-{conv_id}",
                     artifact_type="episode",
                     content=response.content,
-                    input_hashes=[transcript.content_hash],
+                    input_ids=[transcript.artifact_id],
                     prompt_id=prompt_id,
                     model_config=model_config,
                     metadata=ep_metadata,
@@ -129,7 +129,7 @@ class MonthlyRollupTransform(BaseTransform):
                 months[month].append(ep)
             else:
                 print(
-                    f"[synix] Warning: episode '{ep.artifact_id}' has no date metadata, grouping as 'undated'",
+                    f"[synix] Warning: episode '{ep.label}' has no date metadata, grouping as 'undated'",
                     file=sys.stderr,
                 )
                 months["undated"].append(ep)
@@ -156,7 +156,7 @@ class MonthlyRollupTransform(BaseTransform):
         else:
             year, mo = month.split("-")
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
             for ep in inputs
         )
         prompt = template.replace("{month}", mo).replace("{year}", year).replace("{episodes}", episodes_text)
@@ -168,10 +168,10 @@ class MonthlyRollupTransform(BaseTransform):
         )
         return [
             Artifact(
-                artifact_id=f"monthly-{month}",
+                label=f"monthly-{month}",
                 artifact_type="rollup",
                 content=response.content,
-                input_hashes=[ep.content_hash for ep in inputs],
+                input_ids=[ep.artifact_id for ep in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
                 metadata={"month": month, "episode_count": len(inputs)},
@@ -225,8 +225,8 @@ class TopicalRollupTransform(BaseTransform):
                     topic.replace("-", " "),
                     layers=["episodes"],
                 )
-                matching_ids = {r.artifact_id for r in search_results}
-                relevant = [ep for ep in inputs if ep.artifact_id in matching_ids]
+                matching_labels = {r.label for r in search_results}
+                relevant = [ep for ep in inputs if ep.label in matching_labels]
                 if not relevant:
                     relevant = inputs
             else:
@@ -254,7 +254,7 @@ class TopicalRollupTransform(BaseTransform):
         model_config = config.get("llm_config", {})
 
         episodes_text = "\n\n---\n\n".join(
-            f"### {ep.metadata.get('title', ep.artifact_id)} ({ep.metadata.get('date', '')})\n{ep.content}"
+            f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
             for ep in inputs
         )
         prompt = template.replace("{topic}", topic.replace("-", " ")).replace("{episodes}", episodes_text)
@@ -267,10 +267,10 @@ class TopicalRollupTransform(BaseTransform):
         )
         return [
             Artifact(
-                artifact_id=f"topic-{slug}",
+                label=f"topic-{slug}",
                 artifact_type="rollup",
                 content=response.content,
-                input_hashes=[ep.content_hash for ep in inputs],
+                input_ids=[ep.artifact_id for ep in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
                 metadata={"topic": topic, "episode_count": len(inputs)},
@@ -302,7 +302,7 @@ class CoreSynthesisTransform(BaseTransform):
         max_tokens = context_budget if context_budget else model_config.get("max_tokens", 2048)
 
         rollups_text = "\n\n---\n\n".join(
-            f"### {r.metadata.get('month', r.metadata.get('topic', r.artifact_id))}\n{r.content}" for r in inputs
+            f"### {r.metadata.get('month', r.metadata.get('topic', r.label))}\n{r.content}" for r in inputs
         )
         prompt = template.replace("{context_budget}", str(context_budget)).replace("{rollups}", rollups_text)
 
@@ -316,10 +316,10 @@ class CoreSynthesisTransform(BaseTransform):
 
         return [
             Artifact(
-                artifact_id="core-memory",
+                label="core-memory",
                 artifact_type="core_memory",
                 content=response.content,
-                input_hashes=[r.content_hash for r in inputs],
+                input_ids=[r.artifact_id for r in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
                 metadata={"context_budget": context_budget, "input_count": len(inputs)},

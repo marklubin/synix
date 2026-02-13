@@ -29,58 +29,58 @@ class ProvenanceTracker:
 
     def record(
         self,
-        artifact_id: str,
-        parent_ids: list[str],
+        label: str,
+        parent_labels: list[str],
         prompt_id: str | None = None,
         model_config: dict | None = None,
     ) -> None:
         """Record provenance for an artifact."""
-        self._records[artifact_id] = {
-            "artifact_id": artifact_id,
-            "parent_artifact_ids": parent_ids,
+        self._records[label] = {
+            "label": label,
+            "parent_labels": parent_labels,
             "prompt_id": prompt_id,
             "model_config": model_config,
             "created_at": datetime.now().isoformat(),
         }
         self._save()
 
-    def get_parents(self, artifact_id: str) -> list[str]:
-        """Return parent artifact IDs for this artifact."""
-        rec = self._records.get(artifact_id)
+    def get_parents(self, label: str) -> list[str]:
+        """Return parent labels for this artifact."""
+        rec = self._records.get(label)
         if rec is None:
             return []
-        return rec["parent_artifact_ids"]
+        return rec["parent_labels"]
 
-    def get_record(self, artifact_id: str) -> ProvenanceRecord | None:
+    def get_record(self, label: str) -> ProvenanceRecord | None:
         """Return the ProvenanceRecord for an artifact, or None."""
-        rec = self._records.get(artifact_id)
+        rec = self._records.get(label)
         if rec is None:
             return None
         return ProvenanceRecord(
-            artifact_id=rec["artifact_id"],
-            parent_artifact_ids=rec["parent_artifact_ids"],
+            label=rec["label"],
+            parent_labels=rec["parent_labels"],
             prompt_id=rec.get("prompt_id"),
             model_config=rec.get("model_config"),
             created_at=datetime.fromisoformat(rec["created_at"]),
         )
 
-    def get_chain(self, artifact_id: str) -> list[ProvenanceRecord]:
+    def get_chain(self, label: str) -> list[ProvenanceRecord]:
         """Recursive walk to roots — return full provenance chain (BFS)."""
         chain: list[ProvenanceRecord] = []
         visited: set[str] = set()
-        queue: list[str] = [artifact_id]
+        queue: list[str] = [label]
 
         while queue:
-            current_id = queue.pop(0)
-            if current_id in visited:
+            current_label = queue.pop(0)
+            if current_label in visited:
                 continue
-            visited.add(current_id)
+            visited.add(current_label)
 
-            record = self.get_record(current_id)
+            record = self.get_record(current_label)
             if record is not None:
                 chain.append(record)
-                for parent_id in record.parent_artifact_ids:
-                    if parent_id not in visited:
-                        queue.append(parent_id)
+                for parent_label in record.parent_labels:
+                    if parent_label not in visited:
+                        queue.append(parent_label)
 
         return chain

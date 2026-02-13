@@ -7,7 +7,7 @@ Search results for: "climate dashboard" (keyword mode)
 │  to ingest sensor streams, a data pipeline to clean and aggregate readings, and an intuitive UI that meets WCAG 2.1  │
 │  AA standards. The team has 8 weeks.                                                                                 │
 │                                                                                                                      │
-│  Artifact: t-text-project_brief  Score: 1.55  Mode: keyword                                                          │
+│  Label: t-text-project_brief  Score: 1.55  Mode: keyword                                                             │
 │                                                                                                                      │
 ╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
 t-text-project_brief
@@ -31,7 +31,7 @@ t-text-project_brief
 │                                                                                                                      │
 │  Key Risks & Mitigation: ...                                                                                         │
 │                                                                                                                      │
-│  Artifact: final-report  Score: 1.24  Mode: keyword                                                                  │
+│  Label: final-report  Score: 1.24  Mode: keyword                                                                     │
 │                                                                                                                      │
 ╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
 final-report

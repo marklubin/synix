@@ -153,7 +153,7 @@ def run(
                 art.metadata["layer_level"] = layer.level
                 layer_built.append(art)
                 stats.cached += 1
-                logger.artifact_cached(layer.name, art.artifact_id)
+                logger.artifact_cached(layer.name, art.label)
         else:
             # Execute transform to get candidate artifacts
             # Pass the logger to transforms via config so LLM calls can be tracked
@@ -165,11 +165,11 @@ def run(
                 # Compute per-artifact build fingerprint
                 build_fp = None
                 if transform_fp is not None:
-                    build_fp = compute_build_fingerprint(transform_fp, artifact.input_hashes)
+                    build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
 
                 rebuild, _reasons = needs_rebuild(
-                    artifact.artifact_id,
-                    artifact.input_hashes,
+                    artifact.label,
+                    artifact.input_ids,
                     store,
                     current_build_fingerprint=build_fp,
                 )
@@ -182,18 +182,18 @@ def run(
                     if transform_fp is not None:
                         artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
                     store.save_artifact(artifact, layer.name, layer.level)
-                    parent_ids = _get_parent_artifact_ids(artifact, inputs)
+                    parent_labels = _get_parent_labels(artifact, inputs)
                     provenance.record(
-                        artifact.artifact_id,
-                        parent_ids=parent_ids,
+                        artifact.label,
+                        parent_labels=parent_labels,
                         prompt_id=artifact.prompt_id,
                         model_config=artifact.model_config,
                     )
                     layer_built.append(artifact)
                     stats.built += 1
-                    logger.artifact_built(layer.name, artifact.artifact_id)
+                    logger.artifact_built(layer.name, artifact.label)
                 else:
-                    cached = store.load_artifact(artifact.artifact_id)
+                    cached = store.load_artifact(artifact.label)
                     if cached is not None:
                         cached.metadata["layer_name"] = layer.name
                         cached.metadata["layer_level"] = layer.level
@@ -201,7 +201,7 @@ def run(
                     else:
                         layer_built.append(artifact)
                     stats.cached += 1
-                    logger.artifact_cached(layer.name, artifact.artifact_id)
+                    logger.artifact_cached(layer.name, artifact.label)
 
             def _on_batch_complete(artifacts: list[Artifact]) -> None:
                 """Callback for concurrent executor — save each artifact immediately."""
@@ -279,31 +279,31 @@ def _layer_fully_cached(
                 return False
 
     # Check that all current inputs are covered by existing artifacts
-    covered_input_hashes: set[str] = set()
+    covered_input_ids: set[str] = set()
     for art in existing:
-        covered_input_hashes.update(art.input_hashes)
+        covered_input_ids.update(art.input_ids)
 
-    current_input_hashes = {a.content_hash for a in inputs}
-    if not current_input_hashes.issubset(covered_input_hashes):
+    current_input_ids = {a.artifact_id for a in inputs}
+    if not current_input_ids.issubset(covered_input_ids):
         return False
 
     return True
 
 
-def _get_parent_artifact_ids(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
-    """Determine parent artifact IDs based on input hashes."""
-    hash_to_id: dict[str, str] = {}
+def _get_parent_labels(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
+    """Determine parent labels based on input IDs (hashes)."""
+    hash_to_label: dict[str, str] = {}
     for inp in inputs:
-        if inp.content_hash:
-            hash_to_id[inp.content_hash] = inp.artifact_id
+        if inp.artifact_id:
+            hash_to_label[inp.artifact_id] = inp.label
 
     parents = []
-    for h in artifact.input_hashes:
-        if h in hash_to_id:
-            parents.append(hash_to_id[h])
+    for h in artifact.input_ids:
+        if h in hash_to_label:
+            parents.append(hash_to_label[h])
 
     if not parents and inputs:
-        parents = [inp.artifact_id for inp in inputs]
+        parents = [inp.label for inp in inputs]
 
     return parents
 
@@ -580,8 +580,8 @@ PROJECTION_CACHE_FILE = ".projection_cache.json"
 
 
 def _compute_projection_hash(artifacts: list[Artifact], proj_config: dict | None = None) -> str:
-    """Compute a hash over sorted artifact content hashes and projection config."""
-    hashes = sorted(a.content_hash for a in artifacts if a.content_hash)
+    """Compute a hash over sorted artifact IDs (hashes) and projection config."""
+    hashes = sorted(a.artifact_id for a in artifacts if a.artifact_id)
     parts = "|".join(hashes)
     if proj_config:
         config_str = json.dumps(proj_config, sort_keys=True, default=str)

@@ -170,10 +170,10 @@ class TestEpisodeSummaryTransform:
         assert len(results) == 1
         ep = results[0]
         assert ep.artifact_type == "episode"
-        assert ep.artifact_id.startswith("ep-")
+        assert ep.label.startswith("ep-")
         assert ep.prompt_id is not None
         assert ep.prompt_id.startswith("episode_summary_v")
-        assert ep.content_hash.startswith("sha256:")
+        assert ep.artifact_id.startswith("sha256:")
         assert ep.metadata["source_conversation_id"] == transcripts[0].metadata["source_conversation_id"]
 
     def test_episode_summary_multiple_inputs(self, mock_llm, sample_artifacts):
@@ -193,7 +193,7 @@ class TestMonthlyRollupTransform:
         """6 episodes across 2 months → 2 rollups."""
         episodes = [
             Artifact(
-                artifact_id=f"ep-{i}",
+                label=f"ep-{i}",
                 artifact_type="episode",
                 content=f"Episode {i} content about technical topics.",
                 metadata={"date": date, "title": f"Episode {i}"},
@@ -225,7 +225,7 @@ class TestMonthlyRollupTransform:
         """Rollup artifacts have correct type and ID format."""
         episodes = [
             Artifact(
-                artifact_id="ep-1",
+                label="ep-1",
                 artifact_type="episode",
                 content="Content here.",
                 metadata={"date": "2024-03-15", "title": "Test"},
@@ -236,7 +236,7 @@ class TestMonthlyRollupTransform:
 
         assert len(results) == 1
         assert results[0].artifact_type == "rollup"
-        assert results[0].artifact_id == "monthly-2024-03"
+        assert results[0].label == "monthly-2024-03"
 
 
 class TestTopicalRollupTransform:
@@ -246,13 +246,13 @@ class TestTopicalRollupTransform:
         """3 topics configured → 3 topic artifacts."""
         episodes = [
             Artifact(
-                artifact_id="ep-1",
+                label="ep-1",
                 artifact_type="episode",
                 content="Discussion about career and AI projects.",
                 metadata={"date": "2024-03-15", "title": "Career chat"},
             ),
             Artifact(
-                artifact_id="ep-2",
+                label="ep-2",
                 artifact_type="episode",
                 content="Discussion about health and exercise.",
                 metadata={"date": "2024-03-16", "title": "Health chat"},
@@ -271,14 +271,14 @@ class TestTopicalRollupTransform:
 
         assert len(results) == 3
         assert len(mock_llm) == 3
-        topic_ids = {r.artifact_id for r in results}
-        assert topic_ids == {"topic-career", "topic-health", "topic-ai-projects"}
+        topic_labels = {r.label for r in results}
+        assert topic_labels == {"topic-career", "topic-health", "topic-ai-projects"}
 
     def test_topical_rollup_uses_all_episodes_without_search(self, mock_llm):
         """Without search_db_path, all episodes used for each topic."""
         episodes = [
             Artifact(
-                artifact_id=f"ep-{i}",
+                label=f"ep-{i}",
                 artifact_type="episode",
                 content=f"Content {i}",
                 metadata={"date": "2024-03-15", "title": f"Ep {i}"},
@@ -296,8 +296,8 @@ class TestTopicalRollupTransform:
         )
 
         assert len(results) == 1
-        # All 3 episodes should be in input_hashes
-        assert len(results[0].input_hashes) == 3
+        # All 3 episodes should be in input_ids
+        assert len(results[0].input_ids) == 3
 
 
 class TestCoreSynthesisTransform:
@@ -307,7 +307,7 @@ class TestCoreSynthesisTransform:
         """Always produces exactly 1 artifact."""
         rollups = [
             Artifact(
-                artifact_id=f"monthly-2024-0{i}",
+                label=f"monthly-2024-0{i}",
                 artifact_type="rollup",
                 content=f"Rollup for month {i}.",
                 metadata={"month": f"2024-0{i}"},
@@ -319,7 +319,7 @@ class TestCoreSynthesisTransform:
         results = transform.execute(rollups, {"llm_config": {}, "context_budget": 5000})
 
         assert len(results) == 1
-        assert results[0].artifact_id == "core-memory"
+        assert results[0].label == "core-memory"
         assert results[0].artifact_type == "core_memory"
         assert results[0].metadata["context_budget"] == 5000
         assert results[0].metadata["input_count"] == 3
@@ -328,7 +328,7 @@ class TestCoreSynthesisTransform:
         """Core synthesis artifact has a valid prompt_id."""
         rollups = [
             Artifact(
-                artifact_id="monthly-2024-01",
+                label="monthly-2024-01",
                 artifact_type="rollup",
                 content="Rollup content.",
                 metadata={"month": "2024-01"},

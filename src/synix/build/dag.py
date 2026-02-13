@@ -45,8 +45,8 @@ def resolve_build_order(pipeline: Pipeline) -> list[Layer]:
 
 
 def needs_rebuild(
-    artifact_id: str,
-    current_input_hashes: list[str],
+    label: str,
+    current_input_ids: list[str],
     store,
     current_build_fingerprint: Fingerprint | None = None,
 ) -> tuple[bool, list[str]]:
@@ -56,9 +56,9 @@ def needs_rebuild(
     strings explaining why a rebuild is needed.
 
     Uses build fingerprint comparison: the fingerprint encodes transform identity
-    (source code, prompt, model, config) plus input hashes into a single digest.
+    (source code, prompt, model, config) plus input IDs into a single digest.
     """
-    existing = store.load_artifact(artifact_id)
+    existing = store.load_artifact(label)
     if existing is None:
         return (True, ["new artifact"])
 
@@ -75,7 +75,7 @@ def needs_rebuild(
         reasons = current_build_fingerprint.explain_diff(stored_fp)
         return (True, reasons)
 
-    # No fingerprint provided — can only check input hashes
-    if sorted(existing.input_hashes) != sorted(current_input_hashes):
+    # No fingerprint provided — can only check input IDs
+    if sorted(existing.input_ids) != sorted(current_input_ids):
         return (True, ["inputs changed"])
     return (False, [])

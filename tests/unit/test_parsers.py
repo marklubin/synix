@@ -76,12 +76,12 @@ class TestChatGPTParsing:
     def test_chatgpt_artifact_ids_prefixed(self, chatgpt_fixture_path):
         """All artifact IDs have t-chatgpt- prefix."""
         artifacts = parse_chatgpt(chatgpt_fixture_path)
-        assert all(a.artifact_id.startswith("t-chatgpt-") for a in artifacts)
+        assert all(a.label.startswith("t-chatgpt-") for a in artifacts)
 
-    def test_chatgpt_content_hash_computed(self, chatgpt_fixture_path):
-        """Content hash is auto-computed by Artifact.__post_init__."""
+    def test_chatgpt_artifact_id_computed(self, chatgpt_fixture_path):
+        """Artifact ID is auto-computed by Artifact.__post_init__."""
         artifacts = parse_chatgpt(chatgpt_fixture_path)
-        assert all(a.content_hash.startswith("sha256:") for a in artifacts)
+        assert all(a.artifact_id.startswith("sha256:") for a in artifacts)
 
     def test_chatgpt_regeneration_follows_current_node(self, tmp_path):
         """When a response is regenerated, current_node selects the active branch."""
@@ -262,20 +262,18 @@ class TestClaudeParsing:
     def test_claude_artifact_ids_prefixed(self, claude_fixture_path):
         """All artifact IDs have t-claude- prefix."""
         artifacts = parse_claude(claude_fixture_path)
-        assert all(a.artifact_id.startswith("t-claude-") for a in artifacts)
+        assert all(a.label.startswith("t-claude-") for a in artifacts)
 
     def test_claude_sender_normalized(self, claude_fixture_path):
         """Claude 'human' sender is normalized to 'user' in transcripts."""
         artifacts = parse_claude(claude_fixture_path)
         for artifact in artifacts:
-            assert "human:" not in artifact.content, (
-                f"Artifact {artifact.artifact_id} contains un-normalized 'human:' sender"
-            )
+            assert "human:" not in artifact.content, f"Artifact {artifact.label} contains un-normalized 'human:' sender"
             # All user messages should use "user:" prefix
             lines = artifact.content.strip().split("\n\n")
             for line in lines:
                 role = line.split(":")[0]
-                assert role in ("user", "assistant"), f"Unexpected role '{role}' in artifact {artifact.artifact_id}"
+                assert role in ("user", "assistant"), f"Unexpected role '{role}' in artifact {artifact.label}"
 
 
 class TestMixedSources:
@@ -286,7 +284,7 @@ class TestMixedSources:
         chatgpt_artifacts = parse_chatgpt(chatgpt_fixture_path)
         claude_artifacts = parse_claude(claude_fixture_path)
 
-        all_ids = [a.artifact_id for a in chatgpt_artifacts + claude_artifacts]
+        all_ids = [a.label for a in chatgpt_artifacts + claude_artifacts]
         assert len(all_ids) == len(set(all_ids)), "Artifact ID collision detected"
 
     def test_mixed_sources_correct_total(self, chatgpt_fixture_path, claude_fixture_path):

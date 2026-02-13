@@ -11,27 +11,27 @@ from datetime import datetime
 class Artifact:
     """Immutable, versioned build output."""
 
-    artifact_id: str
+    label: str
     artifact_type: str  # "transcript", "episode", "rollup", "core_memory", "search_index"
     content: str
-    content_hash: str = ""
-    input_hashes: list[str] = field(default_factory=list)
+    artifact_id: str = ""
+    input_ids: list[str] = field(default_factory=list)
     prompt_id: str | None = None
     model_config: dict | None = None
     created_at: datetime = field(default_factory=datetime.now)
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.content_hash and self.content:
-            self.content_hash = f"sha256:{hashlib.sha256(self.content.encode()).hexdigest()}"
+        if not self.artifact_id and self.content:
+            self.artifact_id = f"sha256:{hashlib.sha256(self.content.encode()).hexdigest()}"
 
 
 @dataclass
 class ProvenanceRecord:
     """Lineage record for an artifact."""
 
-    artifact_id: str
-    parent_artifact_ids: list[str] = field(default_factory=list)
+    label: str
+    parent_labels: list[str] = field(default_factory=list)
     prompt_id: str | None = None
     model_config: dict | None = None
     created_at: datetime = field(default_factory=datetime.now)

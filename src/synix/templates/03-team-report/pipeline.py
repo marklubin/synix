@@ -43,15 +43,15 @@ class WorkStyleTransform(BaseTransform):
                     ),
                 }
             ],
-            artifact_desc=f"work-style {bio.artifact_id}",
+            artifact_desc=f"work-style {bio.label}",
         )
-        safe_id = bio.artifact_id.replace("t-text-", "")
+        safe_id = bio.label.replace("t-text-", "")
         return [
             Artifact(
-                artifact_id=f"ws-{safe_id}",
+                label=f"ws-{safe_id}",
                 artifact_type="work_style",
                 content=response.content,
-                input_hashes=[bio.content_hash],
+                input_ids=[bio.artifact_id],
                 prompt_id="work_style_v1",
                 model_config=config.get("llm_config"),
             )
@@ -67,7 +67,7 @@ class TeamDynamicsTransform(BaseTransform):
 
     def execute(self, inputs, config):
         client = _get_llm_client(config)
-        profiles = "\n\n".join(f"- {a.artifact_id}: {a.content}" for a in sorted(inputs, key=lambda a: a.artifact_id))
+        profiles = "\n\n".join(f"- {a.label}: {a.content}" for a in sorted(inputs, key=lambda a: a.label))
         response = _logged_complete(
             client,
             config,
@@ -87,10 +87,10 @@ class TeamDynamicsTransform(BaseTransform):
         )
         return [
             Artifact(
-                artifact_id="team-dynamics",
+                label="team-dynamics",
                 artifact_type="team_dynamics",
                 content=response.content,
-                input_hashes=[a.content_hash for a in inputs],
+                input_ids=[a.artifact_id for a in inputs],
                 prompt_id="team_dynamics_v1",
                 model_config=config.get("llm_config"),
             )
@@ -132,10 +132,10 @@ class FinalReportTransform(BaseTransform):
         )
         return [
             Artifact(
-                artifact_id="final-report",
+                label="final-report",
                 artifact_type="final_report",
                 content=response.content,
-                input_hashes=[a.content_hash for a in inputs],
+                input_ids=[a.artifact_id for a in inputs],
                 prompt_id="final_report_v1",
                 model_config=config.get("llm_config"),
             )
@@ -160,7 +160,7 @@ class MaxLengthValidator(BaseValidator):
                         violation_type="max_length",
                         severity="error",
                         message=f"Content is {len(a.content)} chars (max {max_chars})",
-                        artifact_id=a.artifact_id,
+                        label=a.label,
                         field="content",
                     )
                 )

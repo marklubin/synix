@@ -41,9 +41,9 @@ def lineage(artifact_id: str, build_dir: str):
     tree = Tree(f"[bold]{artifact_id}[/bold]")
 
     def add_parents(node, aid):
-        record = next((r for r in chain if r.artifact_id == aid), None)
+        record = next((r for r in chain if r.label == aid), None)
         if record:
-            for parent_id in record.parent_artifact_ids:
+            for parent_id in record.parent_labels:
                 artifact = store.load_artifact(parent_id)
                 label = parent_id
                 if artifact:
@@ -235,13 +235,13 @@ def _display_domain_validations(validation):
         console.print(f"\n[bold]{name}[/bold] violations:")
         for v in viol_list:
             severity_style = "red" if v.severity == "error" else "yellow"
-            console.print(f"  [{severity_style}]{v.artifact_id}[/{severity_style}]: {v.message}")
+            console.print(f"  [{severity_style}]{v.label}[/{severity_style}]: {v.message}")
 
             if v.provenance_trace:
                 console.print("    [dim]Provenance:[/dim]")
                 for step in v.provenance_trace:
                     val_str = f"  {v.field}: {step.field_value}" if step.field_value else ""
-                    console.print(f"      {step.artifact_id} [dim]({step.layer})[/dim]{val_str}")
+                    console.print(f"      {step.label} [dim]({step.layer})[/dim]{val_str}")
 
 
 @click.command()
@@ -255,11 +255,11 @@ def diff(artifact_id: str | None, build_dir: str, old_build_dir: str | None, lay
     If ARTIFACT_ID is given, shows diff for that artifact.
     Otherwise, diffs all artifacts between two build directories.
     """
-    from synix.build.diff import diff_artifact_by_id, diff_builds
+    from synix.build.diff import diff_artifact_by_label, diff_builds
 
     if artifact_id:
         # Single artifact diff
-        result = diff_artifact_by_id(build_dir, artifact_id, previous_build_dir=old_build_dir)
+        result = diff_artifact_by_label(build_dir, artifact_id, previous_build_dir=old_build_dir)
         if result is None:
             console.print(f"[red]Cannot diff artifact:[/red] {artifact_id}")
             console.print("[dim]Either artifact not found or no previous version available.[/dim]")
@@ -313,7 +313,7 @@ def diff(artifact_id: str | None, build_dir: str, old_build_dir: str | None, lay
         if result.diffs:
             console.print(f"\n[yellow]~{len(result.diffs)} modified:[/yellow]")
             for d in result.diffs:
-                console.print(f"  [yellow]~ {d.artifact_id}[/yellow]")
+                console.print(f"  [yellow]~ {d.label}[/yellow]")
                 if d.content_diff:
                     lines = d.content_diff.count("\n")
                     console.print(f"    [dim]{lines} lines changed[/dim]")

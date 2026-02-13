@@ -161,7 +161,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
         if not isinstance(entry, dict):
             issues.append(f"{aid}: entry is not a dict")
             continue
-        for key in ("path", "content_hash", "layer", "level"):
+        for key in ("path", "artifact_id", "layer", "level"):
             if key not in entry:
                 issues.append(f"{aid}: missing key '{key}'")
 
@@ -325,8 +325,8 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
         if artifact is None:
             continue
         expected_hash = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
-        if artifact.content_hash != expected_hash:
-            mismatches.append(f"{aid}: stored={artifact.content_hash[:20]}... computed={expected_hash[:20]}...")
+        if artifact.artifact_id != expected_hash:
+            mismatches.append(f"{aid}: stored={artifact.artifact_id[:20]}... computed={expected_hash[:20]}...")
 
     if mismatches:
         return VerifyCheck(
@@ -441,7 +441,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
 
         # Also walk provenance to find customer_ids from source artifacts
         if merge_id in provenance:
-            parent_ids = provenance[merge_id].get("parent_artifact_ids", [])
+            parent_ids = provenance[merge_id].get("parent_labels", [])
             for parent_id in parent_ids:
                 parent = store.load_artifact(parent_id)
                 if parent and parent.metadata.get("customer_id"):

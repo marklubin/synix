@@ -93,12 +93,12 @@ def fingerprint_value(obj) -> str:
 
 def compute_build_fingerprint(
     transform_fingerprint: Fingerprint,
-    input_hashes: list[str],
+    input_ids: list[str],
 ) -> Fingerprint:
-    """Combine transform identity with input hashes into a build fingerprint."""
+    """Combine transform identity with input IDs into a build fingerprint."""
     components = {
         "transform": transform_fingerprint.digest,
-        "inputs": fingerprint_value(input_hashes),
+        "inputs": fingerprint_value(input_ids),
     }
     return Fingerprint(
         scheme="synix:build:v1",

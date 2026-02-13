@@ -7,13 +7,13 @@
 - Directory structure, empty __init__.py files, pytest structure
 
 **1b. Artifact store** (`artifacts/store.py`)
-- `save_artifact(artifact)` / `load_artifact(artifact_id)` / `list_artifacts(layer)` / `get_content_hash(artifact_id)`
+- `save_artifact(artifact)` / `load_artifact(label)` / `list_artifacts(layer)` / `get_artifact_id(label)`
 - Manifest management (manifest.json)
 - Tests: save/load roundtrip, list by layer, hash checking
 
 **1c. Provenance** (`artifacts/provenance.py`)
-- `record(artifact_id, parent_ids, prompt_id, model_config)`
-- `get_parents(artifact_id)` / `get_chain(artifact_id)` — recursive walk to roots
+- `record(label, parent_ids, prompt_id, model_config)`
+- `get_parents(label)` / `get_chain(label)` — recursive walk to roots
 - Backed by provenance.json
 - Tests: record and retrieve, chain walking
 

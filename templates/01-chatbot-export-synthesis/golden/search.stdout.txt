@@ -29,7 +29,7 @@ Search results for: "docker containers" (keyword mode)
 │                                                                                                                      │
 │  ...                                                                                                                 │
 │                                                                                                                      │
-│  Artifact: ep-423ed14b-dda3-4f89-938b-76152356aca6  Score: 2.53  Mode: keyword                                       │
+│  Label: ep-423ed14b-dda3-4f89-938b-76152356aca6  Score: 2.53  Mode: keyword                                          │
 │                                                                                                                      │
 ╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
 ep-423ed14b-dda3-4f89-938b-76152356aca6
@@ -82,7 +82,7 @@ ep-423ed14b-dda3-4f89-938b-76152356aca6
 │  appeared to be designing infrastructure for a multi-tenant SaaS or similar platform requiring scalable, manageable  │
 │  instance deployment.                                                                                                │
 │                                                                                                                      │
-│  Artifact: ep-6866d714-5cd0-800c-b936-80080a9e36d6  Score: 2.43  Mode: keyword                                       │
+│  Label: ep-6866d714-5cd0-800c-b936-80080a9e36d6  Score: 2.43  Mode: keyword                                          │
 │                                                                                                                      │
 ╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
 ep-6866d714-5cd0-800c-b936-80080a9e36d6

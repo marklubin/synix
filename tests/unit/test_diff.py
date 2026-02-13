@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from synix import Artifact
 from synix.build.artifacts import ArtifactStore
-from synix.build.diff import diff_artifact, diff_artifact_by_id, diff_builds
+from synix.build.diff import diff_artifact, diff_artifact_by_label, diff_builds
 from synix.cli import main
 
 
@@ -22,7 +22,7 @@ def two_builds(tmp_path):
 
     # Shared artifact with same content (no change)
     t1 = Artifact(
-        artifact_id="t-001",
+        label="t-001",
         artifact_type="transcript",
         content="User: Hello\n\nAssistant: Hi!",
         metadata={"source": "chatgpt", "date": "2025-01-15"},
@@ -32,14 +32,14 @@ def two_builds(tmp_path):
 
     # Shared artifact with changed content
     ep_old = Artifact(
-        artifact_id="ep-001",
+        label="ep-001",
         artifact_type="episode",
         content="Original episode summary about greetings.",
         prompt_id="v1",
         metadata={"source_conversation_id": "001"},
     )
     ep_new = Artifact(
-        artifact_id="ep-001",
+        label="ep-001",
         artifact_type="episode",
         content="Updated episode summary about greetings and farewells.",
         prompt_id="v2",
@@ -50,7 +50,7 @@ def two_builds(tmp_path):
 
     # Artifact only in old (removed)
     removed = Artifact(
-        artifact_id="ep-002",
+        label="ep-002",
         artifact_type="episode",
         content="This episode was removed.",
         metadata={},
@@ -59,7 +59,7 @@ def two_builds(tmp_path):
 
     # Artifact only in new (added)
     added = Artifact(
-        artifact_id="ep-003",
+        label="ep-003",
         artifact_type="episode",
         content="This episode was added.",
         metadata={},
@@ -72,7 +72,7 @@ def two_builds(tmp_path):
 class TestDiffArtifact:
     def test_no_changes(self):
         art = Artifact(
-            artifact_id="test",
+            label="test",
             artifact_type="episode",
             content="Same content",
             prompt_id="v1",
@@ -84,8 +84,8 @@ class TestDiffArtifact:
         assert result.metadata_diff == {}
 
     def test_content_change(self):
-        old = Artifact(artifact_id="test", artifact_type="episode", content="Old text")
-        new = Artifact(artifact_id="test", artifact_type="episode", content="New text")
+        old = Artifact(label="test", artifact_type="episode", content="Old text")
+        new = Artifact(label="test", artifact_type="episode", content="New text")
         result = diff_artifact(old, new)
         assert result.has_changes
         assert "Old text" in result.content_diff
@@ -93,13 +93,13 @@ class TestDiffArtifact:
 
     def test_metadata_change(self):
         old = Artifact(
-            artifact_id="test",
+            label="test",
             artifact_type="episode",
             content="Same",
             metadata={"key": "old_value"},
         )
         new = Artifact(
-            artifact_id="test",
+            label="test",
             artifact_type="episode",
             content="Same",
             metadata={"key": "new_value"},
@@ -112,13 +112,13 @@ class TestDiffArtifact:
 
     def test_prompt_change(self):
         old = Artifact(
-            artifact_id="test",
+            label="test",
             artifact_type="episode",
             content="Same",
             prompt_id="v1",
         )
         new = Artifact(
-            artifact_id="test",
+            label="test",
             artifact_type="episode",
             content="Same",
             prompt_id="v2",
@@ -136,12 +136,12 @@ class TestDiffBuilds:
         assert result.has_changes
         assert "ep-003" in result.added
         assert "ep-002" in result.removed
-        assert any(d.artifact_id == "ep-001" for d in result.diffs)
+        assert any(d.label == "ep-001" for d in result.diffs)
 
     def test_no_changes(self, tmp_path):
         """Same build compared to itself."""
         store = ArtifactStore(tmp_path / "build")
-        art = Artifact(artifact_id="t-001", artifact_type="transcript", content="Hello")
+        art = Artifact(label="t-001", artifact_type="transcript", content="Hello")
         store.save_artifact(art, "transcripts", 0)
 
         result = diff_builds(tmp_path / "build", tmp_path / "build")
@@ -161,20 +161,20 @@ class TestDiffBuilds:
 class TestDiffArtifactById:
     def test_cross_build_diff(self, two_builds):
         old_dir, new_dir = two_builds
-        result = diff_artifact_by_id(str(new_dir), "ep-001", previous_build_dir=str(old_dir))
+        result = diff_artifact_by_label(str(new_dir), "ep-001", previous_build_dir=str(old_dir))
         assert result is not None
         assert result.has_changes
         assert "Updated" in result.content_diff
 
     def test_missing_artifact(self, two_builds):
         _, new_dir = two_builds
-        result = diff_artifact_by_id(str(new_dir), "nonexistent")
+        result = diff_artifact_by_label(str(new_dir), "nonexistent")
         assert result is None
 
     def test_no_previous_build(self, two_builds):
         _, new_dir = two_builds
         # No previous build dir and no version history
-        result = diff_artifact_by_id(str(new_dir), "ep-001")
+        result = diff_artifact_by_label(str(new_dir), "ep-001")
         assert result is None
 
 

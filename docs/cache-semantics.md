@@ -6,7 +6,7 @@ Synix uses a fingerprint-based caching system to determine when artifacts need r
 
 | Change | Triggers Rebuild? | Fingerprint Component | Notes |
 |--------|-------------------|-----------------------|-------|
-| Source file content | Yes | `inputs` | Upstream content_hash changes |
+| Source file content | Yes | `inputs` | Upstream artifact_id changes |
 | Prompt template file | Yes | `prompt` | Part of transform fingerprint |
 | LLM config (model, temp) | Yes | `model` | Part of transform fingerprint |
 | Transform config (topics, budget) | Yes | `config` | Part of transform fingerprint |
@@ -38,8 +38,8 @@ A fingerprint has three parts:
 | Scheme | Entity | Components |
 |--------|--------|------------|
 | `synix:transform:v1` | Transform identity | `source`, `prompt`, `config`, `model` |
-| `synix:build:v1` | Per-artifact build context | `transform` (digest), `inputs` (sorted input hashes) |
-| `synix:projection:v1` | Projection identity | `sources` (artifact hashes), `config` |
+| `synix:build:v1` | Per-artifact build context | `transform` (digest), `inputs` (sorted input IDs) |
+| `synix:projection:v1` | Projection identity | `sources` (artifact IDs), `config` |
 
 ### Scheme Versioning
 

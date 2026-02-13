@@ -30,7 +30,7 @@ class TestSearchIndex:
         ]
         for i, topic in enumerate(topics):
             artifact = Artifact(
-                artifact_id=f"ep-{i:03d}",
+                label=f"ep-{i:03d}",
                 artifact_type="episode",
                 content=f"In this conversation, the user discussed {topic}.",
                 metadata={"layer_name": "episodes"},
@@ -53,13 +53,13 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about Python programming"),
+            Artifact(label="ep-001", artifact_type="episode", content="Discussion about Python programming"),
             "episodes",
             1,
         )
         index.insert(
             Artifact(
-                artifact_id="monthly-001",
+                label="monthly-001",
                 artifact_type="rollup",
                 content="Monthly summary covering Python and other topics",
             ),
@@ -89,14 +89,14 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about AI systems"),
+            Artifact(label="ep-001", artifact_type="episode", content="Discussion about AI systems"),
             "episodes",
             1,
         )
 
         tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_ids=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_ids=[])
+        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
+        tracker.record("t-001", parent_labels=[])
 
         results = index.query("AI", provenance_tracker=tracker)
         assert len(results) > 0
@@ -114,7 +114,7 @@ class TestSearchIndex:
         # One artifact mentions "Rust" many times
         index.insert(
             Artifact(
-                artifact_id="ep-rust",
+                label="ep-rust",
                 artifact_type="episode",
                 content="Rust Rust Rust. The user loves Rust programming. Rust ownership is great.",
             ),
@@ -124,7 +124,7 @@ class TestSearchIndex:
         # Another mentions it once among other things
         index.insert(
             Artifact(
-                artifact_id="ep-mixed",
+                label="ep-mixed",
                 artifact_type="episode",
                 content="The user discussed Python, JavaScript, and briefly mentioned Rust.",
             ),
@@ -135,7 +135,7 @@ class TestSearchIndex:
         results = index.query("Rust")
         assert len(results) == 2
         # The Rust-heavy article should rank first (lower rank = more relevant)
-        assert results[0].artifact_id == "ep-rust"
+        assert results[0].label == "ep-rust"
 
         index.close()
 
@@ -145,7 +145,7 @@ class TestSearchIndex:
         index.create()
 
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="Discussion about Python programming"),
+            Artifact(label="ep-001", artifact_type="episode", content="Discussion about Python programming"),
             "episodes",
             1,
         )
@@ -162,7 +162,7 @@ class TestSearchIndex:
         # First build
         index.create()
         index.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="First version about Python"),
+            Artifact(label="ep-001", artifact_type="episode", content="First version about Python"),
             "episodes",
             1,
         )
@@ -172,13 +172,13 @@ class TestSearchIndex:
         # Second build (create drops and recreates)
         index.create()
         index.insert(
-            Artifact(artifact_id="ep-002", artifact_type="episode", content="Second version about Python and Rust"),
+            Artifact(label="ep-002", artifact_type="episode", content="Second version about Python and Rust"),
             "episodes",
             1,
         )
         results2 = index.query("Python")
         assert len(results2) == 1
-        assert results2[0].artifact_id == "ep-002"
+        assert results2[0].label == "ep-002"
 
         # Old data is gone
         results_old = index.query("First version")
@@ -197,7 +197,7 @@ class TestShadowIndexManager:
 
         assert manager.shadow_path.exists()
         shadow.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="Test content"),
+            Artifact(label="ep-001", artifact_type="episode", content="Test content"),
             "episodes",
             1,
         )
@@ -210,7 +210,7 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="ep-001", artifact_type="episode", content="Shadow content about Python"),
+            Artifact(label="ep-001", artifact_type="episode", content="Shadow content about Python"),
             "episodes",
             1,
         )
@@ -224,7 +224,7 @@ class TestShadowIndexManager:
         index = SearchIndex(manager.main_path)
         results = index.query("Python")
         assert len(results) == 1
-        assert results[0].artifact_id == "ep-001"
+        assert results[0].label == "ep-001"
         index.close()
 
     def test_commit_replaces_existing_main(self, tmp_build_dir):
@@ -233,7 +233,7 @@ class TestShadowIndexManager:
         old_index = SearchIndex(tmp_build_dir / "search.db")
         old_index.create()
         old_index.insert(
-            Artifact(artifact_id="old-001", artifact_type="episode", content="Old data about Rust"),
+            Artifact(label="old-001", artifact_type="episode", content="Old data about Rust"),
             "episodes",
             1,
         )
@@ -243,7 +243,7 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="new-001", artifact_type="episode", content="New data about Python"),
+            Artifact(label="new-001", artifact_type="episode", content="New data about Python"),
             "episodes",
             1,
         )
@@ -253,7 +253,7 @@ class TestShadowIndexManager:
         index = SearchIndex(tmp_build_dir / "search.db")
         results = index.query("Python")
         assert len(results) == 1
-        assert results[0].artifact_id == "new-001"
+        assert results[0].label == "new-001"
 
         # Old data is gone
         results_old = index.query("Rust")
@@ -266,7 +266,7 @@ class TestShadowIndexManager:
         old_index = SearchIndex(tmp_build_dir / "search.db")
         old_index.create()
         old_index.insert(
-            Artifact(artifact_id="old-001", artifact_type="episode", content="Preserved data about Docker"),
+            Artifact(label="old-001", artifact_type="episode", content="Preserved data about Docker"),
             "episodes",
             1,
         )
@@ -276,7 +276,7 @@ class TestShadowIndexManager:
         manager = ShadowIndexManager(tmp_build_dir)
         shadow = manager.begin_build()
         shadow.insert(
-            Artifact(artifact_id="new-001", artifact_type="episode", content="New data that should be discarded"),
+            Artifact(label="new-001", artifact_type="episode", content="New data that should be discarded"),
             "episodes",
             1,
         )
@@ -289,7 +289,7 @@ class TestShadowIndexManager:
         index = SearchIndex(tmp_build_dir / "search.db")
         results = index.query("Docker")
         assert len(results) == 1
-        assert results[0].artifact_id == "old-001"
+        assert results[0].label == "old-001"
         index.close()
 
     def test_rollback_without_begin(self, tmp_build_dir):
@@ -326,7 +326,7 @@ class TestSearchIndexProjectionShadow:
 
         artifacts = [
             Artifact(
-                artifact_id="ep-001",
+                label="ep-001",
                 artifact_type="episode",
                 content="Content about machine learning",
                 metadata={"layer_name": "episodes", "layer_level": 1},
@@ -352,7 +352,7 @@ class TestSearchIndexProjectionShadow:
         proj.materialize(
             [
                 Artifact(
-                    artifact_id="old-001",
+                    label="old-001",
                     artifact_type="episode",
                     content="Original data about Rust",
                     metadata={"layer_name": "episodes", "layer_level": 1},
@@ -382,13 +382,13 @@ class TestSearchIndexProjectionShadow:
                 proj2.materialize(
                     [
                         Artifact(
-                            artifact_id="new-001",
+                            label="new-001",
                             artifact_type="episode",
                             content="First new artifact",
                             metadata={"layer_name": "episodes", "layer_level": 1},
                         ),
                         Artifact(
-                            artifact_id="new-002",
+                            label="new-002",
                             artifact_type="episode",
                             content="Second new artifact that will fail",
                             metadata={"layer_name": "episodes", "layer_level": 1},
@@ -407,7 +407,7 @@ class TestSearchIndexProjectionShadow:
         index = SearchIndex(tmp_build_dir / "search.db")
         results = index.query("Rust")
         assert len(results) == 1
-        assert results[0].artifact_id == "old-001"
+        assert results[0].label == "old-001"
         index.close()
 
     def test_query_after_materialize(self, tmp_build_dir):
@@ -418,7 +418,7 @@ class TestSearchIndexProjectionShadow:
         proj.materialize(
             [
                 Artifact(
-                    artifact_id="ep-001",
+                    label="ep-001",
                     artifact_type="episode",
                     content="First build data",
                     metadata={"layer_name": "episodes", "layer_level": 1},
@@ -433,7 +433,7 @@ class TestSearchIndexProjectionShadow:
         proj.materialize(
             [
                 Artifact(
-                    artifact_id="ep-002",
+                    label="ep-002",
                     artifact_type="episode",
                     content="Second build data",
                     metadata={"layer_name": "episodes", "layer_level": 1},
@@ -443,7 +443,7 @@ class TestSearchIndexProjectionShadow:
         )
         results2 = proj.query("Second build")
         assert len(results2) == 1
-        assert results2[0].artifact_id == "ep-002"
+        assert results2[0].label == "ep-002"
 
         # Old data gone
         results_old = proj.query("First build")
@@ -529,7 +529,7 @@ class TestFTS5QueryIntegration:
         for i, topic in enumerate(topics):
             index.insert(
                 Artifact(
-                    artifact_id=f"ep-{i:03d}",
+                    label=f"ep-{i:03d}",
                     artifact_type="episode",
                     content=topic,
                     metadata={"layer_name": "episodes", "topic": topic[:20]},
@@ -573,7 +573,7 @@ class TestFTS5QueryIntegration:
         index.create()
         index.insert(
             Artifact(
-                artifact_id="ep-uni",
+                label="ep-uni",
                 artifact_type="episode",
                 content="Discussion about caf\u00e9 culture and \U0001f30d global trends",
                 metadata={"layer_name": "episodes"},
@@ -600,7 +600,7 @@ class TestFTS5QueryIntegration:
         for layer, level in [("episodes", 1), ("monthly", 2), ("core", 3)]:
             index.insert(
                 Artifact(
-                    artifact_id=f"art-{layer}",
+                    label=f"art-{layer}",
                     artifact_type="episode",
                     content=f"Python discussion in {layer} layer",
                     metadata={"layer_name": layer},
@@ -644,7 +644,7 @@ class TestHybridRetriever:
         ):
             index.insert(
                 Artifact(
-                    artifact_id=f"ep-{i:03d}",
+                    label=f"ep-{i:03d}",
                     artifact_type="episode",
                     content=content,
                     metadata={"layer_name": "episodes"},
@@ -689,17 +689,17 @@ class TestHybridRetriever:
         retriever = HybridRetriever(search_index=index)
 
         keyword_results = [
-            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=10.0),
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=5.0),
+            SearchResult(content="A", label="a", layer_name="ep", layer_level=1, score=10.0),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=5.0),
         ]
         semantic_results = [
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.95),
-            SearchResult(content="C", artifact_id="c", layer_name="ep", layer_level=1, score=0.90),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=0.95),
+            SearchResult(content="C", label="c", layer_name="ep", layer_level=1, score=0.90),
         ]
 
         fused = retriever._rrf_fuse(keyword_results, semantic_results, top_k=10)
         # "b" appears in both lists, so it should have highest RRF score
-        assert fused[0].artifact_id == "b"
+        assert fused[0].label == "b"
         # All three items should be present
-        fused_ids = {r.artifact_id for r in fused}
+        fused_ids = {r.label for r in fused}
         assert fused_ids == {"a", "b", "c"}

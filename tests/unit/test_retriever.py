@@ -47,11 +47,11 @@ def _make_mock_embedding_provider(embedding_map: dict[str, list[float]]):
 def _populate_index(index: SearchIndex, items: list[dict]) -> None:
     """Insert test items into a search index.
 
-    Each item dict: {artifact_id, content, layer_name, layer_level}
+    Each item dict: {label, content, layer_name, layer_level}
     """
     for item in items:
         artifact = Artifact(
-            artifact_id=item["artifact_id"],
+            label=item["label"],
             artifact_type="episode",
             content=item["content"],
             metadata={"layer_name": item["layer_name"]},
@@ -77,31 +77,31 @@ def sample_items():
     """Standard set of test items for the search index."""
     return [
         {
-            "artifact_id": "ep-001",
+            "label": "ep-001",
             "content": "Discussion about machine learning and neural networks",
             "layer_name": "episodes",
             "layer_level": 1,
         },
         {
-            "artifact_id": "ep-002",
+            "label": "ep-002",
             "content": "Docker containerization and deployment practices",
             "layer_name": "episodes",
             "layer_level": 1,
         },
         {
-            "artifact_id": "ep-003",
+            "label": "ep-003",
             "content": "Rust programming and ownership model",
             "layer_name": "episodes",
             "layer_level": 1,
         },
         {
-            "artifact_id": "monthly-001",
+            "label": "monthly-001",
             "content": "In January, the user focused on machine learning and cloud computing",
             "layer_name": "monthly",
             "layer_level": 2,
         },
         {
-            "artifact_id": "core-001",
+            "label": "core-001",
             "content": "Mark is a software engineer interested in AI and distributed systems",
             "layer_name": "core",
             "layer_level": 3,
@@ -200,8 +200,8 @@ class TestKeywordRetrieval:
     def test_keyword_with_provenance(self, populated_index, tmp_build_dir):
         """Keyword mode includes provenance when tracker provided."""
         tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_ids=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_ids=[])
+        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
+        tracker.record("t-001", parent_labels=[])
 
         retriever = HybridRetriever(
             search_index=populated_index,
@@ -210,7 +210,7 @@ class TestKeywordRetrieval:
         results = retriever.query("machine learning", mode="keyword")
 
         # Find the ep-001 result
-        ep_result = next((r for r in results if r.artifact_id == "ep-001"), None)
+        ep_result = next((r for r in results if r.label == "ep-001"), None)
         assert ep_result is not None
         assert len(ep_result.provenance_chain) > 0
 
@@ -232,7 +232,7 @@ class TestSemanticRetrieval:
 
         assert len(results) > 0
         # ML-related content should rank first
-        assert results[0].artifact_id == "ep-001"
+        assert results[0].label == "ep-001"
 
     def test_semantic_ranking(self, populated_index, sample_embedding_map):
         """Semantic results are ranked by cosine similarity."""
@@ -245,7 +245,7 @@ class TestSemanticRetrieval:
 
         assert len(results) > 0
         # Docker content should rank first
-        assert results[0].artifact_id == "ep-002"
+        assert results[0].label == "ep-002"
 
     def test_semantic_without_provider_raises(self, populated_index):
         """Semantic mode without embedding provider raises ValueError."""
@@ -321,8 +321,8 @@ class TestHybridRetrieval:
 
         assert len(results) > 0
         # The core memory artifact should be present (strong semantic match)
-        artifact_ids = {r.artifact_id for r in results}
-        assert "core-001" in artifact_ids
+        labels = {r.label for r in results}
+        assert "core-001" in labels
 
     def test_hybrid_rrf_scores(self, populated_index, sample_embedding_map):
         """Hybrid RRF scores reflect combined ranking."""
@@ -371,8 +371,8 @@ class TestHybridRetrieval:
     def test_hybrid_with_provenance(self, populated_index, sample_embedding_map, tmp_build_dir):
         """Hybrid mode includes provenance chains."""
         tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_ids=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_ids=[])
+        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
+        tracker.record("t-001", parent_labels=[])
 
         provider = _make_mock_embedding_provider(sample_embedding_map)
         retriever = HybridRetriever(
@@ -382,7 +382,7 @@ class TestHybridRetrieval:
         )
         results = retriever.query("machine learning", mode="hybrid")
 
-        ep_result = next((r for r in results if r.artifact_id == "ep-001"), None)
+        ep_result = next((r for r in results if r.label == "ep-001"), None)
         assert ep_result is not None
         assert len(ep_result.provenance_chain) > 0
 
@@ -412,14 +412,14 @@ class TestRRFFusion:
         retriever.RRF_K = 60
 
         keyword_results = [
-            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=1.0),
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.5),
+            SearchResult(content="A", label="a", layer_name="ep", layer_level=1, score=1.0),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=0.5),
         ]
         fused = retriever._rrf_fuse(keyword_results, [], top_k=10)
 
         assert len(fused) == 2
-        assert fused[0].artifact_id == "a"
-        assert fused[1].artifact_id == "b"
+        assert fused[0].label == "a"
+        assert fused[1].label == "b"
 
     def test_rrf_both_lists(self):
         """RRF with both lists produces fused ranking."""
@@ -427,12 +427,12 @@ class TestRRFFusion:
         retriever.RRF_K = 60
 
         keyword_results = [
-            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=1.0),
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.5),
+            SearchResult(content="A", label="a", layer_name="ep", layer_level=1, score=1.0),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=0.5),
         ]
         semantic_results = [
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.9),
-            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=0.3),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=0.9),
+            SearchResult(content="A", label="a", layer_name="ep", layer_level=1, score=0.3),
         ]
         fused = retriever._rrf_fuse(keyword_results, semantic_results, top_k=10)
 
@@ -449,8 +449,7 @@ class TestRRFFusion:
         retriever.RRF_K = 60
 
         keyword_results = [
-            SearchResult(content=f"R{i}", artifact_id=f"r{i}", layer_name="ep", layer_level=1, score=1.0)
-            for i in range(5)
+            SearchResult(content=f"R{i}", label=f"r{i}", layer_name="ep", layer_level=1, score=1.0) for i in range(5)
         ]
         fused = retriever._rrf_fuse(keyword_results, [], top_k=3)
         assert len(fused) == 3
@@ -461,15 +460,15 @@ class TestRRFFusion:
         retriever.RRF_K = 60
 
         keyword_results = [
-            SearchResult(content="A", artifact_id="a", layer_name="ep", layer_level=1, score=1.0),
+            SearchResult(content="A", label="a", layer_name="ep", layer_level=1, score=1.0),
         ]
         semantic_results = [
-            SearchResult(content="B", artifact_id="b", layer_name="ep", layer_level=1, score=0.9),
+            SearchResult(content="B", label="b", layer_name="ep", layer_level=1, score=0.9),
         ]
         fused = retriever._rrf_fuse(keyword_results, semantic_results, top_k=10)
 
         assert len(fused) == 2
-        ids = {r.artifact_id for r in fused}
+        ids = {r.label for r in fused}
         assert ids == {"a", "b"}
 
 
@@ -592,8 +591,8 @@ class TestLayeredRetrieval:
         results = retriever.query("software engineer AI", mode="layered")
 
         # Core (L3) should rank above monthly (L2) even if raw similarity is lower
-        core_idx = next((i for i, r in enumerate(results) if r.artifact_id == "core-001"), None)
-        monthly_idx = next((i for i, r in enumerate(results) if r.artifact_id == "monthly-001"), None)
+        core_idx = next((i for i, r in enumerate(results) if r.label == "core-001"), None)
+        monthly_idx = next((i for i, r in enumerate(results) if r.label == "monthly-001"), None)
         assert core_idx is not None
         assert monthly_idx is not None
         assert core_idx < monthly_idx, "Core (L3) should rank above monthly (L2) in layered mode"
@@ -668,7 +667,7 @@ class TestLayeredRetrieval:
         results = retriever.query("Rust ownership", mode="layered")
 
         # The semantic side should only contribute the Rust result
-        semantic_ids = {r.artifact_id for r in results if r.semantic_score is not None and r.semantic_score >= 0.9}
+        semantic_ids = {r.label for r in results if r.semantic_score is not None and r.semantic_score >= 0.9}
         assert "ep-003" in semantic_ids or len(results) > 0  # At least keyword results
 
     def test_layer_boost_constant(self):
