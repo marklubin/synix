@@ -52,5 +52,3 @@ jobs:
           synix init smoke-test
           cd smoke-test
           synix plan
-          synix list
-          synix clean
