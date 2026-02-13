@@ -20,27 +20,12 @@ def build_dir(tmp_path):
     return d
 
 
-@pytest.fixture
-def pipeline_file(tmp_path, build_dir):
-    """Create a minimal pipeline file pointing at build_dir."""
-    f = tmp_path / "pipeline.py"
-    f.write_text(
-        f"from synix.core.models import Pipeline, Layer\n"
-        f'pipeline = Pipeline("test")\n'
-        f'pipeline.build_dir = "{build_dir}"\n'
-        f'pipeline.source_dir = "{tmp_path}"\n'
-        f'pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))\n'
-    )
-    return f
-
-
 class TestCleanHelp:
     def test_help(self, runner):
         result = runner.invoke(main, ["clean", "--help"])
         assert result.exit_code == 0
-        assert "PIPELINE_PATH" in result.output
+        assert "BUILD_DIR" in result.output
         assert "--yes" in result.output
-        assert "--build-dir" in result.output
 
     def test_help_description(self, runner):
         result = runner.invoke(main, ["clean", "--help"])
@@ -48,27 +33,14 @@ class TestCleanHelp:
 
 
 class TestClean:
-    def test_nonexistent_pipeline_errors(self, runner):
-        result = runner.invoke(main, ["clean", "nonexistent.py"])
-        assert result.exit_code != 0
-
     def test_no_build_dir(self, runner, tmp_path):
         """Clean when build dir doesn't exist — nothing to do."""
-        f = tmp_path / "pipeline.py"
-        f.write_text(
-            f"from synix.core.models import Pipeline, Layer\n"
-            f'pipeline = Pipeline("test")\n'
-            f'pipeline.build_dir = "{tmp_path / "nobuild"}"\n'
-            f'pipeline.source_dir = "{tmp_path}"\n'
-            f'pipeline.add_layer(Layer(name="t", level=0, transform="parse"))\n'
-        )
-        result = runner.invoke(main, ["clean", str(f), "-y"])
+        result = runner.invoke(main, ["clean", str(tmp_path / "nobuild"), "-y"])
         assert result.exit_code == 0
         assert "Nothing to clean" in result.output
 
-    def test_clean_removes_build_dir(self, runner, pipeline_file, build_dir):
+    def test_clean_removes_build_dir(self, runner, build_dir):
         """clean -y removes the build directory."""
-        # Put some files in build_dir so it's non-empty
         (build_dir / "manifest.json").write_text("{}")
         (build_dir / "provenance.json").write_text("{}")
         layer_dir = build_dir / "layer0-transcripts"
@@ -76,53 +48,33 @@ class TestClean:
         (layer_dir / "t-1.json").write_text("{}")
 
         assert build_dir.exists()
-        result = runner.invoke(main, ["clean", str(pipeline_file), "-y"])
+        result = runner.invoke(main, ["clean", str(build_dir), "-y"])
         assert result.exit_code == 0
         assert "Cleaned" in result.output
         assert not build_dir.exists()
 
-    def test_clean_confirmation_abort(self, runner, pipeline_file, build_dir):
+    def test_clean_confirmation_abort(self, runner, build_dir):
         """Without -y, answering 'n' aborts."""
         (build_dir / "manifest.json").write_text("{}")
-        result = runner.invoke(main, ["clean", str(pipeline_file)], input="n\n")
+        result = runner.invoke(main, ["clean", str(build_dir)], input="n\n")
         assert result.exit_code == 0
         assert "Aborted" in result.output
         assert build_dir.exists()
 
-    def test_clean_confirmation_proceed(self, runner, pipeline_file, build_dir):
+    def test_clean_confirmation_proceed(self, runner, build_dir):
         """Without -y, answering 'y' proceeds."""
         (build_dir / "manifest.json").write_text("{}")
-        result = runner.invoke(main, ["clean", str(pipeline_file)], input="y\n")
+        result = runner.invoke(main, ["clean", str(build_dir)], input="y\n")
         assert result.exit_code == 0
         assert "Cleaned" in result.output
         assert not build_dir.exists()
 
-    def test_clean_with_build_dir_override(self, runner, pipeline_file, tmp_path):
-        """--build-dir overrides the pipeline's build_dir."""
-        alt_build = tmp_path / "alt_build"
-        alt_build.mkdir()
-        (alt_build / "search.db").write_text("")
-
-        result = runner.invoke(
-            main,
-            [
-                "clean",
-                str(pipeline_file),
-                "--build-dir",
-                str(alt_build),
-                "-y",
-            ],
-        )
-        assert result.exit_code == 0
-        assert "Cleaned" in result.output
-        assert not alt_build.exists()
-
-    def test_clean_idempotent(self, runner, pipeline_file, build_dir):
+    def test_clean_idempotent(self, runner, build_dir):
         """Cleaning twice — second time says nothing to clean."""
         (build_dir / "manifest.json").write_text("{}")
-        runner.invoke(main, ["clean", str(pipeline_file), "-y"])
+        runner.invoke(main, ["clean", str(build_dir), "-y"])
         assert not build_dir.exists()
 
-        result = runner.invoke(main, ["clean", str(pipeline_file), "-y"])
+        result = runner.invoke(main, ["clean", str(build_dir), "-y"])
         assert result.exit_code == 0
         assert "Nothing to clean" in result.output
