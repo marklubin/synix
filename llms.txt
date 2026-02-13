@@ -10,11 +10,27 @@ Synix takes raw conversation exports (ChatGPT, Claude, text files) and processes
 ## Key concepts
 
 - **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core).  
+- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core).
 - **Pipeline** — Python-defined layers, transforms, grouping strategies, and projections.
 - **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search index, markdown context doc).
 - **Provenance** — every artifact traces back to source conversations through full dependency chain.
-- **Cache/Rebuild** — hash comparison determines what needs rebuilding when inputs or prompts change.
+- **Fingerprint** — self-describing, versioned hash capturing inputs, prompt, model config, transform config, and transform source code. Determines cache hits/misses.
+
+## Cache behavior
+
+Every artifact stores a build fingerprint. The cache decision flow:
+
+1. Artifact doesn't exist → rebuild
+2. Fingerprint exists → compare scheme + digest:
+   - Match → cached
+   - Mismatch → rebuild (reason reported by component: inputs, prompt, model, config, source)
+3. No stored fingerprint (pre-upgrade artifact) → rebuild once to populate
+
+Rebuild triggers: source content change, prompt template change, LLM config change, transform config change, transform source code change, new source files added, fingerprint scheme upgrade.
+
+Does NOT trigger rebuild: removed source files (orphans remain until `clean`).
+
+Use `uvx synix plan --explain-cache` to see inline cache decision reasons per artifact in the plan tree.
 
 ## Installation and quick start
 
@@ -41,10 +57,11 @@ uvx synix validate
 uvx synix init <name>           # Scaffold new project
 uvx synix build                 # Run pipeline, only rebuild what changed
 uvx synix plan                  # Dry-run showing what would build
+uvx synix plan --explain-cache  # Plan with inline cache decision reasons
 uvx synix search "query"        # Full-text search with provenance
-uvx synix show <artifact-id>    # Display artifact content
+uvx synix show <id-or-prefix>   # Display artifact (resolves by ID or hash prefix)
 uvx synix validate              # Run declared validators
-uvx synix list [layer]          # Browse artifacts by layer
+uvx synix list [layer]          # Browse artifacts with short hashes
 uvx synix lineage <id>          # Show provenance tree
 uvx synix clean                 # Delete build directory
 ```
@@ -55,7 +72,7 @@ uvx synix clean                 # Delete build directory
 src/synix/
 ├── cli.py              # Click CLI commands
 ├── pipeline/
-│   ├── config.py       # Parse Python pipeline → Pipeline/Layer objects  
+│   ├── config.py       # Parse Python pipeline → Pipeline/Layer objects
 │   ├── dag.py          # DAG resolution, build order, rebuild detection
 │   └── runner.py       # Execute pipeline, cache artifacts, track provenance
 ├── artifacts/
@@ -63,7 +80,7 @@ src/synix/
 │   └── provenance.py   # Lineage tracking and queries
 ├── transforms/
 │   ├── parse.py        # ChatGPT/Claude JSON → transcript artifacts
-│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)  
+│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)
 │   └── prompts/        # Prompt templates as text files
 ├── projections/
 │   ├── search_index.py # SQLite FTS5 materialization and query
@@ -86,25 +103,35 @@ pipeline.llm_config = {"model": "claude-sonnet-4", "temperature": 0.3}
 
 # Memory hierarchy
 pipeline.add_layer(Layer("transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer("episodes", level=1, depends_on=["transcripts"], 
+pipeline.add_layer(Layer("episodes", level=1, depends_on=["transcripts"],
                          transform="episode_summary", grouping="by_conversation"))
 pipeline.add_layer(Layer("monthly", level=2, depends_on=["episodes"],
-                         transform="monthly_rollup", grouping="by_month")) 
+                         transform="monthly_rollup", grouping="by_month"))
 pipeline.add_layer(Layer("core", level=3, depends_on=["monthly"],
                          transform="core_synthesis", grouping="single"))
 
 # Search and context outputs
 pipeline.add_projection(Projection("memory-index", projection_type="search_index",
                                    sources=[{"layer": "episodes"}, {"layer": "monthly"}]))
-pipeline.add_projection(Projection("context-doc", projection_type="flat_file", 
+pipeline.add_projection(Projection("context-doc", projection_type="flat_file",
                                    sources=[{"layer": "core"}]))
 ```
+
+## Known limitations
+
+- **Removed source files leave orphans** — deleting a source file does not remove downstream artifacts. Run `clean` and rebuild.
+- **YAML frontmatter fields dropped** — parser does not pass through custom frontmatter metadata to artifacts (#53).
+- **Trace artifacts affect validators** — provenance trace artifacts can trigger false positives in content validators (#52).
+- **No CI/automation output mode** — Rich formatting assumes a TTY; no `--quiet` or `--json` flag for scripted usage (#54).
+- **Relative imports in custom transforms** — fail when pipeline file is outside project root (#55).
+- **Search shows IDs only** — no inline content snippets or provenance in search results (#57).
+- **Embedding failures are silent** — search indexing falls back to keyword-only without warning (#33).
 
 ## Important constraints
 
 - **SQLite + filesystem only** — no external databases, no Docker, no web server
 - **Python 3.11+** — uses modern type hints and dataclasses
-- **UV-native** — `uv sync`, `uv run synix`, `uv run pytest` 
+- **UV-native** — `uv sync`, `uv run synix`, `uv run pytest`
 - **LLM API key required** — set `ANTHROPIC_API_KEY` or configure in pipeline
 - **No branching/StatefulArtifact in v0.9** — core build system only
 - **No web UI** — CLI and Python API only
