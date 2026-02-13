@@ -80,6 +80,29 @@ ls build/layer2-cs_product_brief/
 sqlite3 build/search.db "SELECT label, layer_name FROM search_index LIMIT 5"
 ```
 
+## Entity Model
+
+Synix has two kinds of identity. Understanding the difference explains how caching, provenance, and search work.
+
+**Label** — a human-readable semantic name like `ep-conv-123` or `monthly-2024-03`. Labels are stable across rebuilds; they identify *what* an artifact represents. You use labels in `synix show`, `synix lineage`, and search results.
+
+**Artifact ID** — a SHA256 content hash like `sha256:a1b2c3...`. Artifact IDs change whenever the content changes. They are the *true identity* for caching and provenance — if the hash matches, the artifact hasn't changed.
+
+```
+Artifact
+├── label           "ep-conv-123"          # semantic name (stable)
+├── artifact_id     "sha256:a1b2c3..."     # content hash (changes on rebuild)
+├── artifact_type   "episode"              # transcript, episode, rollup, core_memory
+├── content         "Summary of..."        # the actual text
+├── input_ids       ["sha256:x...", ...]   # artifact IDs of inputs that produced this
+├── prompt_id       "episode_summary_v3"   # prompt template version (LLM-derived only)
+└── metadata        {date, title, ...}     # flexible key-value metadata
+```
+
+**Provenance** traces every artifact back to its inputs. Each provenance record stores the artifact ID (hash), the labels of its parent artifacts, the prompt used, and the model config. This is how `synix lineage` reconstructs the full dependency chain from a core memory document back to the original conversations.
+
+**Layers** are named levels in the build DAG — `transcripts → episodes → rollups → core`. Each layer declares a transform and a grouping strategy. The pipeline is the full declared architecture: layers, projections, validators.
+
 ## Defining a Pipeline
 
 A pipeline is a Python file that declares your memory architecture: sources, transforms, projections, and validators.
