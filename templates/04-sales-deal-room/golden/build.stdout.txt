@@ -1,0 +1,36 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: sales-deal-room                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 7                                                                                                            │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ competitor_docs (level 0)  <N> <STATUS>  <TIME>
+  ✓ product_specs (level 0)  <N> <STATUS>  <TIME>
+  ✓ deal_context (level 0)  <N> <STATUS>  <TIME>
+  ✓ win_reports (level 0)  <N> <STATUS>  <TIME>
+  ✓ competitive_intel (level 1)  <N> <STATUS>  <TIME>
+    └─ deal-search  <MATERIALIZED>
+  ✓ strategy (level 2)  <N> <STATUS>  <TIME>
+    └─ deal-search  <MATERIALIZED>
+  ✓ call_prep (level 3)  <N> <STATUS>  <TIME>
+    └─ deal-search  <MATERIALIZED>
+    └─ deal-search  <MATERIALIZED>
+                           Build Summary
+╭───────────────────┬──────────────┬───────┬────────┬─────────────╮
+│ Layer             │    Level     │ Built │ Cached │     Skipped │
+├───────────────────┼──────────────┼───────┼────────┼─────────────┤
+│ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
+│ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
+│ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
+│ win_reports       │  <N>  │  <N>  │  <N>  │  <N>  │
+│ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → deal-search   │ search_index │       │        │ progressive │
+│ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → deal-search   │ search_index │       │        │ progressive │
+│ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
+╰───────────────────┴──────────────┴───────┴────────┴─────────────╯
+
+Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
+LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>

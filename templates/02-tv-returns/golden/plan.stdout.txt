@@ -1,1 +1,32 @@
-Error loading pipeline: No module named 'transforms'
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: tv-returns-demo                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 4                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value                     │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic                 │
+│ Model       │ claude-haiku-4-5-20251001 │
+│ Temperature │ 0.3                       │
+│ Max Tokens  │ 2048                      │
+╰─────────────┴───────────────────────────╯
+
+tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)
+├── product_offers  source:demo_load_product_offers  <STATS>
+│   └── ← ./sources (3 .md, 2 .json files, nested)
+├── policies  source:demo_load_policies  <STATS>
+│   └── ← ./sources (3 .md, 2 .json files, nested)
+├── policy_index  transform:demo_extract_policies  <STATS>
+│   └── ← policies
+└── cs_product_brief  transform:demo_enrich_cs_brief  <STATS>
+    ├── ← product_offers
+    ├── ← policy_index
+    └── → cs-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← cs_product_brief
+        └── embeddings  bge-small-en-v1.5  384d  (fastembed)
+
+<PLAN_SUMMARY>
