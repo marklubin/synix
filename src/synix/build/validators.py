@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
+from synix.core.citations import extract_citations
 from synix.core.errors import atomic_write
 from synix.core.models import Artifact, Pipeline
 
@@ -662,6 +663,116 @@ class SemanticConflictValidator(BaseValidator):
 
         if search_index is not None:
             search_index.close()
+
+        return violations
+
+
+# ---------------------------------------------------------------------------
+# Citation check helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_citation_response(response_text: str) -> list[dict]:
+    """Extract ungrounded claims list from LLM response (JSON in code blocks or raw)."""
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
+    text = match.group(1).strip() if match else response_text.strip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+
+    ungrounded = data.get("ungrounded", [])
+    if not isinstance(ungrounded, list):
+        return []
+
+    for item in ungrounded:
+        item.setdefault("claim", "")
+        item.setdefault("suggestion", "")
+
+    return ungrounded
+
+
+@register_validator("citation")
+class CitationValidator(BaseValidator):
+    """LLM-based validator that checks whether claims are grounded by synix:// citations.
+
+    Config:
+        layers: list of layer names to check
+        llm_config: dict with LLM settings
+        max_artifacts: max artifacts to check (default 20)
+    """
+
+    def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
+        config = getattr(self, "_config", {})
+        max_artifacts = config.get("max_artifacts", 20)
+
+        violations: list[Violation] = []
+
+        # Get LLM client
+        client = config.get("_llm_client")
+        if client is None:
+            llm_config_dict = config.get("llm_config", {})
+            try:
+                from synix.build.cassette import maybe_wrap_client
+                from synix.build.llm_client import LLMClient
+                from synix.core.config import LLMConfig
+
+                llm_cfg = LLMConfig.from_dict(llm_config_dict)
+                client = maybe_wrap_client(LLMClient(llm_cfg))
+            except Exception:
+                return violations
+
+        # Load prompt template
+        try:
+            prompt_path = Path(__file__).parent / "prompts" / "citation_check.txt"
+            prompt_template = prompt_path.read_text()
+        except (FileNotFoundError, OSError):
+            return violations
+
+        for artifact in artifacts[:max_artifacts]:
+            try:
+                existing = extract_citations(artifact.content)
+                existing_uris = ", ".join(c.uri for c in existing) if existing else "(none)"
+
+                prompt = prompt_template.replace("{content}", artifact.content).replace(
+                    "{existing_citations}", existing_uris
+                )
+
+                response = client.complete(
+                    messages=[{"role": "user", "content": prompt}],
+                    artifact_desc=f"citation check for {artifact.label}",
+                )
+
+                _store_llm_trace(ctx.store, artifact.label, prompt, response.content, "citation_check")
+
+                ungrounded = _parse_citation_response(response.content)
+
+                for item in ungrounded:
+                    claim = item.get("claim", "")
+                    suggestion = item.get("suggestion", "")
+
+                    vid = compute_violation_id("ungrounded_claim", artifact.label, claim)
+
+                    violations.append(
+                        Violation(
+                            violation_type="ungrounded_claim",
+                            severity="warning",
+                            message=f"Ungrounded claim: {claim[:80]}",
+                            label=artifact.label,
+                            field="content",
+                            metadata={
+                                "claim": claim,
+                                "suggestion": suggestion,
+                                "existing_citations": [c.uri for c in existing],
+                                "artifact_id": artifact.artifact_id,
+                            },
+                            violation_id=vid,
+                        )
+                    )
+
+            except Exception:
+                continue
 
         return violations
 

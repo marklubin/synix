@@ -1,0 +1,139 @@
+
+Search results for: "pricing" (keyword mode)
+
+╭─────────────────────────────────────────────── competitive_intel (L1) ───────────────────────────────────────────────╮
+│                                                                                                                      │
+│                              Competitive Analysis: DataFlow Inc vs. NovaSight Analytics                              │
+│                                                                                                                      │
+│  1. Competitor Overview and Market Position                                                                          │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  3. Pricing Comparison                                                                                               │
+│                                                                                                                      │
+│  DataFlow Inc Pricing                                                                                                │
+│                                                                                                                      │
+│  DataFlow uses custom enterprise contracts only with no public pricing. Typical range is $80-120/seat/month          │
+│  depending on volume and feature tier, with a minimum contract of $100K/year (effectively 100+ seats minimum).       │
+│  3-year contracts are common with 15-20% discount over annual pricing. Professional services are billed separately   │
+│  at $250/hour.                                                                                                       │
+│                                                                                                                      │
+│  Total Cost of Ownership Impact: Expensive total cost of ownership, often 2-3x initial quote after professional      │
+│  services.                                                                                                           │
+│                                                                                                                      │
+│  NovaSight Analytics Pricing                                                                                         │
+│                                                                                                                      │
+│  NovaSight offers transparent, tiered pricing:                                                                       │
+│                                                                                                                      │
+│   • Starter: $25/seat/month                                                                                          │
+│   • Professional: $55/seat/month                                                                                     │
+│   • Enterprise: Custom pricing                                                                                       │
+│                                                                                                                      │
+│  Annual billing receives a 15% discount, and volume discounts are available for 500+ seats.                          │
+│                                                                                                                      │
+│  Pricing Advantage Analysis                                                                                          │
+│                                                                                                                      │
+│  For mid-market customers (100-500 seats): ... For enterprise customers (500+ seats):                                │
+│                                                                                                                      │
+│   • DataFlow: $80-120/seat/month + $250/hour professional services                                                   │
+│   • NovaSight: Custom pricing with volume discounts + included implementation                                        │
+│   • NovaSight advantage: Transparent pricing, included implementation (2-4 weeks vs. 4-6 months)                     │
+│                                                                                                                      │
+│  ------------------------------------------------------------------------------------------------------------------  │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  Label: intel-dataflow_inc  Score: 0.00  Mode: keyword                                                               │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
+intel-dataflow_inc
+├── t-text-dataflow_inc
+├── t-text-differentiators
+└── t-text-platform_overview
+
+╭─────────────────────────────────────────────── competitive_intel (L1) ───────────────────────────────────────────────╮
+│                                                                                                                      │
+│                              Competitive Analysis: InsightCorp vs. NovaSight Analytics                               │
+│                                                                                                                      │
+│  1. Competitor Overview and Market Position                                                                          │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  3. Pricing Comparison                                                                                               │
+│                                                                                                                      │
+│  InsightCorp Pricing Model                                                                                           │
+│                                                                                                                      │
+│  InsightCorp offers a single tier at $15/seat/month with no enterprise tier currently available. They also offer     │
+│  30-day free trial with full feature access and aggressive startup discounts of 50% off for YC companies, with no    │
+│  minimum seat count.                                                                                                 │
+│                                                                                                                      │
+│  NovaSight Pricing Model                                                                                             │
+│                                                                                                                      │
+│  NovaSight offers three tiers: Starter at $25/seat/month, Professional at $55/seat/month, and Enterprise at custom   │
+│  pricing. Annual billing receives a 15% discount, and volume discounts are available for 500+ seats.                 │
+│                                                                                                                      │
+│  Competitive Analysis                                                                                                │
+│                                                                                                                      │
+│  InsightCorp's Pricing Advantage:                                                                                    │
+│                                                                                                                      │
+│   • At $15/seat/month, InsightCorp is 40% cheaper than NovaSight's Starter tier ($25/month) and 82% cheaper than     │
+│     Professional ($55/month)                                                                                         │
+│   • No minimum seat count and aggressive startup discounts make it extremely easy for teams to adopt without         │
+│     procurement friction                                                                                             │
+│   • This pricing is a significant barrier to NovaSight's SMB penetration                                             │
+│                                                                                                                      │
+│  NovaSight's Pricing Justification:                                                                                  │
+│                                                                                                                      │
+│   • Our higher price reflects substantially more features: custom ML models, 85 data connectors vs. 20, 200+ API     │
+│     endpoints vs. 30, and enterprise security features                                                               │
+│   • Professional tier ($55/month) includes custom ML deployment, REST API access, and SSO/SAML, features             │
+│     InsightCorp doesn't offer at any price ...                                                                       │
+│                                                                                                                      │
+│  Label: intel-insight_corp  Score: 0.00  Mode: keyword                                                               │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
+intel-insight_corp
+├── t-text-differentiators
+├── t-text-insight_corp
+└── t-text-platform_overview
+
+╭─────────────────────────────────────────────── competitive_intel (L1) ───────────────────────────────────────────────╮
+│                                                                                                                      │
+│                           Deal-Specific Competitive Analysis: NovaSight vs. Acme Analytics                           │
+│                                                                                                                      │
+│  1. Competitor Overview and Market Position                                                                          │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  3. Pricing Comparison                                                                                               │
+│                                                                                                                      │
+│  Acme Analytics Pricing                                                                                              │
+│                                                                                                                      │
+│  Standard: $35/seat/month (billed annually); Enterprise: $65/seat/month (billed annually)                            │
+│                                                                                                                      │
+│   • Standard includes core dashboards and 5 data connectors ...                                                      │
+│   • Volume discounts begin at 200+ seats (estimated 10-15% discount)                                                 │
+│                                                                                                                      │
+│  NovaSight Pricing                                                                                                   │
+│                                                                                                                      │
+│  Starter: $25/seat/month; Professional: $55/seat/month; Enterprise: custom pricing                                   │
+│                                                                                                                      │
+│   • Starter includes core dashboards, 10 data connectors, email support, 5 GB storage per user                       │
+│   • Professional adds custom ML models, REST API access, SSO/SAML, priority support, 25 GB storage per user ...      │
+│     NovaSight's Professional tier costs 57% more but includes ML model deployment, full REST API access, and         │
+│     SSO/SAML—features Acme charges extra for or doesn't offer at all.                                                │
+│                                                                                                                      │
+│  Enterprise Flexibility: NovaSight's custom Enterprise pricing allows negotiation on large deals, while Acme's       │
+│  fixed per-seat model ($65) may be more predictable but less flexible for volume commitments.                        │
+│                                                                                                                      │
+│  ------------------------------------------------------------------------------------------------------------------  │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  Label: intel-acme_analytics  Score: 0.00  Mode: keyword                                                             │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 3 ──────────────────────────────────────────────────────╯
+intel-acme_analytics
+├── t-text-acme_analytics
+├── t-text-differentiators
+└── t-text-platform_overview

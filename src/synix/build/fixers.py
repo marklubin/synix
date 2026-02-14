@@ -17,6 +17,7 @@ from pathlib import Path
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import ValidationResult, Violation, _store_llm_trace
+from synix.core.citations import make_uri
 from synix.core.models import Pipeline
 
 # ---------------------------------------------------------------------------
@@ -385,5 +386,154 @@ class SemanticEnrichmentFixer(BaseFixer):
                 new_content="",
                 new_artifact_id="",
                 description=explanation or "Could not resolve contradiction",
+                llm_explanation=explanation,
+            )
+
+
+@register_fixer("citation_enrichment")
+class CitationEnrichmentFixer(BaseFixer):
+    """LLM-based fixer that resolves ungrounded claims by adding citations or removing content.
+
+    Config:
+        max_context_episodes: max source episodes to include (default 5)
+        temperature: LLM temperature (default 0.3)
+    """
+
+    handles_violation_types = ["ungrounded_claim"]
+    interactive = True
+
+    def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
+        artifact = ctx.store.load_artifact(violation.label)
+        if artifact is None:
+            return FixAction(
+                label=violation.label,
+                action="skip",
+                original_artifact_id="",
+                new_content="",
+                new_artifact_id="",
+                description="Artifact not found",
+            )
+
+        if ctx.llm_client is None:
+            return FixAction(
+                label=violation.label,
+                action="skip",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description="No LLM client available",
+            )
+
+        config = getattr(self, "_config", {})
+        max_context = config.get("max_context_episodes", 5)
+        temperature = config.get("temperature", 0.3)
+
+        claim = violation.metadata.get("claim", "")
+        suggestion = violation.metadata.get("suggestion", "")
+
+        # Search for source context
+        evidence_source_ids: list[str] = []
+        source_texts: list[str] = []
+
+        if ctx.search_index is not None:
+            search_queries = [claim]
+            if suggestion:
+                search_queries.append(suggestion)
+
+            seen_ids: set[str] = set()
+            for query in search_queries:
+                if not query.strip():
+                    continue
+                try:
+                    results = ctx.search_index.query(query)
+                    for r in results[:max_context]:
+                        if r.label not in seen_ids:
+                            seen_ids.add(r.label)
+                            evidence_source_ids.append(r.label)
+                            source_texts.append(f"[{r.label}]: {r.content[:500]}")
+                except Exception:
+                    continue
+
+        source_context = "\n\n".join(source_texts) if source_texts else "(no source context available)"
+
+        # Build source label map for the LLM
+        source_label_map = "\n".join(f"  {label} → {make_uri(label)}" for label in evidence_source_ids)
+        if not source_label_map:
+            source_label_map = "(no sources available)"
+
+        # Build prompt
+        prompt_template = (Path(__file__).parent / "prompts" / "citation_enrichment.txt").read_text()
+        prompt = (
+            prompt_template.replace("{claim}", claim)
+            .replace("{suggestion}", suggestion)
+            .replace("{content}", artifact.content)
+            .replace("{source_context}", source_context)
+            .replace("{source_label_map}", source_label_map)
+        )
+
+        try:
+            response = ctx.llm_client.complete(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=8192,
+                temperature=temperature,
+                artifact_desc=f"citation fix for {violation.label}",
+            )
+            response_text = response.content
+        except Exception as exc:
+            return FixAction(
+                label=violation.label,
+                action="skip",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description=f"LLM error: {exc}",
+            )
+
+        # Store trace
+        _store_llm_trace(ctx.store, violation.label, prompt, response_text, "citation_enrichment")
+
+        # Parse response
+        match = re.search(r"```(?:json)?\s*\n?(.*?)(?:\n?```|$)", response_text, re.DOTALL)
+        text = match.group(1).strip() if match else response_text.strip()
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return FixAction(
+                label=violation.label,
+                action="unresolved",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description="Could not parse LLM response",
+                llm_explanation=response_text[:500],
+            )
+
+        status = data.get("status", "unresolved")
+        action = data.get("action", "")
+        new_content = data.get("content", "")
+        explanation = data.get("explanation", "")
+
+        if status == "resolved" and new_content:
+            new_hash = f"sha256:{hashlib.sha256(new_content.encode()).hexdigest()}"
+            return FixAction(
+                label=violation.label,
+                action="rewrite",
+                original_artifact_id=artifact.artifact_id,
+                new_content=new_content,
+                new_artifact_id=new_hash,
+                description=f"{action}: {explanation}" if action else explanation,
+                evidence_source_ids=evidence_source_ids,
+                interactive=True,
+                llm_explanation=explanation,
+            )
+        else:
+            return FixAction(
+                label=violation.label,
+                action="unresolved",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description=explanation or "Could not add citation",
                 llm_explanation=explanation,
             )
