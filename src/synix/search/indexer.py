@@ -10,6 +10,7 @@ from pathlib import Path
 
 from synix.build.projections import BaseProjection, register_projection
 from synix.build.provenance import ProvenanceTracker
+from synix.core.citations import extract_citations
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Artifact
 from synix.search.results import SearchResult
@@ -31,7 +32,7 @@ class SearchIndex:
         return self._conn
 
     def create(self) -> None:
-        """Create the FTS5 search index table."""
+        """Create the FTS5 search index table and citation edges table."""
         conn = self._get_conn()
         conn.execute("DROP TABLE IF EXISTS search_index")
         conn.execute("""
@@ -43,13 +44,22 @@ class SearchIndex:
                 metadata
             )
         """)
+        conn.execute("DROP TABLE IF EXISTS citation_edges")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS citation_edges (
+                source_label TEXT NOT NULL,
+                target_uri   TEXT NOT NULL,
+                target_label TEXT,
+                UNIQUE(source_label, target_uri)
+            )
+        """)
         conn.commit()
 
     # Keys stripped from metadata before indexing (internal build state, not searchable)
     _METADATA_INDEX_EXCLUDE = {"build_fingerprint", "transform_fingerprint"}
 
     def insert(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
-        """Insert an artifact into the search index."""
+        """Insert an artifact into the search index and store citation edges."""
         conn = self._get_conn()
         # Strip internal build metadata that shouldn't affect search ranking
         search_metadata = {k: v for k, v in artifact.metadata.items() if k not in self._METADATA_INDEX_EXCLUDE}
@@ -63,6 +73,13 @@ class SearchIndex:
                 json.dumps(search_metadata),
             ),
         )
+        # Store citation edges
+        citations = extract_citations(artifact.content)
+        for citation in citations:
+            conn.execute(
+                "INSERT OR IGNORE INTO citation_edges (source_label, target_uri, target_label) VALUES (?, ?, ?)",
+                (artifact.label, citation.uri, citation.ref),
+            )
         conn.commit()
 
     # Words too common to be useful in OR queries

@@ -21,9 +21,20 @@ def load_pipeline(path: str) -> Pipeline:
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load pipeline module: {path}")
 
+    # Add pipeline directory to sys.path so `import transforms` works
+    # for pipelines with companion transform modules.
+    pipeline_dir = str(filepath.parent)
+    path_added = pipeline_dir not in sys.path
+    if path_added:
+        sys.path.insert(0, pipeline_dir)
+
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if path_added and pipeline_dir in sys.path:
+            sys.path.remove(pipeline_dir)
 
     pipeline = getattr(module, "pipeline", None)
     if pipeline is None:
