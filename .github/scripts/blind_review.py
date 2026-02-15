@@ -19,7 +19,7 @@ WEBSITE_URL = "https://synix.dev"
 LLM_TIMEOUT = 120  # seconds
 
 CLAUDE_MODEL = "claude-opus-4-6"
-OPENAI_MODEL = "o3"
+OPENAI_MODEL = "gpt-5.2"
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -180,7 +180,7 @@ def format_comment(
     if provider == "claude":
         header = "**Architectural Review** — Claude Opus | Blind review (docs + diff only)"
     else:
-        header = "**Red Team Review** — OpenAI o3 | Adversarial review (docs + diff only)"
+        header = "**Red Team Review** — OpenAI GPT-5.2 | Adversarial review (docs + diff only)"
 
     diff_note = f"{diff_shown:,} lines"
     if diff_shown < diff_total:
