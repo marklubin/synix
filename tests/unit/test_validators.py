@@ -1035,10 +1035,10 @@ class TestParseConflictResponse:
         result = _parse_conflict_response(resp)
         assert result == []
 
-    def test_invalid_json(self):
+    def test_invalid_json_raises(self):
         resp = "this is not json at all"
-        result = _parse_conflict_response(resp)
-        assert result == []
+        with pytest.raises(ValueError, match="Could not parse"):
+            _parse_conflict_response(resp)
 
     def test_missing_source_hints_defaulted(self):
         resp = '{"conflicts": [{"claim_a": "A", "claim_b": "B"}]}'
@@ -1046,10 +1046,10 @@ class TestParseConflictResponse:
         assert result[0]["claim_a_source_hint"] == ""
         assert result[0]["claim_b_source_hint"] == ""
 
-    def test_conflicts_not_a_list(self):
+    def test_conflicts_not_a_list_raises(self):
         resp = '{"conflicts": "not a list"}'
-        result = _parse_conflict_response(resp)
-        assert result == []
+        with pytest.raises(ValueError, match="not a list"):
+            _parse_conflict_response(resp)
 
 
 # ---------------------------------------------------------------------------

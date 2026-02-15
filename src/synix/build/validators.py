@@ -524,19 +524,24 @@ class PIIValidator(BaseValidator):
 
 
 def _parse_conflict_response(response_text: str) -> list[dict]:
-    """Extract conflict list from LLM response (JSON in code blocks or raw)."""
+    """Extract conflict list from LLM response (JSON in code blocks or raw).
+
+    Raises ValueError if the response cannot be parsed as valid JSON.
+    """
     # Try to extract JSON from code blocks first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
     text = match.group(1).strip() if match else response_text.strip()
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        logger.warning("semantic_conflict: LLM returned unparseable response: %s", text[:200])
+        raise ValueError(f"Could not parse LLM conflict response: {text[:200]}") from exc
 
     conflicts = data.get("conflicts", [])
     if not isinstance(conflicts, list):
-        return []
+        logger.warning("semantic_conflict: 'conflicts' key is not a list in response")
+        raise ValueError("LLM conflict response 'conflicts' field is not a list") from None
 
     # Normalize: ensure source hint fields have defaults
     for c in conflicts:
@@ -555,12 +560,14 @@ class SemanticConflictValidator(BaseValidator):
     Config:
         layers: list of layer names to check
         llm_config: dict with LLM settings
-        max_artifacts: max artifacts to check (default 20)
+        max_artifacts: max artifacts to check (default: all)
+        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
     """
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         config = getattr(self, "_config", {})
-        max_artifacts = config.get("max_artifacts", 20)
+        max_artifacts = config.get("max_artifacts")  # None = check all
+        fail_open = config.get("fail_open", False)
 
         violations: list[Violation] = []
 
@@ -575,17 +582,22 @@ class SemanticConflictValidator(BaseValidator):
 
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
-            except Exception:
-                logger.warning("semantic_conflict: could not create LLM client, skipping")
-                return violations
+            except Exception as exc:
+                if fail_open:
+                    logger.warning("semantic_conflict: could not create LLM client (fail_open=True)")
+                    return violations
+                msg = "semantic_conflict validator: could not create LLM client"
+                raise RuntimeError(msg) from exc
 
         # Load prompt template
+        prompt_path = Path(__file__).parent / "prompts" / "semantic_conflict.txt"
         try:
-            prompt_path = Path(__file__).parent / "prompts" / "semantic_conflict.txt"
             prompt_template = prompt_path.read_text()
-        except (FileNotFoundError, OSError):
-            logger.warning("semantic_conflict: prompt file not found at %s", prompt_path)
-            return violations
+        except (FileNotFoundError, OSError) as exc:
+            if fail_open:
+                logger.warning("semantic_conflict: prompt not found at %s (fail_open=True)", prompt_path)
+                return violations
+            raise RuntimeError(f"semantic_conflict validator: prompt not found at {prompt_path}") from exc
 
         # Optional search index for claim tracing (lazy import to avoid build→search dep)
         search_index = None
@@ -597,9 +609,18 @@ class SemanticConflictValidator(BaseValidator):
             if search_db.exists():
                 search_index = _indexer.SearchIndex(search_db)
         except Exception:
-            pass
+            logger.warning("semantic_conflict: could not load search index for claim tracing")
 
-        for artifact in artifacts[:max_artifacts]:
+        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
+        if max_artifacts is not None and len(artifacts) > max_artifacts:
+            logger.info(
+                "semantic_conflict: checking %d of %d artifacts (max_artifacts=%d)",
+                max_artifacts,
+                len(artifacts),
+                max_artifacts,
+            )
+
+        for artifact in target:
             try:
                 prompt = prompt_template.replace("{content}", artifact.content)
                 response = client.complete(
@@ -632,7 +653,11 @@ class SemanticConflictValidator(BaseValidator):
                                         if r.label not in source_ids:
                                             source_ids.append(r.label)
                                 except Exception:
-                                    pass
+                                    logger.warning(
+                                        "semantic_conflict: search query failed for claim in %s",
+                                        artifact.label,
+                                        exc_info=True,
+                                    )
 
                     vid = compute_violation_id("semantic_conflict", artifact.label, claim_a, claim_b)
 
@@ -678,18 +703,23 @@ class SemanticConflictValidator(BaseValidator):
 
 
 def _parse_citation_response(response_text: str) -> list[dict]:
-    """Extract ungrounded claims list from LLM response (JSON in code blocks or raw)."""
+    """Extract ungrounded claims list from LLM response (JSON in code blocks or raw).
+
+    Raises ValueError if the response cannot be parsed as valid JSON.
+    """
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
     text = match.group(1).strip() if match else response_text.strip()
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        logger.warning("citation: LLM returned unparseable response: %s", text[:200])
+        raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from exc
 
     ungrounded = data.get("ungrounded", [])
     if not isinstance(ungrounded, list):
-        return []
+        logger.warning("citation: 'ungrounded' key is not a list in response")
+        raise ValueError("LLM citation response 'ungrounded' field is not a list") from None
 
     for item in ungrounded:
         item.setdefault("claim", "")

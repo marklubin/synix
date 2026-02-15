@@ -150,8 +150,8 @@ class TestCitationValidator:
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_invalid_json_returns_empty(self, store, provenance, ctx):
-        """Invalid JSON from LLM -> no violations."""
+    def test_invalid_json_logged_and_skipped(self, store, provenance, ctx):
+        """Invalid JSON from LLM -> logged warning, no violations (per-artifact skip)."""
         art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
         store.save_artifact(art, "core", 3)
 

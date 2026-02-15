@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -19,6 +20,8 @@ from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import ValidationResult, Violation, _store_llm_trace
 from synix.core.citations import make_uri
 from synix.core.models import Pipeline
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -310,12 +313,24 @@ class SemanticEnrichmentFixer(BaseFixer):
                             evidence_source_ids.append(r.label)
                             source_texts.append(f"[{r.label}]: {r.content[:500]}")
                 except Exception:
+                    logger.warning("semantic_enrichment: search query failed for %s", violation.label, exc_info=True)
                     continue
 
         source_context = "\n\n".join(source_texts) if source_texts else "(no source context available)"
 
         # Build prompt
-        prompt_template = (Path(__file__).parent / "prompts" / "semantic_enrichment.txt").read_text()
+        prompt_path = Path(__file__).parent / "prompts" / "semantic_enrichment.txt"
+        try:
+            prompt_template = prompt_path.read_text()
+        except (FileNotFoundError, OSError):
+            return FixAction(
+                label=violation.label,
+                action="skip",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description=f"Prompt file not found: {prompt_path}",
+            )
         prompt = (
             prompt_template.replace("{claim_a}", claim_a)
             .replace("{claim_b}", claim_b)
@@ -452,6 +467,7 @@ class CitationEnrichmentFixer(BaseFixer):
                             evidence_source_ids.append(r.label)
                             source_texts.append(f"[{r.label}]: {r.content[:500]}")
                 except Exception:
+                    logger.warning("citation_enrichment: search query failed for %s", violation.label, exc_info=True)
                     continue
 
         source_context = "\n\n".join(source_texts) if source_texts else "(no source context available)"
