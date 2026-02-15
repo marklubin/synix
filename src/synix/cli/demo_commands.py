@@ -66,6 +66,8 @@ def run_case(case_dir: str, update_goldens: bool):
     pipeline_file = case.get("pipeline", "pipeline.py")
     steps = case.get("steps", [])
     goldens = case.get("goldens", {})
+    output_masks: dict[str, list[str]] = case.get("output_masks", {})
+    cleanup_files: list[str] = case.get("cleanup", [])
     case_name = case.get("name", case_path.name)
 
     console.print(
@@ -78,6 +80,9 @@ def run_case(case_dir: str, update_goldens: bool):
             border_style="cyan",
         )
     )
+
+    # Clean up artifacts from previous runs
+    _cleanup_files(case_path, cleanup_files)
 
     # Set up environment for deterministic replay
     env = dict(os.environ)
@@ -207,6 +212,8 @@ def run_case(case_dir: str, update_goldens: bool):
         console.print("\n[bold]Golden comparison (text):[/bold]")
 
         for step_name in all_step_names:
+            step_masks = output_masks.get(step_name, [])
+
             # stdout golden
             stdout_golden_file = f"{step_name}.stdout.txt"
             stdout_golden_path = golden_dir / stdout_golden_file
@@ -219,12 +226,14 @@ def run_case(case_dir: str, update_goldens: bool):
                     console.print(f"  {step_name} stdout: [cyan]updated[/cyan] → {stdout_golden_file}")
                 elif stdout_golden_path.exists():
                     expected = stdout_golden_path.read_text()
-                    if expected == actual_normalized:
+                    expected_masked = _apply_masks(expected, step_masks)
+                    actual_masked = _apply_masks(actual_normalized, step_masks)
+                    if expected_masked == actual_masked:
                         console.print(f"  {step_name} stdout: [green]PASS[/green]")
                     else:
                         console.print(f"  {step_name} stdout: [red]FAIL[/red]")
                         failed = True
-                        _show_text_diff(expected, actual_normalized, stdout_golden_file)
+                        _show_text_diff(expected_masked, actual_masked, stdout_golden_file)
                 else:
                     console.print(f"  {step_name} stdout: [yellow]no golden[/yellow] (run with --update-goldens)")
 
@@ -240,18 +249,31 @@ def run_case(case_dir: str, update_goldens: bool):
                     console.print(f"  {step_name} stderr: [cyan]updated[/cyan] → {stderr_golden_file}")
                 elif stderr_golden_path.exists():
                     expected = stderr_golden_path.read_text()
-                    if expected == actual_normalized:
+                    expected_masked = _apply_masks(expected, step_masks)
+                    actual_masked = _apply_masks(actual_normalized, step_masks)
+                    if expected_masked == actual_masked:
                         console.print(f"  {step_name} stderr: [green]PASS[/green]")
                     else:
                         console.print(f"  {step_name} stderr: [red]FAIL[/red]")
                         failed = True
-                        _show_text_diff(expected, actual_normalized, stderr_golden_file)
+                        _show_text_diff(expected_masked, actual_masked, stderr_golden_file)
+
+    # Clean up artifacts created during run
+    _cleanup_files(case_path, cleanup_files)
 
     if failed:
         console.print("\n[red]Demo case failed.[/red]")
         sys.exit(1)
     else:
         console.print("\n[green]Demo case passed.[/green]")
+
+
+def _cleanup_files(case_path: Path, cleanup_files: list[str]) -> None:
+    """Remove files created during demo runs (relative to case_path)."""
+    for rel in cleanup_files:
+        path = case_path / rel
+        if path.exists():
+            path.unlink()
 
 
 def _normalize_output(text: str, case_path: Path) -> str:
@@ -265,12 +287,9 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = line.replace(case_path_str, "<CASE_DIR>")
         # Replace timing values like "1.2s" or "0.05s"
         line = re.sub(r"\b\d+\.\d+s\b", "<TIME>", line)
-        # Replace full LLM stats lines
-        line = re.sub(
-            r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+",
-            "LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>",
-            line,
-        )
+        # Drop LLM stats lines entirely (presence varies based on whether LLM calls occurred)
+        if re.search(r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+", line):
+            continue
         # Normalize cassette miss keys (hash varies by environment)
         line = re.sub(
             r"Cassette miss for key [0-9a-f]+\.\.\.",
@@ -284,20 +303,27 @@ def _normalize_output(text: str, case_path: Path) -> str:
             continue
         # Normalize plan tree stats (new/cached/rebuild counts vary between fresh and incremental)
         line = re.sub(r"((?:source|transform):\S+)\s+.*$", r"\1  <STATS>", line)
-        # Normalize build progress counts (built vs cached)
-        line = re.sub(r"\b\d+ (built|cached)\b", "<N> <STATUS>", line)
+        # Normalize build progress counts — e.g., "3 built, 7 cached" or "10 built"
+        # Replace the entire built/cached segment to avoid varying comma groups
+        line = re.sub(
+            r"\b\d+ (?:built|cached)(?:,\s*\d+ (?:built|cached))*\b",
+            "<BUILD_COUNTS>",
+            line,
+        )
         # Normalize search projection status + index count (e.g., "cached  9 indexed" or "new  14 indexed")
         line = re.sub(
-            r"\b(?:cached|new|materialized|materializing\.\.\.)\s+\d+ indexed\b",
+            r"\b(?:cached|new|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
             "<MATERIALIZED>  <N> indexed",
             line,
         )
         # Normalize materialization and cache status
         line = re.sub(r"\bmaterializ(?:ed|ing\.\.\.)", "<MATERIALIZED>", line)
-        # Normalize standalone "cached" or "built" (e.g. "└─ search  cached", "│ built │")
-        line = re.sub(r"(?<!\d )\b(?:cached|built)\b", "<MATERIALIZED>", line)
+        # Normalize standalone "cached", "built", or "progressive" (e.g. "└─ search  cached", "│ progressive │")
+        line = re.sub(r"(?<!\d )\b(?:cached|built|progressive)\b", "<MATERIALIZED>", line)
         # Normalize remaining "N indexed" counts
         line = re.sub(r"\b\d+ indexed\b", "<N> indexed", line)
+        # Normalize the build Total line entirely
+        line = re.sub(r"^Total:.*(?:built|cached|skipped).*$", "<BUILD_TOTAL>", line)
         # Normalize plan summary line (varies between fresh/incremental)
         line = re.sub(r"^Estimated:.*$", "<PLAN_SUMMARY>", line)
         # Normalize digits and placeholder padding in Build Summary table rows
@@ -315,6 +341,16 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = line.rstrip()
         normalized.append(line)
     return "\n".join(normalized)
+
+
+def _apply_masks(text: str, masks: list[str]) -> str:
+    """Remove lines matching any mask pattern from text."""
+    if not masks:
+        return text
+    compiled = [re.compile(p) for p in masks]
+    lines = text.splitlines()
+    filtered = [line for line in lines if not any(p.search(line) for p in compiled)]
+    return "\n".join(filtered)
 
 
 def _show_text_diff(expected: str, actual: str, label: str) -> None:

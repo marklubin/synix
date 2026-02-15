@@ -10,12 +10,7 @@ import synix.build.llm_transforms  # noqa: F401
 
 # Import to trigger @register_transform decorators
 import synix.build.parse_transform  # noqa: F401
-from synix.build.llm_client import (
-    LLMClient,
-    LLMResponse,
-    _is_reasoning_model,
-    _needs_max_completion_tokens,
-)
+from synix.build.llm_client import LLMClient, LLMResponse
 from synix.core.config import EmbeddingConfig, LLMConfig
 
 # ---------------------------------------------------------------------------
@@ -705,49 +700,16 @@ class TestLLMClientBackwardCompat:
 
 
 # ---------------------------------------------------------------------------
-# OpenAI model family detection helpers
+# OpenAI config-driven param passthrough
 # ---------------------------------------------------------------------------
 
 
-class TestModelDetectionHelpers:
-    """Tests for _is_reasoning_model and _needs_max_completion_tokens."""
+class TestOpenAIParamPassthrough:
+    """Tests verifying config-driven kwargs for OpenAI models.
 
-    @pytest.mark.parametrize(
-        "model,expected",
-        [
-            ("o1", True),
-            ("o1-preview", True),
-            ("o1-mini", True),
-            ("o3", True),
-            ("o3-mini", True),
-            ("o4-mini", True),
-            ("gpt-4o", False),
-            ("gpt-4o-mini", False),
-            ("gpt-5.2", False),
-            ("claude-sonnet-4-20250514", False),
-        ],
-    )
-    def test_is_reasoning_model(self, model, expected):
-        assert _is_reasoning_model(model) is expected
-
-    @pytest.mark.parametrize(
-        "model,expected",
-        [
-            ("o1", True),
-            ("o3-mini", True),
-            ("gpt-5.2", True),
-            ("gpt-5", True),
-            ("gpt-4o", False),
-            ("gpt-4o-mini", False),
-            ("claude-sonnet-4-20250514", False),
-        ],
-    )
-    def test_needs_max_completion_tokens(self, model, expected):
-        assert _needs_max_completion_tokens(model) is expected
-
-
-class TestOpenAIModelSpecificParams:
-    """Tests verifying correct kwargs per model family."""
+    No model-name heuristics — the pipeline controls which params are sent
+    via LLMConfig fields (max_completion_tokens, temperature=None).
+    """
 
     def _make_mock_openai_response(self, text="Mock response", model="gpt-4o"):
         response = MagicMock()
@@ -758,8 +720,8 @@ class TestOpenAIModelSpecificParams:
         response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         return response
 
-    def test_gpt4o_uses_max_tokens_and_temperature(self, monkeypatch):
-        """gpt-4o uses max_tokens and temperature (legacy behavior)."""
+    def test_default_uses_max_tokens_and_temperature(self, monkeypatch):
+        """Default config sends max_tokens and temperature."""
         mock_response = self._make_mock_openai_response()
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
@@ -776,47 +738,44 @@ class TestOpenAIModelSpecificParams:
         assert call_kwargs["max_tokens"] == 512
         assert call_kwargs["temperature"] == 0.5
 
-    def test_o1_uses_max_completion_tokens_no_temperature(self, monkeypatch):
-        """o1 reasoning model uses max_completion_tokens, omits temperature."""
+    def test_max_completion_tokens_overrides_max_tokens(self, monkeypatch):
+        """Setting max_completion_tokens in config sends that instead of max_tokens."""
+        mock_response = self._make_mock_openai_response(model="o3")
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        monkeypatch.setattr("openai.OpenAI", lambda **kwargs: mock_client)
+
+        config = LLMConfig(provider="openai", model="o3", max_completion_tokens=4096, temperature=None)
+        client = LLMClient(config)
+        client.complete(messages=[{"role": "user", "content": "Test"}])
+
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "max_completion_tokens" in call_kwargs
+        assert "max_tokens" not in call_kwargs
+        assert call_kwargs["max_completion_tokens"] == 4096
+
+    def test_temperature_none_omits_temperature(self, monkeypatch):
+        """Setting temperature=None in config omits it from the API call."""
         mock_response = self._make_mock_openai_response(model="o1")
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         monkeypatch.setattr("openai.OpenAI", lambda **kwargs: mock_client)
 
-        config = LLMConfig(provider="openai", model="o1", temperature=0.5, max_tokens=512)
+        config = LLMConfig(provider="openai", model="o1", temperature=None, max_completion_tokens=2048)
         client = LLMClient(config)
         client.complete(messages=[{"role": "user", "content": "Test"}])
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "max_completion_tokens" in call_kwargs
-        assert "max_tokens" not in call_kwargs
-        assert "temperature" not in call_kwargs
-        assert call_kwargs["max_completion_tokens"] == 512
-
-    def test_o3_mini_uses_max_completion_tokens_no_temperature(self, monkeypatch):
-        """o3-mini reasoning model uses max_completion_tokens, omits temperature."""
-        mock_response = self._make_mock_openai_response(model="o3-mini")
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        monkeypatch.setattr("openai.OpenAI", lambda **kwargs: mock_client)
-
-        config = LLMConfig(provider="openai", model="o3-mini", temperature=0.3, max_tokens=1024)
-        client = LLMClient(config)
-        client.complete(messages=[{"role": "user", "content": "Test"}])
-
-        call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "max_completion_tokens" in call_kwargs
-        assert "max_tokens" not in call_kwargs
         assert "temperature" not in call_kwargs
 
-    def test_gpt5_uses_max_completion_tokens_with_temperature(self, monkeypatch):
-        """gpt-5 uses max_completion_tokens but keeps temperature."""
+    def test_max_completion_tokens_with_temperature(self, monkeypatch):
+        """max_completion_tokens + temperature both sent when both are set."""
         mock_response = self._make_mock_openai_response(model="gpt-5.2")
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         monkeypatch.setattr("openai.OpenAI", lambda **kwargs: mock_client)
 
-        config = LLMConfig(provider="openai", model="gpt-5.2", temperature=0.7, max_tokens=2048)
+        config = LLMConfig(provider="openai", model="gpt-5.2", temperature=0.7, max_completion_tokens=8192)
         client = LLMClient(config)
         client.complete(messages=[{"role": "user", "content": "Test"}])
 
@@ -825,4 +784,17 @@ class TestOpenAIModelSpecificParams:
         assert "max_tokens" not in call_kwargs
         assert "temperature" in call_kwargs
         assert call_kwargs["temperature"] == 0.7
-        assert call_kwargs["max_completion_tokens"] == 2048
+        assert call_kwargs["max_completion_tokens"] == 8192
+
+    def test_from_dict_max_completion_tokens(self):
+        """LLMConfig.from_dict picks up max_completion_tokens."""
+        config = LLMConfig.from_dict(
+            {
+                "provider": "openai",
+                "model": "o3",
+                "max_completion_tokens": 4096,
+                "temperature": None,
+            }
+        )
+        assert config.max_completion_tokens == 4096
+        assert config.temperature is None
