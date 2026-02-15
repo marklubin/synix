@@ -110,8 +110,10 @@ def _show_build_status() -> None:
     import json
     import sqlite3
 
+    from synix.build.artifacts import MANIFEST_FILENAME
+
     build_path = Path.cwd() / "build"
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
 
     if not manifest_path.exists():
         console.print("[dim]No build directory with manifest found[/dim]")

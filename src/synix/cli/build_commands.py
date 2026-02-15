@@ -17,6 +17,27 @@ from synix.cli.progress import BuildProgress
 from synix.core.models import Pipeline
 
 
+def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
+    """Print an error with verbosity-dependent detail.
+
+    - verbose == 0 (default): "Label: TypeError: message"
+    - verbose >= 1 (-v): "Label: TypeError at file.py:93" + message on next line
+    - verbose >= 2 (-vv): Full traceback via console.print_exception()
+    """
+    import traceback as _tb
+
+    if verbose >= 2:
+        con.print(f"[red]{label}:[/red]")
+        con.print_exception(show_locals=False)
+    elif verbose >= 1:
+        tb = _tb.extract_tb(exc.__traceback__)
+        loc = f" at {tb[-1].filename.rsplit('/', 1)[-1]}:{tb[-1].lineno}" if tb else ""
+        con.print(f"[red]{label}:[/red] {type(exc).__name__}{loc}")
+        con.print(f"  {exc}")
+    else:
+        con.print(f"[red]{label}:[/red] {type(exc).__name__}: {exc}")
+
+
 def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]]]:
     """Compute layer_name → [(proj_name, proj_type, trigger_type)] mapping.
 
@@ -58,8 +79,15 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
 @click.option("--verbose", "-v", count=True, help="Verbosity level: -v per-artifact, -vv debug/LLM details")
 @click.option("--concurrency", "-j", default=5, type=int, help="Number of concurrent LLM requests (default 5)")
 @click.option("--validate", is_flag=True, default=False, help="Run domain validators after build")
+@click.option("--plain", is_flag=True, default=False, help="Plain text output (no TUI, safe for CI/pipes)")
 def build(
-    pipeline_path: str, source_dir: str | None, build_dir: str | None, verbose: int, concurrency: int, validate: bool
+    pipeline_path: str,
+    source_dir: str | None,
+    build_dir: str | None,
+    verbose: int,
+    concurrency: int,
+    validate: bool,
+    plain: bool,
 ):
     """Build memory artifacts from a pipeline definition.
 
@@ -73,7 +101,7 @@ def build(
     try:
         pipeline = load_pipeline(pipeline_path)
     except Exception as e:
-        console.print(f"[red]Error loading pipeline:[/red] {e}")
+        _print_error("Error loading pipeline", e, verbose, console)
         sys.exit(1)
 
     if source_dir:
@@ -99,9 +127,13 @@ def build(
     # Default verbosity to 1 (verbose) so progress is always shown
     effective_verbosity = max(verbose, 1)
 
-    progress = BuildProgress()
-    try:
-        with Live(progress, console=console, refresh_per_second=4):
+    use_plain = plain
+
+    if use_plain:
+        from synix.cli.progress import PlainBuildProgress
+
+        progress = PlainBuildProgress(console=console)
+        try:
             result = run_pipeline(
                 pipeline,
                 source_dir=source_dir,
@@ -110,9 +142,26 @@ def build(
                 progress=progress,
                 validate=validate,
             )
-    except Exception as e:
-        console.print(f"\n[red]Pipeline failed:[/red] {e}")
-        sys.exit(1)
+        except Exception as e:
+            console.print()
+            _print_error("Pipeline failed", e, verbose, console)
+            sys.exit(1)
+    else:
+        progress = BuildProgress()
+        try:
+            with Live(progress, console=console, refresh_per_second=4):
+                result = run_pipeline(
+                    pipeline,
+                    source_dir=source_dir,
+                    verbosity=effective_verbosity,
+                    concurrency=concurrency,
+                    progress=progress,
+                    validate=validate,
+                )
+        except Exception as e:
+            console.print()
+            _print_error("Pipeline failed", e, verbose, console)
+            sys.exit(1)
 
     elapsed = time.time() - start_time
 
@@ -245,8 +294,15 @@ def _display_validation_results(validation):
 @click.option("--verbose", "-v", count=True, help="Verbosity level")
 @click.option("--concurrency", "-j", default=5, type=int, help="Number of concurrent LLM requests (default 5)")
 @click.option("--validate", is_flag=True, default=False, help="Run domain validators after build")
+@click.option("--plain", is_flag=True, default=False, help="Plain text output (no TUI, safe for CI/pipes)")
 def run_alias(
-    pipeline_path: str, source_dir: str | None, build_dir: str | None, verbose: int, concurrency: int, validate: bool
+    pipeline_path: str,
+    source_dir: str | None,
+    build_dir: str | None,
+    verbose: int,
+    concurrency: int,
+    validate: bool,
+    plain: bool,
 ):
     """Process exports through a memory pipeline (alias for 'build')."""
     # Reuse the build command context
@@ -259,6 +315,7 @@ def run_alias(
         verbose=verbose,
         concurrency=concurrency,
         validate=validate,
+        plain=plain,
     )
 
 

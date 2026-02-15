@@ -42,8 +42,9 @@ class LLMConfig:
 
     provider: str = "anthropic"
     model: str = "claude-sonnet-4-20250514"
-    temperature: float = 0.3
+    temperature: float | None = 0.3
     max_tokens: int = 1024
+    max_completion_tokens: int | None = None  # OpenAI reasoning/newer models; overrides max_tokens
     base_url: str | None = None  # For OpenAI-compatible APIs (Ollama, vLLM, DeepSeek)
     api_key: str | None = None  # Override; defaults to env var
 
@@ -76,6 +77,8 @@ class LLMConfig:
             config.temperature = data["temperature"]
         if "max_tokens" in data:
             config.max_tokens = data["max_tokens"]
+        if "max_completion_tokens" in data:
+            config.max_completion_tokens = data["max_completion_tokens"]
         if "base_url" in data:
             config.base_url = data["base_url"]
         if "api_key" in data:

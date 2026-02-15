@@ -155,12 +155,20 @@ class LLMClient:
 
         for attempt in range(2):
             try:
-                response = self._client.chat.completions.create(
-                    model=self.config.model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=messages,
-                )
+                # Build kwargs from config — pipeline controls which params
+                # are sent (e.g. max_completion_tokens for reasoning models).
+                kwargs: dict = {
+                    "model": self.config.model,
+                    "messages": messages,
+                }
+                if self.config.max_completion_tokens is not None:
+                    kwargs["max_completion_tokens"] = self.config.max_completion_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
+
+                response = self._client.chat.completions.create(**kwargs)
                 choice = response.choices[0]
                 content = choice.message.content or ""
                 usage = response.usage

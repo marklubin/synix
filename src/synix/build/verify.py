@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
+from synix.build.artifacts import MANIFEST_FILENAME, ArtifactStore
 
 
 @dataclass
@@ -113,7 +113,7 @@ def _check_build_exists(build_path: Path) -> VerifyCheck:
             message="Build directory does not exist",
             fix_hint="Run: synix build <pipeline.py>",
         )
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     if not manifest_path.exists():
         return VerifyCheck(
             name="build_exists",
@@ -130,7 +130,7 @@ def _check_build_exists(build_path: Path) -> VerifyCheck:
 
 def _check_manifest_valid(build_path: Path) -> VerifyCheck:
     """Check that manifest.json is valid JSON with expected structure."""
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     if not manifest_path.exists():
         return VerifyCheck(
             name="manifest_valid",
@@ -183,7 +183,7 @@ def _check_manifest_valid(build_path: Path) -> VerifyCheck:
 
 def _check_artifacts_exist(build_path: Path) -> VerifyCheck:
     """Check that all manifest entries have corresponding files on disk."""
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     if not manifest_path.exists():
         return VerifyCheck(
             name="artifacts_exist",
@@ -217,7 +217,7 @@ def _check_artifacts_exist(build_path: Path) -> VerifyCheck:
 
 def _check_provenance_complete(build_path: Path) -> VerifyCheck:
     """Check that all non-root artifacts have provenance records."""
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     provenance_path = build_path / "provenance.json"
 
     if not manifest_path.exists():
@@ -346,7 +346,7 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
 
 def _check_no_orphans(build_path: Path) -> VerifyCheck:
     """Check for orphaned artifact files not in manifest."""
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     if not manifest_path.exists():
         return VerifyCheck(
             name="no_orphans",
@@ -391,7 +391,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
     sources span multiple distinct customer_id values, it is flagged as a
     cross-customer contamination violation.
     """
-    manifest_path = build_path / "manifest.json"
+    manifest_path = build_path / MANIFEST_FILENAME
     provenance_path = build_path / "provenance.json"
 
     if not manifest_path.exists():
