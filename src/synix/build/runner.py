@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from synix.build.provenance import ProvenanceTracker
 from synix.build.transforms import get_transform
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import Artifact, Layer, Pipeline, Projection
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -345,8 +348,10 @@ def _execute_transform_concurrent(
         from synix.build.llm_transforms import _make_llm_client
 
         shared_client = _make_llm_client(config)
-    except Exception:
+    except ImportError:
         pass  # Non-LLM transforms don't need a shared client
+    except Exception:
+        logger.warning("Could not create shared LLM client; workers will create their own", exc_info=True)
 
     def _run_one(index: int, unit_inputs: list[Artifact], config_extras: dict) -> tuple[int, list[Artifact]]:
         """Execute the transform for a single unit, returning (index, artifacts)."""
@@ -554,8 +559,8 @@ def _materialize_projection(
         # Use projection registry to avoid direct search import
         try:
             projection = get_projection("search_index", build_dir)
-        except ValueError:
-            # Search module not loaded — skip silently
+        except ValueError as exc:
+            logger.warning("Projection %r unavailable: %s", proj.name, exc)
             return True
         config = dict(proj.config)  # preserve projection-level config (embedding_config, etc.)
         config["sources"] = sources_config

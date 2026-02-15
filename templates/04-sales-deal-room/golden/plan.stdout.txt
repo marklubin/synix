@@ -1,0 +1,42 @@
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: sales-deal-room                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 7                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value                     │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic                 │
+│ Model       │ claude-haiku-4-5-20251001 │
+│ Temperature │ 0.3                       │
+│ Max Tokens  │ 2048                      │
+╰─────────────┴───────────────────────────╯
+
+sales-deal-room  claude-haiku-4-5-20251001 (anthropic)
+├── competitor_docs  source:parse  <STATS>
+│   └── ← ./sources/competitors (3 .md files)
+├── product_specs  source:parse  <STATS>
+│   └── ← ./sources/product (2 .md files)
+├── deal_context  source:parse  <STATS>
+│   └── ← ./sources/deal (3 .md files)
+├── win_reports  source:parse  <STATS>
+│   └── ← ./sources/wins (2 .md files)
+├── competitive_intel  transform:deal_competitive_intel  <STATS>
+│   ├── ← competitor_docs
+│   └── ← product_specs
+├── strategy  transform:deal_strategy  <STATS>
+│   ├── ← competitive_intel
+│   ├── ← deal_context
+│   └── ← win_reports
+└── call_prep  transform:deal_call_prep  <STATS>
+    ├── ← strategy
+    ├── ← deal_context
+    └── → deal-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← competitive_intel
+        ├── ← strategy
+        └── ← call_prep
+
+<PLAN_SUMMARY>

@@ -1,1 +1,242 @@
-Error loading pipeline: No module named 'transforms'
+╭───────────────────────────────────────────────────── Synix Fix ──────────────────────────────────────────────────────╮
+│ Pipeline: tv-returns-demo                                                                                            │
+│ Build: build                                                                                                         │
+│ Active violations: 3                                                                                                 │
+│ Mode: fix                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  3 active violation(s) (2 errors, 1 warnings)
+╭───────────────────────────────────────────── Fix: cs-brief-SAM-OLED-65 ──────────────────────────────────────────────╮
+│ ERROR  Unclear which process applies for defects discovered within 15 days: store return or manufacturer warranty    │
+│                                                                                                                      │
+│ Claim A:  "Report Damage/Defects Within: 48 hours of delivery. Resolution: Replacement shipment or full refund at no │
+│ cost."                                                                                                               │
+│ Claim B:  "90-Day Satisfaction Guarantee: Full refund or replacement — no restocking fee, no questions asked"        │
+│ Reasoning:  A customer who receives a defective item within 15 days could be directed to either the store's 48-hour  │
+│ defect reporting process (SCENARIO B) or told to contact Samsung for the 90-day satisfaction guarantee. The document │
+│ does not clarify whether SCENARIO B is the store's way of handling defects within the 15-day window, or whether      │
+│ customers should bypass the store and go directly to Samsung. This creates ambiguity about which entity (store or    │
+│ Samsung) should process the claim.                                                                                   │
+│                                                                                                                      │
+│ cs-brief-SAM-OLED-65 (conflict detected)                                                                             │
+│ ├── parents                                                                                                          │
+│ │   ├── product-offer-SAM-OLED-65 (product_offer_view)                                                               │
+│ │   ├── idx-return_policy (policy_index)                                                                             │
+│ │   ├── idx-shipping_policy (policy_index)                                                                           │
+│ │   └── idx-warranty_policy (policy_index)                                                                           │
+│ └── evidence sources                                                                                                 │
+│     ├── cs-brief-SAM-OLED-65 (cs_product_brief)                                                                      │
+│     ├── cs-brief-DYS-V15-DETECT (cs_product_brief)                                                                   │
+│     └── cs-brief-KAI-PRO-KNIFE8 (cs_product_brief)                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────── Proposed rewrite ──────────────────────────────────────────────────╮
+│ Description:  The contradiction was resolved by clarifying the temporal and jurisdictional relationship between the  │
+│ two claims. Claim A (48-hour damage reporting with replacement/refund) applies to physical damage discovered         │
+│ immediately upon delivery. Claim B (90-Day Satisfaction Guarantee) is Samsung's manufacturer warranty that applies   │
+│ to defects discovered within 90 days of delivery and is handled by Samsung directly, not the store. These are not    │
+│ contradictory—they operate in different timeframes and through different channels. The 90-day guarantee specifically │
+│ covers defects discovered after the 15-day store return window closes (days 16-90), providing an additional layer of │
+│ protection beyond the store's 15-day return policy. The artifact was updated to clarify this distinction in SCENARIO │
+│ C and the WARRANTY SUMMARY section, and a new key point was added for CS agents.                                     │
+│ Explanation:  The contradiction was resolved by clarifying the temporal and jurisdictional relationship between the  │
+│ two claims. Claim A (48-hour damage reporting with replacement/refund) applies to physical damage discovered         │
+│ immediately upon delivery. Claim B (90-Day Satisfaction Guarantee) is Samsung's manufacturer warranty that applies   │
+│ to defects discovered within 90 days of delivery and is handled by Samsung directly, not the store. These are not    │
+│ contradictory—they operate in different timeframes and through different channels. The 90-day guarantee specifically │
+│ covers defects discovered after the 15-day store return window closes (days 16-90), providing an additional layer of │
+│ protection beyond the store's 15-day return policy. The artifact was updated to clarify this distinction in SCENARIO │
+│ C and the WARRANTY SUMMARY section, and a new key point was added for CS agents.                                     │
+│                                                                                                                      │
+│ # CUSTOMER SERVICE REFERENCE BRIEF                                                                                   │
+│ ## Samsung 65" S95D OLED Smart TV (SAM-OLED-65)                                                                      │
+│                                                                                                                      │
+│ ---                                                                                                                  │
+│                                                                                                                      │
+│ ## PRODUCT OVERVIEW                                                                                                  │
+│                                                                                                                      │
+│ **Product Name:** Samsung 65" S95D OLED Smart TV                                                                     │
+│ **SKU:** SAM-OLED-65                                                                                                 │
+│ **UPC:** 887276846293                                                                                                │
+│ **Brand:** Samsung Electronics America                                                                               │
+│ **Category:** Electronics > TVs > OLED                                                                               │
+│ **Model Year:** 2024                                                                                                 │
+│                                                                                                                      │
+│ ### Key Features                                                                                                     │
+│ - 65-inch 4K OLED display (3840x2160 resolution)                                                                     │
+│ - 144Hz refresh rate (ideal for gaming)                                                                              │
+│ - Anti-glare coating                                                                                                 │
+│ - Neural Quantum Processor                                                                                           │
+│ - Dolby Atmos audio                                                                                                  │
+│ - HDR10+ and Dolby Vision support                                                                                    │
+│ - Tizen OS smart platform                                                                                            │
+│                                                                                                                      │
+│ ### Technical Specifications                                                                                         │
+│ | Spec | Details |                                                                                                   │
+│ |------|---------|                                                                                                   │
+│ | Display | 4K OLED, 3840x2160 |                                                                                     │
+│ | Refresh Rate | 144Hz |                                                                                             │
+│ | HDR Support | HDR10+, Dolby Vision |                                                                               │
+│ | Smart Platform | Tizen OS |                                                                                        │
+│ | Ports | 4x HDMI 2.1, 2x USB, 1x Ethernet |                                                                         │
+│ | Dimensions |                                                                                                       │
+│ ...                                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  [a]ccept / [d]eny / [i]gnore > Applied fix to cs-brief-SAM-OLED-65
+╭───────────────────────────────────────────── Fix: cs-brief-SAM-OLED-65 ──────────────────────────────────────────────╮
+│ ERROR  Unclear which process applies for defects discovered within 15 days: store return or manufacturer warranty    │
+│                                                                                                                      │
+│ Claim A:  "Report Damage/Defects Within: 48 hours of delivery. Resolution: Replacement shipment or full refund at no │
+│ cost."                                                                                                               │
+│ Claim B:  "90-Day Satisfaction Guarantee: Full refund or replacement — no restocking fee, no questions asked"        │
+│ Reasoning:  A customer who receives a defective item within 15 days could be directed to either the store's 48-hour  │
+│ defect reporting process (SCENARIO B) or told to contact Samsung for the 90-day satisfaction guarantee. The document │
+│ does not clarify whether SCENARIO B is the store's way of handling defects within the 15-day window, or whether      │
+│ customers should bypass the store and go directly to Samsung. This creates ambiguity about which entity (store or    │
+│ Samsung) should process the claim.                                                                                   │
+│                                                                                                                      │
+│ cs-brief-SAM-OLED-65 (conflict detected)                                                                             │
+│ ├── parents                                                                                                          │
+│ │   ├── product-offer-SAM-OLED-65 (product_offer_view)                                                               │
+│ │   ├── idx-return_policy (policy_index)                                                                             │
+│ │   ├── idx-shipping_policy (policy_index)                                                                           │
+│ │   └── idx-warranty_policy (policy_index)                                                                           │
+│ └── evidence sources                                                                                                 │
+│     ├── cs-brief-DYS-V15-DETECT (cs_product_brief)                                                                   │
+│     ├── cs-brief-SAM-OLED-65 (cs_product_brief)                                                                      │
+│     └── cs-brief-KAI-PRO-KNIFE8 (cs_product_brief)                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────── Proposed rewrite ──────────────────────────────────────────────────╮
+│ Description:  The contradiction was resolved by clarifying the temporal and jurisdictional boundaries. Claim A       │
+│ describes the store's return process (which applies within the 15-day window), while Claim B describes what happens  │
+│ after that window closes. These are not contradictory—they describe different phases of the customer service         │
+│ lifecycle. The key clarification added: (1) A note in Scenario A stating the return process applies ONLY within the  │
+│ 15-day window, (2) Rephrasing in Scenario C to specify that warranty claims 'after the 15-day return window' are     │
+│ handled by Samsung, and (3) Updating Key Point #2 and #3 to explicitly state that the store's return/warranty        │
+│ handling ends after 15 days. This makes clear that both claims are true but apply to different time periods.         │
+│ Explanation:  The contradiction was resolved by clarifying the temporal and jurisdictional boundaries. Claim A       │
+│ describes the store's return process (which applies within the 15-day window), while Claim B describes what happens  │
+│ after that window closes. These are not contradictory—they describe different phases of the customer service         │
+│ lifecycle. The key clarification added: (1) A note in Scenario A stating the return process applies ONLY within the  │
+│ 15-day window, (2) Rephrasing in Scenario C to specify that warranty claims 'after the 15-day return window' are     │
+│ handled by Samsung, and (3) Updating Key Point #2 and #3 to explicitly state that the store's return/warranty        │
+│ handling ends after 15 days. This makes clear that both claims are true but apply to different time periods.         │
+│                                                                                                                      │
+│ # CUSTOMER SERVICE REFERENCE BRIEF                                                                                   │
+│ ## Samsung 65" S95D OLED Smart TV (SAM-OLED-65)                                                                      │
+│                                                                                                                      │
+│ ---                                                                                                                  │
+│                                                                                                                      │
+│ ## PRODUCT OVERVIEW                                                                                                  │
+│                                                                                                                      │
+│ **Product Name:** Samsung 65" S95D OLED Smart TV                                                                     │
+│ **SKU:** SAM-OLED-65                                                                                                 │
+│ **UPC:** 887276846293                                                                                                │
+│ **Brand:** Samsung Electronics America                                                                               │
+│ **Category:** Electronics > TVs > OLED                                                                               │
+│ **Model Year:** 2024                                                                                                 │
+│                                                                                                                      │
+│ ### Key Features                                                                                                     │
+│ - 65-inch 4K OLED display (3840x2160 resolution)                                                                     │
+│ - 144Hz refresh rate (ideal for gaming)                                                                              │
+│ - Anti-glare coating                                                                                                 │
+│ - Neural Quantum Processor                                                                                           │
+│ - Dolby Atmos audio                                                                                                  │
+│ - HDR10+ and Dolby Vision support                                                                                    │
+│ - Tizen OS smart platform                                                                                            │
+│                                                                                                                      │
+│ ### Technical Specifications                                                                                         │
+│ | Spec | Details |                                                                                                   │
+│ |------|----------|                                                                                                  │
+│ | Display | 4K OLED, 3840x2160 |                                                                                     │
+│ | Refresh Rate | 144Hz |                                                                                             │
+│ | HDR Support | HDR10+, Dolby Vision |                                                                               │
+│ | Smart Platform | Tizen OS |                                                                                        │
+│ | Ports | 4x HDMI 2.1, 2x USB, 1x Ethernet |                                                                         │
+│ | Dimensions                                                                                                         │
+│ ...                                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  [a]ccept / [d]eny / [i]gnore > Applied fix to cs-brief-SAM-OLED-65
+╭───────────────────────────────────────────── Fix: cs-brief-SAM-OLED-65 ──────────────────────────────────────────────╮
+│ ERROR  Unclear which process applies for defects discovered within 15 days: store return or manufacturer warranty    │
+│                                                                                                                      │
+│ Claim A:  "Report Damage/Defects Within: 48 hours of delivery. Resolution: Replacement shipment or full refund at no │
+│ cost."                                                                                                               │
+│ Claim B:  "90-Day Satisfaction Guarantee: Full refund or replacement — no restocking fee, no questions asked"        │
+│ Reasoning:  A customer who receives a defective item within 15 days could be directed to either the store's 48-hour  │
+│ defect reporting process (SCENARIO B) or told to contact Samsung for the 90-day satisfaction guarantee. The document │
+│ does not clarify whether SCENARIO B is the store's way of handling defects within the 15-day window, or whether      │
+│ customers should bypass the store and go directly to Samsung. This creates ambiguity about which entity (store or    │
+│ Samsung) should process the claim.                                                                                   │
+│                                                                                                                      │
+│ cs-brief-SAM-OLED-65 (conflict detected)                                                                             │
+│ ├── parents                                                                                                          │
+│ │   ├── product-offer-SAM-OLED-65 (product_offer_view)                                                               │
+│ │   ├── idx-return_policy (policy_index)                                                                             │
+│ │   ├── idx-shipping_policy (policy_index)                                                                           │
+│ │   └── idx-warranty_policy (policy_index)                                                                           │
+│ └── evidence sources                                                                                                 │
+│     ├── cs-brief-SAM-OLED-65 (cs_product_brief)                                                                      │
+│     ├── cs-brief-DYS-V15-DETECT (cs_product_brief)                                                                   │
+│     └── cs-brief-KAI-PRO-KNIFE8 (cs_product_brief)                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────── Proposed rewrite ──────────────────────────────────────────────────╮
+│ Description:  The contradiction was resolved by clarifying the relationship between the two claims. Claim A (15-day  │
+│ return window for unopened items) and Claim B (90-Day Satisfaction Guarantee) are not mutually exclusive—they        │
+│ operate in different scenarios and timeframes. The 15-day window is the store's return policy for unopened items,    │
+│ while the 90-Day Satisfaction Guarantee is Samsung's manufacturer warranty that covers defects discovered after the  │
+│ store return window closes (up to 90 days). The artifact has been updated to explicitly clarify that the 90-Day      │
+│ Satisfaction Guarantee applies to defects discovered within 90 days of delivery, even if outside the 15-day store    │
+│ return window, and to emphasize that customers should contact Samsung (not the store) for warranty claims after day  │
+│ 15. This reconciles both claims as complementary rather than contradictory.                                          │
+│ Explanation:  The contradiction was resolved by clarifying the relationship between the two claims. Claim A (15-day  │
+│ return window for unopened items) and Claim B (90-Day Satisfaction Guarantee) are not mutually exclusive—they        │
+│ operate in different scenarios and timeframes. The 15-day window is the store's return policy for unopened items,    │
+│ while the 90-Day Satisfaction Guarantee is Samsung's manufacturer warranty that covers defects discovered after the  │
+│ store return window closes (up to 90 days). The artifact has been updated to explicitly clarify that the 90-Day      │
+│ Satisfaction Guarantee applies to defects discovered within 90 days of delivery, even if outside the 15-day store    │
+│ return window, and to emphasize that customers should contact Samsung (not the store) for warranty claims after day  │
+│ 15. This reconciles both claims as complementary rather than contradictory.                                          │
+│                                                                                                                      │
+│ # CUSTOMER SERVICE REFERENCE BRIEF                                                                                   │
+│ ## Samsung 65" S95D OLED Smart TV (SAM-OLED-65)                                                                      │
+│                                                                                                                      │
+│ ---                                                                                                                  │
+│                                                                                                                      │
+│ ## PRODUCT OVERVIEW                                                                                                  │
+│                                                                                                                      │
+│ **Product Name:** Samsung 65" S95D OLED Smart TV                                                                     │
+│ **SKU:** SAM-OLED-65                                                                                                 │
+│ **UPC:** 887276846293                                                                                                │
+│ **Brand:** Samsung Electronics America                                                                               │
+│ **Category:** Electronics > TVs > OLED                                                                               │
+│ **Model Year:** 2024                                                                                                 │
+│                                                                                                                      │
+│ ### Key Features                                                                                                     │
+│ - 65-inch 4K OLED display (3840x2160 resolution)                                                                     │
+│ - 144Hz refresh rate (ideal for gaming)                                                                              │
+│ - Anti-glare coating                                                                                                 │
+│ - Neural Quantum Processor                                                                                           │
+│ - Dolby Atmos audio                                                                                                  │
+│ - HDR10+ and Dolby Vision support                                                                                    │
+│ - Tizen OS smart platform                                                                                            │
+│                                                                                                                      │
+│ ### Technical Specifications                                                                                         │
+│ | Spec | Details |                                                                                                   │
+│ |------|---------|                                                                                                   │
+│ | Display | 4K OLED, 3840x2160 |                                                                                     │
+│ | Refresh Rate | 144Hz |                                                                                             │
+│ | HDR Support | HDR10+, Dolby Vision |                                                                               │
+│ | Smart Platform | Tizen OS |                                                                                        │
+│ | Ports | 4x HDMI 2.1, 2x USB, 1x Ethernet |                                                                         │
+│ | Dimensions |                                                                                                       │
+│ ...                                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  [a]ccept / [d]eny / [i]gnore > Applied fix to cs-brief-SAM-OLED-65
+
+Fix summary:
+  Applied: 3
+  Denied: 0
+  Ignored: 0
