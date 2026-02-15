@@ -81,10 +81,10 @@ class TestNormalizeOutput:
         result = _normalize_output(text, case_path)
         assert result == "Loading pipeline from <CASE_DIR>/pipeline.py"
 
-    def test_normalize_llm_stats(self):
+    def test_normalize_llm_stats_dropped(self):
         text = "LLM calls: 5, Tokens: 12,345, Est. cost: $0.42"
         result = _normalize_output(text, Path("/tmp/case"))
-        assert result == "LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>"
+        assert result == ""  # LLM stats lines are dropped entirely
 
     def test_normalize_token_cost_fragment(self):
         text = "Used 1,234 tokens, $0.05 for this step"
@@ -108,10 +108,12 @@ class TestNormalizeOutput:
     def test_normalize_build_status(self):
         built = "  ✓ bios (level 0)  3 built  1.2s"
         cached = "  ✓ bios (level 0)  3 cached  0.0s"
+        mixed = "  ✓ bios (level 0)  1 built, 2 cached  0.5s"
         result_built = _normalize_output(built, Path("/tmp/case"))
         result_cached = _normalize_output(cached, Path("/tmp/case"))
-        assert result_built == result_cached
-        assert "<N> <STATUS>" in result_built
+        result_mixed = _normalize_output(mixed, Path("/tmp/case"))
+        assert result_built == result_cached == result_mixed
+        assert "<BUILD_COUNTS>" in result_built
 
     def test_normalize_materialization(self):
         text1 = "    └─ search  materialized"

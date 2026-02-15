@@ -5,10 +5,10 @@
 │ Layers: 4                                                                                                            │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ product_offers (level 0)  <N> <STATUS>  <TIME>
-  ✓ policies (level 0)  <N> <STATUS>  <TIME>
-  ✓ policy_index (level 1)  <N> <STATUS>  <TIME>
-  ✓ cs_product_brief (level 2)  <N> <STATUS>  <TIME>
+  ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ policies (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ policy_index (level 1)  <BUILD_COUNTS>  <TIME>
+  ✓ cs_product_brief (level 2)  <BUILD_COUNTS>  <TIME>
     └─ cs-search  <MATERIALIZED>
        └─ embeddings  3/3  <TIME>  (fastembed, <MATERIALIZED>: 3)
     └─ cs-search  <MATERIALIZED>
@@ -24,5 +24,4 @@
 │   → cs-search    │ search_index │       │        │ <MATERIALIZED> │
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
-Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
-LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>
+<BUILD_TOTAL>

@@ -94,4 +94,17 @@ case = {
         "validate_clean": "validate_clean.json",
         "validate_cascade": "validate_cascade.json",
     },
+    # Regex masks — lines matching any pattern are excluded from golden comparison.
+    # Used for non-deterministic output that can't be normalized to stable placeholders.
+    "output_masks": {
+        # Fix output is highly LLM-dependent (violation count, proposed rewrites, etc.)
+        "fix": [r"."],  # skip entire output — content depends on LLM non-determinism
+        # Validate stdout varies in violation details
+        "validate_initial": [r"active violation"],
+        "validate_clean": [r"active violation"],
+    },
+    # Files created by steps that should be cleaned up between runs
+    "cleanup": [
+        "sources/competitors/acme_q1_update.md",
+    ],
 }
