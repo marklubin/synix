@@ -3,6 +3,13 @@
 The ``synix://`` scheme makes citations unambiguous and machine-parseable
 in any text format.  The default output format is markdown links:
 ``[display text](synix://label)``.
+
+Label character set follows RFC 3986 *unreserved* characters:
+``ALPHA / DIGIT / "-" / "." / "_" / "~"``  (i.e., ``[\\w.~-]+``).
+
+The scheme is intentionally unversioned.  If a future breaking change
+requires a new grammar, version it via the path component
+(``synix://v2/label``) rather than a new scheme name.
 """
 
 from __future__ import annotations
@@ -12,8 +19,9 @@ from dataclasses import dataclass
 
 SYNIX_SCHEME = "synix"
 
-# Matches synix://label where label is word chars, hyphens, and dots
-_URI_RE = re.compile(r"synix://([\w.-]+)")
+# Label character set: RFC 3986 unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"
+# \w covers [a-zA-Z0-9_], so we add . ~ -
+_URI_RE = re.compile(r"synix://([\w.~-]+)")
 
 
 @dataclass

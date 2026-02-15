@@ -705,12 +705,14 @@ class CitationValidator(BaseValidator):
     Config:
         layers: list of layer names to check
         llm_config: dict with LLM settings
-        max_artifacts: max artifacts to check (default 20)
+        max_artifacts: max artifacts to check (default: all)
+        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
     """
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         config = getattr(self, "_config", {})
-        max_artifacts = config.get("max_artifacts", 20)
+        max_artifacts = config.get("max_artifacts")  # None = check all
+        fail_open = config.get("fail_open", False)
 
         violations: list[Violation] = []
 
@@ -725,19 +727,33 @@ class CitationValidator(BaseValidator):
 
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
-            except Exception:
-                logger.warning("citation: could not create LLM client, skipping")
-                return violations
+            except Exception as exc:
+                if fail_open:
+                    logger.warning("citation: could not create LLM client, skipping (fail_open=True)")
+                    return violations
+                msg = "citation validator: could not create LLM client"
+                raise RuntimeError(msg) from exc
 
         # Load prompt template
+        prompt_path = Path(__file__).parent / "prompts" / "citation_check.txt"
         try:
-            prompt_path = Path(__file__).parent / "prompts" / "citation_check.txt"
             prompt_template = prompt_path.read_text()
-        except (FileNotFoundError, OSError):
-            logger.warning("citation: prompt file not found at %s", prompt_path)
-            return violations
+        except (FileNotFoundError, OSError) as exc:
+            if fail_open:
+                logger.warning("citation: prompt not found at %s (fail_open=True)", prompt_path)
+                return violations
+            raise RuntimeError(f"citation validator: prompt not found at {prompt_path}") from exc
 
-        for artifact in artifacts[:max_artifacts]:
+        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
+        if max_artifacts is not None and len(artifacts) > max_artifacts:
+            logger.info(
+                "citation: checking %d of %d artifacts (max_artifacts=%d)",
+                max_artifacts,
+                len(artifacts),
+                max_artifacts,
+            )
+
+        for artifact in target:
             try:
                 existing = extract_citations(artifact.content)
                 existing_uris = ", ".join(c.uri for c in existing) if existing else "(none)"

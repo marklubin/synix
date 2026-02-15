@@ -134,7 +134,7 @@ class TestCitationValidator:
         assert v.violation_id != ""
 
     def test_llm_error_graceful_skip(self, store, provenance, ctx):
-        """LLM raises an exception -> no crash, no violations."""
+        """LLM raises an exception per-artifact -> no crash, no violations."""
         art = _make_artifact(
             "core-1",
             "core_memory",
@@ -162,17 +162,62 @@ class TestCitationValidator:
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_no_llm_client_returns_empty(self, store, provenance, ctx):
-        """No LLM config and no _llm_client -> returns empty (can't create client)."""
+    def test_bad_llm_config_fails_closed(self, store, provenance, ctx):
+        """Invalid LLM config -> raises RuntimeError by default (fail closed)."""
         art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
 
         validator = get_validator("citation")
-        validator._config = {}
+        # Use a provider that will fail during client creation
+        validator._config = {"llm_config": {"provider": "nonexistent_provider_xyz"}}
+        with pytest.raises(RuntimeError, match="could not create LLM client"):
+            validator.validate([art], ctx)
+
+    def test_bad_llm_config_fail_open(self, store, provenance, ctx):
+        """With fail_open=True, bad LLM config returns empty."""
+        art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
+
+        validator = get_validator("citation")
+        validator._config = {"llm_config": {"provider": "nonexistent_provider_xyz"}, "fail_open": True}
         violations = validator.validate([art], ctx)
         assert violations == []
 
+    def test_missing_prompt_fails_closed(self, store, provenance, ctx, tmp_path):
+        """Missing prompt file raises RuntimeError by default."""
+        import synix.build.validators as vmod
+
+        art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
+        mock_llm = _MockLLMClient('{"ungrounded": []}')
+
+        # Temporarily point prompts to a non-existent directory
+        orig_file = vmod.__file__
+        vmod.__file__ = str(tmp_path / "fake" / "validators.py")
+        try:
+            validator = get_validator("citation")
+            validator._config = {"_llm_client": mock_llm}
+            with pytest.raises(RuntimeError, match="prompt not found"):
+                validator.validate([art], ctx)
+        finally:
+            vmod.__file__ = orig_file
+
+    def test_missing_prompt_fail_open(self, store, provenance, ctx, tmp_path):
+        """With fail_open=True, missing prompt returns empty."""
+        import synix.build.validators as vmod
+
+        art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
+        mock_llm = _MockLLMClient('{"ungrounded": []}')
+
+        orig_file = vmod.__file__
+        vmod.__file__ = str(tmp_path / "fake" / "validators.py")
+        try:
+            validator = get_validator("citation")
+            validator._config = {"_llm_client": mock_llm, "fail_open": True}
+            violations = validator.validate([art], ctx)
+            assert violations == []
+        finally:
+            vmod.__file__ = orig_file
+
     def test_max_artifacts_respected(self, store, provenance, ctx):
-        """Only first max_artifacts are checked."""
+        """Only first max_artifacts are checked when configured."""
         arts = []
         for i in range(5):
             a = _make_artifact(f"core-{i}", "core_memory", content=f"content {i}", layer_name="core")
@@ -185,6 +230,21 @@ class TestCitationValidator:
         validator._config = {"_llm_client": mock_llm, "max_artifacts": 2}
         validator.validate(arts, ctx)
         assert len(mock_llm.calls) == 2
+
+    def test_all_artifacts_checked_by_default(self, store, provenance, ctx):
+        """Without max_artifacts, all artifacts are checked."""
+        arts = []
+        for i in range(5):
+            a = _make_artifact(f"core-{i}", "core_memory", content=f"content {i}", layer_name="core")
+            store.save_artifact(a, "core", 3)
+            arts.append(a)
+
+        mock_llm = _MockLLMClient('{"ungrounded": []}')
+
+        validator = get_validator("citation")
+        validator._config = {"_llm_client": mock_llm}
+        validator.validate(arts, ctx)
+        assert len(mock_llm.calls) == 5
 
     def test_registered_in_registry(self):
         v = get_validator("citation")

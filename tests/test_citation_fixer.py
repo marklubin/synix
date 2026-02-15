@@ -229,6 +229,28 @@ class TestCitationEnrichmentFixer:
         assert action.action == "unresolved"
         assert "parse" in action.description.lower()
 
+    def test_missing_prompt_file_skip(self, store, provenance, tmp_path):
+        """Fixer skips when prompt file is missing."""
+        import synix.build.fixers as fmod
+
+        art = _make_artifact("core-1", "core_memory", "Some content.", layer_name="core", layer_level=3)
+        store.save_artifact(art, "core", 3)
+
+        mock_llm = _MockLLMClient('{"status": "resolved", "content": "x", "explanation": "y"}')
+
+        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+
+        # Point prompts to non-existent directory
+        orig_file = fmod.__file__
+        fmod.__file__ = str(tmp_path / "fake" / "fixers.py")
+        try:
+            fixer = CitationEnrichmentFixer()
+            action = fixer.fix(_make_violation(), ctx)
+            assert action.action == "skip"
+            assert "prompt" in action.description.lower() or "not found" in action.description.lower()
+        finally:
+            fmod.__file__ = orig_file
+
     def test_registered_in_registry(self):
         fixer = get_fixer("citation_enrichment")
         assert isinstance(fixer, CitationEnrichmentFixer)

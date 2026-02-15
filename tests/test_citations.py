@@ -54,6 +54,22 @@ class TestParseUri:
         c = parse_uri("synix://my_artifact_name")
         assert c.ref == "my_artifact_name"
 
+    def test_tilde_in_label(self):
+        c = parse_uri("synix://draft~1")
+        assert c.ref == "draft~1"
+
+    def test_all_unreserved_chars(self):
+        """RFC 3986 unreserved = ALPHA / DIGIT / '-' / '.' / '_' / '~'."""
+        c = parse_uri("synix://A-z_0.9~test")
+        assert c.ref == "A-z_0.9~test"
+
+    def test_reserved_chars_rejected(self):
+        """Colons, slashes, etc. are not valid in labels."""
+        with pytest.raises(ValueError, match="Invalid synix URI"):
+            parse_uri("synix://foo:bar")
+        with pytest.raises(ValueError, match="Invalid synix URI"):
+            parse_uri("synix://foo/bar")
+
     def test_missing_ref_raises(self):
         with pytest.raises(ValueError, match="Invalid synix URI"):
             parse_uri("synix://")
@@ -152,6 +168,18 @@ class TestExtractCitations:
         citations = extract_citations(text)
         assert len(citations) == 1
         assert citations[0].ref == "intel-acme.v2.1"
+
+    def test_tilde_in_label(self):
+        citations = extract_citations("see synix://draft~1 here")
+        assert len(citations) == 1
+        assert citations[0].ref == "draft~1"
+
+    def test_stops_at_reserved_chars(self):
+        """Extraction stops at characters outside the unreserved set."""
+        citations = extract_citations("synix://foo:bar and synix://baz/qux")
+        assert len(citations) == 2
+        assert citations[0].ref == "foo"
+        assert citations[1].ref == "baz"
 
     def test_mixed_markdown_and_plain(self):
         text = "ref [link](synix://a) and plain synix://b here"

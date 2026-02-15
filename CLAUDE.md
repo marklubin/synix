@@ -122,6 +122,8 @@ Every PR must link to the GitHub issues it addresses:
 - **DO NOT** build a web UI
 - **Every module must have at least basic tests**
 - Write tests BEFORE or ALONGSIDE the module, never after
+- **Tests must cover failure modes, not just happy paths** — for every new validator, fixer, or LLM-backed component: test infra failures (missing prompt files, bad LLM config), test fail-closed behavior (default should raise, not silently pass), test edge cases in input parsing (special characters, empty inputs, malformed responses). Happy-path-only tests are incomplete.
+- **Validators and fixers fail closed by default** — if the component cannot do its job (no LLM client, missing prompt file), it must raise, not silently return empty results. Use `fail_open=True` in config to opt into graceful degradation.
 - Mock the LLM for unit and integration tests — only E2E hits real API
 - Use `tmp_path` for all filesystem tests — no shared state
 - **Every functional behavior change must have e2e test coverage** — unit tests alone are insufficient. If a change affects CLI output, plan display, cache detection, or artifact metadata, write an e2e test that exercises the full path.

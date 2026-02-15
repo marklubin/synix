@@ -462,7 +462,18 @@ class CitationEnrichmentFixer(BaseFixer):
             source_label_map = "(no sources available)"
 
         # Build prompt
-        prompt_template = (Path(__file__).parent / "prompts" / "citation_enrichment.txt").read_text()
+        prompt_path = Path(__file__).parent / "prompts" / "citation_enrichment.txt"
+        try:
+            prompt_template = prompt_path.read_text()
+        except (FileNotFoundError, OSError):
+            return FixAction(
+                label=violation.label,
+                action="skip",
+                original_artifact_id=artifact.artifact_id,
+                new_content="",
+                new_artifact_id="",
+                description=f"Prompt file not found: {prompt_path}",
+            )
         prompt = (
             prompt_template.replace("{claim}", claim)
             .replace("{suggestion}", suggestion)
