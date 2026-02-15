@@ -60,6 +60,7 @@ def pipeline_argument(fn):
 
 
 @click.group()
+@click.version_option(package_name="synix")
 def main():
     """Synix — A build system for agent memory."""
     pass

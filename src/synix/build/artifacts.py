@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
 from synix.core.errors import atomic_write
 from synix.core.models import Artifact
+
+logger = logging.getLogger(__name__)
+
+MANIFEST_FILENAME = "manifest.json"
+"""Canonical name for the build manifest file."""
+
+_REQUIRED_ENTRY_KEYS = {"path", "layer"}
 
 
 class ArtifactStore:
@@ -17,13 +25,41 @@ class ArtifactStore:
     def __init__(self, build_dir: str | Path):
         self.build_dir = Path(build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
-        self._manifest_path = self.build_dir / "manifest.json"
+        self._manifest_path = self.build_dir / MANIFEST_FILENAME
         self._manifest: dict[str, dict] = self._load_manifest()
 
     def _load_manifest(self) -> dict[str, dict]:
-        if self._manifest_path.exists():
-            return json.loads(self._manifest_path.read_text())
-        return {}
+        if not self._manifest_path.exists():
+            return {}
+
+        try:
+            raw = json.loads(self._manifest_path.read_text())
+        except json.JSONDecodeError as exc:
+            logger.warning("manifest.json is not valid JSON (%s), starting empty", exc)
+            return {}
+
+        if not isinstance(raw, dict):
+            logger.warning("manifest.json top-level is not a dict, starting empty")
+            return {}
+
+        result: dict[str, dict] = {}
+        skipped = 0
+        for key, value in raw.items():
+            # Skip reserved metadata keys
+            if key.startswith("_"):
+                continue
+            if not isinstance(value, dict):
+                skipped += 1
+                continue
+            if not _REQUIRED_ENTRY_KEYS.issubset(value):
+                skipped += 1
+                continue
+            result[key] = value
+
+        if skipped:
+            logger.warning("manifest.json: skipped %d invalid entries", skipped)
+
+        return result
 
     def _save_manifest(self) -> None:
         atomic_write(self._manifest_path, json.dumps(self._manifest, indent=2))

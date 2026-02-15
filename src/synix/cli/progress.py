@@ -253,6 +253,58 @@ class BuildProgress:
             )
 
 
+class PlainBuildProgress:
+    """Plain-text progress reporter for CI / piped output.
+
+    Prints timestamped lines via console.print() instead of using Rich Live.
+    Implements the same callback interface as BuildProgress so the runner
+    can use either interchangeably.
+    """
+
+    def __init__(self, console: Console | None = None) -> None:
+        from rich.console import Console as _Console
+
+        self._console = console or _Console()
+
+    def _ts(self) -> str:
+        import datetime
+
+        return datetime.datetime.now().strftime("%H:%M:%S")
+
+    def layer_start(self, name: str, level: int) -> None:
+        self._console.print(f"[{self._ts()}] layer {name} (level {level}) started")
+
+    def layer_finish(self, name: str, built: int, cached: int) -> None:
+        self._console.print(f"[{self._ts()}] layer {name} done  built={built} cached={cached}")
+
+    def artifact_start(self, name: str) -> None:
+        self._console.print(f"[{self._ts()}]   artifact {name} started")
+
+    def artifact_finish(self, name: str, elapsed: float = 0.0) -> None:
+        self._console.print(f"[{self._ts()}]   artifact {name} done  {elapsed:.1f}s")
+
+    def artifact_cached(self, name: str) -> None:
+        self._console.print(f"[{self._ts()}]   artifact {name} cached")
+
+    def projection_start(self, name: str, triggered_by: str | None = None) -> None:
+        self._console.print(f"[{self._ts()}]   projection {name} started")
+
+    def projection_finish(self, name: str, triggered_by: str | None = None) -> None:
+        self._console.print(f"[{self._ts()}]   projection {name} done")
+
+    def projection_cached(self, name: str, triggered_by: str | None = None) -> None:
+        self._console.print(f"[{self._ts()}]   projection {name} cached")
+
+    def embedding_start(self, count: int, provider: str) -> None:
+        self._console.print(f"[{self._ts()}]   embeddings started  count={count} provider={provider}")
+
+    def embedding_progress(self, completed: int, total: int) -> None:
+        self._console.print(f"[{self._ts()}]   embeddings {completed}/{total}")
+
+    def embedding_finish(self, count: int, cached: int, generated: int) -> None:
+        self._console.print(f"[{self._ts()}]   embeddings done  count={count} cached={cached} generated={generated}")
+
+
 def _short_name(name: str) -> str:
     """Shorten artifact description for display."""
     for prefix in (

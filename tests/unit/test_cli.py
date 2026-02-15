@@ -207,6 +207,41 @@ def test_info_shows_logo(runner, tmp_path, monkeypatch):
     assert "███" in result.output
 
 
+def test_version_flag(runner):
+    """synix --version exits 0 and shows version string."""
+    result = runner.invoke(main, ["--version"])
+    assert result.exit_code == 0
+    assert "synix" in result.output.lower() or "version" in result.output.lower()
+    # Should contain a semver-like pattern
+    import re
+
+    assert re.search(r"\d+\.\d+", result.output), f"No version found in: {result.output}"
+
+
+def test_build_plain_option_in_help(runner):
+    """synix build --help shows --plain option."""
+    result = runner.invoke(main, ["build", "--help"])
+    assert result.exit_code == 0
+    assert "--plain" in result.output
+
+
+def test_run_plain_option_in_help(runner):
+    """synix run --help shows --plain option."""
+    result = runner.invoke(main, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--plain" in result.output
+
+
+def test_build_error_shows_exception_type(runner, tmp_path):
+    """Default verbosity includes exception type name in error output."""
+    bad_pipeline = tmp_path / "bad_pipeline.py"
+    bad_pipeline.write_text("raise ValueError('test error')")
+    result = runner.invoke(main, ["build", str(bad_pipeline)])
+    assert result.exit_code != 0
+    # Should show the exception type name
+    assert "Error" in result.output
+
+
 def test_build_does_not_import_search():
     """The build module must not directly import search — uses projection registry instead.
 

@@ -20,6 +20,27 @@ class LLMResponse:
     total_tokens: int
 
 
+# ---------------------------------------------------------------------------
+# OpenAI model family detection
+# ---------------------------------------------------------------------------
+
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4")
+"""Reasoning models: no temperature, use max_completion_tokens."""
+
+_NEW_TOKEN_PARAM_PREFIXES = ("gpt-5",)
+"""Non-reasoning models that require max_completion_tokens instead of max_tokens."""
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """Return True for OpenAI reasoning models (o1, o3, o4 family)."""
+    return any(model.startswith(p) for p in _REASONING_MODEL_PREFIXES)
+
+
+def _needs_max_completion_tokens(model: str) -> bool:
+    """Return True for models that require max_completion_tokens instead of max_tokens."""
+    return _is_reasoning_model(model) or any(model.startswith(p) for p in _NEW_TOKEN_PARAM_PREFIXES)
+
+
 class LLMClient:
     """Unified LLM client that dispatches to Anthropic or OpenAI SDKs.
 
@@ -155,12 +176,18 @@ class LLMClient:
 
         for attempt in range(2):
             try:
-                response = self._client.chat.completions.create(
-                    model=self.config.model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=messages,
-                )
+                kwargs: dict = {
+                    "model": self.config.model,
+                    "messages": messages,
+                }
+                if _needs_max_completion_tokens(self.config.model):
+                    kwargs["max_completion_tokens"] = max_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
+                if not _is_reasoning_model(self.config.model):
+                    kwargs["temperature"] = temperature
+
+                response = self._client.chat.completions.create(**kwargs)
                 choice = response.choices[0]
                 content = choice.message.content or ""
                 usage = response.usage
