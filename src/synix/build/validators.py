@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections import deque
@@ -22,6 +23,8 @@ from synix.build.provenance import ProvenanceTracker
 from synix.core.citations import extract_citations
 from synix.core.errors import atomic_write
 from synix.core.models import Artifact, Pipeline
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -573,13 +576,15 @@ class SemanticConflictValidator(BaseValidator):
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
             except Exception:
-                return violations  # Can't validate without LLM
+                logger.warning("semantic_conflict: could not create LLM client, skipping")
+                return violations
 
         # Load prompt template
         try:
             prompt_path = Path(__file__).parent / "prompts" / "semantic_conflict.txt"
             prompt_template = prompt_path.read_text()
         except (FileNotFoundError, OSError):
+            logger.warning("semantic_conflict: prompt file not found at %s", prompt_path)
             return violations
 
         # Optional search index for claim tracing (lazy import to avoid build→search dep)
@@ -658,7 +663,7 @@ class SemanticConflictValidator(BaseValidator):
                     )
 
             except Exception:
-                # LLM errors → skip this artifact gracefully
+                logger.warning("semantic_conflict: error checking %s, skipping", artifact.label, exc_info=True)
                 continue
 
         if search_index is not None:
@@ -721,6 +726,7 @@ class CitationValidator(BaseValidator):
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
             except Exception:
+                logger.warning("citation: could not create LLM client, skipping")
                 return violations
 
         # Load prompt template
@@ -728,6 +734,7 @@ class CitationValidator(BaseValidator):
             prompt_path = Path(__file__).parent / "prompts" / "citation_check.txt"
             prompt_template = prompt_path.read_text()
         except (FileNotFoundError, OSError):
+            logger.warning("citation: prompt file not found at %s", prompt_path)
             return violations
 
         for artifact in artifacts[:max_artifacts]:
@@ -772,6 +779,7 @@ class CitationValidator(BaseValidator):
                     )
 
             except Exception:
+                logger.warning("citation: error checking %s, skipping", artifact.label, exc_info=True)
                 continue
 
         return violations

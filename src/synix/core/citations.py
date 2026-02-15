@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 SYNIX_SCHEME = "synix"
 
-# Matches synix://label where label is word chars + hyphens
-_URI_RE = re.compile(r"synix://([\w-]+)")
+# Matches synix://label where label is word chars, hyphens, and dots
+_URI_RE = re.compile(r"synix://([\w.-]+)")
 
 
 @dataclass
