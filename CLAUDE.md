@@ -122,6 +122,12 @@ Every PR must link to the GitHub issues it addresses:
 - **DO NOT** build a web UI
 - **Every module must have at least basic tests**
 - Write tests BEFORE or ALONGSIDE the module, never after
+- **Fail fast and loud — never eat errors silently.** This is a core design principle across the entire codebase:
+  - **No bare `except: pass/continue/return []`** in build logic, validators, fixers, or transforms. Every `except` block must either re-raise, log a warning with `exc_info=True`, or return a result that explicitly communicates the failure (e.g., `action="skip"` with a description of why).
+  - **Validators and fixers fail closed by default** — if the component cannot do its job (no LLM client, missing prompt file, unparseable LLM response), it must raise `RuntimeError`/`ValueError`, not silently return empty results. Use `fail_open=True` in config to opt into graceful degradation.
+  - **Never make "best effort corrections" on behalf of the user** unless the correction is trivially obvious, well-documented, and the user explicitly opted in. If data is ambiguous or missing, surface the error — don't guess.
+  - **Acceptable exceptions**: cache files (corrupted cache → rebuild), type-probing patterns (try int/float/date parsing), plan-mode estimation (read-only speculation), and CLI display helpers. These may degrade silently because they have no correctness impact.
+- **Tests must cover failure modes, not just happy paths** — for every new validator, fixer, or LLM-backed component: test infra failures (missing prompt files, bad LLM config), test fail-closed behavior (default should raise, not silently pass), test edge cases in input parsing (special characters, empty inputs, malformed responses). Happy-path-only tests are incomplete.
 - Mock the LLM for unit and integration tests — only E2E hits real API
 - Use `tmp_path` for all filesystem tests — no shared state
 - **Every functional behavior change must have e2e test coverage** — unit tests alone are insufficient. If a change affects CLI output, plan display, cache detection, or artifact metadata, write an e2e test that exercises the full path.

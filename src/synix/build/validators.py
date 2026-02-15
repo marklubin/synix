@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections import deque
@@ -19,8 +20,11 @@ from uuid import uuid4
 
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
+from synix.core.citations import extract_citations
 from synix.core.errors import atomic_write
 from synix.core.models import Artifact, Pipeline
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -520,19 +524,24 @@ class PIIValidator(BaseValidator):
 
 
 def _parse_conflict_response(response_text: str) -> list[dict]:
-    """Extract conflict list from LLM response (JSON in code blocks or raw)."""
+    """Extract conflict list from LLM response (JSON in code blocks or raw).
+
+    Raises ValueError if the response cannot be parsed as valid JSON.
+    """
     # Try to extract JSON from code blocks first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
     text = match.group(1).strip() if match else response_text.strip()
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        logger.warning("semantic_conflict: LLM returned unparseable response: %s", text[:200])
+        raise ValueError(f"Could not parse LLM conflict response: {text[:200]}") from exc
 
     conflicts = data.get("conflicts", [])
     if not isinstance(conflicts, list):
-        return []
+        logger.warning("semantic_conflict: 'conflicts' key is not a list in response")
+        raise ValueError("LLM conflict response 'conflicts' field is not a list") from None
 
     # Normalize: ensure source hint fields have defaults
     for c in conflicts:
@@ -551,12 +560,14 @@ class SemanticConflictValidator(BaseValidator):
     Config:
         layers: list of layer names to check
         llm_config: dict with LLM settings
-        max_artifacts: max artifacts to check (default 20)
+        max_artifacts: max artifacts to check (default: all)
+        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
     """
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         config = getattr(self, "_config", {})
-        max_artifacts = config.get("max_artifacts", 20)
+        max_artifacts = config.get("max_artifacts")  # None = check all
+        fail_open = config.get("fail_open", False)
 
         violations: list[Violation] = []
 
@@ -571,15 +582,22 @@ class SemanticConflictValidator(BaseValidator):
 
                 llm_cfg = LLMConfig.from_dict(llm_config_dict)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
-            except Exception:
-                return violations  # Can't validate without LLM
+            except Exception as exc:
+                if fail_open:
+                    logger.warning("semantic_conflict: could not create LLM client (fail_open=True)")
+                    return violations
+                msg = "semantic_conflict validator: could not create LLM client"
+                raise RuntimeError(msg) from exc
 
         # Load prompt template
+        prompt_path = Path(__file__).parent / "prompts" / "semantic_conflict.txt"
         try:
-            prompt_path = Path(__file__).parent / "prompts" / "semantic_conflict.txt"
             prompt_template = prompt_path.read_text()
-        except (FileNotFoundError, OSError):
-            return violations
+        except (FileNotFoundError, OSError) as exc:
+            if fail_open:
+                logger.warning("semantic_conflict: prompt not found at %s (fail_open=True)", prompt_path)
+                return violations
+            raise RuntimeError(f"semantic_conflict validator: prompt not found at {prompt_path}") from exc
 
         # Optional search index for claim tracing (lazy import to avoid build→search dep)
         search_index = None
@@ -591,9 +609,18 @@ class SemanticConflictValidator(BaseValidator):
             if search_db.exists():
                 search_index = _indexer.SearchIndex(search_db)
         except Exception:
-            pass
+            logger.warning("semantic_conflict: could not load search index for claim tracing")
 
-        for artifact in artifacts[:max_artifacts]:
+        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
+        if max_artifacts is not None and len(artifacts) > max_artifacts:
+            logger.info(
+                "semantic_conflict: checking %d of %d artifacts (max_artifacts=%d)",
+                max_artifacts,
+                len(artifacts),
+                max_artifacts,
+            )
+
+        for artifact in target:
             try:
                 prompt = prompt_template.replace("{content}", artifact.content)
                 response = client.complete(
@@ -626,7 +653,11 @@ class SemanticConflictValidator(BaseValidator):
                                         if r.label not in source_ids:
                                             source_ids.append(r.label)
                                 except Exception:
-                                    pass
+                                    logger.warning(
+                                        "semantic_conflict: search query failed for claim in %s",
+                                        artifact.label,
+                                        exc_info=True,
+                                    )
 
                     vid = compute_violation_id("semantic_conflict", artifact.label, claim_a, claim_b)
 
@@ -657,11 +688,145 @@ class SemanticConflictValidator(BaseValidator):
                     )
 
             except Exception:
-                # LLM errors → skip this artifact gracefully
+                logger.warning("semantic_conflict: error checking %s, skipping", artifact.label, exc_info=True)
                 continue
 
         if search_index is not None:
             search_index.close()
+
+        return violations
+
+
+# ---------------------------------------------------------------------------
+# Citation check helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_citation_response(response_text: str) -> list[dict]:
+    """Extract ungrounded claims list from LLM response (JSON in code blocks or raw).
+
+    Raises ValueError if the response cannot be parsed as valid JSON.
+    """
+    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
+    text = match.group(1).strip() if match else response_text.strip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("citation: LLM returned unparseable response: %s", text[:200])
+        raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from exc
+
+    ungrounded = data.get("ungrounded", [])
+    if not isinstance(ungrounded, list):
+        logger.warning("citation: 'ungrounded' key is not a list in response")
+        raise ValueError("LLM citation response 'ungrounded' field is not a list") from None
+
+    for item in ungrounded:
+        item.setdefault("claim", "")
+        item.setdefault("suggestion", "")
+
+    return ungrounded
+
+
+@register_validator("citation")
+class CitationValidator(BaseValidator):
+    """LLM-based validator that checks whether claims are grounded by synix:// citations.
+
+    Config:
+        layers: list of layer names to check
+        llm_config: dict with LLM settings
+        max_artifacts: max artifacts to check (default: all)
+        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
+    """
+
+    def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
+        config = getattr(self, "_config", {})
+        max_artifacts = config.get("max_artifacts")  # None = check all
+        fail_open = config.get("fail_open", False)
+
+        violations: list[Violation] = []
+
+        # Get LLM client
+        client = config.get("_llm_client")
+        if client is None:
+            llm_config_dict = config.get("llm_config", {})
+            try:
+                from synix.build.cassette import maybe_wrap_client
+                from synix.build.llm_client import LLMClient
+                from synix.core.config import LLMConfig
+
+                llm_cfg = LLMConfig.from_dict(llm_config_dict)
+                client = maybe_wrap_client(LLMClient(llm_cfg))
+            except Exception as exc:
+                if fail_open:
+                    logger.warning("citation: could not create LLM client, skipping (fail_open=True)")
+                    return violations
+                msg = "citation validator: could not create LLM client"
+                raise RuntimeError(msg) from exc
+
+        # Load prompt template
+        prompt_path = Path(__file__).parent / "prompts" / "citation_check.txt"
+        try:
+            prompt_template = prompt_path.read_text()
+        except (FileNotFoundError, OSError) as exc:
+            if fail_open:
+                logger.warning("citation: prompt not found at %s (fail_open=True)", prompt_path)
+                return violations
+            raise RuntimeError(f"citation validator: prompt not found at {prompt_path}") from exc
+
+        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
+        if max_artifacts is not None and len(artifacts) > max_artifacts:
+            logger.info(
+                "citation: checking %d of %d artifacts (max_artifacts=%d)",
+                max_artifacts,
+                len(artifacts),
+                max_artifacts,
+            )
+
+        for artifact in target:
+            try:
+                existing = extract_citations(artifact.content)
+                existing_uris = ", ".join(c.uri for c in existing) if existing else "(none)"
+
+                prompt = prompt_template.replace("{content}", artifact.content).replace(
+                    "{existing_citations}", existing_uris
+                )
+
+                response = client.complete(
+                    messages=[{"role": "user", "content": prompt}],
+                    artifact_desc=f"citation check for {artifact.label}",
+                )
+
+                _store_llm_trace(ctx.store, artifact.label, prompt, response.content, "citation_check")
+
+                ungrounded = _parse_citation_response(response.content)
+
+                for item in ungrounded:
+                    claim = item.get("claim", "")
+                    suggestion = item.get("suggestion", "")
+
+                    vid = compute_violation_id("ungrounded_claim", artifact.label, claim)
+
+                    violations.append(
+                        Violation(
+                            violation_type="ungrounded_claim",
+                            severity="warning",
+                            message=f"Ungrounded claim: {claim[:80]}",
+                            label=artifact.label,
+                            field="content",
+                            metadata={
+                                "claim": claim,
+                                "suggestion": suggestion,
+                                "existing_citations": [c.uri for c in existing],
+                                "artifact_id": artifact.artifact_id,
+                            },
+                            violation_id=vid,
+                        )
+                    )
+
+            except Exception:
+                logger.warning("citation: error checking %s, skipping", artifact.label, exc_info=True)
+                continue
 
         return violations
 

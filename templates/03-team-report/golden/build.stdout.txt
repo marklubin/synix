@@ -5,15 +5,15 @@
 │ Layers: 5                                                                                                            │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ bios (level 0)  <N> <STATUS>  <TIME>
+  ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
     └─ search  <MATERIALIZED>
-  ✓ project_brief (level 0)  <N> <STATUS>  <TIME>
+  ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
     └─ search  <MATERIALIZED>
-  ✓ work_styles (level 1)  <N> <STATUS>  <TIME>
+  ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
     └─ search  <MATERIALIZED>
-  ✓ team_dynamics (level 2)  <N> <STATUS>  <TIME>
+  ✓ team_dynamics (level 2)  <BUILD_COUNTS>  <TIME>
     └─ search  <MATERIALIZED>
-  ✓ final_report (level 3)  <N> <STATUS>  <TIME>
+  ✓ final_report (level 3)  <BUILD_COUNTS>  <TIME>
     └─ search  <MATERIALIZED>
     └─ search  <MATERIALIZED>
                          Build Summary
@@ -21,16 +21,15 @@
 │ Layer         │    Level     │ Built │ Cached │     Skipped │
 ├───────────────┼──────────────┼───────┼────────┼─────────────┤
 │ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ progressive │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ progressive │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ progressive │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ progressive │
+│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
 │   → search    │ search_index │       │        │ <MATERIALIZED> │
 ╰───────────────┴──────────────┴───────┴────────┴─────────────╯
 
-Total: <N> <STATUS>, <N> <STATUS>, 0 skipped
-LLM calls: <N>, Tokens: <N>, Est. cost: $<COST>
+<BUILD_TOTAL>

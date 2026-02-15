@@ -1,0 +1,40 @@
+You are checking whether factual claims in a synthesized document are properly cited.
+
+Citations in this system use synix:// URIs in markdown link format:
+  [description](synix://source-label)
+
+For example: [Acme pricing is $50/seat](synix://intel-acme-analytics)
+
+The document may already contain some citations. Here are the existing citation URIs found:
+{existing_citations}
+
+<artifact>
+{content}
+</artifact>
+
+Identify factual claims that are NOT supported by a synix:// citation link. Focus on:
+- Specific numbers, prices, percentages, or dates
+- Claims about competitors, products, or market positioning
+- Assertions of fact that a reader would want to verify
+
+Do NOT flag:
+- General observations or opinions clearly marked as analysis
+- Section headers or structural text
+- Claims that already have a [text](synix://...) citation link
+
+For each ungrounded claim, provide:
+- claim: The specific text of the ungrounded claim (quote or close paraphrase)
+- suggestion: What kind of source would ground this claim
+
+Respond with JSON only:
+{
+  "ungrounded": [
+    {
+      "claim": "...",
+      "suggestion": "..."
+    }
+  ]
+}
+
+If all substantive claims are properly cited, respond with:
+{"ungrounded": []}

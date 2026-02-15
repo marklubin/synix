@@ -1,0 +1,2278 @@
+{
+  "passed": true,
+  "validators_run": [
+    "citation"
+  ],
+  "violations": [
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Gartner Magic Quadrant Leader for 3 consecutive years",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "Gartner Magic Quadrant Leader for 3 consecutive years",
+        "suggestion": "A source document containing DataFlow's Gartner Magic Quadrant rankings or analyst reports",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "abdd71896bed9ce4"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: DataFlow Inc is a mature, publicly-traded enterprise analytics platform founded ",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "DataFlow Inc is a mature, publicly-traded enterprise analytics platform founded in 2016 and listed on 
+NASDAQ (DFLW) since 2022",
+        "suggestion": "A source document with DataFlow's company history, founding date, and NASDAQ listing 
+information",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "e0547b34481d8825"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Acme Analytics pricing at $390K/year for 500 seats",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "Acme Analytics pricing at $390K/year for 500 seats",
+        "suggestion": "A source document containing Acme Analytics pricing information or proposal",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "585d53e39dffd8df"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Acme Analytics has unreliable SSO with a 3.2/5 rating",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "Acme Analytics has unreliable SSO with a 3.2/5 rating",
+        "suggestion": "A source document with Acme Analytics SSO reliability assessment or customer feedback scores",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "069e4af42d92e534"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: InsightCorp pricing at $90K/year for 500 seats",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "InsightCorp pricing at $90K/year for 500 seats",
+        "suggestion": "A source document containing InsightCorp pricing information or proposal",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "6b7268a470767b15"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: NovaSight has 85 data connectors",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "NovaSight has 85 data connectors",
+        "suggestion": "A source document with NovaSight's product specifications or feature list",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "ab721ba1aab37936"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: NovaSight has 200+ REST API endpoints",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "NovaSight has 200+ REST API endpoints",
+        "suggestion": "A source document with NovaSight's API documentation or product specifications",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "f5ee8c0acd8e7f61"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Acme Analytics has 40 read-only API endpoints",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "Acme Analytics has 40 read-only API endpoints",
+        "suggestion": "A source document with Acme Analytics' API documentation or product specifications",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "ec4ff049e3914fc4"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Acme Analytics has 50+ data connectors",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "Acme Analytics has 50+ data connectors",
+        "suggestion": "A source document with Acme Analytics' product specifications or feature list",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "2e5d28d93b9e7d11"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: InsightCorp has 30 beta API endpoints",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "InsightCorp has 30 beta API endpoints",
+        "suggestion": "A source document with InsightCorp's API documentation or product specifications",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "23920e3a65c11eaf"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: InsightCorp has 20 data connectors",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "InsightCorp has 20 data connectors",
+        "suggestion": "A source document with InsightCorp's product specifications or feature list",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "f763da80ed2f523b"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: DataFlow has 150+ data connectors",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "DataFlow has 150+ data connectors",
+        "suggestion": "A source document with DataFlow's product specifications or feature list",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-lost_deal_postmortem",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-platform_overview",
+          "synix://t-text-platform_overview",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-differentiators",
+          "synix://t-text-dataflow_inc",
+          "synix://t-text-dataflow_inc"
+        ],
+        "artifact_id": "sha256:513a1bc6b9c9bf8cc6ba0c0df2c2830dadec9ff2b23bf6a7a6192bb91dfadaee"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "543fcfd5759e6043"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Your data science team can deploy custom Python models directly in NovaSight wit",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Your data science team can deploy custom Python models directly in NovaSight without maintaining 
+separate Jupyter notebooks.",
+        "suggestion": "Product capability documentation or technical specification for NovaSight's Python model 
+deployment feature",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "f428c1e0d5f99427"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Our UI is built for modern analytics workflows, not legacy BI paradigms.",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Our UI is built for modern analytics workflows, not legacy BI paradigms.",
+        "suggestion": "Product design documentation or UX research supporting this architectural claim",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "778ac1b40aecf208"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: We've solved the fragile SSO problem that plagues your current Tableau deploymen",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "We've solved the fragile SSO problem that plagues your current Tableau deployment.",
+        "suggestion": "Technical case study or customer reference documenting Tableau SSO issues and NovaSight's 
+solution",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "a2dcb9407e0fb5ee"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Query pushdown, incremental refresh, and native Snowflake authentication all bui",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Query pushdown, incremental refresh, and native Snowflake authentication all built in.",
+        "suggestion": "Technical documentation or product specifications for Snowflake connector capabilities",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "143e8e15f1e46c43"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Our Tableau migration tool handles 95% of dashboard translation automatically.",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Our Tableau migration tool handles 95% of dashboard translation automatically.",
+        "suggestion": "Product documentation or case study data supporting the 95% automation rate",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "e3d5cb06727a11b7"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Your team creates reports 30% faster than Tableau.",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Your team creates reports 30% faster than Tableau.",
+        "suggestion": "Benchmark study, customer performance data, or usability research comparing report creation 
+speed",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "e571111d1024c621"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: We're active in the analytics community. You'll see us at Tableau conferences an",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "We're active in the analytics community. You'll see us at Tableau conferences and analytics summits.",
+        "suggestion": "Event participation records or community engagement documentation",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "265087071864b36c"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "warning",
+      "message": "Ungrounded claim: Reference a similar-sized manufacturing customer who went live in 8 weeks",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "Reference a similar-sized manufacturing customer who went live in 8 weeks",
+        "suggestion": "Specific customer case study or reference with timeline documentation",
+        "existing_citations": [
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy"
+        ],
+        "artifact_id": "sha256:9a2a911000e76af67655704687b0f31d9d330e22930f312020f2aaccb481829a"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "9a0ca3759c354487"
+    }
+  ]
+}
