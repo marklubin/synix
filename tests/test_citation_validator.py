@@ -125,15 +125,15 @@ class TestCitationValidator:
         assert len(violations) == 1
         v = violations[0]
         assert v.violation_type == "ungrounded_claim"
-        assert v.severity == "warning"
+        assert v.severity == "error"
         assert v.label == "core-1"
         assert v.field == "content"
         assert v.metadata["claim"] == "expert in quantum computing"
         assert v.metadata["suggestion"] == "Link to conversation about computing background"
         assert v.violation_id != ""
 
-    def test_llm_error_graceful_skip(self, store, provenance, ctx):
-        """LLM raises an exception per-artifact -> no crash, no violations."""
+    def test_llm_error_produces_failure_violation(self, store, provenance, ctx):
+        """LLM raises an exception per-artifact -> no crash, produces citation_check_failed violation."""
         art = _make_artifact(
             "core-1",
             "core_memory",
@@ -147,10 +147,13 @@ class TestCitationValidator:
         validator = Citation(layers=[])
         validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
-        assert violations == []
+        assert len(violations) == 1
+        assert violations[0].violation_type == "citation_check_failed"
+        assert violations[0].severity == "error"
+        assert violations[0].label == "core-1"
 
-    def test_invalid_json_logged_and_skipped(self, store, provenance, ctx):
-        """Invalid JSON from LLM -> logged warning, no violations (per-artifact skip)."""
+    def test_invalid_json_produces_failure_violation(self, store, provenance, ctx):
+        """Invalid JSON from LLM -> produces citation_check_failed violation."""
         art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
         store.save_artifact(art, "core", 3)
 
@@ -159,7 +162,8 @@ class TestCitationValidator:
         validator = Citation(layers=[])
         validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
-        assert violations == []
+        assert len(violations) == 1
+        assert violations[0].violation_type == "citation_check_failed"
 
     def test_bad_llm_config_fails_closed(self, store, provenance, ctx):
         """Invalid LLM config -> raises RuntimeError by default (fail closed)."""

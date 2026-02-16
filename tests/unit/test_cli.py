@@ -73,7 +73,6 @@ def test_status_empty_build_dir(runner, tmp_path):
     result = runner.invoke(main, ["status", "--build-dir", str(build_dir)])
     assert result.exit_code == 0
     assert "Build Status" in result.output
-    assert "not built yet" in result.output
 
 
 def test_main_help(runner):

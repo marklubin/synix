@@ -66,4 +66,9 @@ case = {
         "validate_mid": "validate_mid.json",
         "validate_final": "validate_final.json",
     },
+    # Regex masks — lines matching any pattern are excluded from golden comparison.
+    "output_masks": {
+        # Trace artifact labels contain content hashes that change when prompts change
+        "verify": [r"trace-"],
+    },
 }

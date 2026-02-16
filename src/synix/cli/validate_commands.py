@@ -18,6 +18,36 @@ from rich.tree import Tree
 from synix.cli.main import console, pipeline_argument
 
 
+def _build_provenance_tree(label, store, provenance):
+    """Build a Rich Tree showing the actual provenance DAG for an artifact."""
+    root_art = store.load_artifact(label)
+    root_layer = root_art.metadata.get("layer_name", root_art.artifact_type) if root_art else ""
+    tree = Tree("[dim]Provenance[/dim]")
+
+    def _add_node(parent_tree, node_label, visited):
+        if node_label in visited:
+            parent_tree.add(f"[dim]{node_label} (cycle)[/dim]")
+            return
+        visited = visited | {node_label}
+
+        art = store.load_artifact(node_label)
+        layer = art.metadata.get("layer_name", art.artifact_type) if art else ""
+        display = f"[bold]{node_label}[/bold] [dim]({layer})[/dim]"
+        node = parent_tree.add(display)
+
+        parents = provenance.get_parents(node_label)
+        for pid in sorted(parents):
+            _add_node(node, pid, visited)
+
+    # Start from the violation artifact
+    root_node = tree.add(f"[bold]{label}[/bold] [dim]({root_layer})[/dim]")
+    parents = provenance.get_parents(label)
+    for pid in sorted(parents):
+        _add_node(root_node, pid, {label})
+
+    return tree
+
+
 @click.command()
 @pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
@@ -61,6 +91,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
 
     ctx = ValidationContext(store, provenance, pipeline)
     result = ValidationResult()
+    result.violations_by_validator = {}
 
     for validator in pipeline.validators:
         config = validator.to_config_dict()
@@ -89,6 +120,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
 
         result.violations.extend(violations)
         result.validators_run.append(validator_name)
+        result.violations_by_validator[validator_name] = violations
 
         if not output_json:
             errors = sum(1 for v in violations if v.severity == "error")
@@ -145,7 +177,8 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         # Add violation_ids to JSON output
         for i, v in enumerate(result.violations):
             out["violations"][i]["violation_id"] = v.violation_id
-        console.print(json.dumps(out, indent=2))
+        # Use print() not console.print() to avoid Rich word-wrapping inside JSON strings
+        print(json.dumps(out, indent=2))
         sys.exit(0 if result.passed else 1)
 
     # Rich display
@@ -153,19 +186,16 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         console.print("\n[green]All validators passed.[/green] No violations found.")
         return
 
-    # Group violations by type
-    by_type: dict[str, list] = {}
-    for v in result.violations:
-        by_type.setdefault(v.violation_type, []).append(v)
+    # Summary table (use per-validator violation counts from progress loop)
+    by_validator = getattr(result, "violations_by_validator", {})
 
-    # Summary table
     table = Table(title="Validation Results", box=box.ROUNDED)
     table.add_column("Validator", style="bold")
     table.add_column("Status", justify="center")
     table.add_column("Count", justify="right")
 
     for name in result.validators_run:
-        viols = by_type.get(name, [])
+        viols = by_validator.get(name, [])
         errors = [v for v in viols if v.severity == "error"]
         warnings = [v for v in viols if v.severity == "warning"]
         if errors:
@@ -210,13 +240,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
 
         # Build panel content — text body + optional provenance tree
         if v.provenance_trace:
-            provenance_tree = Tree("[dim]Provenance[/dim]")
-            parent = provenance_tree
-            for step in v.provenance_trace:
-                step_display = f"[bold]{step.label}[/bold] [dim]({step.layer})[/dim]"
-                if step.field_value:
-                    step_display += f"  {v.field}: {step.field_value}"
-                parent = parent.add(step_display)
+            provenance_tree = _build_provenance_tree(v.label, store, provenance)
             panel_content = Group(body, "", provenance_tree)
         else:
             panel_content = body

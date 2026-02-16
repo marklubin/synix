@@ -19,9 +19,14 @@ def _source_label_block(inputs: list[Artifact]) -> str:
 
 
 _CITATION_INSTRUCTION = (
-    "When making a factual claim, cite the source using a markdown link: "
-    "`[description](synix://label)`. Every substantive claim (numbers, dates, "
-    "competitive facts) must have at least one citation."
+    "CRITICAL: You MUST cite sources using markdown links in this exact format:\n"
+    "  [claim text](synix://source-label)\n\n"
+    "Examples of properly cited claims:\n"
+    "  - DataFlow charges [$180K/year for 500 seats](synix://intel-dataflow_inc)\n"
+    "  - Customer budget is [$300K-$500K approved](synix://t-text-budget_timeline)\n"
+    "  - Sarah Chen is [VP Analytics and executive sponsor](synix://t-text-stakeholder_map)\n\n"
+    "Every factual claim (numbers, dates, prices, competitor facts, customer details) "
+    "MUST have at least one synix:// citation. Uncited claims will be flagged as violations."
 )
 
 

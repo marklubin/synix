@@ -300,12 +300,15 @@ class ViolationQueue:
 
     def resolve(self, violation_id: str, fix_action: str = "") -> None:
         if violation_id in self._state:
+            ts = datetime.now().isoformat()
             self._state[violation_id]["status"] = "resolved"
+            self._state[violation_id]["fix_action"] = fix_action
+            self._state[violation_id]["resolved_at"] = ts
             self._append_log(
                 {
                     "event": "resolved",
                     "violation_id": violation_id,
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": ts,
                     "fix_action": fix_action,
                 }
             )
@@ -744,16 +747,28 @@ class SemanticConflict(BaseValidator):
 def _parse_citation_response(response_text: str) -> list[dict]:
     """Extract ungrounded claims list from LLM response (JSON in code blocks or raw).
 
-    Raises ValueError if the response cannot be parsed as valid JSON.
+    Handles truncated responses where the LLM hit max_tokens before completing
+    the JSON — strips the opening code fence and attempts to recover any
+    complete claim objects from the partial JSON.
+
+    Raises ValueError if the response cannot be parsed at all.
     """
+    # Try complete code fence first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
-    text = match.group(1).strip() if match else response_text.strip()
+    if match:
+        text = match.group(1).strip()
+    else:
+        # Strip opening fence even without closing (truncated response)
+        text = re.sub(r"^```(?:json)?\s*\n?", "", response_text.strip())
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning("citation: LLM returned unparseable response: %s", text[:200])
-        raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from exc
+    except json.JSONDecodeError:
+        # Response may be truncated — try to salvage complete claim objects
+        data = _salvage_truncated_citation_json(text)
+        if data is None:
+            logger.warning("citation: LLM returned unparseable response: %s", text[:200])
+            raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from None
 
     ungrounded = data.get("ungrounded", [])
     if not isinstance(ungrounded, list):
@@ -765,6 +780,33 @@ def _parse_citation_response(response_text: str) -> list[dict]:
         item.setdefault("suggestion", "")
 
     return ungrounded
+
+
+def _salvage_truncated_citation_json(text: str) -> dict | None:
+    """Attempt to recover complete claim objects from truncated JSON.
+
+    When the LLM hits max_tokens, the JSON is cut off mid-object.
+    We find all complete {"claim": ..., "suggestion": ...} objects
+    and return them in an {"ungrounded": [...]} wrapper.
+    """
+    # Find all complete claim objects
+    pattern = r'\{\s*"claim"\s*:\s*"(?:[^"\\]|\\.)*"\s*,\s*"suggestion"\s*:\s*"(?:[^"\\]|\\.)*"\s*\}'
+    matches = re.findall(pattern, text)
+    if not matches:
+        return None
+
+    claims = []
+    for m in matches:
+        try:
+            claims.append(json.loads(m))
+        except json.JSONDecodeError:
+            continue
+
+    if not claims:
+        return None
+
+    logger.info("citation: salvaged %d complete claims from truncated response", len(claims))
+    return {"ungrounded": claims}
 
 
 class Citation(BaseValidator):
@@ -862,7 +904,7 @@ class Citation(BaseValidator):
                     violations.append(
                         Violation(
                             violation_type="ungrounded_claim",
-                            severity="warning",
+                            severity="error",
                             message=f"Ungrounded claim: {claim[:80]}",
                             label=artifact.label,
                             field="content",
@@ -877,8 +919,16 @@ class Citation(BaseValidator):
                     )
 
             except Exception:
-                logger.warning("citation: error checking %s, skipping", artifact.label, exc_info=True)
-                continue
+                logger.warning("citation: error checking %s", artifact.label, exc_info=True)
+                violations.append(
+                    Violation(
+                        violation_type="citation_check_failed",
+                        severity="error",
+                        message=f"Citation check failed for {artifact.label} (LLM response unparseable or missing)",
+                        label=artifact.label,
+                        field="content",
+                    )
+                )
 
         return violations
 

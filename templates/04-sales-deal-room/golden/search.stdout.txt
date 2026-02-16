@@ -1,1 +1,97 @@
-No search index found. Run synix build first.
+
+Search results for: "pricing" (keyword mode)
+
+╭─────────────────────────────────────────────── competitive_intel (L1) ───────────────────────────────────────────────╮
+│                                                                                                                      │
+│                              Competitive Analysis: DataFlow Inc vs. NovaSight Analytics                              │
+│                                                                                                                      │
+│  Deal-Specific Intelligence | January 2026                                                                           │
+│                                                                                                                      │
+│  ------------------------------------------------------------------------------------------------------------------  │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  3. Pricing Comparison                                                                                               │
+│                                                                                                                      │
+│  DataFlow Inc Pricing                                                                                                │
+│                                                                                                                      │
+│  No public pricing; custom enterprise contracts only with typical range of $80-120/seat/month depending on volume    │
+│  and feature tier. Minimum contract: $100K/year (effectively 100+ seats minimum). 3-year contracts common with       │
+│  15-20% discount over annual pricing. Professional services billed separately at $250/hour.                          │
+│                                                                                                                      │
+│  Total Cost of Ownership Reality: Expensive: total cost of ownership often 2-3x initial quote after professional     │
+│  services. ...                                                                                                       │
+│                                                                                                                      │
+│   • Total: $2.04M-$2.16M                                                                                             │
+│                                                                                                                      │
+│  NovaSight Analytics Pricing                                                                                         │
+│                                                                                                                      │
+│  Starter: $25/seat/month; Professional: $55/seat/month; Enterprise: custom pricing. Annual billing receives 15%      │
+│  discount; volume discounts available for 500+ seats.                                                                │
+│                                                                                                                      │
+│  Example Scenario (500 seats, 3-year contract, Professional tier with 15% annual discount): ...                      │
+│                                                                                                                      │
+│  Label: intel-dataflow_inc  Score: 0.00  Mode: keyword                                                               │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
+intel-dataflow_inc
+├── t-text-dataflow_inc
+├── t-text-differentiators
+└── t-text-platform_overview
+
+╭──────────────────────────────────────────────── competitor_docs (L0) ────────────────────────────────────────────────╮
+│                                                                                                                      │
+│                                          DataFlow Inc — Competitor Profile                                           │
+│                                                                                                                      │
+│  Last updated: January 2026                                                                                          │
+│                                                                                                                      │
+│  ... DataFlow's enterprise data platform provides end-to-end analytics — from data ingestion and transformation to   │
+│  dashboards and embedded analytics. The product is <MATERIALIZED> for large enterprises (1,000+ employees) with complex data  │
+│  environments. They support 150+ native data connectors and offer a visual ETL pipeline builder.                     │
+│                                                                                                                      │
+│  Pricing                                                                                                             │
+│                                                                                                                      │
+│   • No public pricing; custom enterprise contracts only                                                              │
+│   • Typical range: $80-120/seat/month depending on volume and feature tier                                           │
+│   • Minimum contract: $100K/year (effectively 100+ seats minimum)                                                    │
+│   • 3-year contracts common with 15-20% discount over annual pricing                                                 │
+│   • Professional services billed separately at $250/hour                                                             │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  Label: t-text-dataflow_inc  Score: 0.00  Mode: keyword                                                              │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
+t-text-dataflow_inc
+
+╭───────────────────────────────────────────────── deal_context (L0) ──────────────────────────────────────────────────╮
+│                                                                                                                      │
+│                                       MegaCorp Industries — Budget & Timeline                                        │
+│                                                                                                                      │
+│  Deal ID: MC-2026-0142 | Last updated: February 2026                                                                 │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│   • True current TCO: approximately $440K/year when including maintenance FTEs and IT infrastructure                 │
+│                                                                                                                      │
+│  Pricing Scenarios for NovaSight                                                                                     │
+│                                                                                                                      │
+│  Scenario A: Professional Tier (Recommended)                                                                         │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  Scenario B: Enterprise Tier (If Hybrid Required)                                                                    │
+│                                                                                                                      │
+│   • 500 users, custom pricing: estimated $70/seat/month = $420K/year                                                 │
+│   • Volume discount (500+ seats, 10%): $378K/year                                                                    │
+│   • Implementation services (one-time): $65K ...                                                                     │
+│   • ROI target: positive ROI within 18 months, measured as cost savings + productivity gains                         │
+│                                                                                                                      │
+│  Competitive Pricing Intelligence                                                                                    │
+│                                                                                                                      │
+│   • DataFlow Inc: estimated $80-100/seat/month for 500 users = $480K-600K/year + $150K implementation ...            │
+│                                                                                                                      │
+│  Label: t-text-budget_timeline  Score: 0.00  Mode: keyword                                                           │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 3 ──────────────────────────────────────────────────────╯
+t-text-budget_timeline

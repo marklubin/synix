@@ -9,7 +9,6 @@ from pathlib import Path
 import click
 from rich.console import Group
 from rich.panel import Panel
-from rich.tree import Tree
 
 from synix.cli.main import console, pipeline_argument
 
@@ -42,10 +41,10 @@ def fix(pipeline_path: str, build_dir: str | None, output_json: bool, dry_run: b
         console.print(f"[red]Build directory not found:[/red] {build_path}\nRun [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    _run_fix_mode(pipeline, build_path, output_json, dry_run)
+    _run_fix_mode(pipeline, build_path, output_json, dry_run, pipeline_path)
 
 
-def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
+def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, pipeline_path: str = "pipeline.py"):
     """Load persisted violations from queue and propose/apply fixes."""
     from synix.build.artifacts import ArtifactStore
     from synix.build.fixers import apply_fix, run_fixers
@@ -182,35 +181,38 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
             "fixed_count": fix_result.fixed_count,
             "skipped_count": fix_result.skipped_count,
         }
-        console.print(json.dumps(out, indent=2))
+        # Use print() not console.print() to avoid Rich word-wrapping inside JSON strings
+        print(json.dumps(out, indent=2))
         return
 
     if not fix_result.actions:
         console.print("\n[yellow]No fixable violations found.[/yellow]")
         return
 
-    applied_count = 0
-    denied_count = 0
-    ignored_count = 0
-
-    # Index violations by label for lookup
-    violations_by_label: dict[str, Violation] = {}
+    # Index ALL violations by label (batched — one fix action per artifact)
+    violations_by_label: dict[str, list[Violation]] = {}
     for v in result.violations:
-        violations_by_label.setdefault(v.label, v)
+        violations_by_label.setdefault(v.label, []).append(v)
+
+    # Track decisions per action for summary
+    decisions: list[dict] = []
 
     for action in fix_result.actions:
         if action.action == "skip":
             console.print(f"\n[dim]Skipping {action.label}: {action.description}[/dim]")
+            decisions.append({"action": action, "choice": "skip", "violations": []})
             continue
 
-        violation = violations_by_label.get(action.label)
+        label_violations = violations_by_label.get(action.label, [])
+        first_violation = label_violations[0] if label_violations else None
         if action.action == "rewrite":
-            _display_rewrite_proposal(action, violation, store, provenance)
+            _display_rewrite_proposal(action, first_violation, store, provenance)
         elif action.action == "unresolved":
-            _display_unresolved(action, violation, store, provenance)
+            _display_unresolved(action, first_violation, store, provenance)
 
         if dry_run:
             console.print("[dim](dry-run: no changes applied)[/dim]")
+            decisions.append({"action": action, "choice": "dry-run", "violations": label_violations})
             continue
 
         # Interactive prompt
@@ -219,113 +221,147 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool):
         if choice == "a":
             if action.action == "rewrite":
                 apply_fix(action, store, provenance)
-                # Find violation_id for this action
-                for v in result.violations:
-                    if v.label == action.label:
-                        queue.resolve(v.violation_id, fix_action="rewrite")
-                        break
-                console.print(f"[green]Applied fix to {action.label}[/green]")
+                for v in label_violations:
+                    queue.resolve(v.violation_id, fix_action="rewrite")
             else:
-                # Unresolved: accept original as-is
-                for v in result.violations:
-                    if v.label == action.label:
-                        queue.resolve(v.violation_id, fix_action="accept_original")
-                        break
-                console.print(f"[green]Accepted original for {action.label}[/green]")
-            applied_count += 1
+                for v in label_violations:
+                    queue.resolve(v.violation_id, fix_action="accept_original")
+            decisions.append({"action": action, "choice": "accept", "violations": label_violations})
         elif choice == "d":
-            console.print(f"[yellow]Denied fix for {action.label}[/yellow]")
-            denied_count += 1
+            decisions.append({"action": action, "choice": "deny", "violations": label_violations})
         elif choice == "i":
-            for v in result.violations:
-                if v.label == action.label:
-                    queue.ignore(v.violation_id)
-                    break
-            console.print(f"[dim]Ignored {action.label} (won't resurface for same content)[/dim]")
-            ignored_count += 1
+            for v in label_violations:
+                queue.ignore(v.violation_id)
+            decisions.append({"action": action, "choice": "ignore", "violations": label_violations})
 
     queue.save_state()
 
-    # Summary
-    console.print("\n[bold]Fix summary:[/bold]")
-    console.print(f"  Applied: {applied_count}")
-    console.print(f"  Denied: {denied_count}")
-    console.print(f"  Ignored: {ignored_count}")
+    # Remaining active violations in queue
+    remaining = queue.active()
 
-    if applied_count > 0 and fix_result.rebuild_required:
-        unique_downstream = set()
-        for a in fix_result.actions:
-            unique_downstream.update(a.downstream_invalidated)
-        console.print(
-            f"\n[yellow]Run [bold]synix build {sys.argv[-1] if len(sys.argv) > 1 else 'pipeline.py'}[/bold] "
-            f"to rebuild {len(unique_downstream)} downstream artifact(s).[/yellow]"
-        )
+    _print_fix_summary(decisions, remaining, fix_result, pipeline_path)
 
     if search_index is not None:
         search_index.close()
 
 
-def _build_fix_investigation_tree(action, violation, store, provenance):
-    """Build a tree showing the investigation path from conflict to sources."""
-    tree = Tree(f"[bold]{action.label}[/bold] [dim](conflict detected)[/dim]")
+def _print_fix_summary(decisions, remaining, fix_result, pipeline_path):
+    """Print a detailed fix summary showing what happened to each artifact."""
+    from rich.tree import Tree
 
-    # Walk provenance to show parents
-    parent_ids = provenance.get_parents(action.label)
-    if parent_ids:
-        parents_branch = tree.add("[dim]parents[/dim]")
-        for pid in parent_ids:
-            parent_art = store.load_artifact(pid)
-            if parent_art:
-                label = f"[bold]{pid}[/bold] [dim]({parent_art.artifact_type})[/dim]"
-            else:
-                label = f"[bold]{pid}[/bold]"
-            parents_branch.add(label)
+    tree = Tree("[bold]Fix Summary[/bold]")
 
-    # Evidence sources the fixer found
-    if action.evidence_source_ids:
-        evidence_branch = tree.add("[dim]evidence sources[/dim]")
-        for eid in action.evidence_source_ids:
-            ev_art = store.load_artifact(eid)
-            if ev_art:
-                label = f"[bold]{eid}[/bold] [dim]({ev_art.artifact_type})[/dim]"
-            else:
-                label = f"[bold]{eid}[/bold]"
-            evidence_branch.add(label)
+    for d in decisions:
+        action = d["action"]
+        choice = d["choice"]
+        violations = d["violations"]
+        n_viols = len(violations)
 
-    return tree
+        if choice == "accept" and action.action == "rewrite":
+            icon = "[green]\u2713[/green]"
+            label = f"{icon} [bold]{action.label}[/bold]  [green]rewritten[/green] ({n_viols} violations resolved)"
+        elif choice == "accept" and action.action == "unresolved":
+            icon = "[green]\u2713[/green]"
+            label = (
+                f"{icon} [bold]{action.label}[/bold]  [green]accepted original[/green] ({n_viols} violations resolved)"
+            )
+        elif choice == "deny":
+            icon = "[yellow]\u2717[/yellow]"
+            label = f"{icon} [bold]{action.label}[/bold]  [yellow]denied[/yellow] ({n_viols} violations remain)"
+        elif choice == "ignore":
+            icon = "[dim]\u2500[/dim]"
+            label = f"{icon} [bold]{action.label}[/bold]  [dim]ignored[/dim] ({n_viols} violations suppressed)"
+        elif choice == "skip":
+            icon = "[dim]\u2500[/dim]"
+            label = f"{icon} [bold]{action.label}[/bold]  [dim]skipped[/dim]"
+        else:
+            label = f"  [bold]{action.label}[/bold]  {choice}"
+
+        node = tree.add(label)
+
+        # Show the violations that were addressed
+        for v in violations:
+            msg = v.message
+            if len(msg) > 90:
+                msg = msg[:87] + "..."
+            node.add(f"[dim]{msg}[/dim]")
+
+        # Show downstream artifacts that need rebuilding
+        if choice == "accept" and action.downstream_invalidated:
+            for ds in action.downstream_invalidated:
+                node.add(f"[yellow]\u21b3 rebuild needed: {ds}[/yellow]")
+
+    console.print()
+    console.print(tree)
+
+    # Next steps
+    unique_downstream: set[str] = set()
+    for d in decisions:
+        if d["choice"] == "accept":
+            unique_downstream.update(d["action"].downstream_invalidated)
+
+    if unique_downstream:
+        console.print(
+            f"\n[yellow]Next:[/yellow] [bold]synix build {pipeline_path}[/bold] "
+            f"to rebuild {len(unique_downstream)} downstream artifact(s)."
+        )
+        console.print("[dim]Run [bold]synix status[/bold] to see full build health.[/dim]")
+
+    if remaining:
+        console.print(
+            f"\n[dim]{len(remaining)} violation(s) still active. "
+            f"Run [bold]synix validate {pipeline_path}[/bold] to re-check.[/dim]"
+        )
+    elif not unique_downstream:
+        console.print("\n[green]All violations resolved.[/green]")
+
+
+def _render_diff(original: str, proposed: str) -> str:
+    """Render a colorized unified diff between original and proposed content."""
+    import difflib
+
+    orig_lines = original.splitlines(keepends=True)
+    prop_lines = proposed.splitlines(keepends=True)
+    diff = difflib.unified_diff(orig_lines, prop_lines, fromfile="original", tofile="proposed", lineterm="")
+
+    out: list[str] = []
+    for line in diff:
+        line = line.rstrip("\n")
+        # Escape Rich markup in diff content
+        escaped = line.replace("[", "\\[")
+        if line.startswith("+++") or line.startswith("---"):
+            out.append(f"[bold]{escaped}[/bold]")
+        elif line.startswith("@@"):
+            out.append(f"[cyan]{escaped}[/cyan]")
+        elif line.startswith("+"):
+            out.append(f"[green]{escaped}[/green]")
+        elif line.startswith("-"):
+            out.append(f"[red]{escaped}[/red]")
+        else:
+            out.append(f"[dim]{escaped}[/dim]")
+    return "\n".join(out)
 
 
 def _display_rewrite_proposal(action, violation=None, store=None, provenance=None):
-    """Display a rewrite proposal with investigation tree and diff."""
-    severity_style = "red"
+    """Display a rewrite proposal with diff."""
+    # Header: explanation of what the fix does
     lines: list[str] = []
-    if violation:
-        lines.append(
-            f"[{severity_style} bold]{violation.severity.upper()}[/{severity_style} bold]  {violation.message}"
-        )
-        if violation.violation_type == "semantic_conflict":
-            claim_a = violation.metadata.get("claim_a", "")
-            claim_b = violation.metadata.get("claim_b", "")
-            explanation = violation.metadata.get("explanation", "")
-            if claim_a and claim_b:
-                lines.append("")
-                lines.append(f'[dim]Claim A:[/dim]  "{claim_a}"')
-                lines.append(f'[dim]Claim B:[/dim]  "{claim_b}"')
-            if explanation:
-                lines.append(f"[dim]Reasoning:[/dim]  {explanation}")
-    else:
-        lines.append(f"[bold]Fix proposal for {action.label}[/bold]")
+    if action.llm_explanation:
+        lines.append(f"[bold]{action.llm_explanation}[/bold]")
+    elif action.description:
+        lines.append(f"[bold]{action.description}[/bold]")
 
     body = "\n".join(lines)
 
-    if store and provenance:
-        inv_tree = _build_fix_investigation_tree(
-            action,
-            violation,
-            store,
-            provenance,
-        )
-        panel_content = Group(body, "", inv_tree)
+    # Build diff between original and proposed content
+    diff_text = ""
+    if action.new_content and store:
+        original_art = store.load_artifact(action.label)
+        if original_art:
+            diff_text = _render_diff(original_art.content, action.new_content)
+
+    if diff_text:
+        panel_content = Group(body, "", diff_text) if body else diff_text
     else:
         panel_content = body
 
@@ -338,61 +374,20 @@ def _display_rewrite_proposal(action, violation=None, store=None, provenance=Non
         )
     )
 
-    if action.new_content:
-        fix_lines: list[str] = []
-        fix_lines.append(f"[dim]Description:[/dim]  {action.description}")
-        if action.llm_explanation:
-            fix_lines.append(f"[dim]Explanation:[/dim]  {action.llm_explanation}")
-        fix_lines.append("")
-        preview = action.new_content[:800]
-        if len(action.new_content) > 800:
-            preview += "\n..."
-        fix_lines.append(preview)
-        console.print(
-            Panel(
-                "\n".join(fix_lines),
-                title="[green]Proposed rewrite[/green]",
-                border_style="green",
-                padding=(0, 1),
-            )
-        )
-
 
 def _display_unresolved(action, violation=None, store=None, provenance=None):
-    """Display an unresolved contradiction with investigation tree."""
+    """Display an unresolved contradiction."""
     lines: list[str] = []
-    if violation:
-        lines.append(f"[yellow bold]WARNING[/yellow bold]  {violation.message}")
-        if violation.violation_type == "semantic_conflict":
-            claim_a = violation.metadata.get("claim_a", "")
-            claim_b = violation.metadata.get("claim_b", "")
-            if claim_a and claim_b:
-                lines.append("")
-                lines.append(f'[dim]Claim A:[/dim]  "{claim_a}"')
-                lines.append(f'[dim]Claim B:[/dim]  "{claim_b}"')
-    else:
-        lines.append(f"[bold yellow]Cannot auto-resolve: {action.label}[/bold yellow]")
-
     if action.llm_explanation:
-        lines.append("")
-        lines.append(f"[dim]Explanation:[/dim]  {action.llm_explanation}")
-
-    body = "\n".join(lines)
-
-    if store and provenance:
-        inv_tree = _build_fix_investigation_tree(
-            action,
-            violation,
-            store,
-            provenance,
-        )
-        panel_content = Group(body, "", inv_tree)
+        lines.append(f"[bold]{action.llm_explanation}[/bold]")
+    elif action.description:
+        lines.append(f"[bold]{action.description}[/bold]")
     else:
-        panel_content = body
+        lines.append("[bold]Cannot auto-resolve[/bold]")
 
     console.print(
         Panel(
-            panel_content,
+            "\n".join(lines),
             title=f"[yellow]Unresolved: {action.label}[/yellow]",
             border_style="yellow",
             padding=(0, 1),

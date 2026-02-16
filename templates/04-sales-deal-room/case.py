@@ -46,7 +46,7 @@ case = {
             "capture_json": True,
         },
         {"name": "note_fix", "command": ["synix", "demo", "note", "5/12 Fixing ungrounded claims..."]},
-        {"name": "fix", "command": ["synix", "fix", "PIPELINE"], "stdin": "a\na\na\na\na\na\na\na\na\na\na\na\na\n"},
+        {"name": "fix", "command": ["synix", "fix", "PIPELINE"], "stdin": "a\na\n"},
         {"name": "note_revalidate", "command": ["synix", "demo", "note", "6/12 Re-validating..."]},
         {
             "name": "validate_clean",

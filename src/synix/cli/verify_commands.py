@@ -57,9 +57,16 @@ def lineage(artifact_id: str, build_dir: str):
 
 @click.command()
 @click.option("--build-dir", default="./build", help="Build directory")
-def status(build_dir: str):
+@click.option("--resolved", is_flag=True, help="Show resolved violation details")
+def status(build_dir: str, resolved: bool):
     """Show build status summary."""
+    import json as _json
+    from datetime import datetime
+
+    from rich.tree import Tree
+
     from synix.build.artifacts import ArtifactStore
+    from synix.build.provenance import ProvenanceTracker
 
     build_path = Path(build_dir)
     if not build_path.exists():
@@ -67,48 +74,223 @@ def status(build_dir: str):
         sys.exit(1)
 
     store = ArtifactStore(build_dir)
+    provenance = ProvenanceTracker(build_dir)
 
+    # ── Build layers table ──────────────────────────────────────────────
     table = Table(title="Build Status", box=box.ROUNDED)
     table.add_column("Layer", style="bold")
     table.add_column("Artifacts", justify="right")
-    table.add_column("Last Build", justify="center")
+    table.add_column("Last Built", justify="center")
 
-    # Group artifacts by layer from manifest
+    # Group artifacts by layer, track newest created_at per layer
     manifest = store._manifest
     layers: dict[str, dict] = {}
-    for _aid, info in manifest.items():
+    for aid, info in manifest.items():
         layer = info.get("layer", "unknown")
         level = info.get("level", 0)
         if layer not in layers:
-            layers[layer] = {"count": 0, "level": level}
+            layers[layer] = {"count": 0, "level": level, "newest": None}
         layers[layer]["count"] += 1
 
-    # Sort by level
+        # Read created_at from artifact file for last-built timestamp
+        art = store.load_artifact(aid)
+        if art and art.created_at:
+            ts = art.created_at if isinstance(art.created_at, str) else art.created_at.isoformat()
+            current = layers[layer]["newest"]
+            if current is None or ts > current:
+                layers[layer]["newest"] = ts
+
     for layer_name, info in sorted(layers.items(), key=lambda x: x[1]["level"]):
+        if layer_name == "traces":
+            continue  # skip system artifacts
         style = get_layer_style(info["level"])
+        ts = info.get("newest")
+        if ts:
+            try:
+                dt = datetime.fromisoformat(ts)
+                time_str = dt.strftime("%b %d %H:%M")
+            except (ValueError, TypeError):
+                time_str = "-"
+        else:
+            time_str = "-"
         table.add_row(
             f"[{style}]{layer_name}[/{style}]",
             str(info["count"]),
-            "-",
+            time_str,
         )
 
     console.print()
     console.print(table)
 
-    # Search index status
+    # ── Projections ─────────────────────────────────────────────────────
     search_db = build_path / "search.db"
-    if search_db.exists():
-        console.print(f"\n[green]Search index:[/green] {search_db} exists")
-    else:
-        console.print("\n[yellow]Search index:[/yellow] not built yet")
-
-    # Context doc status
     context_doc = build_path / "context.md"
+    proj_parts = []
+    if search_db.exists():
+        proj_parts.append("[green]search index[/green]")
     if context_doc.exists():
         size = context_doc.stat().st_size
-        console.print(f"[green]Context doc:[/green] {context_doc} ({size} bytes)")
+        proj_parts.append(f"[green]context doc[/green] ({size}b)")
+    if proj_parts:
+        console.print(f"\n[bold]Projections:[/bold] {', '.join(proj_parts)}")
+
+    # ── Stale artifacts ─────────────────────────────────────────────────
+    stale = _find_stale_artifacts(store, provenance)
+    if stale:
+        stale_tree = Tree(f"[yellow bold]Stale Artifacts: {len(stale)} artifact(s) need rebuild[/yellow bold]")
+        for label, changed_parents in sorted(stale.items()):
+            node = stale_tree.add(f"[bold]{label}[/bold]")
+            for parent in changed_parents:
+                node.add(f"[yellow]\u21b3 parent changed: {parent}[/yellow]")
+        console.print()
+        console.print(stale_tree)
+
+    # ── Violations ──────────────────────────────────────────────────────
+    violations_state = build_path / "violations_state.json"
+    by_status: dict[str, int] = {}
+    state: dict = {}
+
+    if violations_state.exists():
+        state = _json.loads(violations_state.read_text())
+
+    if state:
+        # Counts by status
+        for v in state.values():
+            s = v.get("status", "unknown")
+            by_status[s] = by_status.get(s, 0) + 1
+
+        parts = []
+        if by_status.get("active"):
+            parts.append(f"[red]{by_status['active']} active[/red]")
+        if by_status.get("resolved"):
+            parts.append(f"[green]{by_status['resolved']} resolved[/green]")
+        if by_status.get("ignored"):
+            parts.append(f"[dim]{by_status['ignored']} ignored[/dim]")
+        if by_status.get("expired"):
+            parts.append(f"[dim]{by_status['expired']} expired[/dim]")
+        console.print(f"\n[bold]Violations:[/bold] {', '.join(parts)}")
+
+        # Group active violations by artifact label for tree display
+        active_by_label: dict[str, list[dict]] = {}
+        for entry in state.values():
+            if entry.get("status") != "active":
+                continue
+            viol = entry.get("violation", {})
+            label = viol.get("label", "?")
+            active_by_label.setdefault(label, []).append(viol)
+
+        if active_by_label:
+            tree = Tree(f"[red bold]{by_status.get('active', 0)} active violation(s)[/red bold]")
+            for label, viols in sorted(active_by_label.items()):
+                node = tree.add(f"[bold]{label}[/bold] ({len(viols)})")
+                for viol in viols:
+                    msg = viol.get("message", "")
+                    if len(msg) > 90:
+                        msg = msg[:87] + "..."
+                    sev = viol.get("severity", "warning")
+                    sev_style = "red" if sev == "error" else "yellow"
+                    node.add(f"[{sev_style}]{sev.upper()}[/{sev_style}] {msg}")
+            console.print(tree)
+
+        # Show resolved details when --resolved flag is set
+        if resolved and by_status.get("resolved"):
+            _show_resolved_details(state)
+
+    # ── Next steps ──────────────────────────────────────────────────────
+    active_count = by_status.get("active", 0)
+    stale_count = len(stale)
+    _print_next_steps(active_count, stale_count)
+
+
+def _find_stale_artifacts(store, provenance) -> dict[str, list[str]]:
+    """Find artifacts whose parents have changed since they were built.
+
+    Returns a dict mapping stale artifact labels to the list of parent labels
+    whose artifact_id no longer matches the child's input_ids.
+    """
+    stale: dict[str, list[str]] = {}
+
+    for label in store._manifest:
+        parent_labels = provenance.get_parents(label)
+        if not parent_labels:
+            continue
+
+        # Load the artifact to get its input_ids
+        artifact = store.load_artifact(label)
+        if artifact is None:
+            continue
+
+        input_ids = set(artifact.input_ids or [])
+        changed_parents: list[str] = []
+
+        for parent_label in parent_labels:
+            parent_hash = store.get_artifact_id(parent_label)
+            if parent_hash and parent_hash not in input_ids:
+                changed_parents.append(parent_label)
+
+        if changed_parents:
+            stale[label] = changed_parents
+
+    return stale
+
+
+def _show_resolved_details(state: dict) -> None:
+    """Show resolved violation details grouped by label."""
+    from datetime import datetime
+
+    resolved_by_label: dict[str, list[dict]] = {}
+    for entry in state.values():
+        if entry.get("status") != "resolved":
+            continue
+        viol = entry.get("violation", {})
+        label = viol.get("label", "?")
+        resolved_by_label.setdefault(label, []).append(entry)
+
+    if not resolved_by_label:
+        return
+
+    total = sum(len(v) for v in resolved_by_label.values())
+    tree = Tree(f"[green bold]Resolved Violations: {total}[/green bold]")
+    for label, entries in sorted(resolved_by_label.items()):
+        node = tree.add(f"[bold]{label}[/bold] ({len(entries)})")
+        for entry in entries:
+            viol = entry.get("violation", {})
+            fix_action = entry.get("fix_action", "")
+            resolved_at = entry.get("resolved_at", "")
+            msg = viol.get("message", "")
+            if len(msg) > 80:
+                msg = msg[:77] + "..."
+
+            ts_str = ""
+            if resolved_at:
+                try:
+                    dt = datetime.fromisoformat(resolved_at)
+                    ts_str = f"  ({dt.strftime('%b %d %H:%M')})"
+                except (ValueError, TypeError):
+                    pass
+
+            action_str = f"  {fix_action}" if fix_action else ""
+            node.add(f"[green]\u2713{action_str}[/green]  {msg}{ts_str}")
+
+    console.print()
+    console.print(tree)
+
+
+def _print_next_steps(active_count: int, stale_count: int) -> None:
+    """Print actionable next-step guidance based on build state."""
+    if active_count and stale_count:
+        console.print(
+            "\n[bold]Next:[/bold] Run [bold]synix fix <pipeline>[/bold] to resolve violations, "
+            f"then [bold]synix build <pipeline>[/bold] to rebuild {stale_count} stale artifact(s)."
+        )
+    elif active_count:
+        console.print("\n[bold]Next:[/bold] Run [bold]synix fix <pipeline>[/bold] to resolve violations.")
+    elif stale_count:
+        console.print(
+            f"\n[bold]Next:[/bold] Run [bold]synix build <pipeline>[/bold] to rebuild {stale_count} stale artifact(s)."
+        )
     else:
-        console.print("[yellow]Context doc:[/yellow] not built yet")
+        console.print("\n[green]Build is clean.[/green]")
 
 
 @click.command()

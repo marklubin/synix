@@ -103,6 +103,14 @@ class BaseFixer(ABC):
         """Propose a fix for the given violation."""
         ...
 
+    def fix_batch(self, violations: list[Violation], ctx: FixContext) -> FixAction:
+        """Fix multiple violations for the same artifact in one pass.
+
+        Default: delegates to fix() for the first violation only.
+        Override for batch-aware fixers (e.g., CitationEnrichment).
+        """
+        return self.fix(violations[0], ctx)
+
     def can_handle(self, violation: Violation) -> bool:
         return violation.violation_type in self.handles_violation_types
 
@@ -197,32 +205,30 @@ def run_fixers(
     ctx = FixContext(store, provenance, pipeline, search_index, llm_client)
     result = FixResult()
 
-    # Count total fixable violations across all fixers
-    total_fixable = 0
-    for fixer in pipeline.fixers:
-        matching = [v for v in validation_result.violations if fixer.can_handle(v)]
-        total_fixable += len(matching)
-
-    current = 0
     for fixer in pipeline.fixers:
         matching = [v for v in validation_result.violations if fixer.can_handle(v)]
 
-        for violation in matching:
-            current += 1
+        # Group violations by artifact label — fix all issues per artifact in one batch
+        by_label: dict[str, list[Violation]] = {}
+        for v in matching:
+            by_label.setdefault(v.label, []).append(v)
+
+        total_batches = len(by_label)
+
+        for current, (label, violations) in enumerate(sorted(by_label.items()), 1):
             if on_progress:
                 on_progress(
-                    f"Fixing {violation.label} ({fixer.name})",
+                    f"Fixing {label} ({len(violations)} violations, {fixer.name})",
                     current,
-                    total_fixable,
+                    total_batches,
                 )
             try:
-                action = fixer.fix(violation, ctx)
-                # Compute downstream invalidation
+                action = fixer.fix_batch(violations, ctx)
                 action.downstream_invalidated = _find_downstream_artifacts(action.label, provenance)
                 result.actions.append(action)
                 result.rebuild_required.extend(action.downstream_invalidated)
             except Exception as exc:
-                result.errors.append(f"Fixer {fixer.name} error on {violation.label}: {exc}")
+                result.errors.append(f"Fixer {fixer.name} error on {label}: {exc}")
 
         result.fixers_run.append(fixer.name or type(fixer).__name__)
 
@@ -413,10 +419,15 @@ class CitationEnrichment(BaseFixer):
         }
 
     def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
-        artifact = ctx.store.load_artifact(violation.label)
+        return self.fix_batch([violation], ctx)
+
+    def fix_batch(self, violations: list[Violation], ctx: FixContext) -> FixAction:
+        """Fix all ungrounded claims for one artifact in a single LLM call."""
+        label = violations[0].label
+        artifact = ctx.store.load_artifact(label)
         if artifact is None:
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="skip",
                 original_artifact_id="",
                 new_content="",
@@ -426,7 +437,7 @@ class CitationEnrichment(BaseFixer):
 
         if ctx.llm_client is None:
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="skip",
                 original_artifact_id=artifact.artifact_id,
                 new_content="",
@@ -434,72 +445,93 @@ class CitationEnrichment(BaseFixer):
                 description="No LLM client available",
             )
 
-        claim = violation.metadata.get("claim", "")
-        suggestion = violation.metadata.get("suggestion", "")
-
-        # Search for source context
+        # Collect all claims and search for source context
         evidence_source_ids: list[str] = []
         source_texts: list[str] = []
+        claims_lines: list[str] = []
 
-        if ctx.search_index is not None:
-            search_queries = [claim]
+        for v in violations:
+            claim = v.metadata.get("claim", "")
+            suggestion = v.metadata.get("suggestion", "")
+            claims_lines.append(f"  - {claim}")
             if suggestion:
-                search_queries.append(suggestion)
+                claims_lines.append(f"    Suggested source: {suggestion}")
 
-            seen_ids: set[str] = set()
-            for query in search_queries:
-                if not query.strip():
-                    continue
-                try:
-                    results = ctx.search_index.query(query)
-                    for r in results[: self._max_context]:
-                        if r.label not in seen_ids:
-                            seen_ids.add(r.label)
-                            evidence_source_ids.append(r.label)
-                            source_texts.append(f"[{r.label}]: {r.content[:500]}")
-                except Exception:
-                    logger.warning("citation_enrichment: search query failed for %s", violation.label, exc_info=True)
-                    continue
+            if ctx.search_index is not None:
+                search_queries = [claim]
+                if suggestion:
+                    search_queries.append(suggestion)
 
+                seen_ids: set[str] = {eid for eid in evidence_source_ids}
+                for query in search_queries:
+                    if not query.strip():
+                        continue
+                    try:
+                        results = ctx.search_index.query(query)
+                        for r in results[: self._max_context]:
+                            if r.label not in seen_ids:
+                                seen_ids.add(r.label)
+                                evidence_source_ids.append(r.label)
+                                source_texts.append(f"[{r.label}]: {r.content[:500]}")
+                    except Exception:
+                        logger.warning("citation_enrichment: search query failed for %s", label, exc_info=True)
+                        continue
+
+        claims_list = "\n".join(claims_lines)
         source_context = "\n\n".join(source_texts) if source_texts else "(no source context available)"
 
         # Build source label map for the LLM
-        source_label_map = "\n".join(f"  {label} -> {make_uri(label)}" for label in evidence_source_ids)
+        source_label_map = "\n".join(f"  {lbl} -> {make_uri(lbl)}" for lbl in evidence_source_ids)
         if not source_label_map:
             source_label_map = "(no sources available)"
 
-        # Build prompt
-        prompt_path = Path(__file__).parent / "prompts" / "citation_enrichment.txt"
+        # Use batch prompt for multiple violations, single prompt for one
+        if len(violations) > 1:
+            prompt_path = Path(__file__).parent / "prompts" / "citation_enrichment_batch.txt"
+        else:
+            prompt_path = Path(__file__).parent / "prompts" / "citation_enrichment.txt"
+
         try:
             prompt_template = prompt_path.read_text()
         except (FileNotFoundError, OSError):
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="skip",
                 original_artifact_id=artifact.artifact_id,
                 new_content="",
                 new_artifact_id="",
                 description=f"Prompt file not found: {prompt_path}",
             )
-        prompt = (
-            prompt_template.replace("{claim}", claim)
-            .replace("{suggestion}", suggestion)
-            .replace("{content}", artifact.content)
-            .replace("{source_context}", source_context)
-            .replace("{source_label_map}", source_label_map)
-        )
+
+        if len(violations) > 1:
+            prompt = (
+                prompt_template.replace("{claims_list}", claims_list)
+                .replace("{content}", artifact.content)
+                .replace("{source_context}", source_context)
+                .replace("{source_label_map}", source_label_map)
+            )
+        else:
+            claim = violations[0].metadata.get("claim", "")
+            suggestion = violations[0].metadata.get("suggestion", "")
+            prompt = (
+                prompt_template.replace("{claim}", claim)
+                .replace("{suggestion}", suggestion)
+                .replace("{content}", artifact.content)
+                .replace("{source_context}", source_context)
+                .replace("{source_label_map}", source_label_map)
+            )
 
         try:
             response = ctx.llm_client.complete(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=8192,
                 temperature=self._temperature,
-                artifact_desc=f"citation fix for {violation.label}",
+                artifact_desc=f"citation fix for {label} ({len(violations)} claims)",
             )
             response_text = response.content
         except Exception as exc:
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="skip",
                 original_artifact_id=artifact.artifact_id,
                 new_content="",
@@ -508,7 +540,7 @@ class CitationEnrichment(BaseFixer):
             )
 
         # Store trace
-        _store_llm_trace(ctx.store, violation.label, prompt, response_text, "citation_enrichment")
+        _store_llm_trace(ctx.store, label, prompt, response_text, "citation_enrichment")
 
         # Parse response
         match = re.search(r"```(?:json)?\s*\n?(.*?)(?:\n?```|$)", response_text, re.DOTALL)
@@ -518,7 +550,7 @@ class CitationEnrichment(BaseFixer):
             data = json.loads(text)
         except json.JSONDecodeError:
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="unresolved",
                 original_artifact_id=artifact.artifact_id,
                 new_content="",
@@ -535,7 +567,7 @@ class CitationEnrichment(BaseFixer):
         if status == "resolved" and new_content:
             new_hash = f"sha256:{hashlib.sha256(new_content.encode()).hexdigest()}"
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="rewrite",
                 original_artifact_id=artifact.artifact_id,
                 new_content=new_content,
@@ -547,7 +579,7 @@ class CitationEnrichment(BaseFixer):
             )
         else:
             return FixAction(
-                label=violation.label,
+                label=label,
                 action="unresolved",
                 original_artifact_id=artifact.artifact_id,
                 new_content="",

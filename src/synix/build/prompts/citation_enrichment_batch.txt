@@ -1,0 +1,33 @@
+You are fixing multiple ungrounded claims in a memory artifact by adding proper citations or removing unsupported content.
+
+The following claims were flagged as ungrounded (lacking synix:// citation links):
+{claims_list}
+
+Original artifact content:
+<artifact>
+{content}
+</artifact>
+
+Available source artifacts and their content snippets:
+<sources>
+{source_context}
+</sources>
+
+Available source labels for citation (use these exact URIs):
+{source_label_map}
+
+Instructions:
+1. For each ungrounded claim, check if it IS supported by one of the available sources:
+   - If YES: add a markdown citation link [claim text](synix://source-label)
+   - If NO: either remove the unsupported claim or qualify it (e.g., "It has been reported that X")
+2. Fix ALL flagged claims in a single pass.
+3. Return the FULL rewritten artifact content with ALL fixes applied.
+4. Do NOT alter content that was not flagged — preserve the rest exactly.
+
+Respond with JSON only:
+{
+  "status": "resolved",
+  "action": "batch_fix",
+  "content": "The full rewritten artifact content with all fixes applied",
+  "explanation": "Summary of what was changed"
+}

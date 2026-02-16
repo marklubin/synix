@@ -35,6 +35,10 @@ sales-deal-room  claude-haiku-4-5-20251001 (anthropic)
     ├── ← strategy
     ├── ← deal_context
     └── → deal-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← competitor_docs
+        ├── ← product_specs
+        ├── ← deal_context
+        ├── ← win_reports
         ├── ← competitive_intel
         ├── ← strategy
         └── ← call_prep

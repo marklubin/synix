@@ -312,7 +312,7 @@ def _normalize_output(text: str, case_path: Path) -> str:
         )
         # Normalize search projection status + index count (e.g., "cached  9 indexed" or "new  14 indexed")
         line = re.sub(
-            r"\b(?:cached|new|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
+            r"\b(?:cached|new|rebuild|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
             "<MATERIALIZED>  <N> indexed",
             line,
         )

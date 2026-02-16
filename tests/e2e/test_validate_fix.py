@@ -265,15 +265,14 @@ class TestSemanticFixCycleE2E:
         rewrite_actions = [a for a in fix_result.actions if a.action == "rewrite"]
         assert len(rewrite_actions) >= 1
 
-        # Step 4: Apply fix (simulating user accept)
-        for action in rewrite_actions:
-            apply_fix(action, store, provenance)
+        # Step 4: Apply fix for monthly-dec (simulating user accept)
+        monthly_action = next(a for a in rewrite_actions if a.label == "monthly-dec")
+        apply_fix(monthly_action, store, provenance)
 
-            # Mark resolved in queue
-            for v in result.violations:
-                if v.label == action.label:
-                    queue.resolve(v.violation_id, fix_action="rewrite")
-            break
+        # Mark resolved in queue
+        for v in result.violations:
+            if v.label == monthly_action.label:
+                queue.resolve(v.violation_id, fix_action="rewrite")
 
         queue.save_state()
 
@@ -288,7 +287,8 @@ class TestSemanticFixCycleE2E:
         assert "ep-dec" in parents
 
         # Step 7: Verify downstream invalidation
-        assert "core-1" in fix_result.actions[0].downstream_invalidated
+        monthly_fix = next(a for a in fix_result.actions if a.label == "monthly-dec")
+        assert "core-1" in monthly_fix.downstream_invalidated
 
     def test_unresolved_accept_original(self, store, provenance, build_dir, monkeypatch):
         """Unresolved -> user accepts original -> violation resolved, no content change."""

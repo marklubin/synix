@@ -80,12 +80,21 @@ pipeline.add(
     call_prep,
 )
 
-# -- Projection: full-text search on intel + strategy + call prep ------
+# -- Projection: full-text search on all layers (sources + transforms) --
+#    Fixer needs access to source docs to verify claims and add citations.
 
 pipeline.add(
     SearchIndex(
         "deal-search",
-        sources=[competitive_intel, strategy, call_prep],
+        sources=[
+            competitor_docs,
+            product_specs,
+            deal_context,
+            win_reports,
+            competitive_intel,
+            strategy,
+            call_prep,
+        ],
         search=["fulltext"],
     )
 )
@@ -99,6 +108,7 @@ pipeline.add_validator(
             "provider": "anthropic",
             "model": "claude-haiku-4-5-20251001",
             "temperature": 0.0,
+            "max_tokens": 4096,
         },
     )
 )
