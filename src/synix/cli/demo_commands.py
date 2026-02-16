@@ -290,6 +290,12 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Drop LLM stats lines entirely (presence varies based on whether LLM calls occurred)
         if re.search(r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+", line):
             continue
+        # Normalize Python traceback file paths (vary between local and CI)
+        line = re.sub(
+            r'(File ")[^"]*/(src/synix/)',
+            r"\1<PKG>/\2",
+            line,
+        )
         # Normalize cassette miss keys (hash varies by environment)
         line = re.sub(
             r"Cassette miss for key [0-9a-f]+\.\.\.",
