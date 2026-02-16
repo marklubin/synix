@@ -1,124 +1,108 @@
 # synix
 
-> A build system for agent memory — declarative pipelines turn conversations into searchable, hierarchical memory with full provenance tracking
+> A build system for agent memory — declarative pipelines transform raw conversations into searchable, hierarchical memory with full provenance tracking
 
 ## What it does
 
-Synix processes historical conversations through configurable DAGs of LLM-backed transforms, producing memory artifacts at multiple levels of abstraction. Change a prompt or add new conversations, and only affected layers rebuild. Every artifact traces back through the full dependency graph to its source conversations, enabling architecture experimentation without data loss.
+Synix processes conversation exports (ChatGPT, Claude, text files) through configurable DAG pipelines of LLM transforms to build memory artifacts at multiple levels of abstraction. Think `make` or `dbt` for agent memory: declare your architecture in Python, build incrementally with content-addressed caching, trace any artifact back to source conversations.
 
 ## Key concepts
 
-- **Artifact** — immutable, content-addressed build output (transcript, episode, rollup, core memory) with SHA256 identity
-- **Layer** — named level in memory hierarchy forming a DAG (transcripts → episodes → rollups → core)  
-- **Pipeline** — declared in Python defining layers, transforms, grouping strategies, and projections
-- **Transform** — 1:1 LLM processing (conversation → episode summary)
-- **Aggregate** — N:1 grouping with synthesis (episodes → monthly rollup by time period)
-- **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search index, markdown context doc)
-- **Provenance** — every artifact chains back to source conversations through dependency graph
-- **Fingerprint-based caching** — SHA256 of inputs + prompt + config + model determines rebuild necessity
+- **Artifact** — immutable, versioned build output with SHA256 content hash and provenance chain
+- **Layer** — typed pipeline step (Source/Transform/SearchIndex/FlatFile) with dependency references  
+- **Pipeline** — Python object containing layers, projections, and config; routes data through DAG
+- **Transform** — 1:1 LLM step (episode summary, synthesis); extensible with custom classes
+- **Projection** — materializes artifacts into usable outputs (SQLite FTS5 search, markdown context)
+- **Provenance** — every artifact traces back through dependency graph to source conversations
+- **Fingerprint** — content-addressed cache key capturing inputs, prompts, model config, transform code
 
 ## Installation and quick start
 
 ```bash
-# Install via uv (recommended)
+# Install
+uvx synix --help
+
+# Initialize project with sample data
 uvx synix init my-project
 cd my-project
 
-# Configure LLM (requires API key)
-export OPENAI_API_KEY=sk-...
-# or ANTHROPIC_API_KEY=sk-ant-...
-
-# Build pipeline
+# Build the pipeline (requires LLM API key in config)
 uvx synix build
 
-# Search and explore  
-uvx synix search "return policy"
-uvx synix lineage final-report
+# Search and explore
+uvx synix search "hiking"
+uvx synix list
+uvx synix show final-report
 ```
 
 ## CLI commands
 
-- `uvx synix init <name>` — scaffold new project with sources and pipeline
-- `uvx synix build [pipeline.py]` — execute pipeline, incremental rebuilds only  
-- `uvx synix plan` — dry-run showing what would build + cost estimates
-- `uvx synix search <query> [--layers L] [--trace]` — hybrid search with provenance
-- `uvx synix list [layer]` — show all artifacts, optionally filtered
-- `uvx synix show <label|id>` — display artifact content (markdown or JSON)
-- `uvx synix lineage <id>` — full dependency chain to sources
-- `uvx synix validate` — run declared validators on build output
-- `uvx synix verify` — check build integrity (hashes, provenance, consistency)
-- `uvx synix clean` — delete build directory
+| Command | Description |
+|---------|-------------|
+| `uvx synix init <name>` | Scaffold new project with pipeline and sources |
+| `uvx synix build [pipeline.py]` | Run pipeline, only rebuild what changed |
+| `uvx synix plan [pipeline.py]` | Dry-run showing what would build with cost estimates |
+| `uvx synix search <query>` | Search artifacts with provenance, `--layers` to filter |
+| `uvx synix show <id>` | Display artifact content, resolves by label or ID prefix |
+| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
+| `uvx synix lineage <id>` | Show full provenance chain for artifact |
+| `uvx synix validate` | *(Experimental)* Run declared validators |
+| `uvx synix verify` | Check build integrity (hashes, provenance) |
+| `uvx synix clean` | Delete build directory |
 
 ## Architecture overview
 
 ```
 src/synix/
-├── cli.py              # Click CLI commands
-├── pipeline/
-│   ├── config.py       # Parse pipeline.py into Pipeline/Layer objects  
-│   ├── dag.py          # DAG resolution, build order, cache detection
-│   └── runner.py       # Execute layers, run transforms, materialize projections
-├── artifacts/
-│   ├── store.py        # Artifact storage (filesystem + manifest.json)
-│   └── provenance.py   # Track and query lineage chains
-├── transforms/
-│   ├── parse.py        # ChatGPT/Claude JSON → transcript artifacts
-│   ├── summarize.py    # LLM transforms (episode, rollup, core synthesis)
-│   └── prompts/        # Prompt templates as text files  
-├── projections/
-│   ├── search_index.py # SQLite FTS5 + semantic search materialization
-│   └── flat_file.py    # Render artifacts as markdown context docs
-└── sources/
-    ├── chatgpt.py      # ChatGPT export parser
-    ├── claude.py       # Claude export parser  
-    └── text.py         # Plain text/markdown with YAML frontmatter
+├── cli/                   # Click commands (build, search, validate, etc.)
+├── core/
+│   └── models.py          # Layer hierarchy, Pipeline, Artifact models
+├── build/
+│   ├── runner.py          # Execute pipeline, walk DAG, cache artifacts  
+│   ├── plan.py            # Dry-run planner, rebuild/cache decisions
+│   ├── dag.py             # DAG resolution, build order from dependencies
+│   ├── artifacts.py       # Artifact storage (filesystem-backed)
+│   ├── provenance.py      # Lineage tracking and queries
+│   ├── fingerprint.py     # Build fingerprints for caching
+│   ├── llm_transforms.py  # Built-in transforms (episode, rollup, synthesis)
+│   └── validators.py      # Built-in validators (PII, semantic conflict)
+├── search/
+│   ├── indexer.py         # SQLite FTS5 + embedding index builder
+│   ├── retriever.py       # Hybrid search with RRF fusion  
+│   └── embeddings.py      # Embedding providers (fastembed, OpenAI)
+└── transforms/            # Public API re-exports
 ```
-
-Key interfaces: `runner.py` calls `store.{save,load}_artifact()`, `transforms.execute()`, `projections.materialize()`, and `provenance.record()`. CLI calls `config.load()`, `runner.run()`, and `search_index.query()`.
 
 ## Pipeline definition
 
-```python
-from synix import Pipeline, Layer, Projection
+Pipelines are Python code defining the memory architecture:
 
-pipeline = Pipeline("memory-system")
-pipeline.source_dir = "./exports" 
+```python
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+
+pipeline = Pipeline("my-memory")
+pipeline.source_dir = "./sources"
 pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3}
 
-# Layer 0: auto-detect and parse sources  
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+# Layers — the memory hierarchy
+transcripts = Source("transcripts") 
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])  
+core = CoreSynthesis("core", depends_on=[monthly])
 
-# Layer 1: one summary per conversation
-pipeline.add_layer(Layer(
-    name="episodes", level=1, depends_on=["transcripts"],
-    transform="episode_summary", grouping="by_conversation"
-))
+pipeline.add(transcripts, episodes, monthly, core)
 
-# Layer 2: group episodes by month
-pipeline.add_layer(Layer(
-    name="monthly", level=2, depends_on=["episodes"], 
-    transform="monthly_rollup", grouping="by_month"
-))
-
-# Layer 3: synthesize into core memory
-pipeline.add_layer(Layer(
-    name="core", level=3, depends_on=["monthly"],
-    transform="core_synthesis", grouping="single", context_budget=10000
-))
-
-# Projections: search index + flat file output
-pipeline.add_projection(Projection(
-    name="memory-index", projection_type="search_index",
-    sources=[{"layer": "episodes"}, {"layer": "monthly"}, {"layer": "core"}]
-))
+# Projections — how artifacts become usable
+pipeline.add(SearchIndex("memory-index", sources=[episodes, monthly, core]))
+pipeline.add(FlatFile("context-doc", sources=[core], output_path="./context.md"))
 ```
 
 ## Important constraints
 
-- **SQLite + filesystem only** — no external databases required
-- **Python 3.11+ required** — uses modern typing and async features
-- **LLM API key required** — supports OpenAI, Anthropic, or OpenAI-compatible endpoints  
-- **Single-user focused** — not designed for multi-tenant deployment
-- **No web UI** — CLI and programmatic API only
-- **Conversation sources only** — optimized for chat exports, not general documents
-- **Local execution** — no cloud service, runs on your machine with your data
+- **SQLite only** — no external databases, filesystem + SQLite FTS5 for all storage
+- **No web UI** — CLI-first tool, outputs can be consumed by any system  
+- **Python 3.11+** required with UV package manager (`uv sync`, `uv run synix`)
+- **LLM API key** required (Anthropic/OpenAI) for transforms, configured via pipeline
+- **Experimental APIs** — validate/fix workflow APIs may change in future releases
+- **Source file cleanup** — deleted source files don't auto-remove downstream artifacts
