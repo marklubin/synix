@@ -9,9 +9,9 @@ The fundamental output: **system prompt + RAG**, built from raw conversations wi
 ## Core Concepts
 
 - **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — named level in the memory hierarchy. Layers form a DAG (transcripts → episodes → rollups → core).
-- **Pipeline** — declared in Python. Defines layers, transforms, grouping strategies, and projections.
-- **Projection** — materializes artifacts into usable outputs (search index via SQLite FTS5, context doc as markdown).
+- **Layer** — typed Python object in the build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchIndex`/`FlatFile` for projections. Dependencies are object references via `depends_on`.
+- **Pipeline** — declared in Python. `Pipeline.add(*layers)` routes Source/Transform to layers, SearchIndex/FlatFile to projections automatically.
+- **Projection** — materializes artifacts into usable outputs. `SearchIndex` (SQLite FTS5 + optional embeddings), `FlatFile` (markdown context doc).
 - **Provenance** — every artifact traces back to its inputs. Always included in search results.
 - **Cache/Rebuild** — hash comparison: if inputs or prompt changed, rebuild. Otherwise skip.
 
@@ -22,50 +22,70 @@ Pipeline Python API and examples: [docs/pipeline-api.md](docs/pipeline-api.md)
 
 ```
 src/synix/
-├── __init__.py
-├── cli.py              # Click CLI — synix run, synix search, synix lineage
-├── pipeline/
-│   ├── config.py       # Parse pipeline Python module into Pipeline/Layer objects
-│   ├── dag.py          # DAG resolution — build order, rebuild detection
-│   └── runner.py       # Execute pipeline — walk DAG, run transforms, cache artifacts
-├── artifacts/
-│   ├── store.py        # Artifact storage — save/load/query (filesystem-backed)
-│   └── provenance.py   # Provenance tracking — record and query lineage chains
+├── __init__.py            # Public API: Pipeline, Source, Transform, SearchIndex, FlatFile, Artifact
+├── core/
+│   └── models.py          # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
+├── build/
+│   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
+│   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions
+│   ├── dag.py             # DAG resolution — build order from depends_on references
+│   ├── pipeline.py        # Pipeline loader — import Python module, extract Pipeline object
+│   ├── artifacts.py       # Artifact storage — save/load/query (filesystem-backed)
+│   ├── provenance.py      # Provenance tracking — record and query lineage chains
+│   ├── fingerprint.py     # Build fingerprints — synix:transform:v2 scheme
+│   ├── llm_transforms.py  # Built-in LLM transforms (EpisodeSummary, MonthlyRollup, etc.)
+│   ├── parse_transform.py # Source parser — ChatGPT/Claude JSON → transcript artifacts
+│   ├── merge_transform.py # Merge transform — Jaccard similarity grouping
+│   ├── transforms.py      # Transform base + registry (string dispatch fallback)
+│   ├── validators.py      # Built-in validators (PII, SemanticConflict, Citation, etc.)
+│   ├── fixers.py          # Built-in fixers (SemanticEnrichment, CitationEnrichment)
+│   ├── projections.py     # Projection dispatch
+│   └── cassette.py        # Record/replay for LLM + embedding calls
 ├── transforms/
-│   ├── base.py         # Base transform interface
-│   ├── parse.py        # Source parsers — ChatGPT/Claude JSON → transcript artifacts
-│   ├── summarize.py    # LLM transforms — episode, rollup, core synthesis
-│   └── prompts/        # Prompt templates as text files
+│   ├── __init__.py        # Re-export: EpisodeSummary, MonthlyRollup, TopicalRollup, CoreSynthesis, Merge
+│   └── base.py            # BaseTransform (legacy compat)
+├── validators/
+│   └── __init__.py        # Re-export: MutualExclusion, RequiredField, PII, SemanticConflict, Citation
+├── fixers/
+│   └── __init__.py        # Re-export: SemanticEnrichment, CitationEnrichment
 ├── projections/
-│   ├── base.py         # Base projection interface
-│   ├── search_index.py # SQLite FTS5 — materialize and query
-│   └── flat_file.py    # Render core memory as context document
-└── sources/
-    ├── chatgpt.py      # ChatGPT export parser
-    └── claude.py       # Claude export parser
+│   └── __init__.py        # Re-export: SearchIndexProjection, FlatFileProjection
+├── search/
+│   ├── indexer.py         # SQLite FTS5 — build, query, shadow swap
+│   ├── embeddings.py      # Embedding provider — fastembed, OpenAI, cached
+│   └── retriever.py       # Hybrid search — keyword + semantic + RRF fusion
+├── cli/                   # Click CLI commands
+│   ├── main.py
+│   ├── build_commands.py
+│   ├── artifact_commands.py
+│   └── ...
+└── templates/             # Bundled demo pipelines (synix init, synix demo)
 ```
 
 ## Key Module Interfaces
 
-**pipeline/runner.py** calls:
-- `artifacts.store.{save,load}_artifact()`, `get_artifact_id()` — cache checking
-- `transforms.*.execute(inputs, config) -> Artifact`
-- `projections.*.materialize(artifacts, config)` — after build
-- `artifacts.provenance.record(label, parent_ids, prompt_id, model_config)`
+**Pipeline model** (`core/models.py`):
+- `Source(name)` — root layer, loads files from source_dir
+- `Transform(name, depends_on=[...])` — abstract, subclass with `execute()` + `split()`
+- `SearchIndex(name, sources=[...])` — FTS5 + optional embeddings projection
+- `FlatFile(name, sources=[...], output_path=...)` — markdown context doc projection
+- `Pipeline.add(*layers)` — routes Source/Transform to layers, SearchIndex/FlatFile to projections
 
-**cli.py** calls:
-- `pipeline.config.load(path) -> Pipeline`
-- `pipeline.runner.run(pipeline, source_dir) -> RunResult`
-- `projections.search_index.query(query, layers) -> list[SearchResult]`
-- `artifacts.provenance.get_chain(label) -> list[ProvenanceRecord]`
+**build/runner.py** calls:
+- `isinstance(layer, Source)` → `layer.load(config)` for parsing
+- `isinstance(layer, Transform)` → `layer.compute_fingerprint()`, `layer.split()`, `layer.execute()`
+- Projection materialization via `SearchIndexProjection` / `FlatFileProjection`
 
 ## CLI Commands
 
 ```bash
-synix run pipeline.py [--source-dir ./exports]   # Build pipeline + materialize projections
-synix search "query" [--layers episodes,core]     # Search with provenance chains
-synix lineage <artifact-id>                       # Provenance tree view
-synix status                                      # Build summary table
+synix build pipeline.py                          # Build pipeline + materialize projections
+synix plan pipeline.py                           # Dry-run — per-artifact rebuild/cached counts
+synix plan pipeline.py --explain-cache           # Plan with cache decision reasons
+synix search "query" [--layers episodes,core]    # Search with provenance chains
+synix lineage <artifact-id>                      # Provenance tree view
+synix list                                       # All artifacts, grouped by layer
+synix show <id>                                  # Render artifact (markdown)
 ```
 
 CLI UX requirements (Rich formatting, colors, progress): [docs/cli-ux.md](docs/cli-ux.md)

@@ -101,18 +101,19 @@ Artifact
 
 **Provenance** traces every artifact back to its inputs. Each provenance record stores the artifact ID (hash), the labels of its parent artifacts, the prompt used, and the model config. This is how `synix lineage` reconstructs the full dependency chain from a core memory document back to the original conversations.
 
-**Layers** are named levels in the build DAG — `transcripts → episodes → rollups → core`. Each layer declares a transform and a grouping strategy. The pipeline is the full declared architecture: layers, projections, validators.
+**Layers** are typed Python objects in a DAG — `Source("transcripts") → EpisodeSummary("episodes") → MonthlyRollup("monthly") → CoreSynthesis("core")`. Dependencies are expressed as object references via `depends_on`. The pipeline is the full declared architecture: layers, projections, validators.
 
 ## Defining a Pipeline
 
-A pipeline is a Python file that declares your memory architecture: sources, transforms, projections, and validators.
+A pipeline is a Python file that declares your memory architecture. Layers are real Python objects — `Source` for inputs, transform classes for LLM steps, `SearchIndex` and `FlatFile` for outputs.
 
 ```python
 # pipeline.py
-from synix import Pipeline, Layer, Projection, ValidatorDecl, FixerDecl
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("my-memory")
-pipeline.source_dir = "./exports"
+pipeline.source_dir = "./sources"
 pipeline.build_dir = "./build"
 pipeline.llm_config = {
     "model": "claude-sonnet-4-20250514",
@@ -121,57 +122,52 @@ pipeline.llm_config = {
 }
 
 # Layer 0: auto-detect and parse source files
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+transcripts = Source("transcripts")
 
 # Layer 1: one summary per conversation
-pipeline.add_layer(Layer(
-    name="episodes", level=1, depends_on=["transcripts"],
-    transform="episode_summary", grouping="by_conversation",
-))
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 
 # Layer 2: group episodes by month
-pipeline.add_layer(Layer(
-    name="monthly", level=2, depends_on=["episodes"],
-    transform="monthly_rollup", grouping="by_month",
-))
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
 
 # Layer 3: synthesize everything into core memory
-pipeline.add_layer(Layer(
-    name="core", level=3, depends_on=["monthly"],
-    transform="core_synthesis", grouping="single",
-    context_budget=10000,
-))
+core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+
+pipeline.add(transcripts, episodes, monthly, core)
 
 # Projections — how artifacts become usable
-pipeline.add_projection(Projection(
-    name="memory-index", projection_type="search_index",
-    sources=[
-        {"layer": "episodes", "search": ["fulltext"]},
-        {"layer": "monthly", "search": ["fulltext"]},
-        {"layer": "core", "search": ["fulltext"]},
-    ],
-))
-pipeline.add_projection(Projection(
-    name="context-doc", projection_type="flat_file",
-    sources=[{"layer": "core"}],
-    config={"output_path": "./build/context.md"},
-))
+pipeline.add(
+    SearchIndex(
+        "memory-index",
+        sources=[episodes, monthly, core],
+        search=["fulltext", "semantic"],
+        embedding_config={
+            "provider": "fastembed",
+            "model": "BAAI/bge-small-en-v1.5",
+        },
+    )
+)
+pipeline.add(
+    FlatFile("context-doc", sources=[core], output_path="./build/context.md")
+)
 
 # Optional: validators and fixers
-pipeline.add_validator(ValidatorDecl(name="pii", config={"severity": "warning"}))
-pipeline.add_validator(ValidatorDecl(name="semantic_conflict", config={
-    "llm_config": pipeline.llm_config,
-}))
-pipeline.add_fixer(FixerDecl(name="semantic_enrichment"))
+from synix.validators import PII, SemanticConflict
+from synix.fixers import SemanticEnrichment
+
+pipeline.add_validator(PII(severity="warning"))
+pipeline.add_validator(SemanticConflict())
+pipeline.add_fixer(SemanticEnrichment())
 ```
 
 Because pipelines are Python, you can generate layers dynamically:
 
 ```python
+from synix.transforms import TopicalRollup
+
 for topic in ["career", "projects", "health"]:
-    pipeline.add_layer(Layer(
-        name=f"topic-{topic}", level=2, depends_on=["episodes"],
-        transform="topical_rollup", grouping="by_topic",
+    pipeline.add(TopicalRollup(
+        f"topic-{topic}", depends_on=[episodes],
         config={"topics": [topic]},
     ))
 ```
@@ -190,36 +186,45 @@ Drop files into `source_dir` — the `parse` transform auto-detects format by fi
 
 ### Transforms
 
-| Name | Grouping | What it does |
-|------|----------|-------------|
-| `parse` | — | Auto-discovers and parses all source files into transcript artifacts. |
-| `episode_summary` | `by_conversation` | 1 transcript → 1 episode summary via LLM. |
-| `monthly_rollup` | `by_month` | Groups episodes by calendar month, synthesizes each via LLM. |
-| `topical_rollup` | `by_topic` | Groups episodes by user-declared topics. Requires `config={"topics": [...]}`. |
-| `core_synthesis` | `single` | All rollups → single core memory document. Respects `context_budget`. |
-| `merge` | — | Groups artifacts by content similarity (Jaccard), merges above threshold. |
+Import from `synix.transforms`:
+
+| Class | What it does |
+|-------|-------------|
+| `EpisodeSummary` | 1 transcript → 1 episode summary via LLM. |
+| `MonthlyRollup` | Groups episodes by calendar month, synthesizes each via LLM. |
+| `TopicalRollup` | Groups episodes by user-declared topics. Requires `config={"topics": [...]}`. |
+| `CoreSynthesis` | All rollups → single core memory document. Respects `context_budget`. |
+| `Merge` | Groups artifacts by content similarity (Jaccard), merges above threshold. |
 
 ### Projections
 
-| Type | Output | Purpose |
-|------|--------|---------|
-| `search_index` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search. |
-| `flat_file` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt. |
+Import from `synix`:
+
+| Class | Output | Purpose |
+|-------|--------|---------|
+| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search. |
+| `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt. |
 
 ### Validators
 
-| Name | What it checks |
-|------|---------------|
-| `mutual_exclusion` | Merged artifacts don't mix values of a metadata field (e.g., `customer_id`). |
-| `required_field` | Artifacts in specified layers have a required metadata field. |
-| `pii` | Detects credit cards, SSNs, emails, phone numbers in content. |
-| `semantic_conflict` | LLM-based detection of contradictions across synthesized artifacts. |
+Import from `synix.validators`:
+
+| Class | What it checks |
+|-------|---------------|
+| `MutualExclusion` | Merged artifacts don't mix values of a metadata field (e.g., `customer_id`). |
+| `RequiredField` | Artifacts in specified layers have a required metadata field. |
+| `PII` | Detects credit cards, SSNs, emails, phone numbers in content. |
+| `SemanticConflict` | LLM-based detection of contradictions across synthesized artifacts. |
+| `Citation` | Verifies artifacts cite their source artifacts with valid URIs. |
 
 ### Fixers
 
-| Name | What it fixes |
-|------|--------------|
-| `semantic_enrichment` | Resolves semantic conflicts by rewriting with source episode context. Interactive approval. |
+Import from `synix.fixers`:
+
+| Class | What it fixes |
+|-------|--------------|
+| `SemanticEnrichment` | Resolves semantic conflicts by rewriting with source episode context. Interactive approval. |
+| `CitationEnrichment` | Adds missing citation references to artifacts. |
 
 ## CLI Reference
 
