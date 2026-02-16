@@ -351,6 +351,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
         normalized.append(line)
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
+    # Collapse Python tracebacks to just File lines + exception (body varies by Python version)
+    normalized = _collapse_tracebacks(normalized)
     return "\n".join(normalized)
 
 
@@ -378,6 +380,36 @@ def _sort_consecutive_spinner_lines(lines: list[str]) -> list[str]:
             flush()
             result.append(line)
     flush()
+    return result
+
+
+def _collapse_tracebacks(lines: list[str]) -> list[str]:
+    """Collapse Python traceback bodies to just File lines + exception.
+
+    Python 3.12+ shows fine-grained error locations with ^^^^^^^^ carets,
+    while older versions show the source code lines. Strip the indented
+    body lines between ``File "..."`` lines so tracebacks compare equal
+    across Python versions.
+    """
+    result: list[str] = []
+    in_traceback = False
+    for line in lines:
+        if line == "Traceback (most recent call last):":
+            in_traceback = True
+            result.append(line)
+        elif in_traceback:
+            # File lines are indented with 2 spaces
+            if re.match(r"  File ", line):
+                result.append(line)
+            elif line.startswith("    "):
+                # Source code or caret line — skip
+                continue
+            else:
+                # Exception line (not indented with 4 spaces) — ends the traceback
+                in_traceback = False
+                result.append(line)
+        else:
+            result.append(line)
     return result
 
 
