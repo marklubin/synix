@@ -89,7 +89,9 @@ for topic in ["work", "health", "projects", "relationships"]:
 
 This is why code > config. You can't do that in YAML.
 
-## Validators and Fixers
+## Validators and Fixers (Experimental)
+
+> **Note:** The validate/fix workflow is experimental. APIs and output formats may change in future releases.
 
 Validators and fixers are typed Python objects with explicit constructors:
 

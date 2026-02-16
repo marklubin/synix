@@ -27,8 +27,8 @@ Conversations are sources. Prompts are build rules. Summaries and world models a
 
 ```bash
 uvx synix build pipeline.py
-uvx synix validate
 uvx synix search "return policy"
+uvx synix validate                # experimental
 ```
 
 ## Quick Start
@@ -54,11 +54,11 @@ uvx synix show final-report       # render an artifact as markdown
 uvx synix show final-report --raw # full JSON with metadata and artifact IDs
 ```
 
-Validate and search:
+Search and validate:
 
 ```bash
-uvx synix validate                # run declared validators
 uvx synix search "hiking"         # full-text search across all indexed layers
+uvx synix validate                # run declared validators (experimental)
 ```
 
 ## Using Your Build Output
@@ -151,7 +151,7 @@ pipeline.add(
     FlatFile("context-doc", sources=[core], output_path="./build/context.md")
 )
 
-# Optional: validators and fixers
+# Optional: validators and fixers (experimental — APIs may change)
 from synix.validators import PII, SemanticConflict
 from synix.fixers import SemanticEnrichment
 
@@ -205,7 +205,9 @@ Import from `synix`:
 | `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search. |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt. |
 
-### Validators
+### Validators (Experimental)
+
+> **Note:** The validate/fix workflow is experimental. APIs and output formats may change in future releases.
 
 Import from `synix.validators`:
 
@@ -217,7 +219,7 @@ Import from `synix.validators`:
 | `SemanticConflict` | LLM-based detection of contradictions across synthesized artifacts. |
 | `Citation` | Verifies artifacts cite their source artifacts with valid URIs. |
 
-### Fixers
+### Fixers (Experimental)
 
 Import from `synix.fixers`:
 
@@ -237,8 +239,8 @@ Import from `synix.fixers`:
 | `uvx synix list [layer]` | List all artifacts with short artifact IDs, optionally filtered by layer. |
 | `uvx synix show <id>` | Display an artifact's content. Resolves by label or artifact ID prefix. `--raw` for JSON. |
 | `uvx synix search <query>` | Full-text search across indexed layers. `--mode hybrid` for semantic. |
-| `uvx synix validate` | Run declared validators against build artifacts. |
-| `uvx synix fix` | LLM-assisted repair of validation violations. |
+| `uvx synix validate` | *(Experimental)* Run declared validators against build artifacts. |
+| `uvx synix fix` | *(Experimental)* LLM-assisted repair of validation violations. |
 | `uvx synix verify` | Check build integrity (hashes, provenance). |
 | `uvx synix lineage <id>` | Show the full provenance chain for an artifact. |
 | `uvx synix clean` | Delete the build directory. |

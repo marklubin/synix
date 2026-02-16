@@ -19,11 +19,14 @@ from synix.cli.main import console, pipeline_argument
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.option("--dry-run", is_flag=True, help="Show fix proposals without applying")
 def fix(pipeline_path: str, build_dir: str | None, output_json: bool, dry_run: bool):
-    """Fix violations found by validate.
+    """[Experimental] Fix violations found by validate.
 
     Reads pre-saved violations from the violation queue and runs
     pipeline fixers to propose resolutions. Stale violations
     (where the artifact has been rebuilt) are automatically expired.
+
+    NOTE: The validate/fix workflow is experimental. APIs and output formats
+    may change in future releases.
     """
     from synix.build.pipeline import load_pipeline
 

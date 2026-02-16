@@ -53,11 +53,14 @@ def _build_provenance_tree(label, store, provenance):
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
-    """Validate built artifacts for contradictions, PII, and other issues.
+    """[Experimental] Validate built artifacts for contradictions, PII, and other issues.
 
     PIPELINE_PATH defaults to pipeline.py in the current directory.
 
     Runs validators and reports violations. Use `synix fix` to resolve them.
+
+    NOTE: The validate/fix workflow is experimental. APIs and output formats
+    may change in future releases.
     """
     from synix.build.pipeline import load_pipeline
 
