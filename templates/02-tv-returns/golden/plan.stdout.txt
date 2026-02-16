@@ -16,13 +16,13 @@
 ╰─────────────┴───────────────────────────╯
 
 tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)
-├── product_offers  source:demo_load_product_offers  <STATS>
+├── product_offers  source:parse  <STATS>
 │   └── ← ./sources (3 .md, 2 .json files, nested)
-├── policies  source:demo_load_policies  <STATS>
+├── policies  source:parse  <STATS>
 │   └── ← ./sources (3 .md, 2 .json files, nested)
-├── policy_index  transform:demo_extract_policies  <STATS>
+├── policy_index  transform:DemoExtractPoliciesTransform  <STATS>
 │   └── ← policies
-└── cs_product_brief  transform:demo_enrich_cs_brief  <STATS>
+└── cs_product_brief  transform:DemoEnrichCSBriefTransform  <STATS>
     ├── ← product_offers
     ├── ← policy_index
     └── → cs-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed

@@ -24,14 +24,14 @@ sales-deal-room  claude-haiku-4-5-20251001 (anthropic)
 │   └── ← ./sources/deal (3 .md files)
 ├── win_reports  source:parse  <STATS>
 │   └── ← ./sources/wins (2 .md files)
-├── competitive_intel  transform:deal_competitive_intel  <STATS>
+├── competitive_intel  transform:DealCompetitiveIntelTransform  <STATS>
 │   ├── ← competitor_docs
 │   └── ← product_specs
-├── strategy  transform:deal_strategy  <STATS>
+├── strategy  transform:DealStrategyTransform  <STATS>
 │   ├── ← competitive_intel
 │   ├── ← deal_context
 │   └── ← win_reports
-└── call_prep  transform:deal_call_prep  <STATS>
+└── call_prep  transform:DealCallPrepTransform  <STATS>
     ├── ← strategy
     ├── ← deal_context
     └── → deal-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed

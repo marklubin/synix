@@ -57,22 +57,20 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
         ValidationContext,
         ValidationResult,
         _gather_artifacts,
-        get_validator,
     )
 
     ctx = ValidationContext(store, provenance, pipeline)
     result = ValidationResult()
 
-    for decl in pipeline.validators:
-        validator = get_validator(decl.name)
-        validator._field_name = decl.config.get("field", "")  # type: ignore[attr-defined]
-        validator._config = decl.config  # type: ignore[attr-defined]
+    for validator in pipeline.validators:
+        config = validator.to_config_dict()
+        validator_name = validator.name or type(validator).__name__
 
-        artifacts = _gather_artifacts(store, decl.config)
+        artifacts = _gather_artifacts(store, config)
 
         if not output_json:
-            label = f"[bold]{decl.name}[/bold] [dim]({len(artifacts)} artifact(s))[/dim]"
-            spinner_msg = f"Running [bold]{decl.name}[/bold] on {len(artifacts)} artifact(s)..."
+            label = f"[bold]{validator_name}[/bold] [dim]({len(artifacts)} artifact(s))[/dim]"
+            spinner_msg = f"Running [bold]{validator_name}[/bold] on {len(artifacts)} artifact(s)..."
 
         start = time.monotonic()
 
@@ -90,7 +88,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
                 v.provenance_trace = ctx.trace_field_origin(v.label, v.field)
 
         result.violations.extend(violations)
-        result.validators_run.append(decl.name)
+        result.validators_run.append(validator_name)
 
         if not output_json:
             errors = sum(1 for v in violations if v.severity == "error")

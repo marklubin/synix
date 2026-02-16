@@ -125,23 +125,23 @@ def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
     pipeline = load_pipeline(str(tmp_path / "dag-test" / "pipeline.py"))
     by_name = {l.name: l for l in pipeline.layers}
 
-    # Two independent roots
-    assert by_name["bios"].level == 0
+    # Two independent roots (Source layers, level computed from DAG)
+    assert by_name["bios"]._level == 0
     assert by_name["bios"].depends_on == []
-    assert by_name["project_brief"].level == 0
+    assert by_name["project_brief"]._level == 0
     assert by_name["project_brief"].depends_on == []
 
     # 1:1 work style per bio
-    assert by_name["work_styles"].level == 1
-    assert by_name["work_styles"].depends_on == ["bios"]
+    assert by_name["work_styles"]._level == 1
+    assert [d.name for d in by_name["work_styles"].depends_on] == ["bios"]
 
     # Many:1 rollup
-    assert by_name["team_dynamics"].level == 2
-    assert by_name["team_dynamics"].depends_on == ["work_styles"]
+    assert by_name["team_dynamics"]._level == 2
+    assert [d.name for d in by_name["team_dynamics"].depends_on] == ["work_styles"]
 
     # Multi-source synthesis
-    assert by_name["final_report"].level == 3
-    assert set(by_name["final_report"].depends_on) == {"team_dynamics", "project_brief"}
+    assert by_name["final_report"]._level == 3
+    assert set(d.name for d in by_name["final_report"].depends_on) == {"team_dynamics", "project_brief"}
 
 
 def test_init_output_message(runner, tmp_path, monkeypatch):
@@ -168,7 +168,7 @@ def _make_mock_response(text):
 
 
 def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
-    """Full flow: init → build → validate → search with mocked LLM."""
+    """Full flow: init -> build -> validate -> search with mocked LLM."""
     monkeypatch.chdir(tmp_path)
 
     # 1. Init

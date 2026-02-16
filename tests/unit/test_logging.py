@@ -337,7 +337,8 @@ class TestRunLogWithRunner:
         """Create a pipeline and source dir that don't conflict."""
         import shutil
 
-        from synix import Layer, Pipeline, Projection
+        from synix import FlatFile, Pipeline, SearchIndex, Source
+        from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
         fixtures_dir = Path(__file__).parent.parent / "synix" / "fixtures"
         source_dir = tmp_path / "src_exports"
@@ -347,6 +348,11 @@ class TestRunLogWithRunner:
 
         build_dir = tmp_path / "build"
 
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+
         pipeline = Pipeline("test-logging")
         pipeline.source_dir = str(source_dir)
         pipeline.build_dir = str(build_dir)
@@ -355,52 +361,19 @@ class TestRunLogWithRunner:
             "temperature": 0.3,
             "max_tokens": 1024,
         }
-        pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        pipeline.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
+        pipeline.add(transcripts, episodes, monthly, core)
+        pipeline.add(
+            SearchIndex(
+                "memory-index",
+                sources=[episodes, monthly, core],
+                search=["fulltext"],
             )
         )
-        pipeline.add_layer(
-            Layer(
-                name="monthly",
-                level=2,
-                depends_on=["episodes"],
-                transform="monthly_rollup",
-                grouping="by_month",
-            )
-        )
-        pipeline.add_layer(
-            Layer(
-                name="core",
-                level=3,
-                depends_on=["monthly"],
-                transform="core_synthesis",
-                grouping="single",
-                context_budget=10000,
-            )
-        )
-        pipeline.add_projection(
-            Projection(
-                name="memory-index",
-                projection_type="search_index",
-                sources=[
-                    {"layer": "episodes", "search": ["fulltext"]},
-                    {"layer": "monthly", "search": ["fulltext"]},
-                    {"layer": "core", "search": ["fulltext"]},
-                ],
-            )
-        )
-        pipeline.add_projection(
-            Projection(
-                name="context-doc",
-                projection_type="flat_file",
-                sources=[{"layer": "core"}],
-                config={"output_path": str(build_dir / "context.md")},
+        pipeline.add(
+            FlatFile(
+                "context-doc",
+                sources=[core],
+                output_path=str(build_dir / "context.md"),
             )
         )
 

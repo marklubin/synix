@@ -6,10 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import synix.build.llm_transforms  # noqa: F401
-
-# Import to trigger @register_transform decorators
-import synix.build.parse_transform  # noqa: F401
 from synix.build.llm_client import LLMClient, LLMResponse
 from synix.core.config import EmbeddingConfig, LLMConfig
 
@@ -665,9 +661,9 @@ class TestLLMClientBackwardCompat:
 
     def test_transforms_still_work_with_mock_llm(self, mock_llm, sample_artifacts):
         """Existing mock_llm fixture still works — transforms produce correct output."""
-        from synix.build.transforms import get_transform
+        from synix.transforms import EpisodeSummary
 
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test-episodes")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
 
         results = transform.execute(transcripts[:1], {"llm_config": {}})
@@ -680,7 +676,7 @@ class TestLLMClientBackwardCompat:
 
     def test_pipeline_llm_config_without_provider(self, mock_llm, sample_artifacts):
         """Pipeline configs that omit 'provider' default to anthropic and work."""
-        from synix.build.transforms import get_transform
+        from synix.transforms import EpisodeSummary
 
         # Old-style config: no 'provider' key
         old_config = {
@@ -691,7 +687,7 @@ class TestLLMClientBackwardCompat:
             }
         }
 
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test-episodes")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
         results = transform.execute(transcripts[:1], old_config)
 

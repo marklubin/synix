@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from synix import Layer, Pipeline, Projection
+from synix import FlatFile, Pipeline, SearchIndex, Source
 from synix.artifacts.provenance import ProvenanceTracker
-from synix.pipeline.runner import run
-from synix.search.index import SearchIndex
+from synix.build.runner import run
+from synix.search.index import SearchIndex as SearchIdx
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -37,49 +38,14 @@ def pipeline_obj(build_dir):
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, monthly, core)
+    p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
 
     return p
 
@@ -89,7 +55,7 @@ class TestProjections:
         """Search results come from multiple layers."""
         run(pipeline_obj, source_dir=str(source_dir))
 
-        index = SearchIndex(build_dir / "search.db")
+        index = SearchIdx(build_dir / "search.db")
 
         # Query broadly — should get results from episodes, monthly, and core
         results = index.query("programming")

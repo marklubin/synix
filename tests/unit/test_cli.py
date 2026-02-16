@@ -277,6 +277,9 @@ def test_build_does_not_import_search():
                     # Allow the lazy import in llm_transforms (topical rollup needs SearchIndex at runtime)
                     if "llm_transforms" in py_file.name and "SearchIndex" in stripped:
                         continue
+                    # Allow the lazy import in projections (get_projection dispatches to SearchIndexProjection)
+                    if "projections" in py_file.name and "SearchIndexProjection" in stripped:
+                        continue
                     raise AssertionError(f"Build module {py_file.name}:{i} directly imports search: {stripped!r}")
     finally:
         # Restore modules

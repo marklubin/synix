@@ -8,7 +8,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-from synix.build.projections import BaseProjection, register_projection
+from synix.build.projections import BaseProjection
 from synix.build.provenance import ProvenanceTracker
 from synix.core.citations import extract_citations
 from synix.core.config import EmbeddingConfig
@@ -304,7 +304,6 @@ class ShadowIndexManager:
             self.shadow_path.unlink()
 
 
-@register_projection("search_index")
 class SearchIndexProjection(BaseProjection):
     """Materializes artifacts into a SQLite FTS5 search index.
 

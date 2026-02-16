@@ -5,13 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from synix.adapters.registry import get_supported_extensions, parse_file
-from synix.build.transforms import BaseTransform, register_transform
-from synix.core.models import Artifact
+from synix.core.models import Artifact, Transform
 
 
-@register_transform("parse")
-class ParseTransform(BaseTransform):
+class ParseTransform(Transform):
     """Discover and parse source files from source_dir into transcript Artifacts."""
+
+    def __init__(self, name: str = "_parse", **kwargs):
+        super().__init__(name, **kwargs)
 
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         """Parse all recognized export files in source_dir."""

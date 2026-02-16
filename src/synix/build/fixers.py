@@ -1,7 +1,8 @@
 """Fixer framework for automatically resolving validation violations.
 
-Provides an ABC + decorator registry pattern (matching validators.py) for
-fixers that propose and apply corrections to artifacts with full provenance tracking.
+Provides an ABC for fixers that propose and apply corrections to artifacts
+with full provenance tracking. Fixers use typed constructors instead of
+string-based config dicts.
 """
 
 from __future__ import annotations
@@ -74,15 +75,28 @@ class FixContext:
 
 
 # ---------------------------------------------------------------------------
-# BaseFixer ABC + registry
+# BaseFixer ABC
 # ---------------------------------------------------------------------------
 
 
 class BaseFixer(ABC):
-    """Abstract base class for fixers."""
+    """Abstract base class for fixers.
 
+    Custom fixers with typed constructors MUST override to_config_dict().
+    """
+
+    name: str = ""
     handles_violation_types: list[str] = []
     interactive: bool = False
+
+    def to_config_dict(self) -> dict:
+        """Return config for this fixer.
+
+        Must be overridden by subclasses with typed constructors.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must override to_config_dict() to return its configuration dict."
+        )
 
     @abstractmethod
     def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
@@ -91,26 +105,6 @@ class BaseFixer(ABC):
 
     def can_handle(self, violation: Violation) -> bool:
         return violation.violation_type in self.handles_violation_types
-
-
-_FIXERS: dict[str, type[BaseFixer]] = {}
-
-
-def register_fixer(name: str):
-    """Decorator to register a fixer class by name."""
-
-    def wrapper(cls: type[BaseFixer]) -> type[BaseFixer]:
-        _FIXERS[name] = cls
-        return cls
-
-    return wrapper
-
-
-def get_fixer(name: str) -> BaseFixer:
-    """Get an instantiated fixer by name."""
-    if name not in _FIXERS:
-        raise ValueError(f"Unknown fixer: {name}. Available: {list(_FIXERS.keys())}")
-    return _FIXERS[name]()
 
 
 # ---------------------------------------------------------------------------
@@ -190,11 +184,10 @@ def run_fixers(
 ) -> FixResult:
     """Run all fixers declared in the pipeline against violations.
 
-    For each FixerDecl in pipeline.fixers:
-    1. Instantiate the registered fixer
-    2. Filter violations that this fixer can handle
-    3. Call fix() for each matching violation
-    4. Collect actions and compute downstream invalidation
+    For each fixer instance in pipeline.fixers:
+    1. Filter violations that this fixer can handle
+    2. Call fix() for each matching violation
+    3. Collect actions and compute downstream invalidation
 
     on_progress(message, current, total) is called before each fix attempt
     to allow the CLI to show live progress.
@@ -206,23 +199,19 @@ def run_fixers(
 
     # Count total fixable violations across all fixers
     total_fixable = 0
-    for decl in pipeline.fixers:
-        fixer = get_fixer(decl.name)
+    for fixer in pipeline.fixers:
         matching = [v for v in validation_result.violations if fixer.can_handle(v)]
         total_fixable += len(matching)
 
     current = 0
-    for decl in pipeline.fixers:
-        fixer = get_fixer(decl.name)
-        fixer._config = decl.config  # type: ignore[attr-defined]
-
+    for fixer in pipeline.fixers:
         matching = [v for v in validation_result.violations if fixer.can_handle(v)]
 
         for violation in matching:
             current += 1
             if on_progress:
                 on_progress(
-                    f"Fixing {violation.label} ({decl.name})",
+                    f"Fixing {violation.label} ({fixer.name})",
                     current,
                     total_fixable,
                 )
@@ -233,9 +222,9 @@ def run_fixers(
                 result.actions.append(action)
                 result.rebuild_required.extend(action.downstream_invalidated)
             except Exception as exc:
-                result.errors.append(f"Fixer {decl.name} error on {violation.label}: {exc}")
+                result.errors.append(f"Fixer {fixer.name} error on {violation.label}: {exc}")
 
-        result.fixers_run.append(decl.name)
+        result.fixers_run.append(fixer.name or type(fixer).__name__)
 
     # Deduplicate rebuild_required
     result.rebuild_required = list(set(result.rebuild_required))
@@ -247,17 +236,22 @@ def run_fixers(
 # ---------------------------------------------------------------------------
 
 
-@register_fixer("semantic_enrichment")
-class SemanticEnrichmentFixer(BaseFixer):
-    """LLM-based fixer that resolves semantic conflicts using source context.
+class SemanticEnrichment(BaseFixer):
+    """LLM-based fixer that resolves semantic conflicts using source context."""
 
-    Config:
-        max_context_episodes: max source episodes to include (default 5)
-        temperature: LLM temperature (default 0.3)
-    """
-
+    name = "semantic_enrichment"
     handles_violation_types = ["semantic_conflict"]
     interactive = True
+
+    def __init__(self, *, max_context_episodes: int = 5, temperature: float = 0.3):
+        self._max_context = max_context_episodes
+        self._temperature = temperature
+
+    def to_config_dict(self) -> dict:
+        return {
+            "max_context_episodes": self._max_context,
+            "temperature": self._temperature,
+        }
 
     def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
         artifact = ctx.store.load_artifact(violation.label)
@@ -281,10 +275,6 @@ class SemanticEnrichmentFixer(BaseFixer):
                 description="No LLM client available",
             )
 
-        config = getattr(self, "_config", {})
-        max_context = config.get("max_context_episodes", 5)
-        temperature = config.get("temperature", 0.3)
-
         claim_a = violation.metadata.get("claim_a", "")
         claim_b = violation.metadata.get("claim_b", "")
         claim_a_hint = violation.metadata.get("claim_a_source_hint", "")
@@ -307,7 +297,7 @@ class SemanticEnrichmentFixer(BaseFixer):
                     continue
                 try:
                     results = ctx.search_index.query(query)
-                    for r in results[:max_context]:
+                    for r in results[: self._max_context]:
                         if r.label not in seen_ids:
                             seen_ids.add(r.label)
                             evidence_source_ids.append(r.label)
@@ -342,7 +332,7 @@ class SemanticEnrichmentFixer(BaseFixer):
             response = ctx.llm_client.complete(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=8192,
-                temperature=temperature,
+                temperature=self._temperature,
                 artifact_desc=f"enrichment fix for {violation.label}",
             )
             response_text = response.content
@@ -405,17 +395,22 @@ class SemanticEnrichmentFixer(BaseFixer):
             )
 
 
-@register_fixer("citation_enrichment")
-class CitationEnrichmentFixer(BaseFixer):
-    """LLM-based fixer that resolves ungrounded claims by adding citations or removing content.
+class CitationEnrichment(BaseFixer):
+    """LLM-based fixer that resolves ungrounded claims by adding citations or removing content."""
 
-    Config:
-        max_context_episodes: max source episodes to include (default 5)
-        temperature: LLM temperature (default 0.3)
-    """
-
+    name = "citation_enrichment"
     handles_violation_types = ["ungrounded_claim"]
     interactive = True
+
+    def __init__(self, *, max_context_episodes: int = 5, temperature: float = 0.3):
+        self._max_context = max_context_episodes
+        self._temperature = temperature
+
+    def to_config_dict(self) -> dict:
+        return {
+            "max_context_episodes": self._max_context,
+            "temperature": self._temperature,
+        }
 
     def fix(self, violation: Violation, ctx: FixContext) -> FixAction:
         artifact = ctx.store.load_artifact(violation.label)
@@ -439,10 +434,6 @@ class CitationEnrichmentFixer(BaseFixer):
                 description="No LLM client available",
             )
 
-        config = getattr(self, "_config", {})
-        max_context = config.get("max_context_episodes", 5)
-        temperature = config.get("temperature", 0.3)
-
         claim = violation.metadata.get("claim", "")
         suggestion = violation.metadata.get("suggestion", "")
 
@@ -461,7 +452,7 @@ class CitationEnrichmentFixer(BaseFixer):
                     continue
                 try:
                     results = ctx.search_index.query(query)
-                    for r in results[:max_context]:
+                    for r in results[: self._max_context]:
                         if r.label not in seen_ids:
                             seen_ids.add(r.label)
                             evidence_source_ids.append(r.label)
@@ -473,7 +464,7 @@ class CitationEnrichmentFixer(BaseFixer):
         source_context = "\n\n".join(source_texts) if source_texts else "(no source context available)"
 
         # Build source label map for the LLM
-        source_label_map = "\n".join(f"  {label} → {make_uri(label)}" for label in evidence_source_ids)
+        source_label_map = "\n".join(f"  {label} -> {make_uri(label)}" for label in evidence_source_ids)
         if not source_label_map:
             source_label_map = "(no sources available)"
 
@@ -502,7 +493,7 @@ class CitationEnrichmentFixer(BaseFixer):
             response = ctx.llm_client.complete(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=8192,
-                temperature=temperature,
+                temperature=self._temperature,
                 artifact_desc=f"citation fix for {violation.label}",
             )
             response_text = response.content

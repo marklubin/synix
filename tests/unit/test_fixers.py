@@ -7,19 +7,18 @@ import pytest
 from synix.build.artifacts import ArtifactStore
 from synix.build.fixers import (
     BaseFixer,
+    CitationEnrichment,
     FixAction,
     FixContext,
     FixResult,
-    SemanticEnrichmentFixer,
+    SemanticEnrichment,
     _find_downstream_artifacts,
     apply_fix,
-    get_fixer,
-    register_fixer,
     run_fixers,
 )
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import ValidationResult, Violation
-from synix.core.models import Artifact, FixerDecl, Pipeline
+from synix.core.models import Artifact, Pipeline
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -117,36 +116,26 @@ class TestFixResult:
 
 
 # ---------------------------------------------------------------------------
-# Registry tests
+# Fixer instantiation tests (replaces registry tests)
 # ---------------------------------------------------------------------------
 
 
-class TestFixerRegistry:
-    def test_register_and_get(self):
-        @register_fixer("test_fixer_reg")
-        class TestFixer(BaseFixer):
-            handles_violation_types = ["test_type"]
+class TestFixerInstantiation:
+    def test_semantic_enrichment(self):
+        fixer = SemanticEnrichment()
+        assert isinstance(fixer, SemanticEnrichment)
+        assert fixer.interactive is True
+        assert "semantic_conflict" in fixer.handles_violation_types
 
-            def fix(self, violation, ctx):
-                return FixAction("a", "skip", "", "", "", "test skip")
-
-        fixer = get_fixer("test_fixer_reg")
-        assert isinstance(fixer, TestFixer)
-
-    def test_unknown_fixer_raises(self):
-        with pytest.raises(ValueError, match="Unknown fixer"):
-            get_fixer("nonexistent_fixer_xyz")
+    def test_citation_enrichment(self):
+        fixer = CitationEnrichment()
+        assert isinstance(fixer, CitationEnrichment)
+        assert fixer.interactive is True
+        assert "ungrounded_claim" in fixer.handles_violation_types
 
     def test_can_handle_matches(self):
-        @register_fixer("test_fixer_handle")
-        class HandleFixer(BaseFixer):
-            handles_violation_types = ["type_a", "type_b"]
-
-            def fix(self, violation, ctx):
-                return FixAction("a", "skip", "", "", "", "")
-
-        fixer = get_fixer("test_fixer_handle")
-        v_match = Violation("type_a", "error", "msg", "art-1", "f")
+        fixer = SemanticEnrichment()
+        v_match = Violation("semantic_conflict", "error", "msg", "art-1", "f")
         v_no_match = Violation("type_c", "error", "msg", "art-1", "f")
         assert fixer.can_handle(v_match) is True
         assert fixer.can_handle(v_no_match) is False
@@ -155,6 +144,37 @@ class TestFixerRegistry:
 # ---------------------------------------------------------------------------
 # run_fixers tests
 # ---------------------------------------------------------------------------
+
+
+class _InlineFixer(BaseFixer):
+    """Test-only fixer for run_fixers tests."""
+
+    def to_config_dict(self) -> dict:
+        return {}
+
+
+class _MatchFixer(_InlineFixer):
+    name = "test_match_fixer"
+    handles_violation_types = ["match_type"]
+
+    def fix(self, violation, ctx):
+        return FixAction(violation.label, "skip", "", "", "", "skipped")
+
+
+class _ErrorFixer(_InlineFixer):
+    name = "test_error_fixer"
+    handles_violation_types = ["error_type"]
+
+    def fix(self, violation, ctx):
+        raise RuntimeError("fixer broke")
+
+
+class _DownstreamFixer(_InlineFixer):
+    name = "test_downstream_fixer"
+    handles_violation_types = ["downstream_type"]
+
+    def fix(self, violation, ctx):
+        return FixAction(violation.label, "rewrite", "", "new", "", "fixed")
 
 
 class TestRunFixers:
@@ -166,15 +186,8 @@ class TestRunFixers:
         assert result.fixers_run == []
 
     def test_fixer_matches_violations(self, store, provenance):
-        @register_fixer("test_match_fixer")
-        class MatchFixer(BaseFixer):
-            handles_violation_types = ["match_type"]
-
-            def fix(self, violation, ctx):
-                return FixAction(violation.label, "skip", "", "", "", "skipped")
-
         pipeline = Pipeline("test")
-        pipeline.add_fixer(FixerDecl(name="test_match_fixer"))
+        pipeline.add_fixer(_MatchFixer())
 
         vr = ValidationResult(
             violations=[
@@ -188,15 +201,8 @@ class TestRunFixers:
         assert "test_match_fixer" in result.fixers_run
 
     def test_fixer_error_captured(self, store, provenance):
-        @register_fixer("test_error_fixer")
-        class ErrorFixer(BaseFixer):
-            handles_violation_types = ["error_type"]
-
-            def fix(self, violation, ctx):
-                raise RuntimeError("fixer broke")
-
         pipeline = Pipeline("test")
-        pipeline.add_fixer(FixerDecl(name="test_error_fixer"))
+        pipeline.add_fixer(_ErrorFixer())
 
         vr = ValidationResult(
             violations=[
@@ -215,15 +221,8 @@ class TestRunFixers:
         provenance.record("child-1", parent_labels=["parent-1"])
         provenance.record("child-2", parent_labels=["parent-1"])
 
-        @register_fixer("test_downstream_fixer")
-        class DownstreamFixer(BaseFixer):
-            handles_violation_types = ["downstream_type"]
-
-            def fix(self, violation, ctx):
-                return FixAction(violation.label, "rewrite", "", "new", "", "fixed")
-
         pipeline = Pipeline("test")
-        pipeline.add_fixer(FixerDecl(name="test_downstream_fixer"))
+        pipeline.add_fixer(_DownstreamFixer())
 
         vr = ValidationResult(
             violations=[
@@ -302,7 +301,7 @@ class TestApplyFix:
 
 
 # ---------------------------------------------------------------------------
-# Mock helpers for SemanticEnrichmentFixer
+# Mock helpers for SemanticEnrichment fixer
 # ---------------------------------------------------------------------------
 
 
@@ -340,7 +339,7 @@ class _MockSearchIndex:
 
 
 # ---------------------------------------------------------------------------
-# SemanticEnrichmentFixer tests
+# SemanticEnrichment fixer tests
 # ---------------------------------------------------------------------------
 
 
@@ -378,7 +377,7 @@ class TestSemanticEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
-        fixer = SemanticEnrichmentFixer()
+        fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
 
         assert action.action == "rewrite"
@@ -397,7 +396,7 @@ class TestSemanticEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
 
-        fixer = SemanticEnrichmentFixer()
+        fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
 
         assert action.action == "unresolved"
@@ -406,7 +405,7 @@ class TestSemanticEnrichmentFixer:
 
     def test_missing_artifact_skip(self, store, provenance):
         ctx = FixContext(store, provenance, Pipeline("test"))
-        fixer = SemanticEnrichmentFixer()
+        fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation("nonexistent"), ctx)
         assert action.action == "skip"
         assert "not found" in action.description.lower()
@@ -417,7 +416,7 @@ class TestSemanticEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=None)
 
-        fixer = SemanticEnrichmentFixer()
+        fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
         assert action.action == "skip"
         assert "no llm client" in action.description.lower()
@@ -437,7 +436,7 @@ class TestSemanticEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
-        fixer = SemanticEnrichmentFixer()
+        fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
         assert action.action == "rewrite"
 
@@ -450,8 +449,8 @@ class TestSemanticEnrichmentFixer:
         parents = provenance.get_parents("a-1")
         assert "t-1" in parents
 
-    def test_registered_in_registry(self):
-        fixer = get_fixer("semantic_enrichment")
-        assert isinstance(fixer, SemanticEnrichmentFixer)
+    def test_semantic_enrichment_instantiation(self):
+        fixer = SemanticEnrichment()
+        assert isinstance(fixer, SemanticEnrichment)
         assert fixer.interactive is True
         assert "semantic_conflict" in fixer.handles_violation_types

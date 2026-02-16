@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline, Projection
+from synix import Artifact, Pipeline, SearchIndex, Source
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 FIXTURES_DIR = Path(__file__).parent / "synix" / "fixtures"
 
@@ -140,62 +141,39 @@ def sample_pipeline(tmp_build_dir, tmp_path):
     source_dir = tmp_path / "exports"
     source_dir.mkdir()
 
-    pipeline = Pipeline("test-pipeline")
-    pipeline.source_dir = str(source_dir)
-    pipeline.build_dir = str(tmp_build_dir)
-    pipeline.llm_config = {
-        "model": "claude-sonnet-4-20250514",
-        "temperature": 0.3,
-        "max_tokens": 1024,
-    }
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    pipeline.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
+    pipeline = Pipeline(
+        "test-pipeline",
+        source_dir=str(source_dir),
+        build_dir=str(tmp_build_dir),
+        llm_config={
+            "model": "claude-sonnet-4-20250514",
+            "temperature": 0.3,
+            "max_tokens": 1024,
+        },
     )
-    pipeline.add_layer(
-        Layer(
-            name="monthly",
-            level=2,
-            depends_on=["episodes"],
-            transform="monthly_rollup",
-            grouping="by_month",
-        )
-    )
-    pipeline.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
+
+    pipeline.add(transcripts, episodes, monthly, core)
+
+    pipeline.add(
+        SearchIndex(
+            "memory-index",
+            sources=[episodes, monthly, core],
+            search=["fulltext"],
         )
     )
 
-    pipeline.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    pipeline.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(tmp_build_dir / "context.md")},
+    from synix import FlatFile
+
+    pipeline.add(
+        FlatFile(
+            "context-doc",
+            sources=[core],
+            output_path=str(tmp_build_dir / "context.md"),
         )
     )
 

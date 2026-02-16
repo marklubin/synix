@@ -1,4 +1,4 @@
-"""Unit tests for the CitationValidator."""
+"""Unit tests for the Citation validator."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ import pytest
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import (
-    CitationValidator,
+    Citation,
     ValidationContext,
-    get_validator,
 )
 from synix.core.models import Artifact
 
@@ -74,7 +73,7 @@ class _MockLLMClient:
 
 
 # ---------------------------------------------------------------------------
-# CitationValidator tests
+# Citation validator tests
 # ---------------------------------------------------------------------------
 
 
@@ -91,8 +90,8 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient('{"ungrounded": []}')
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
         assert violations == []
         assert len(mock_llm.calls) == 1
@@ -119,8 +118,8 @@ class TestCitationValidator:
         )
         mock_llm = _MockLLMClient(response)
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
 
         assert len(violations) == 1
@@ -145,8 +144,8 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient(RuntimeError("API unavailable"))
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -157,8 +156,8 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient("this is not valid json")
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -166,9 +165,7 @@ class TestCitationValidator:
         """Invalid LLM config -> raises RuntimeError by default (fail closed)."""
         art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
 
-        validator = get_validator("citation")
-        # Use a provider that will fail during client creation
-        validator._config = {"llm_config": {"provider": "nonexistent_provider_xyz"}}
+        validator = Citation(layers=[], llm_config={"provider": "nonexistent_provider_xyz"})
         with pytest.raises(RuntimeError, match="could not create LLM client"):
             validator.validate([art], ctx)
 
@@ -176,8 +173,7 @@ class TestCitationValidator:
         """With fail_open=True, bad LLM config returns empty."""
         art = _make_artifact("core-1", "core_memory", content="test", layer_name="core")
 
-        validator = get_validator("citation")
-        validator._config = {"llm_config": {"provider": "nonexistent_provider_xyz"}, "fail_open": True}
+        validator = Citation(layers=[], llm_config={"provider": "nonexistent_provider_xyz"}, fail_open=True)
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -192,8 +188,8 @@ class TestCitationValidator:
         orig_file = vmod.__file__
         vmod.__file__ = str(tmp_path / "fake" / "validators.py")
         try:
-            validator = get_validator("citation")
-            validator._config = {"_llm_client": mock_llm}
+            validator = Citation(layers=[])
+            validator._llm_client = mock_llm
             with pytest.raises(RuntimeError, match="prompt not found"):
                 validator.validate([art], ctx)
         finally:
@@ -209,8 +205,8 @@ class TestCitationValidator:
         orig_file = vmod.__file__
         vmod.__file__ = str(tmp_path / "fake" / "validators.py")
         try:
-            validator = get_validator("citation")
-            validator._config = {"_llm_client": mock_llm, "fail_open": True}
+            validator = Citation(layers=[], fail_open=True)
+            validator._llm_client = mock_llm
             violations = validator.validate([art], ctx)
             assert violations == []
         finally:
@@ -226,8 +222,8 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient('{"ungrounded": []}')
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm, "max_artifacts": 2}
+        validator = Citation(layers=[], max_artifacts=2)
+        validator._llm_client = mock_llm
         validator.validate(arts, ctx)
         assert len(mock_llm.calls) == 2
 
@@ -241,14 +237,14 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient('{"ungrounded": []}')
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         validator.validate(arts, ctx)
         assert len(mock_llm.calls) == 5
 
-    def test_registered_in_registry(self):
-        v = get_validator("citation")
-        assert isinstance(v, CitationValidator)
+    def test_instantiation(self):
+        v = Citation(layers=[])
+        assert isinstance(v, Citation)
 
     def test_llm_trace_stored(self, store, provenance, ctx):
         """LLM call produces a trace artifact."""
@@ -257,8 +253,8 @@ class TestCitationValidator:
 
         mock_llm = _MockLLMClient('{"ungrounded": []}')
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         validator.validate([art], ctx)
 
         traces = store.list_artifacts("traces")
@@ -287,8 +283,8 @@ class TestCitationValidator:
         )
         mock_llm = _MockLLMClient(response)
 
-        validator = get_validator("citation")
-        validator._config = {"_llm_client": mock_llm}
+        validator = Citation(layers=[])
+        validator._llm_client = mock_llm
         violations = validator.validate([art], ctx)
 
         assert len(violations) == 1

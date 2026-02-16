@@ -20,11 +20,11 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 │   └── ← ./sources/bios (3 .md files)
 ├── project_brief  source:parse  <STATS>
 │   └── ← ./sources/brief (1 .md file)
-├── work_styles  transform:work_style  <STATS>
+├── work_styles  transform:WorkStyleTransform  <STATS>
 │   └── ← bios
-├── team_dynamics  transform:dynamics  <STATS>
+├── team_dynamics  transform:TeamDynamicsTransform  <STATS>
 │   └── ← work_styles
-└── final_report  transform:report  <STATS>
+└── final_report  transform:FinalReportTransform  <STATS>
     ├── ← team_dynamics
     ├── ← project_brief
     └── → search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed

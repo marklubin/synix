@@ -1,29 +1,27 @@
 # pipeline.py — My First Synix Pipeline
 #
 # DAG:
-#   Level 0: bios [parse]              → one artifact per person
-#   Level 0: project_brief [parse]     → the task description
-#   Level 1: work_styles [work_style]  → inferred work style per person (1:1)
-#   Level 2: team_dynamics [dynamics]  → rolled-up team dynamics analysis
-#   Level 3: final_report [report]     → synthesis of team + project brief
+#   Level 0: bios [parse]              -> one artifact per person
+#   Level 0: project_brief [parse]     -> the task description
+#   Level 1: work_styles [work_style]  -> inferred work style per person (1:1)
+#   Level 2: team_dynamics [dynamics]  -> rolled-up team dynamics analysis
+#   Level 3: final_report [report]     -> synthesis of team + project brief
 #
 # Usage:
-#   synix build pipeline.py
-#   synix validate pipeline.py
-#   synix search 'hiking'
+#   uvx synix build pipeline.py
+#   uvx synix validate pipeline.py
+#   uvx synix search 'hiking'
 
-from synix import Layer, Pipeline, Projection, ValidatorDecl
+from synix import Pipeline, SearchIndex, Source, Transform
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
-from synix.build.transforms import BaseTransform, register_transform
-from synix.build.validators import BaseValidator, Violation, register_validator
 from synix.core.models import Artifact
+from synix.validators import BaseValidator, Violation
 
 # -- Transforms --------------------------------------------------------------
 
 
-@register_transform("work_style")
-class WorkStyleTransform(BaseTransform):
-    """One bio → one work style profile. Default split gives 1:1."""
+class WorkStyleTransform(Transform):
+    """One bio -> one work style profile. Default split gives 1:1."""
 
     def execute(self, inputs, config):
         bio = inputs[0]
@@ -58,8 +56,7 @@ class WorkStyleTransform(BaseTransform):
         ]
 
 
-@register_transform("dynamics")
-class TeamDynamicsTransform(BaseTransform):
+class TeamDynamicsTransform(Transform):
     """Roll up all work style profiles into one team dynamics analysis."""
 
     def split(self, inputs, config):
@@ -97,8 +94,7 @@ class TeamDynamicsTransform(BaseTransform):
         ]
 
 
-@register_transform("report")
-class FinalReportTransform(BaseTransform):
+class FinalReportTransform(Transform):
     """Combine team dynamics + project brief into a staffing report."""
 
     def split(self, inputs, config):
@@ -145,21 +141,30 @@ class FinalReportTransform(BaseTransform):
 # -- Validator ----------------------------------------------------------------
 
 
-@register_validator("max_length")
 class MaxLengthValidator(BaseValidator):
     """Check that artifact content is under a maximum character count."""
 
+    name = "max_length"
+
+    def __init__(self, *, layers: list, max_chars: int = 2000):
+        self._layers = layers
+        self._max_chars = max_chars
+
+    def to_config_dict(self) -> dict:
+        return {
+            "layers": [l.name for l in self._layers],
+            "max_chars": self._max_chars,
+        }
+
     def validate(self, artifacts, ctx):
-        config = getattr(self, "_config", {})
-        max_chars = config.get("max_chars", 2000)
         violations = []
         for a in artifacts:
-            if len(a.content) > max_chars:
+            if len(a.content) > self._max_chars:
                 violations.append(
                     Violation(
                         violation_type="max_length",
                         severity="error",
-                        message=f"Content is {len(a.content)} chars (max {max_chars})",
+                        message=f"Content is {len(a.content)} chars (max {self._max_chars})",
                         label=a.label,
                         field="content",
                     )
@@ -180,73 +185,28 @@ pipeline.llm_config = {
 }
 
 # Level 0 — two independent leaf nodes
-pipeline.add_layer(
-    Layer(
-        name="bios",
-        level=0,
-        transform="parse",
-        config={"source_dir": "./sources/bios"},
-    )
-)
-
-pipeline.add_layer(
-    Layer(
-        name="project_brief",
-        level=0,
-        transform="parse",
-        config={"source_dir": "./sources/brief"},
-    )
-)
+bios = Source("bios", dir="./sources/bios")
+project_brief = Source("project_brief", dir="./sources/brief")
 
 # Level 1 — per-person work style (1:1)
-pipeline.add_layer(
-    Layer(
-        name="work_styles",
-        level=1,
-        depends_on=["bios"],
-        transform="work_style",
-    )
-)
+work_styles = WorkStyleTransform("work_styles", depends_on=[bios])
 
 # Level 2 — team dynamics rollup (many:1)
-pipeline.add_layer(
-    Layer(
-        name="team_dynamics",
-        level=2,
-        depends_on=["work_styles"],
-        transform="dynamics",
-    )
-)
+team_dynamics = TeamDynamicsTransform("team_dynamics", depends_on=[work_styles])
 
-# Level 3 — final report (team dynamics + project brief → synthesis)
-pipeline.add_layer(
-    Layer(
-        name="final_report",
-        level=3,
-        depends_on=["team_dynamics", "project_brief"],
-        transform="report",
-    )
-)
+# Level 3 — final report (team dynamics + project brief -> synthesis)
+final_report = FinalReportTransform("final_report", depends_on=[team_dynamics, project_brief])
+
+pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report)
 
 # Projection — every layer searchable
-pipeline.add_projection(
-    Projection(
-        name="search",
-        projection_type="search_index",
-        sources=[
-            {"layer": "bios", "search": ["fulltext"]},
-            {"layer": "project_brief", "search": ["fulltext"]},
-            {"layer": "work_styles", "search": ["fulltext"]},
-            {"layer": "team_dynamics", "search": ["fulltext"]},
-            {"layer": "final_report", "search": ["fulltext"]},
-        ],
+pipeline.add(
+    SearchIndex(
+        "search",
+        sources=[bios, project_brief, work_styles, team_dynamics, final_report],
+        search=["fulltext"],
     )
 )
 
 # Validator — final report must be concise
-pipeline.add_validator(
-    ValidatorDecl(
-        name="max_length",
-        config={"layers": ["final_report"], "max_chars": 5000},
-    )
-)
+pipeline.add_validator(MaxLengthValidator(layers=[final_report], max_chars=5000))

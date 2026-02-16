@@ -27,16 +27,18 @@ def simple_pipeline(tmp_path, build_dir):
     """Create a minimal pipeline file with PII validator."""
     pipeline_file = tmp_path / "pipeline.py"
     pipeline_file.write_text(f"""
-from synix.core.models import Pipeline, Layer, ValidatorDecl
+from synix import Pipeline, Source
+from synix.core.models import Layer
+from synix.validators import PII
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
 pipeline.source_dir = "{tmp_path / "exports"}"
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_validator(ValidatorDecl(
-    name="pii",
-    config={{"layers": ["episodes"], "severity": "warning"}},
-))
+
+transcripts = Source("transcripts")
+episodes = Layer("episodes", depends_on=[transcripts])
+pipeline.add(transcripts, episodes)
+pipeline.add_validator(PII(layers=[episodes], severity="warning"))
 """)
     (tmp_path / "exports").mkdir(exist_ok=True)
     return pipeline_file
@@ -47,20 +49,20 @@ def pipeline_with_fixer(tmp_path, build_dir):
     """Create a pipeline with both validator and fixer."""
     pipeline_file = tmp_path / "pipeline.py"
     pipeline_file.write_text(f"""
-from synix.core.models import Pipeline, Layer, ValidatorDecl, FixerDecl
+from synix import Pipeline, Source
+from synix.core.models import Layer
+from synix.validators import PII
+from synix.fixers import SemanticEnrichment
 
 pipeline = Pipeline("test")
 pipeline.build_dir = "{build_dir}"
 pipeline.source_dir = "{tmp_path / "exports"}"
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_validator(ValidatorDecl(
-    name="pii",
-    config={{"layers": ["episodes"], "severity": "warning"}},
-))
-pipeline.add_fixer(FixerDecl(
-    name="semantic_enrichment",
-    config={{}},
-))
+
+transcripts = Source("transcripts")
+episodes = Layer("episodes", depends_on=[transcripts])
+pipeline.add(transcripts, episodes)
+pipeline.add_validator(PII(layers=[episodes], severity="warning"))
+pipeline.add_fixer(SemanticEnrichment())
 """)
     (tmp_path / "exports").mkdir(exist_ok=True)
     return pipeline_file
@@ -110,13 +112,13 @@ class TestValidateCommand:
         assert "not found" in result.output.lower() or "Build directory" in result.output
 
     def test_validate_no_violations(self, runner, simple_pipeline, build_dir):
-        """Empty build dir → no violations."""
+        """Empty build dir -> no violations."""
         result = runner.invoke(main, ["validate", str(simple_pipeline)])
         assert result.exit_code == 0
         assert "passed" in result.output.lower() or "No violations" in result.output
 
     def test_validate_with_pii(self, runner, simple_pipeline, build_dir):
-        """PII in artifacts → violations reported."""
+        """PII in artifacts -> violations reported."""
         from synix.build.artifacts import ArtifactStore
         from synix.core.models import Artifact
 

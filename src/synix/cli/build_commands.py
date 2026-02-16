@@ -14,7 +14,7 @@ from rich.tree import Tree
 
 from synix.cli.main import console, get_layer_style, pipeline_argument
 from synix.cli.progress import BuildProgress
-from synix.core.models import Pipeline
+from synix.core.models import FlatFile, Pipeline, SearchIndex
 
 
 def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
@@ -52,22 +52,29 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
     triggers: dict[str, list[tuple[str, str, str]]] = {}
 
     for proj in pipeline.projections:
-        source_layers = [s["layer"] for s in proj.sources]
+        source_layer_names = [s.name for s in proj.sources]
 
-        if proj.projection_type == "search_index":
+        if isinstance(proj, SearchIndex):
+            proj_type = "search_index"
+        elif isinstance(proj, FlatFile):
+            proj_type = "flat_file"
+        else:
+            proj_type = "unknown"
+
+        if proj_type == "search_index":
             # Progressive: every source layer triggers
-            for ln in source_layers:
-                triggers.setdefault(ln, []).append((proj.name, proj.projection_type, "progressive"))
-        elif proj.projection_type == "flat_file":
+            for ln in source_layer_names:
+                triggers.setdefault(ln, []).append((proj.name, proj_type, "progressive"))
+        elif proj_type == "flat_file":
             # Complete: only the last source layer triggers
-            if source_layers:
-                last = max(source_layers, key=lambda ln: layer_order.get(ln, 0))
-                triggers.setdefault(last, []).append((proj.name, proj.projection_type, "complete"))
+            if source_layer_names:
+                last = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0))
+                triggers.setdefault(last, []).append((proj.name, proj_type, "complete"))
         else:
             # Unknown type: last source layer
-            if source_layers:
-                last = max(source_layers, key=lambda ln: layer_order.get(ln, 0))
-                triggers.setdefault(last, []).append((proj.name, proj.projection_type, "complete"))
+            if source_layer_names:
+                last = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0))
+                triggers.setdefault(last, []).append((proj.name, proj_type, "complete"))
 
     return triggers
 
@@ -398,7 +405,7 @@ def plan(
     proj_by_source_layer: dict[str, list] = {}
     for proj in pipeline.projections:
         for src in proj.sources:
-            proj_by_source_layer.setdefault(src["layer"], []).append(proj)
+            proj_by_source_layer.setdefault(src.name, []).append(proj)
 
     # Track which projections we've already rendered (show once, on last source layer)
     proj_triggers = _projection_triggers(pipeline)
@@ -421,9 +428,14 @@ def plan(
         status_style = STATUS_STYLES.get(step.status, "white")
         layer_obj = layer_lookup.get(step.name)
 
-        # Entity type label: source:transform_name or transform:transform_name
+        # Entity type label: source:parse or transform:ClassName
         kind = "source" if step.level == 0 else "transform"
-        transform_name = layer_obj.transform if layer_obj else "?"
+        if layer_obj is None:
+            transform_name = "?"
+        elif kind == "source":
+            transform_name = "parse"
+        else:
+            transform_name = type(layer_obj).__name__
         type_label = f"[dim]{kind}:{transform_name}[/dim]"
 
         # Status counts
@@ -457,9 +469,10 @@ def plan(
         # Show inputs (← depends_on)
         if layer_obj and layer_obj.depends_on:
             for dep in layer_obj.depends_on:
-                dep_step = step_lookup.get(dep)
+                dep_name = dep.name
+                dep_step = step_lookup.get(dep_name)
                 dep_style = get_layer_style(dep_step.level) if dep_step else "dim"
-                layer_node.add(f"[dim]← [{dep_style}]{dep}[/{dep_style}][/dim]")
+                layer_node.add(f"[dim]← [{dep_style}]{dep_name}[/{dep_style}][/dim]")
 
         # Inline cache fingerprint breakdown when --explain-cache and cached
         if explain_cache and step.status == "cached" and step.fingerprint:
@@ -577,7 +590,7 @@ def _display_source_change_warnings(build_plan, pipeline):
             if stored_source and current_source and stored_source != current_source:
                 console.print(
                     f"\n[yellow]Warning:[/yellow] Transform source changed for "
-                    f"[bold]{layer_obj.transform}[/bold] (layer '{step.name}') — rebuild required"
+                    f"[bold]{type(layer_obj).__name__}[/bold] (layer '{step.name}') — rebuild required"
                 )
                 break  # One warning per layer
 

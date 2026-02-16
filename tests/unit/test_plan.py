@@ -9,10 +9,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from synix import Layer, Pipeline, Projection
+from synix import FlatFile, Pipeline, SearchIndex, Source
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
 from synix.cli import main
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -45,49 +46,14 @@ def pipeline_obj(build_dir, source_dir):
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, monthly, core)
+    p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
 
     return p
 
@@ -503,20 +469,20 @@ class TestPlanCLI:
         # Write a pipeline config file
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-json")
 pipeline.source_dir = {str(source_dir)!r}
 pipeline.build_dir = {str(tmp_path / "build")!r}
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                         transform="episode_summary", grouping="by_conversation"))
-pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"],
-                         transform="monthly_rollup", grouping="by_month"))
-pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
-                         transform="core_synthesis", grouping="single", context_budget=10000))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+
+pipeline.add(transcripts, episodes, monthly, core)
 """)
 
         result = runner.invoke(main, ["plan", str(pipeline_file), "--json"])
@@ -535,16 +501,17 @@ pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"],
         """synix plan (default) produces table output."""
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
-from synix import Pipeline, Layer
+from synix import Pipeline, Source
+from synix.transforms import EpisodeSummary
 
 pipeline = Pipeline("test-rich")
 pipeline.source_dir = {str(source_dir)!r}
 pipeline.build_dir = {str(tmp_path / "build")!r}
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                         transform="episode_summary", grouping="by_conversation"))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+pipeline.add(transcripts, episodes)
 """)
 
         result = runner.invoke(main, ["plan", str(pipeline_file)])
@@ -557,16 +524,17 @@ pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
         build_dir = tmp_path / "build"
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
-from synix import Pipeline, Layer
+from synix import Pipeline, Source
+from synix.transforms import EpisodeSummary
 
 pipeline = Pipeline("test-save")
 pipeline.source_dir = {str(source_dir)!r}
 pipeline.build_dir = {str(build_dir)!r}
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"],
-                         transform="episode_summary", grouping="by_conversation"))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+pipeline.add(transcripts, episodes)
 """)
 
         result = runner.invoke(main, ["plan", str(pipeline_file), "--save"])
@@ -595,16 +563,10 @@ class TestPlanEdgeCases:
         p.source_dir = str(empty_src)
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
-        p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
-        )
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        p.add(transcripts, episodes)
 
         plan = plan_build(p)
 
@@ -617,7 +579,9 @@ class TestPlanEdgeCases:
         p.source_dir = str(tmp_path / "does_not_exist")
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
-        p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
+
+        transcripts = Source("transcripts")
+        p.add(transcripts)
 
         plan = plan_build(p)
 
@@ -630,26 +594,15 @@ class TestPlanEdgeCases:
         p.source_dir = str(source_dir)
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
-        p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            config={"topics": ["career", "tech", "personal"]},
         )
-        p.add_layer(
-            Layer(
-                name="topics",
-                level=2,
-                depends_on=["episodes"],
-                transform="topical_rollup",
-                grouping="by_topic",
-                config={"topics": ["career", "tech", "personal"]},
-            )
-        )
+        p.add(transcripts, episodes, topics)
 
         plan = plan_build(p)
 
@@ -764,7 +717,9 @@ class TestEditDetection:
         p.source_dir = str(text_source)
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
-        p.add_layer(Layer(name="docs", level=0, transform="parse"))
+
+        docs = Source("docs")
+        p.add(docs)
         return p
 
     def _initial_build(self, text_pipeline, text_source):
@@ -856,7 +811,9 @@ class TestSourceInfo:
         p.source_dir = str(empty_src)
         p.build_dir = str(tmp_path / "build")
         p.llm_config = {"model": "test", "temperature": 0.3}
-        p.add_layer(Layer(name="docs", level=0, transform="parse"))
+
+        docs = Source("docs")
+        p.add(docs)
 
         plan = plan_build(p)
         docs_step = plan.steps[0]

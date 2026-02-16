@@ -9,27 +9,12 @@
   ✓ product_specs (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ deal_context (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ win_reports (level 0)  <BUILD_COUNTS>  <TIME>
-  ✓ competitive_intel (level 1)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
-  ✓ strategy (level 2)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
-  ✓ call_prep (level 3)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
-    └─ deal-search  <MATERIALIZED>
-                           Build Summary
-╭───────────────────┬──────────────┬───────┬────────┬─────────────╮
-│ Layer             │    Level     │ Built │ Cached │     Skipped │
-├───────────────────┼──────────────┼───────┼────────┼─────────────┤
-│ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
-│ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
-│ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
-│ win_reports       │  <N>  │  <N>  │  <N>  │  <N>  │
-│ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
-│ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
-│ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
-╰───────────────────┴──────────────┴───────┴────────┴─────────────╯
+  competitive_intel (level 1)  0/4  ⟳ 4 in flight  <TIME>
 
-<BUILD_TOTAL>
+    ⟳ competitive intel t-text-acme_an...  <TIME>
+    ⟳ competitive intel t-text-acme_q1...  <TIME>
+    ⟳ competitive intel t-text-dataflo...  <TIME>
+    ⟳ competitive intel t-text-insight...  <TIME>
+Pipeline failed: CassetteMiss: Cassette miss for key <HASH>... (prompt: You are a competitive intelligence analyst
+preparing a deal-specific competitor )
+Run with SYNIX_CASSETTE_MODE=record to capture this call.

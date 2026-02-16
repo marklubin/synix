@@ -337,10 +337,42 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
         line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
         line = re.sub(r"(\bSearch index has )\d+( entries\b)", r"\g<1><N>\2", line)
+        # Drop embedding progress lines — presence varies with projection cache state
+        if re.search(r"└─ embeddings\s+\d+/\d+", line):
+            continue
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)
+    # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
+    normalized = _sort_consecutive_spinner_lines(normalized)
     return "\n".join(normalized)
+
+
+def _sort_consecutive_spinner_lines(lines: list[str]) -> list[str]:
+    """Sort consecutive groups of spinner (⟳) lines for deterministic output.
+
+    Concurrent build steps may complete in arbitrary order, producing
+    non-deterministic orderings of progress lines like:
+        ⟳ competitive intel t-text-acme...
+        ⟳ competitive intel t-text-dataflo...
+    Sorting these groups removes concurrency-induced non-determinism.
+    """
+    result: list[str] = []
+    group: list[str] = []
+
+    def flush():
+        if group:
+            result.extend(sorted(group))
+            group.clear()
+
+    for line in lines:
+        if "\u21bb" in line:  # ⟳
+            group.append(line)
+        else:
+            flush()
+            result.append(line)
+    flush()
+    return result
 
 
 def _apply_masks(text: str, masks: list[str]) -> str:

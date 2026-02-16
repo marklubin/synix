@@ -47,19 +47,21 @@ def pipeline_file(workspace):
     """Write a pipeline.py into the workspace."""
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-fp")
 pipeline.source_dir = "{workspace["source_dir"]}"
 pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="episode_summary", grouping="by_conversation"))
-pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month"))
-pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"], transform="core_synthesis", grouping="single", context_budget=10000))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
+pipeline.add(transcripts, episodes, monthly, core)
+pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path
 
@@ -129,7 +131,7 @@ class TestFingerprintStoredOnBuild:
             assert "transform_fingerprint" in metadata, f"Missing transform_fingerprint for {aid}"
             transform_fp = Fingerprint.from_dict(metadata["transform_fingerprint"])
             assert transform_fp is not None
-            assert transform_fp.scheme == "synix:transform:v1"
+            assert transform_fp.scheme == "synix:transform:v2"
             assert "source" in transform_fp.components
 
 

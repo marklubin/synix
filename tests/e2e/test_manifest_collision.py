@@ -40,15 +40,18 @@ def workspace(tmp_path):
 def pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source
+from synix.transforms import EpisodeSummary
 
 pipeline = Pipeline("test-collision")
 pipeline.source_dir = "{workspace["source_dir"]}"
 pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="episode_summary", grouping="by_conversation"))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+
+pipeline.add(transcripts, episodes)
 """)
     return path
 

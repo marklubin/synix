@@ -1,1 +1,1 @@
-No results for: price cut
+No search index found. Run synix build first.

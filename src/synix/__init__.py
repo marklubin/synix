@@ -1,16 +1,14 @@
-"""Synix — A build system for agent memory.
+"""Synix — A build system for agent memory."""
 
-Re-export core models for backward compatibility.
-"""
-
-__version__ = "0.10.3"
+__version__ = "0.11.0"
 
 from synix.core.models import (  # noqa: F401
     Artifact,
-    FixerDecl,
+    FlatFile,
     Layer,
     Pipeline,
-    Projection,
     ProvenanceRecord,
-    ValidatorDecl,
+    SearchIndex,
+    Source,
+    Transform,
 )
