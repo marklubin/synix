@@ -77,7 +77,9 @@ def _compare_diff_fallback(repo: str, pr_number: str, token: str) -> str:
         files = resp2.json().get("files", [])
         lines = [f"# Diff too large for GitHub API — file summary ({len(files)} files)\n"]
         for f in files:
-            lines.append(f"{f['status']:10s} +{f.get('additions',0):-4d} -{f.get('deletions',0):-4d}  {f['filename']}")
+            lines.append(
+                f"{f['status']:10s} +{f.get('additions', 0):-4d} -{f.get('deletions', 0):-4d}  {f['filename']}"
+            )
             if f.get("patch"):
                 lines.append(f["patch"][:2000])
         return "\n".join(lines)
