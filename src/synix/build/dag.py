@@ -12,15 +12,16 @@ def resolve_build_order(pipeline: Pipeline) -> list[Layer]:
     """Topological sort of layers — return in build order."""
     layer_map = {layer.name: layer for layer in pipeline.layers}
 
-    # Build in-degree and adjacency
+    # Build in-degree and adjacency from Layer object references
     in_degree: dict[str, int] = {name: 0 for name in layer_map}
     children: dict[str, list[str]] = {name: [] for name in layer_map}
 
     for layer in pipeline.layers:
         for dep in layer.depends_on:
-            if dep not in layer_map:
-                raise ValueError(f"Layer '{layer.name}' depends on unknown layer '{dep}'")
-            children[dep].append(layer.name)
+            dep_name = dep.name
+            if dep_name not in layer_map:
+                raise ValueError(f"Layer '{layer.name}' depends on unknown layer '{dep_name}'")
+            children[dep_name].append(layer.name)
             in_degree[layer.name] += 1
 
     queue: deque[str] = deque()
@@ -42,6 +43,24 @@ def resolve_build_order(pipeline: Pipeline) -> list[Layer]:
         raise ValueError(f"Pipeline has circular dependencies involving: {sorted(remaining)}")
 
     return [layer_map[name] for name in order]
+
+
+def compute_levels(layers: list[Layer]) -> None:
+    """Assign _level to each layer based on DAG depth."""
+    level_cache: dict[str, int] = {}
+
+    def _get_level(layer: Layer) -> int:
+        if layer.name in level_cache:
+            return level_cache[layer.name]
+        if not layer.depends_on:
+            level_cache[layer.name] = 0
+            return 0
+        level = max(_get_level(dep) for dep in layer.depends_on) + 1
+        level_cache[layer.name] = level
+        return level
+
+    for layer in layers:
+        layer._level = _get_level(layer)
 
 
 def needs_rebuild(

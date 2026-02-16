@@ -1,1 +1,77 @@
-No results for: price cut
+
+Search results for: "price cut" (keyword mode)
+
+╭──────────────────────────────────────────────── competitor_docs (L0) ────────────────────────────────────────────────╮
+│                                                                                                                      │
+│                               Acme Analytics — Q1 2026 Competitive Intelligence Update                               │
+│                                                                                                                      │
+│  Classification: Internal — Sales Team Only | Date: February 10, 2026                                                │
+│                                                                                                                      │
+│  Pricing Changes                                                                                                     │
+│                                                                                                                      │
+│  Acme Analytics announced a significant price reduction effective February 1, 2026:                                  │
+│                                                                                                                      │
+│   • Standard tier: reduced from $35/seat/month to $25/seat/month (29% cut)                                           │
+│   • Enterprise tier: reduced from $65/seat/month to $50/seat/month (23% cut)                                         │
+│   • Existing customers will be migrated to new pricing at their next renewal                                         │
+│                                                                                                                      │
+│  This is notable because Acme's new Standard pricing of $25/seat/month now matches NovaSight's Starter tier          │
+│  exactly. However, NovaSight's Starter tier includes 10 data connectors vs Acme's 5, and our Professional tier       │
+│  ($55/seat) still offers custom ML models and API access that Acme lacks at any price point.                         │
+│                                                                                                                      │
+│  New Product Features                                                                                                │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  Key Risks for NovaSight                                                                                             │
+│                                                                                                                      │
+│   1 Pricing pressure: Acme's $25/seat Standard tier matches our Starter tier, which may force us to compete more     │
+│     aggressively on price in the mid-market segment                                                                  │
+│   2 Enterprise pivot: with Torres leading, Acme will likely accelerate enterprise feature development — our 12-18    │
+│     month lead on enterprise features may narrow                                                                     │
+│   3 Template marketplace: community-contributed templates could become a competitive moat if they gain traction;     │
+│     consider whether NovaSight should launch a similar marketplace ...                                               │
+│                                                                                                                      │
+│  Label: t-text-acme_q1_update  Score: 3.54  Mode: keyword                                                            │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
+t-text-acme_q1_update
+
+╭─────────────────────────────────────────────── competitive_intel (L1) ───────────────────────────────────────────────╮
+│                                                                                                                      │
+│                                         Competitive Analysis: Acme Analytics                                         │
+│                                                                                                                      │
+│  Deal-Specific Intelligence Brief                                                                                    │
+│                                                                                                                      │
+│  ------------------------------------------------------------------------------------------------------------------  │
+│                                                                                                                      │
+│  ... Acme has made a bold move to increase market share through aggressive pricing:                                  │
+│                                                                                                                      │
+│   • Standard tier reduced from $35/seat/month to $25/seat/month (29% cut)                                            │
+│   • Enterprise tier reduced from $65/seat/month to $50/seat/month (23% cut)                                          │
+│   • Existing customers will be migrated to new pricing at their next renewal                                         │
+│                                                                                                                      │
+│  ... | SSO/SAML | Available on Professional and Enterprise tiers | Enterprise tier only; implementation issues       │
+│  noted in MedTech POC | NovaSight (more reliable) | | Implementation Time | 2 weeks average for Professional tier |  │
+│  Not disclosed | NovaSight | | Security Certification | SOC2 Type II certified since 2022 (4th consecutive renewal)  │
+│  | Not mentioned | NovaSight |                                                                                       │
+│                                                                                                                      │
+│  ------------------------------------------------------------------------------------------------------------------  │
+│                                                                                                                      │
+│  ...                                                                                                                 │
+│                                                                                                                      │
+│  B. No Custom ML Capabilities                                                                                        │
+│                                                                                                                      │
+│  Weakness: Acme has no ML support at any price point. CloudServe (180 seats) lost to NovaSight because Acme's        │
+│  Standard tier could not match our Professional offering on ML models.                                               │
+│                                                                                                                      │
+│  Talking point: "Acme can't run your custom models. If you have proprietary ML algorithms or need to deploy models   │
+│  your data science team <MATERIALIZED>, Acme forces you to use a separate tool. We do it all in one platform." ...            │
+│                                                                                                                      │
+│  Label: intel-acme_q1_update  Score: 2.69  Mode: keyword                                                             │
+│                                                                                                                      │
+╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
+intel-acme_q1_update
+├── t-text-acme_q1_update
+├── t-text-differentiators
+└── t-text-platform_overview

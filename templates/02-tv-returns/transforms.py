@@ -7,15 +7,13 @@ import hashlib
 import json
 from pathlib import Path
 
-from synix.build.transforms import BaseTransform, register_transform
-from synix.core.models import Artifact
+from synix.core.models import Artifact, Source, Transform
 
 
-@register_transform("demo_load_product_offers")
-class DemoLoadProductOffersTransform(BaseTransform):
+class DemoLoadProductOffersTransform(Source):
     """Read product_catalog.json + vendor_offers.json, join by SKU."""
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def load(self, config: dict) -> list[Artifact]:
         source_dir = Path(config["source_dir"])
 
         catalog_path = source_dir / "product_catalog.json"
@@ -53,11 +51,10 @@ class DemoLoadProductOffersTransform(BaseTransform):
         return artifacts
 
 
-@register_transform("demo_load_policies")
-class DemoLoadPoliciesTransform(BaseTransform):
+class DemoLoadPoliciesTransform(Source):
     """Read policy markdown files from sources/policies/."""
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def load(self, config: dict) -> list[Artifact]:
         source_dir = Path(config["source_dir"])
         policies_dir = source_dir / "policies"
 
@@ -79,8 +76,7 @@ class DemoLoadPoliciesTransform(BaseTransform):
         return artifacts
 
 
-@register_transform("demo_extract_policies")
-class DemoExtractPoliciesTransform(BaseTransform):
+class DemoExtractPoliciesTransform(Transform):
     """Extract key actionable rules from policy documents using LLM."""
 
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
@@ -125,8 +121,7 @@ class DemoExtractPoliciesTransform(BaseTransform):
         return results
 
 
-@register_transform("demo_enrich_cs_brief")
-class DemoEnrichCSBriefTransform(BaseTransform):
+class DemoEnrichCSBriefTransform(Transform):
     """Combine product/offer data with policy rules into a CS agent brief."""
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:

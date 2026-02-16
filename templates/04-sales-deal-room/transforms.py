@@ -6,28 +6,31 @@
 #   3. deal_call_prep — actionable call prep brief with citations
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
-from synix.build.transforms import BaseTransform, register_transform
 from synix.core.citations import make_uri
-from synix.core.models import Artifact
+from synix.core.models import Artifact, Transform
 
 
 def _source_label_block(inputs: list[Artifact]) -> str:
-    """Build an 'Available sources' block listing input labels → synix:// URIs."""
+    """Build an 'Available sources' block listing input labels -> synix:// URIs."""
     lines = []
     for a in sorted(inputs, key=lambda a: a.label):
-        lines.append(f"  {a.label} → {make_uri(a.label)}")
+        lines.append(f"  {a.label} -> {make_uri(a.label)}")
     return "\n".join(lines)
 
 
 _CITATION_INSTRUCTION = (
-    "When making a factual claim, cite the source using a markdown link: "
-    "`[description](synix://label)`. Every substantive claim (numbers, dates, "
-    "competitive facts) must have at least one citation."
+    "CRITICAL: You MUST cite sources using markdown links in this exact format:\n"
+    "  [claim text](synix://source-label)\n\n"
+    "Examples of properly cited claims:\n"
+    "  - DataFlow charges [$180K/year for 500 seats](synix://intel-dataflow_inc)\n"
+    "  - Customer budget is [$300K-$500K approved](synix://t-text-budget_timeline)\n"
+    "  - Sarah Chen is [VP Analytics and executive sponsor](synix://t-text-stakeholder_map)\n\n"
+    "Every factual claim (numbers, dates, prices, competitor facts, customer details) "
+    "MUST have at least one synix:// citation. Uncited claims will be flagged as violations."
 )
 
 
-@register_transform("deal_competitive_intel")
-class DealCompetitiveIntelTransform(BaseTransform):
+class DealCompetitiveIntelTransform(Transform):
     """Analyze each competitor against our product specs, with citations."""
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
@@ -98,8 +101,7 @@ class DealCompetitiveIntelTransform(BaseTransform):
         ]
 
 
-@register_transform("deal_strategy")
-class DealStrategyTransform(BaseTransform):
+class DealStrategyTransform(Transform):
     """Synthesize all competitive intel + deal context into a positioning strategy."""
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
@@ -158,8 +160,7 @@ class DealStrategyTransform(BaseTransform):
         ]
 
 
-@register_transform("deal_call_prep")
-class DealCallPrepTransform(BaseTransform):
+class DealCallPrepTransform(Transform):
     """Produce a final call prep brief from strategy + deal context."""
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:

@@ -7,16 +7,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-import synix.build.llm_transforms  # noqa: F401
-
-# Import transform modules to trigger @register_transform decorators
-import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
-from synix.build.dag import resolve_build_order
+from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
-from synix.build.transforms import get_transform
 from synix.core.config import LLMConfig, redact_api_key
-from synix.core.models import Artifact, Layer, Pipeline
+from synix.core.models import Artifact, FlatFile, Layer, Pipeline, SearchIndex, Source, Transform
 
 # Default token estimates per LLM call
 DEFAULT_INPUT_TOKENS_PER_CALL = 2000
@@ -83,20 +78,6 @@ class BuildPlan:
         return json.dumps(self.to_dict(), indent=indent)
 
 
-def _transform_to_prompt_name(transform_name: str) -> str:
-    """Map transform name to prompt template filename.
-
-    Mirrors the mapping in runner.py.
-    """
-    mapping = {
-        "episode_summary": "episode_summary",
-        "monthly_rollup": "monthly_rollup",
-        "topical_rollup": "topical_rollup",
-        "core_synthesis": "core_memory",
-    }
-    return mapping.get(transform_name, transform_name)
-
-
 def plan_build(
     pipeline: Pipeline,
     source_dir: str | None = None,
@@ -106,26 +87,12 @@ def plan_build(
     input_token_price: float = DEFAULT_INPUT_TOKEN_PRICE,
     output_token_price: float = DEFAULT_OUTPUT_TOKEN_PRICE,
 ) -> BuildPlan:
-    """Walk the DAG and determine what would be built without executing.
-
-    This mirrors the runner logic but never calls the LLM. For level-0 (parse)
-    layers, the parse transform is actually executed to count source artifacts
-    (it is fast and does not use the LLM). For level > 0 layers, cache state
-    is analyzed using the same needs_rebuild logic as the runner.
-
-    Args:
-        pipeline: The pipeline definition.
-        source_dir: Override for pipeline.source_dir.
-        input_tokens_per_call: Estimated input tokens per LLM call.
-        output_tokens_per_call: Estimated output tokens per LLM call.
-        input_token_price: Price per input token in USD.
-        output_token_price: Price per output token in USD.
-
-    Returns:
-        BuildPlan with per-step analysis and cost estimates.
-    """
+    """Walk the DAG and determine what would be built without executing."""
     src_dir = source_dir or pipeline.source_dir
     build_dir = Path(pipeline.build_dir)
+
+    # Compute levels from DAG structure
+    compute_levels(pipeline.layers)
 
     store = ArtifactStore(build_dir) if build_dir.exists() else None
 
@@ -185,15 +152,20 @@ def _plan_layer(
     output_token_price: float,
 ) -> StepPlan:
     """Analyze a single layer to determine its build plan."""
+    if isinstance(layer, Source):
+        return _plan_source_layer(layer, pipeline, src_dir, store, layer_artifacts)
+
+    # Must be a Transform
+    assert isinstance(layer, Transform), f"Expected Transform, got {type(layer)}"
+
     # Gather inputs from dependent layers
     inputs: list[Artifact] = []
-    if layer.depends_on:
-        for dep_name in layer.depends_on:
-            dep_artifacts = layer_artifacts.get(dep_name)
-            if dep_artifacts is None and store is not None:
-                dep_artifacts = store.list_artifacts(dep_name)
-            if dep_artifacts:
-                inputs.extend(dep_artifacts)
+    for dep in layer.depends_on:
+        dep_artifacts = layer_artifacts.get(dep.name)
+        if dep_artifacts is None and store is not None:
+            dep_artifacts = store.list_artifacts(dep.name)
+        if dep_artifacts:
+            inputs.extend(dep_artifacts)
 
     # Build config for the transform (mirroring runner.py)
     base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
@@ -211,32 +183,23 @@ def _plan_layer(
 
     transform_config["search_db_path"] = str(Path(pipeline.build_dir) / "search.db")
 
-    # Get the transform
-    transform = get_transform(layer.transform)
-
-    # Compute transform fingerprint (unified identity for source code + prompt + config + model)
-    prompt_name = _transform_to_prompt_name(layer.transform) if layer.level > 0 else None
-    transform_fp = transform.compute_fingerprint(transform_config, prompt_name) if layer.level > 0 else None
+    # Compute transform fingerprint
+    transform_fp = layer.compute_fingerprint(transform_config)
 
     # Resolve the per-layer LLM config for display
     resolved_llm = _resolve_layer_llm_config(layer, pipeline)
 
-    if layer.level == 0:
-        # Parse layer: actually run the parse transform to count artifacts (fast, no LLM)
-        return _plan_parse_layer(layer, transform, transform_config, store, layer_artifacts)
-
     # Check if any upstream dependency has pending rebuilds
     upstream_dirty = False
-    if layer.depends_on:
-        step_lookup = {s.name: s for s in prior_steps}
-        for dep_name in layer.depends_on:
-            dep_step = step_lookup.get(dep_name)
-            if dep_step and dep_step.rebuild_count > 0:
-                upstream_dirty = True
-                break
+    step_lookup = {s.name: s for s in prior_steps}
+    for dep in layer.depends_on:
+        dep_step = step_lookup.get(dep.name)
+        if dep_step and dep_step.rebuild_count > 0:
+            upstream_dirty = True
+            break
 
     # For LLM layers, analyze cache state
-    step = _plan_llm_layer(
+    step = _plan_transform_layer(
         layer,
         inputs,
         store,
@@ -247,6 +210,7 @@ def _plan_layer(
         input_token_price,
         output_token_price,
         transform_fp,
+        transform_config,
     )
     step.resolved_llm_config = resolved_llm
     if transform_fp is not None:
@@ -255,7 +219,7 @@ def _plan_layer(
     # Estimate parallel unit count from split() if the layer will be built
     if step.status != "cached" and inputs:
         try:
-            units = transform.split(inputs, transform_config)
+            units = layer.split(inputs, transform_config)
             step.parallel_units = len(units)
         except Exception:
             step.parallel_units = 1
@@ -304,31 +268,34 @@ def _compute_source_info(source_dir: str) -> str | None:
     return f"{source_dir} ({', '.join(parts)} {file_word}{depth_label})"
 
 
-def _plan_parse_layer(
-    layer: Layer,
-    transform,
-    transform_config: dict,
+def _plan_source_layer(
+    layer: Source,
+    pipeline: Pipeline,
+    src_dir: str,
     store: ArtifactStore | None,
     layer_artifacts: dict[str, list[Artifact]],
 ) -> StepPlan:
-    """Plan a parse (level 0) layer by running the parse transform."""
+    """Plan a Source layer by running its load() method."""
+    source_dir = layer.dir or src_dir
+    source_config = {"source_dir": source_dir}
+
     try:
-        artifacts = transform.execute([], transform_config)
+        artifacts = layer.load(source_config)
     except Exception:
-        # If parsing fails (e.g., source_dir doesn't exist), report 0 artifacts
+        # If loading fails (e.g., source_dir doesn't exist), report 0 artifacts
         artifacts = []
 
     layer_artifacts[layer.name] = artifacts
     artifact_count = len(artifacts)
 
     # Compute source info for display
-    source_info = _compute_source_info(transform_config["source_dir"])
+    source_info = _compute_source_info(source_dir)
 
     if store is None:
         # No build dir yet -- everything is new
         return StepPlan(
             name=layer.name,
-            level=layer.level,
+            level=layer._level,
             status="new",
             artifact_count=artifact_count,
             rebuild_count=artifact_count,
@@ -358,7 +325,7 @@ def _plan_parse_layer(
     if added == 0 and removed == 0 and modified == 0:
         return StepPlan(
             name=layer.name,
-            level=layer.level,
+            level=layer._level,
             status="cached",
             artifact_count=artifact_count,
             rebuild_count=0,
@@ -388,7 +355,7 @@ def _plan_parse_layer(
 
     return StepPlan(
         name=layer.name,
-        level=layer.level,
+        level=layer._level,
         status=status,
         artifact_count=artifact_count,
         rebuild_count=rebuild_count,
@@ -401,8 +368,8 @@ def _plan_parse_layer(
     )
 
 
-def _plan_llm_layer(
-    layer: Layer,
+def _plan_transform_layer(
+    layer: Transform,
     inputs: list[Artifact],
     store: ArtifactStore | None,
     layer_artifacts: dict[str, list[Artifact]],
@@ -412,21 +379,22 @@ def _plan_llm_layer(
     input_token_price: float,
     output_token_price: float,
     transform_fp: Fingerprint | None = None,
+    transform_config: dict | None = None,
 ) -> StepPlan:
-    """Plan an LLM (level > 0) layer by checking cache state."""
+    """Plan a Transform layer by checking cache state."""
     tokens_per_call = input_tokens_per_call + output_tokens_per_call
     cost_per_call = input_tokens_per_call * input_token_price + output_tokens_per_call * output_token_price
 
     if store is None:
         # No build dir -- everything is new
-        estimated_count = _estimate_artifact_count(layer, inputs)
+        estimated_count = layer.estimate_output_count(len(inputs))
 
         # Store placeholder artifacts for downstream planning
         layer_artifacts[layer.name] = inputs  # approximate
 
         return StepPlan(
             name=layer.name,
-            level=layer.level,
+            level=layer._level,
             status="new",
             artifact_count=estimated_count,
             rebuild_count=estimated_count,
@@ -440,15 +408,13 @@ def _plan_llm_layer(
     existing = store.list_artifacts(layer.name)
 
     # Check if the whole layer is fully cached
-    # If upstream has pending rebuilds, those artifacts will get new hashes —
-    # so even if current input IDs match, the layer will need rebuilding.
     fully_cached = not upstream_dirty and _is_layer_fully_cached(layer, existing, inputs, transform_fp)
 
     if fully_cached:
         layer_artifacts[layer.name] = existing
         return StepPlan(
             name=layer.name,
-            level=layer.level,
+            level=layer._level,
             status="cached",
             artifact_count=len(existing),
             rebuild_count=0,
@@ -460,8 +426,6 @@ def _plan_llm_layer(
         )
 
     # Not fully cached — check per-artifact to get accurate rebuild count.
-    # Determine whether the rebuild is due to a global change (transform
-    # identity) or just changed inputs. If global, everything rebuilds.
     global_change = _has_global_change(existing, transform_fp)
 
     rebuild_count = 0
@@ -469,14 +433,14 @@ def _plan_llm_layer(
 
     if global_change:
         # Transform identity changed — all artifacts rebuild
-        estimated_count = _estimate_artifact_count(layer, inputs)
+        estimated_count = layer.estimate_output_count(len(inputs))
         rebuild_count = estimated_count
         cached_count = 0
     else:
         # Check per-artifact which are stale
         try:
-            transform = get_transform(layer.transform)
-            units = transform.split(inputs, {})
+            config = transform_config or {}
+            units = layer.split(inputs, config)
             # Build a set of all input IDs covered by existing artifacts
             existing_by_inputs: dict[tuple[str, ...], bool] = {}
             for art in existing:
@@ -495,7 +459,7 @@ def _plan_llm_layer(
                 else:
                     rebuild_count += 1
         except Exception:
-            estimated_count = _estimate_artifact_count(layer, inputs)
+            estimated_count = layer.estimate_output_count(len(inputs))
             rebuild_count = estimated_count
             cached_count = 0
 
@@ -513,7 +477,7 @@ def _plan_llm_layer(
 
     return StepPlan(
         name=layer.name,
-        level=layer.level,
+        level=layer._level,
         status=status,
         artifact_count=total_count,
         rebuild_count=rebuild_count,
@@ -613,15 +577,12 @@ def _determine_rebuild_reason(
     return ", ".join(reasons) if reasons else "inputs changed"
 
 
-def _resolve_layer_llm_config(layer: Layer, pipeline: Pipeline) -> dict | None:
+def _resolve_layer_llm_config(layer: Transform, pipeline: Pipeline) -> dict | None:
     """Resolve the effective LLM config for a layer by deep-merging over pipeline defaults.
 
-    Returns None for parse layers (level 0) which don't use LLM.
-    For LLM layers, returns the resolved config dict with API key redacted.
+    Returns None for Source layers which don't use LLM.
+    For Transform layers, returns the resolved config dict with API key redacted.
     """
-    if layer.level == 0:
-        return None
-
     # Start with pipeline defaults
     base = dict(pipeline.llm_config) if pipeline.llm_config else {}
 
@@ -652,31 +613,6 @@ def _llm_config_to_display_dict(config: LLMConfig) -> dict:
     return d
 
 
-def _estimate_artifact_count(layer: Layer, inputs: list[Artifact]) -> int:
-    """Estimate how many artifacts a layer will produce based on grouping."""
-    grouping = layer.grouping
-
-    if grouping == "single":
-        return 1
-    elif grouping == "by_conversation":
-        return len(inputs)
-    elif grouping == "by_month":
-        months = set()
-        for art in inputs:
-            month = art.metadata.get("date", "")[:7]
-            if month and "-" in month:
-                months.add(month)
-            else:
-                months.add("undated")
-        return max(len(months), 1)
-    elif grouping == "by_topic":
-        topics = layer.config.get("topics", [])
-        return max(len(topics), 1)
-    else:
-        # Default: one artifact per input
-        return max(len(inputs), 1)
-
-
 def _plan_projection(
     proj,
     pipeline: Pipeline,
@@ -684,13 +620,13 @@ def _plan_projection(
     store: ArtifactStore | None,
 ) -> ProjectionPlan:
     """Analyze a projection to determine its plan status."""
-    from synix.build.runner import PROJECTION_CACHE_FILE, _compute_projection_hash
+    from synix.build.runner import PROJECTION_CACHE_FILE, _compute_projection_hash, _get_projection_config
 
-    source_layers = [s["layer"] for s in proj.sources]
+    source_layers = [s.name for s in proj.sources]
     build_dir = Path(pipeline.build_dir)
 
     # Extract embedding config for display
-    embedding_config = proj.config.get("embedding_config") if proj.config else None
+    embedding_config = proj.embedding_config if isinstance(proj, SearchIndex) else None
 
     # Count total artifacts that would feed this projection
     all_artifacts: list[Artifact] = []
@@ -701,6 +637,14 @@ def _plan_projection(
         all_artifacts.extend(arts)
 
     artifact_count = len(all_artifacts)
+
+    # Determine projection type
+    if isinstance(proj, SearchIndex):
+        proj_type = "search_index"
+    elif isinstance(proj, FlatFile):
+        proj_type = "flat_file"
+    else:
+        proj_type = "unknown"
 
     # Check projection cache
     cache_path = build_dir / PROJECTION_CACHE_FILE
@@ -716,7 +660,7 @@ def _plan_projection(
     if cached_entry is None:
         return ProjectionPlan(
             name=proj.name,
-            projection_type=proj.projection_type,
+            projection_type=proj_type,
             source_layers=source_layers,
             status="new",
             artifact_count=artifact_count,
@@ -725,12 +669,13 @@ def _plan_projection(
         )
 
     # Compute current hash including projection config
-    current_hash = _compute_projection_hash(all_artifacts, proj.config)
+    proj_config = _get_projection_config(proj)
+    current_hash = _compute_projection_hash(all_artifacts, proj_config)
 
     if cached_entry.get("source_hash") == current_hash and cached_entry.get("artifact_count") == artifact_count:
         return ProjectionPlan(
             name=proj.name,
-            projection_type=proj.projection_type,
+            projection_type=proj_type,
             source_layers=source_layers,
             status="cached",
             artifact_count=artifact_count,
@@ -740,15 +685,15 @@ def _plan_projection(
 
     # Determine reason: check if config changed vs artifacts changed
     reason = "source artifacts changed"
-    if cached_entry.get("config_hash") is not None and proj.config:
+    if cached_entry.get("config_hash") is not None and proj_config:
         old_config_hash = cached_entry["config_hash"]
-        new_config_hash = hashlib.sha256(json.dumps(proj.config, sort_keys=True, default=str).encode()).hexdigest()
+        new_config_hash = hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
         if old_config_hash != new_config_hash:
             reason = "projection config changed"
 
     return ProjectionPlan(
         name=proj.name,
-        projection_type=proj.projection_type,
+        projection_type=proj_type,
         source_layers=source_layers,
         status="rebuild",
         artifact_count=artifact_count,

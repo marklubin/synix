@@ -1,4 +1,4 @@
-"""Unit tests for the CitationEnrichmentFixer."""
+"""Unit tests for the CitationEnrichment fixer."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ import pytest
 
 from synix.build.artifacts import ArtifactStore
 from synix.build.fixers import (
-    CitationEnrichmentFixer,
+    CitationEnrichment,
     FixContext,
-    get_fixer,
 )
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import Violation
@@ -107,7 +106,7 @@ def _make_violation(label="core-1"):
 
 
 # ---------------------------------------------------------------------------
-# CitationEnrichmentFixer tests
+# CitationEnrichment fixer tests
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +136,7 @@ class TestCitationEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
 
         assert action.action == "rewrite"
@@ -169,7 +168,7 @@ class TestCitationEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
 
         assert action.action == "unresolved"
@@ -180,7 +179,7 @@ class TestCitationEnrichmentFixer:
         """Fixer skips when artifact is not found in store."""
         ctx = FixContext(store, provenance, Pipeline("test"))
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation("nonexistent"), ctx)
 
         assert action.action == "skip"
@@ -193,7 +192,7 @@ class TestCitationEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=None)
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
 
         assert action.action == "skip"
@@ -208,7 +207,7 @@ class TestCitationEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
 
         assert action.action == "skip"
@@ -223,7 +222,7 @@ class TestCitationEnrichmentFixer:
 
         ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
 
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
 
         assert action.action == "unresolved"
@@ -244,21 +243,21 @@ class TestCitationEnrichmentFixer:
         orig_file = fmod.__file__
         fmod.__file__ = str(tmp_path / "fake" / "fixers.py")
         try:
-            fixer = CitationEnrichmentFixer()
+            fixer = CitationEnrichment()
             action = fixer.fix(_make_violation(), ctx)
             assert action.action == "skip"
             assert "prompt" in action.description.lower() or "not found" in action.description.lower()
         finally:
             fmod.__file__ = orig_file
 
-    def test_registered_in_registry(self):
-        fixer = get_fixer("citation_enrichment")
-        assert isinstance(fixer, CitationEnrichmentFixer)
+    def test_instantiation(self):
+        fixer = CitationEnrichment()
+        assert isinstance(fixer, CitationEnrichment)
         assert fixer.interactive is True
         assert "ungrounded_claim" in fixer.handles_violation_types
 
     def test_can_handle_matches(self):
-        fixer = CitationEnrichmentFixer()
+        fixer = CitationEnrichment()
         v_match = Violation("ungrounded_claim", "warning", "msg", "a", "content")
         v_no_match = Violation("semantic_conflict", "error", "msg", "a", "content")
         assert fixer.can_handle(v_match) is True

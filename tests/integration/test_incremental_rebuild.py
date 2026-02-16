@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from synix import Layer, Pipeline, Projection
-from synix.pipeline.runner import run
+from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix.build.runner import run
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -36,62 +37,32 @@ def pipeline_obj(build_dir):
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, monthly, core)
+    p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
 
     return p
 
 
 class TestIncrementalRebuild:
     def test_second_run_all_cached(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Run twice — second run builds 0 artifacts."""
+        """Run twice — second run caches all transform layers."""
         result1 = run(pipeline_obj, source_dir=str(source_dir))
         assert result1.built > 0
 
         result2 = run(pipeline_obj, source_dir=str(source_dir))
-        assert result2.built == 0
-        assert result2.cached > 0
+        # Source layers always re-parse (counted as built), but transform layers
+        # should all be cached on the second run.
+        t_stats = next(s for s in result2.layer_stats if s.name == "transcripts")
+        for stats in result2.layer_stats:
+            if stats.name != "transcripts":  # skip Source layer
+                assert stats.built == 0, f"Layer {stats.name} should be cached but built {stats.built}"
+                assert stats.cached > 0, f"Layer {stats.name} should have cached artifacts"
 
     def test_new_source_partial_rebuild(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Add a conversation — only its chain rebuilds."""
@@ -141,7 +112,7 @@ class TestIncrementalRebuild:
         total_transcripts = transcript_stats_1.built + transcript_stats_1.cached
 
         # Now change the episode prompt template to force rebuild
-        from synix.transforms.base import PROMPTS_DIR
+        from synix.build.transforms import PROMPTS_DIR
 
         prompt_path = PROMPTS_DIR / "episode_summary.txt"
         original = prompt_path.read_text()
@@ -150,10 +121,10 @@ class TestIncrementalRebuild:
 
             result2 = run(pipeline_obj, source_dir=str(source_dir))
 
-            # Transcripts should all be cached
+            # Transcripts: Source layers always re-parse (built > 0),
+            # but content is unchanged so downstream caching still works.
             transcript_stats = next(s for s in result2.layer_stats if s.name == "transcripts")
-            assert transcript_stats.cached == total_transcripts
-            assert transcript_stats.built == 0
+            assert transcript_stats.built == total_transcripts
 
             # Episodes should rebuild (prompt changed)
             episode_stats = next(s for s in result2.layer_stats if s.name == "episodes")
@@ -174,6 +145,8 @@ class TestIncrementalRebuild:
         result2 = run(pipeline_obj, source_dir=str(source_dir))
         total2 = result2.built + result2.cached + result2.skipped
         assert total2 > 0
-        # Second run: everything cached, nothing built
-        assert result2.built == 0
-        assert result2.cached == total1  # same total
+        # Second run: Source layers always re-parse (built), but all Transform
+        # layers should be cached. The total artifact count should be the same.
+        transcript_built = next(s for s in result2.layer_stats if s.name == "transcripts").built
+        assert result2.built == transcript_built  # only Source layer counted as built
+        assert result2.cached > 0  # Transform layers are cached

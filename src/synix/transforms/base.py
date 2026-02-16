@@ -1,8 +1,3 @@
-"""Backward compatibility shim — moved to synix.build.transforms."""
+"""Backward compatibility shim — use synix.core.models.Transform."""
 
-from synix.build.transforms import (  # noqa: F401
-    PROMPTS_DIR,
-    BaseTransform,
-    get_transform,
-    register_transform,
-)
+from synix.build.transforms import PROMPTS_DIR, BaseTransform  # noqa: F401

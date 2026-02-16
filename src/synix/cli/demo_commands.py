@@ -290,6 +290,12 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Drop LLM stats lines entirely (presence varies based on whether LLM calls occurred)
         if re.search(r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+", line):
             continue
+        # Normalize Python traceback file paths (vary between local and CI)
+        line = re.sub(
+            r'(File ")[^"]*/(src/synix/)',
+            r"\1<PKG>/\2",
+            line,
+        )
         # Normalize cassette miss keys (hash varies by environment)
         line = re.sub(
             r"Cassette miss for key [0-9a-f]+\.\.\.",
@@ -312,7 +318,7 @@ def _normalize_output(text: str, case_path: Path) -> str:
         )
         # Normalize search projection status + index count (e.g., "cached  9 indexed" or "new  14 indexed")
         line = re.sub(
-            r"\b(?:cached|new|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
+            r"\b(?:cached|new|rebuild|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
             "<MATERIALIZED>  <N> indexed",
             line,
         )
@@ -337,10 +343,74 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
         line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
         line = re.sub(r"(\bSearch index has )\d+( entries\b)", r"\g<1><N>\2", line)
+        # Drop embedding progress lines — presence varies with projection cache state
+        if re.search(r"└─ embeddings\s+\d+/\d+", line):
+            continue
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)
+    # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
+    normalized = _sort_consecutive_spinner_lines(normalized)
+    # Collapse Python tracebacks to just File lines + exception (body varies by Python version)
+    normalized = _collapse_tracebacks(normalized)
     return "\n".join(normalized)
+
+
+def _sort_consecutive_spinner_lines(lines: list[str]) -> list[str]:
+    """Sort consecutive groups of spinner (⟳) lines for deterministic output.
+
+    Concurrent build steps may complete in arbitrary order, producing
+    non-deterministic orderings of progress lines like:
+        ⟳ competitive intel t-text-acme...
+        ⟳ competitive intel t-text-dataflo...
+    Sorting these groups removes concurrency-induced non-determinism.
+    """
+    result: list[str] = []
+    group: list[str] = []
+
+    def flush():
+        if group:
+            result.extend(sorted(group))
+            group.clear()
+
+    for line in lines:
+        if "\u21bb" in line:  # ⟳
+            group.append(line)
+        else:
+            flush()
+            result.append(line)
+    flush()
+    return result
+
+
+def _collapse_tracebacks(lines: list[str]) -> list[str]:
+    """Collapse Python traceback bodies to just File lines + exception.
+
+    Python 3.12+ shows fine-grained error locations with ^^^^^^^^ carets,
+    while older versions show the source code lines. Strip the indented
+    body lines between ``File "..."`` lines so tracebacks compare equal
+    across Python versions.
+    """
+    result: list[str] = []
+    in_traceback = False
+    for line in lines:
+        if line == "Traceback (most recent call last):":
+            in_traceback = True
+            result.append(line)
+        elif in_traceback:
+            # File lines are indented with 2 spaces
+            if re.match(r"  File ", line):
+                result.append(line)
+            elif line.startswith("    "):
+                # Source code or caret line — skip
+                continue
+            else:
+                # Exception line (not indented with 4 spaces) — ends the traceback
+                in_traceback = False
+                result.append(line)
+        else:
+            result.append(line)
+    return result
 
 
 def _apply_masks(text: str, masks: list[str]) -> str:

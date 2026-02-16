@@ -1,4 +1,4 @@
-"""E2E tests for the validate → fix → rebuild cycle."""
+"""E2E tests for the validate -> fix -> rebuild cycle."""
 
 from __future__ import annotations
 
@@ -8,15 +8,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from synix.build.artifacts import ArtifactStore
-from synix.build.fixers import apply_fix, run_fixers
+from synix.build.fixers import SemanticEnrichment, apply_fix, run_fixers
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import (
+    PII,
+    SemanticConflict,
     Violation,
     ViolationQueue,
     compute_violation_id,
     run_validators,
 )
-from synix.core.models import Artifact, FixerDecl, Pipeline, ValidatorDecl
+from synix.core.models import Artifact, Layer, Pipeline
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -56,7 +58,7 @@ def _make_artifact(aid, content, atype="episode", layer_name="episodes", **meta)
 
 class TestPIIDetectionE2E:
     def test_pii_detected_in_episodes(self, store, provenance, build_dir):
-        """Build artifacts with PII → validate detects them with provenance."""
+        """Build artifacts with PII -> validate detects them with provenance."""
         # Set up artifacts with provenance
         transcript = _make_artifact(
             "t-1",
@@ -76,12 +78,7 @@ class TestPIIDetectionE2E:
         provenance.record("ep-1", parent_labels=["t-1"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="pii",
-                config={"layers": ["episodes"], "severity": "warning"},
-            )
-        )
+        pipeline.add_validator(PII(layers=[Layer("episodes")], severity="warning"))
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) >= 1
@@ -101,17 +98,12 @@ class TestPIIDetectionE2E:
 
 class TestViolationQueueE2E:
     def test_validate_persists_to_queue(self, store, provenance, build_dir):
-        """Validate → violations saved to queue → load roundtrip."""
+        """Validate -> violations saved to queue -> load roundtrip."""
         art = _make_artifact("ep-1", "Email: user@example.com")
         store.save_artifact(art, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="pii",
-                config={"layers": ["episodes"]},
-            )
-        )
+        pipeline.add_validator(PII(layers=[Layer("episodes")]))
 
         result = run_validators(pipeline, store, provenance)
 
@@ -131,7 +123,7 @@ class TestViolationQueueE2E:
         assert len(active) >= 1
 
     def test_violation_id_dedup(self, build_dir):
-        """Upsert same violation twice → no duplicate in state."""
+        """Upsert same violation twice -> no duplicate in state."""
         queue = ViolationQueue(build_dir=build_dir)
         vid = compute_violation_id("pii", "ep-1", "email", "user@example.com")
 
@@ -152,7 +144,7 @@ class TestViolationQueueE2E:
         assert len(queue2.active()) == 1
 
     def test_ignore_flow(self, build_dir):
-        """Ignore → validate again → not reported (same hash)."""
+        """Ignore -> validate again -> not reported (same hash)."""
         vid = compute_violation_id("pii", "ep-1", "ssn", "123-45-6789")
         queue = ViolationQueue(build_dir=build_dir)
 
@@ -169,11 +161,11 @@ class TestViolationQueueE2E:
         queue.ignore(vid)
         queue.save_state()
 
-        # Same content hash → still ignored
+        # Same content hash -> still ignored
         assert queue.is_ignored(vid, "sha256:abc") is True
 
     def test_ignore_invalidation(self, build_dir):
-        """Ignore → artifact rebuilt (new hash) → violation resurfaces."""
+        """Ignore -> artifact rebuilt (new hash) -> violation resurfaces."""
         vid = compute_violation_id("pii", "ep-1", "ssn", "123-45-6789")
         queue = ViolationQueue(build_dir=build_dir)
 
@@ -190,7 +182,7 @@ class TestViolationQueueE2E:
         queue.ignore(vid)
         queue.save_state()
 
-        # New content hash → ignore invalidated
+        # New content hash -> ignore invalidated
         assert queue.is_ignored(vid, "sha256:new") is False
 
 
@@ -206,7 +198,7 @@ class TestSemanticFixCycleE2E:
         monkeypatch.setattr("synix.core.config.LLMConfig.from_dict", lambda d: None)
 
     def test_validate_fix_rebuild_cycle(self, store, provenance, build_dir, monkeypatch):
-        """Full cycle: build → validate (conflict) → fix (accept) → verify artifact rewritten."""
+        """Full cycle: build -> validate (conflict) -> fix (accept) -> verify artifact rewritten."""
         # Set up: monthly artifact with a contradiction
         monthly = _make_artifact(
             "monthly-dec",
@@ -239,22 +231,13 @@ class TestSemanticFixCycleE2E:
         # Pipeline with semantic conflict validator + enrichment fixer
         pipeline = Pipeline("test")
         pipeline.add_validator(
-            ValidatorDecl(
-                name="semantic_conflict",
-                config={
-                    "layers": ["monthly"],
-                    "llm_config": {"api_key": "test"},
-                },
+            SemanticConflict(
+                llm_config={"api_key": "test"},
             )
         )
-        pipeline.add_fixer(
-            FixerDecl(
-                name="semantic_enrichment",
-                config={"max_context_episodes": 3},
-            )
-        )
+        pipeline.add_fixer(SemanticEnrichment(max_context_episodes=3))
 
-        # Step 1: Validate — should find the contradiction
+        # Step 1: Validate -- should find the contradiction
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) >= 1
         conflict_viols = [v for v in result.violations if v.violation_type == "semantic_conflict"]
@@ -282,15 +265,14 @@ class TestSemanticFixCycleE2E:
         rewrite_actions = [a for a in fix_result.actions if a.action == "rewrite"]
         assert len(rewrite_actions) >= 1
 
-        # Step 4: Apply fix (simulating user accept)
-        for action in rewrite_actions:
-            apply_fix(action, store, provenance)
+        # Step 4: Apply fix for monthly-dec (simulating user accept)
+        monthly_action = next(a for a in rewrite_actions if a.label == "monthly-dec")
+        apply_fix(monthly_action, store, provenance)
 
-            # Mark resolved in queue
-            for v in result.violations:
-                if v.label == action.label:
-                    queue.resolve(v.violation_id, fix_action="rewrite")
-            break
+        # Mark resolved in queue
+        for v in result.violations:
+            if v.label == monthly_action.label:
+                queue.resolve(v.violation_id, fix_action="rewrite")
 
         queue.save_state()
 
@@ -305,10 +287,11 @@ class TestSemanticFixCycleE2E:
         assert "ep-dec" in parents
 
         # Step 7: Verify downstream invalidation
-        assert "core-1" in fix_result.actions[0].downstream_invalidated
+        monthly_fix = next(a for a in fix_result.actions if a.label == "monthly-dec")
+        assert "core-1" in monthly_fix.downstream_invalidated
 
     def test_unresolved_accept_original(self, store, provenance, build_dir, monkeypatch):
-        """Unresolved → user accepts original → violation resolved, no content change."""
+        """Unresolved -> user accepts original -> violation resolved, no content change."""
         monthly = _make_artifact(
             "monthly-1",
             "Contradictory content here.",
@@ -323,24 +306,16 @@ class TestSemanticFixCycleE2E:
 
         pipeline = Pipeline("test")
         pipeline.add_validator(
-            ValidatorDecl(
-                name="semantic_conflict",
-                config={
-                    "layers": ["monthly"],
-                    "llm_config": {"api_key": "test"},
-                },
+            SemanticConflict(
+                llm_config={"api_key": "test"},
             )
         )
-        pipeline.add_fixer(
-            FixerDecl(
-                name="semantic_enrichment",
-            )
-        )
+        pipeline.add_fixer(SemanticEnrichment())
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) >= 1
 
-        # Run fixer — returns unresolved
+        # Run fixer -- returns unresolved
         mock_client = _make_mock_fix_client_unresolved()
         fix_result = run_fixers(
             result,
@@ -381,12 +356,7 @@ class TestJSONOutput:
         store.save_artifact(art, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="pii",
-                config={"layers": ["episodes"]},
-            )
-        )
+        pipeline.add_validator(PII(layers=[Layer("episodes")]))
 
         result = run_validators(pipeline, store, provenance)
         out = result.to_dict()

@@ -1,15 +1,16 @@
 # Pipeline Definition (Python API)
 
-The pipeline is defined in Python, not YAML. More flexible, more expressive, better for dynamic layer generation.
+Pipelines are defined in Python. Layers are real objects — `Source` for inputs, transform classes for LLM steps, `SearchIndex` and `FlatFile` for outputs. Dependencies are expressed as object references, not strings.
 
 ```python
 # pipeline.py — Personal Memory Pipeline
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("personal-memory")
 
 # Sources
-pipeline.source_dir = "./exports"
+pipeline.source_dir = "./sources"
 pipeline.build_dir = "./build"
 
 # LLM defaults
@@ -20,94 +21,115 @@ pipeline.llm_config = {
 }
 
 # Layers — the memory hierarchy
-pipeline.add_layer(Layer(
-    name="transcripts",
-    level=0,
-    transform="parse",
-))
+transcripts = Source("transcripts")
 
-pipeline.add_layer(Layer(
-    name="episodes",
-    level=1,
-    depends_on=["transcripts"],
-    transform="episode_summary",
-    grouping="by_conversation",
-))
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 
-pipeline.add_layer(Layer(
-    name="monthly",
-    level=2,
-    depends_on=["episodes"],
-    transform="monthly_rollup",
-    grouping="by_month",
-))
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
 
-pipeline.add_layer(Layer(
-    name="core",
-    level=3,
-    depends_on=["monthly"],
-    transform="core_synthesis",
-    grouping="single",
-    context_budget=10000,
-))
+core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+
+pipeline.add(transcripts, episodes, monthly, core)
 
 # Projections — how artifacts become usable
-pipeline.add_projection(Projection(
-    name="memory-index",
-    projection_type="search_index",
-    sources=[
-        {"layer": "episodes", "search": ["fulltext"]},
-        {"layer": "monthly", "search": ["fulltext"]},
-        {"layer": "core", "search": ["fulltext"]},
-    ],
-))
+pipeline.add(
+    SearchIndex(
+        "memory-index",
+        sources=[episodes, monthly, core],
+        search=["fulltext", "semantic"],
+        embedding_config={
+            "provider": "fastembed",
+            "model": "BAAI/bge-small-en-v1.5",
+        },
+    )
+)
 
-pipeline.add_projection(Projection(
-    name="context-doc",
-    projection_type="flat_file",
-    sources=[
-        {"layer": "core"},
-    ],
-    output_path="./build/context.md",
-))
+pipeline.add(
+    FlatFile(
+        "context-doc",
+        sources=[core],
+        output_path="./build/context.md",
+    )
+)
 ```
 
 ## Demo Config Change: Monthly → Topical
 
+Swap the rollup strategy — transcripts and episodes stay cached:
+
 ```python
 # pipeline_topical.py — just change level 2
-pipeline.add_layer(Layer(
-    name="topics",
-    level=2,
-    depends_on=["episodes"],
-    transform="topical_rollup",
-    grouping="by_topic",
-    config={"topics": ["career", "technical-projects", "san-francisco", "personal-growth", "ai-and-agents"]},
-))
+from synix.transforms import TopicalRollup
 
-pipeline.add_layer(Layer(
-    name="core",
-    level=3,
-    depends_on=["topics"],  # changed dependency
-    transform="core_synthesis",
-    grouping="single",
-    context_budget=10000,
-))
+topics = TopicalRollup(
+    "topics",
+    depends_on=[episodes],
+    config={"topics": ["career", "technical-projects", "san-francisco", "personal-growth", "ai-and-agents"]},
+)
+
+core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+pipeline.add(transcripts, episodes, topics, core)
 ```
 
 ## Dynamic Layer Generation
 
 Because it's Python, you can do things like:
+
 ```python
+from synix.transforms import TopicalRollup
+
 for topic in ["work", "health", "projects", "relationships"]:
-    pipeline.add_layer(Layer(
-        name=f"topic-{topic}",
-        level=2,
-        depends_on=["episodes"],
-        transform="topical_rollup",
-        grouping="by_topic",
+    pipeline.add(TopicalRollup(
+        f"topic-{topic}",
+        depends_on=[episodes],
         config={"topic": topic},
     ))
 ```
 
 This is why code > config. You can't do that in YAML.
+
+## Validators and Fixers (Experimental)
+
+> **Note:** The validate/fix workflow is experimental. APIs and output formats may change in future releases.
+
+Validators and fixers are typed Python objects with explicit constructors:
+
+```python
+from synix.validators import PII, SemanticConflict, Citation, MutualExclusion
+from synix.fixers import SemanticEnrichment, CitationEnrichment
+
+pipeline.add_validator(PII(severity="warning"))
+pipeline.add_validator(SemanticConflict())
+pipeline.add_validator(Citation(layers=["strategy", "call_prep"]))
+pipeline.add_validator(MutualExclusion(fields=["customer_id"]))
+
+pipeline.add_fixer(SemanticEnrichment())
+pipeline.add_fixer(CitationEnrichment())
+```
+
+## Custom Transforms
+
+Extend `Transform` from `synix.core.models` to define custom transforms:
+
+```python
+from synix.core.models import Artifact, Transform
+
+class CompetitiveIntel(Transform):
+    prompt_name = "competitive_intel"  # loads prompts/competitive_intel.txt
+
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+        # Your transform logic here
+        ...
+
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+        # Optional: decompose into parallel work units
+        return [(inputs, config)]
+```
+
+Then use it in your pipeline like any built-in transform:
+
+```python
+intel = CompetitiveIntel("competitive_intel", depends_on=[competitor_docs, product_specs])
+pipeline.add(intel)
+```

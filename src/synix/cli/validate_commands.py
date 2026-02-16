@@ -18,16 +18,49 @@ from rich.tree import Tree
 from synix.cli.main import console, pipeline_argument
 
 
+def _build_provenance_tree(label, store, provenance):
+    """Build a Rich Tree showing the actual provenance DAG for an artifact."""
+    root_art = store.load_artifact(label)
+    root_layer = root_art.metadata.get("layer_name", root_art.artifact_type) if root_art else ""
+    tree = Tree("[dim]Provenance[/dim]")
+
+    def _add_node(parent_tree, node_label, visited):
+        if node_label in visited:
+            parent_tree.add(f"[dim]{node_label} (cycle)[/dim]")
+            return
+        visited = visited | {node_label}
+
+        art = store.load_artifact(node_label)
+        layer = art.metadata.get("layer_name", art.artifact_type) if art else ""
+        display = f"[bold]{node_label}[/bold] [dim]({layer})[/dim]"
+        node = parent_tree.add(display)
+
+        parents = provenance.get_parents(node_label)
+        for pid in sorted(parents):
+            _add_node(node, pid, visited)
+
+    # Start from the violation artifact
+    root_node = tree.add(f"[bold]{label}[/bold] [dim]({root_layer})[/dim]")
+    parents = provenance.get_parents(label)
+    for pid in sorted(parents):
+        _add_node(root_node, pid, {label})
+
+    return tree
+
+
 @click.command()
 @pipeline_argument
 @click.option("--build-dir", default=None, help="Override build directory")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
-    """Validate built artifacts for contradictions, PII, and other issues.
+    """[Experimental] Validate built artifacts for contradictions, PII, and other issues.
 
     PIPELINE_PATH defaults to pipeline.py in the current directory.
 
     Runs validators and reports violations. Use `synix fix` to resolve them.
+
+    NOTE: The validate/fix workflow is experimental. APIs and output formats
+    may change in future releases.
     """
     from synix.build.pipeline import load_pipeline
 
@@ -57,22 +90,21 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
         ValidationContext,
         ValidationResult,
         _gather_artifacts,
-        get_validator,
     )
 
     ctx = ValidationContext(store, provenance, pipeline)
     result = ValidationResult()
+    result.violations_by_validator = {}
 
-    for decl in pipeline.validators:
-        validator = get_validator(decl.name)
-        validator._field_name = decl.config.get("field", "")  # type: ignore[attr-defined]
-        validator._config = decl.config  # type: ignore[attr-defined]
+    for validator in pipeline.validators:
+        config = validator.to_config_dict()
+        validator_name = validator.name or type(validator).__name__
 
-        artifacts = _gather_artifacts(store, decl.config)
+        artifacts = _gather_artifacts(store, config)
 
         if not output_json:
-            label = f"[bold]{decl.name}[/bold] [dim]({len(artifacts)} artifact(s))[/dim]"
-            spinner_msg = f"Running [bold]{decl.name}[/bold] on {len(artifacts)} artifact(s)..."
+            label = f"[bold]{validator_name}[/bold] [dim]({len(artifacts)} artifact(s))[/dim]"
+            spinner_msg = f"Running [bold]{validator_name}[/bold] on {len(artifacts)} artifact(s)..."
 
         start = time.monotonic()
 
@@ -90,7 +122,8 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
                 v.provenance_trace = ctx.trace_field_origin(v.label, v.field)
 
         result.violations.extend(violations)
-        result.validators_run.append(decl.name)
+        result.validators_run.append(validator_name)
+        result.violations_by_validator[validator_name] = violations
 
         if not output_json:
             errors = sum(1 for v in violations if v.severity == "error")
@@ -147,7 +180,8 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         # Add violation_ids to JSON output
         for i, v in enumerate(result.violations):
             out["violations"][i]["violation_id"] = v.violation_id
-        console.print(json.dumps(out, indent=2))
+        # Use print() not console.print() to avoid Rich word-wrapping inside JSON strings
+        print(json.dumps(out, indent=2))
         sys.exit(0 if result.passed else 1)
 
     # Rich display
@@ -155,19 +189,16 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
         console.print("\n[green]All validators passed.[/green] No violations found.")
         return
 
-    # Group violations by type
-    by_type: dict[str, list] = {}
-    for v in result.violations:
-        by_type.setdefault(v.violation_type, []).append(v)
+    # Summary table (use per-validator violation counts from progress loop)
+    by_validator = getattr(result, "violations_by_validator", {})
 
-    # Summary table
     table = Table(title="Validation Results", box=box.ROUNDED)
     table.add_column("Validator", style="bold")
     table.add_column("Status", justify="center")
     table.add_column("Count", justify="right")
 
     for name in result.validators_run:
-        viols = by_type.get(name, [])
+        viols = by_validator.get(name, [])
         errors = [v for v in viols if v.severity == "error"]
         warnings = [v for v in viols if v.severity == "warning"]
         if errors:
@@ -212,13 +243,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
 
         # Build panel content — text body + optional provenance tree
         if v.provenance_trace:
-            provenance_tree = Tree("[dim]Provenance[/dim]")
-            parent = provenance_tree
-            for step in v.provenance_trace:
-                step_display = f"[bold]{step.label}[/bold] [dim]({step.layer})[/dim]"
-                if step.field_value:
-                    step_display += f"  {v.field}: {step.field_value}"
-                parent = parent.add(step_display)
+            provenance_tree = _build_provenance_tree(v.label, store, provenance)
             panel_content = Group(body, "", provenance_tree)
         else:
             panel_content = body

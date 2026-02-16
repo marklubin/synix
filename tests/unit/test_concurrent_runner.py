@@ -7,23 +7,24 @@ import time
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline, Projection
+from synix import Artifact, FlatFile, Pipeline, Source
 from synix.build.runner import _execute_transform_concurrent, run
-from synix.build.transforms import BaseTransform
+from synix.core.models import Transform
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-class MockEpisodeTransform(BaseTransform):
+class MockEpisodeTransform(Transform):
     """A mock 1:1 transform that simulates an LLM call with configurable delay.
 
     Each input artifact produces exactly one output artifact, mirroring
-    how EpisodeSummaryTransform works.
+    how EpisodeSummary works.
     """
 
     def __init__(self, delay: float = 0.0, fail_ids: set[str] | None = None):
+        super().__init__("mock-episodes")
         self.delay = delay
         self.fail_ids = fail_ids or set()
         self.call_log: list[dict] = []
@@ -81,20 +82,16 @@ def _make_transcript(tid: str, content: str = "", date: str = "2024-01-15") -> A
 
 def _make_pipeline_with_episodes(build_dir: str, source_dir: str) -> Pipeline:
     """Create a minimal pipeline with transcripts -> episodes."""
+    from synix.transforms import EpisodeSummary
+
     p = Pipeline("test-concurrent")
     p.build_dir = build_dir
     p.source_dir = source_dir
     p.llm_config = {"model": "test-model", "temperature": 0.3, "max_tokens": 1024}
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
+
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    p.add(transcripts, episodes)
     return p
 
 
@@ -186,30 +183,19 @@ class TestConcurrentBuildSameResults:
         for i in range(4):
             (source_dir / f"conv_{i}.txt").write_text(f"user: Question {i}\nassistant: Answer {i}\n")
 
+        from synix.transforms import EpisodeSummary
+
         # --- Sequential build (concurrency=1) ---
         build_dir_seq = tmp_path / "build_seq"
         p_seq = Pipeline("test-seq")
         p_seq.build_dir = str(build_dir_seq)
         p_seq.source_dir = str(source_dir)
         p_seq.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-        p_seq.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p_seq.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
-        )
-        p_seq.add_projection(
-            Projection(
-                name="context-doc",
-                projection_type="flat_file",
-                sources=[{"layer": "episodes"}],
-                config={"output_path": str(build_dir_seq / "context.md")},
-            )
-        )
+
+        transcripts_seq = Source("transcripts")
+        episodes_seq = EpisodeSummary("episodes", depends_on=[transcripts_seq])
+        p_seq.add(transcripts_seq, episodes_seq)
+        p_seq.add(FlatFile("context-doc", sources=[episodes_seq], output_path=str(build_dir_seq / "context.md")))
 
         result_seq = run(p_seq, concurrency=1)
 
@@ -219,24 +205,11 @@ class TestConcurrentBuildSameResults:
         p_conc.build_dir = str(build_dir_conc)
         p_conc.source_dir = str(source_dir)
         p_conc.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-        p_conc.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p_conc.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
-        )
-        p_conc.add_projection(
-            Projection(
-                name="context-doc",
-                projection_type="flat_file",
-                sources=[{"layer": "episodes"}],
-                config={"output_path": str(build_dir_conc / "context.md")},
-            )
-        )
+
+        transcripts_conc = Source("transcripts")
+        episodes_conc = EpisodeSummary("episodes", depends_on=[transcripts_conc])
+        p_conc.add(transcripts_conc, episodes_conc)
+        p_conc.add(FlatFile("context-doc", sources=[episodes_conc], output_path=str(build_dir_conc / "context.md")))
 
         result_conc = run(p_conc, concurrency=4)
 
@@ -281,7 +254,10 @@ class TestConcurrentBuildRespectsLimit:
         current_concurrent = {"value": 0}
         lock = threading.Lock()
 
-        class TrackingTransform(BaseTransform):
+        class TrackingTransform(Transform):
+            def __init__(self):
+                super().__init__("tracking")
+
             def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
                 results = []
                 for inp in inputs:
@@ -320,6 +296,8 @@ class TestConcurrentBuildDefaultSequential:
 
     def test_concurrency_1_no_thread_pool(self, tmp_path, mock_llm):
         """With concurrency=1, transforms run in the main thread (no ThreadPoolExecutor)."""
+        from synix.transforms import EpisodeSummary
+
         source_dir = tmp_path / "exports"
         source_dir.mkdir()
         (source_dir / "conv.txt").write_text("user: hi\nassistant: hello\n")
@@ -329,16 +307,10 @@ class TestConcurrentBuildDefaultSequential:
         p.build_dir = str(build_dir)
         p.source_dir = str(source_dir)
         p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-        p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
-        )
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        p.add(transcripts, episodes)
 
         # With concurrency=1, should still produce correct results
         result = run(p, concurrency=1)
@@ -398,6 +370,8 @@ class TestConcurrentErrorsDontCrash:
 
     def test_sequential_layers_unaffected_by_concurrency(self, tmp_path, mock_llm):
         """Monthly/core layers still produce correct results with -j4 (split determines parallelism)."""
+        from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+
         source_dir = tmp_path / "exports"
         source_dir.mkdir()
         for i in range(3):
@@ -408,35 +382,12 @@ class TestConcurrentErrorsDontCrash:
         p.build_dir = str(build_dir)
         p.source_dir = str(source_dir)
         p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-        p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        p.add_layer(
-            Layer(
-                name="episodes",
-                level=1,
-                depends_on=["transcripts"],
-                transform="episode_summary",
-                grouping="by_conversation",
-            )
-        )
-        p.add_layer(
-            Layer(
-                name="monthly",
-                level=2,
-                depends_on=["episodes"],
-                transform="monthly_rollup",
-                grouping="by_month",
-            )
-        )
-        p.add_layer(
-            Layer(
-                name="core",
-                level=3,
-                depends_on=["monthly"],
-                transform="core_synthesis",
-                grouping="single",
-                context_budget=10000,
-            )
-        )
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+        p.add(transcripts, episodes, monthly, core)
 
         # Should complete without errors even with concurrency > 1
         result = run(p, concurrency=4)
@@ -485,7 +436,7 @@ class TestTransformSplit:
     """Tests for the split() method on various transforms."""
 
     def test_default_split_is_1_to_1(self):
-        """BaseTransform default split produces one unit per input."""
+        """Transform default split produces one unit per input."""
         transform = MockEpisodeTransform()
         inputs = [_make_transcript(f"t-{i}") for i in range(5)]
         config = {"llm_config": {"model": "test"}}
@@ -498,10 +449,10 @@ class TestTransformSplit:
             assert config_extras == {}
 
     def test_monthly_rollup_split_groups_by_month(self):
-        """MonthlyRollupTransform.split() groups episodes by month."""
-        from synix.build.llm_transforms import MonthlyRollupTransform
+        """MonthlyRollup.split() groups episodes by month."""
+        from synix.build.llm_transforms import MonthlyRollup
 
-        transform = MonthlyRollupTransform()
+        transform = MonthlyRollup("test-monthly")
         inputs = [
             _make_transcript("t-0", date="2024-01-15"),
             _make_transcript("t-1", date="2024-01-20"),
@@ -521,10 +472,10 @@ class TestTransformSplit:
         assert feb_extras == {"_month_key": "2024-02"}
 
     def test_core_synthesis_split_single_unit(self):
-        """CoreSynthesisTransform.split() returns a single unit with all inputs."""
-        from synix.build.llm_transforms import CoreSynthesisTransform
+        """CoreSynthesis.split() returns a single unit with all inputs."""
+        from synix.build.llm_transforms import CoreSynthesis
 
-        transform = CoreSynthesisTransform()
+        transform = CoreSynthesis("test-core")
         inputs = [_make_transcript(f"t-{i}") for i in range(3)]
         config = {"llm_config": {"model": "test"}}
 
@@ -534,10 +485,10 @@ class TestTransformSplit:
         assert units[0][1] == {}
 
     def test_merge_transform_split_single_unit(self):
-        """MergeTransform.split() returns a single unit (needs all inputs for pairwise)."""
-        from synix.build.merge_transform import MergeTransform
+        """Merge.split() returns a single unit (needs all inputs for pairwise)."""
+        from synix.build.merge_transform import Merge
 
-        transform = MergeTransform()
+        transform = Merge("test-merge")
         inputs = [_make_transcript(f"t-{i}") for i in range(4)]
         config = {}
 
@@ -547,10 +498,10 @@ class TestTransformSplit:
         assert units[0][1] == {}
 
     def test_topical_rollup_split_per_topic(self):
-        """TopicalRollupTransform.split() creates one unit per topic."""
-        from synix.build.llm_transforms import TopicalRollupTransform
+        """TopicalRollup.split() creates one unit per topic."""
+        from synix.build.llm_transforms import TopicalRollup
 
-        transform = TopicalRollupTransform()
+        transform = TopicalRollup("test-topics")
         inputs = [_make_transcript(f"t-{i}") for i in range(3)]
         config = {
             "llm_config": {"model": "test"},
@@ -570,8 +521,9 @@ class TestTransformSplit:
     def test_concurrent_with_config_extras(self):
         """_execute_transform_concurrent merges config_extras into per-worker config."""
 
-        class ConfigCheckTransform(BaseTransform):
+        class ConfigCheckTransform(Transform):
             def __init__(self):
+                super().__init__("config-check")
                 self.seen_configs: list[dict] = []
                 self._lock = threading.Lock()
 

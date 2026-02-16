@@ -7,9 +7,8 @@ import sys
 from collections import defaultdict
 
 from synix.build.llm_client import LLMClient, LLMResponse
-from synix.build.transforms import BaseTransform, register_transform
 from synix.core.config import LLMConfig
-from synix.core.models import Artifact
+from synix.core.models import Artifact, Transform
 
 
 def _make_llm_client(config: dict) -> LLMClient:
@@ -70,9 +69,10 @@ def _logged_complete(
     return response
 
 
-@register_transform("episode_summary")
-class EpisodeSummaryTransform(BaseTransform):
-    """One transcript → one episode summary."""
+class EpisodeSummary(Transform):
+    """One transcript -> one episode summary."""
+
+    prompt_name = "episode_summary"
 
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         template = self.load_prompt("episode_summary")
@@ -116,9 +116,10 @@ class EpisodeSummaryTransform(BaseTransform):
         return results
 
 
-@register_transform("monthly_rollup")
-class MonthlyRollupTransform(BaseTransform):
+class MonthlyRollup(Transform):
     """Group episodes by month, synthesize each month."""
+
+    prompt_name = "monthly_rollup"
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """Split episodes into per-month work units."""
@@ -135,6 +136,9 @@ class MonthlyRollupTransform(BaseTransform):
                 months["undated"].append(ep)
 
         return [(episodes, {"_month_key": month}) for month, episodes in sorted(months.items())]
+
+    def estimate_output_count(self, input_count: int) -> int:
+        return max(input_count // 3, 1)  # rough: ~3 episodes per month
 
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         month = config.get("_month_key")
@@ -155,7 +159,7 @@ class MonthlyRollupTransform(BaseTransform):
             year, mo = "unknown", "undated"
         else:
             year, mo = month.split("-")
-        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda ep: ep.artifact_id)
         episodes_text = "\n\n---\n\n".join(
             f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
@@ -181,9 +185,10 @@ class MonthlyRollupTransform(BaseTransform):
         ]
 
 
-@register_transform("topical_rollup")
-class TopicalRollupTransform(BaseTransform):
+class TopicalRollup(Transform):
     """Group episodes by topic, synthesize each topic."""
+
+    prompt_name = "topical_rollup"
 
     def get_cache_key(self, config: dict) -> str:
         """Topics list affects output — include in cache key."""
@@ -204,12 +209,12 @@ class TopicalRollupTransform(BaseTransform):
         if search_db_path:
             from pathlib import Path
 
-            from synix.search.indexer import SearchIndex
+            from synix.search.indexer import SearchIndex as SearchIdx
 
             db_path = Path(search_db_path)
             if db_path.exists():
                 try:
-                    idx = SearchIndex(db_path)
+                    idx = SearchIdx(db_path)
                     row = (
                         idx._get_conn()
                         .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
@@ -240,6 +245,11 @@ class TopicalRollupTransform(BaseTransform):
 
         return units
 
+    def estimate_output_count(self, input_count: int) -> int:
+        # Use topics from layer config if available; fall back to input_count
+        topics = self.config.get("topics", [])
+        return len(topics) if topics else input_count
+
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         topic = config.get("_topic")
         if topic is None:
@@ -255,7 +265,7 @@ class TopicalRollupTransform(BaseTransform):
         client = _get_llm_client(config)
         model_config = config.get("llm_config", {})
 
-        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda ep: ep.artifact_id)
         episodes_text = "\n\n---\n\n".join(
             f"### {ep.metadata.get('title', ep.label)} ({ep.metadata.get('date', '')})\n{ep.content}"
@@ -282,13 +292,17 @@ class TopicalRollupTransform(BaseTransform):
         ]
 
 
-@register_transform("core_synthesis")
-class CoreSynthesisTransform(BaseTransform):
-    """All rollups → single core memory document."""
+class CoreSynthesis(Transform):
+    """All rollups -> single core memory document."""
+
+    prompt_name = "core_memory"
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """N:1 — all inputs in a single unit (no parallelism)."""
         return [(inputs, {})]
+
+    def estimate_output_count(self, input_count: int) -> int:
+        return 1
 
     def get_cache_key(self, config: dict) -> str:
         """context_budget affects output — include in cache key."""
@@ -305,7 +319,7 @@ class CoreSynthesisTransform(BaseTransform):
         # Derive max_tokens from context_budget; fall back to model_config
         max_tokens = context_budget if context_budget else model_config.get("max_tokens", 2048)
 
-        # Sort inputs by artifact_id for deterministic prompt → stable cassette key
+        # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda r: r.artifact_id)
         rollups_text = "\n\n---\n\n".join(
             f"### {r.metadata.get('month', r.metadata.get('topic', r.label))}\n{r.content}" for r in sorted_inputs

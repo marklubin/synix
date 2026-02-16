@@ -9,12 +9,11 @@ import pytest
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import (
-    BaseValidator,
-    MutualExclusionValidator,
-    PIIValidator,
+    PII,
+    MutualExclusion,
     ProvenanceStep,
-    RequiredFieldValidator,
-    SemanticConflictValidator,
+    RequiredField,
+    SemanticConflict,
     ValidationContext,
     ValidationResult,
     Violation,
@@ -22,13 +21,11 @@ from synix.build.validators import (
     _gather_artifacts,
     _parse_conflict_response,
     compute_violation_id,
-    get_validator,
     mutual_exclusion_violation,
-    register_validator,
     required_field_violation,
     run_validators,
 )
-from synix.core.models import Artifact, Pipeline, ValidatorDecl
+from synix.core.models import Artifact, Pipeline
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -214,32 +211,26 @@ class TestFactoryFunctions:
 
 
 # ---------------------------------------------------------------------------
-# Registry tests
+# Instantiation tests (replaces registry tests)
 # ---------------------------------------------------------------------------
 
 
-class TestRegistry:
-    def test_get_mutual_exclusion(self):
-        v = get_validator("mutual_exclusion")
-        assert isinstance(v, MutualExclusionValidator)
+class TestInstantiation:
+    def test_mutual_exclusion(self):
+        v = MutualExclusion(field="customer_id", scope="merge", layers=[])
+        assert isinstance(v, MutualExclusion)
 
-    def test_get_required_field(self):
-        v = get_validator("required_field")
-        assert isinstance(v, RequiredFieldValidator)
+    def test_required_field(self):
+        v = RequiredField(field="customer_id", layers=[])
+        assert isinstance(v, RequiredField)
 
-    def test_unknown_validator_raises(self):
-        with pytest.raises(ValueError, match="Unknown validator"):
-            get_validator("nonexistent_validator")
+    def test_pii(self):
+        v = PII(layers=[])
+        assert isinstance(v, PII)
 
-    def test_register_custom_validator(self):
-        @register_validator("test_custom")
-        class CustomValidator(BaseValidator):
-            def validate(self, artifacts, ctx):
-                return []
-
-        v = get_validator("test_custom")
-        assert isinstance(v, CustomValidator)
-        assert v.validate([], None) == []
+    def test_semantic_conflict(self):
+        v = SemanticConflict()
+        assert isinstance(v, SemanticConflict)
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +301,7 @@ class TestTraceFieldOrigin:
 
 
 # ---------------------------------------------------------------------------
-# MutualExclusionValidator tests
+# MutualExclusion validator tests
 # ---------------------------------------------------------------------------
 
 
@@ -325,8 +316,7 @@ class TestMutualExclusionValidator:
         store.save_artifact(merge, "merge", 2)
         provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
 
-        validator = get_validator("mutual_exclusion")
-        validator._field_name = "customer_id"
+        validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert violations == []
 
@@ -340,8 +330,7 @@ class TestMutualExclusionValidator:
         store.save_artifact(merge, "merge", 2)
         provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
 
-        validator = get_validator("mutual_exclusion")
-        validator._field_name = "customer_id"
+        validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert len(violations) == 1
         assert violations[0].violation_type == "mutual_exclusion"
@@ -359,8 +348,7 @@ class TestMutualExclusionValidator:
         )
         store.save_artifact(merge, "merge", 2)
 
-        validator = get_validator("mutual_exclusion")
-        validator._field_name = "customer_id"
+        validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert len(violations) == 1
 
@@ -369,8 +357,7 @@ class TestMutualExclusionValidator:
         merge = _make_artifact("merge-ep-3", "merge", layer_name="merge")
         store.save_artifact(merge, "merge", 2)
 
-        validator = get_validator("mutual_exclusion")
-        validator._field_name = "customer_id"
+        validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert violations == []
 
@@ -393,15 +380,14 @@ class TestMutualExclusionValidator:
         store.save_artifact(m2, "merge", 2)
         provenance.record("merge-2", parent_labels=["ep-1", "ep-3"])
 
-        validator = get_validator("mutual_exclusion")
-        validator._field_name = "customer_id"
+        validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([m1, m2], ctx)
         assert len(violations) == 1
         assert violations[0].label == "merge-1"
 
 
 # ---------------------------------------------------------------------------
-# RequiredFieldValidator tests
+# RequiredField validator tests
 # ---------------------------------------------------------------------------
 
 
@@ -410,8 +396,7 @@ class TestRequiredFieldValidator:
         art = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
-        validator = get_validator("required_field")
-        validator._field_name = "customer_id"
+        validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -419,8 +404,7 @@ class TestRequiredFieldValidator:
         art = _make_artifact("ep-1", "episode", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
-        validator = get_validator("required_field")
-        validator._field_name = "customer_id"
+        validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].violation_type == "required_field"
@@ -430,8 +414,7 @@ class TestRequiredFieldValidator:
         art = _make_artifact("ep-1", "episode", customer_id="", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
-        validator = get_validator("required_field")
-        validator._field_name = "customer_id"
+        validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
 
@@ -439,8 +422,7 @@ class TestRequiredFieldValidator:
         art = _make_artifact("ep-1", "episode", customer_id="  ", layer_name="episodes")
         store.save_artifact(art, "episodes", 1)
 
-        validator = get_validator("required_field")
-        validator._field_name = "customer_id"
+        validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
 
@@ -452,8 +434,7 @@ class TestRequiredFieldValidator:
         store.save_artifact(a2, "episodes", 1)
         store.save_artifact(a3, "episodes", 1)
 
-        validator = get_validator("required_field")
-        validator._field_name = "customer_id"
+        validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([a1, a2, a3], ctx)
         assert len(violations) == 1
         assert violations[0].label == "ep-2"
@@ -532,12 +513,7 @@ class TestRunValidators:
         provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="mutual_exclusion",
-                config={"field": "customer_id", "scope": "merge"},
-            )
-        )
+        pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is False
@@ -553,12 +529,7 @@ class TestRunValidators:
         store.save_artifact(a2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="required_field",
-                config={"field": "customer_id", "layers": ["episodes"]},
-            )
-        )
+        pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is False
@@ -573,18 +544,8 @@ class TestRunValidators:
         store.save_artifact(ep2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="required_field",
-                config={"field": "customer_id", "layers": ["episodes"]},
-            )
-        )
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="mutual_exclusion",
-                config={"field": "customer_id", "scope": "merge"},
-            )
-        )
+        pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
+        pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.validators_run) == 2
@@ -608,12 +569,7 @@ class TestRunValidators:
         provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="mutual_exclusion",
-                config={"field": "customer_id", "scope": "merge"},
-            )
-        )
+        pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
         result = run_validators(pipeline, store, provenance)
         assert len(result.violations) == 1
@@ -631,54 +587,38 @@ class TestRunValidators:
         store.save_artifact(ep2, "episodes", 1)
 
         pipeline = Pipeline("test")
-        pipeline.add_validator(
-            ValidatorDecl(
-                name="required_field",
-                config={"field": "customer_id", "layers": ["episodes"]},
-            )
-        )
+        pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
 
         result = run_validators(pipeline, store, provenance)
         assert result.passed is True
         assert len(result.violations) == 0
 
-    def test_unknown_validator_raises(self, store, provenance):
-        pipeline = Pipeline("test")
-        pipeline.add_validator(ValidatorDecl(name="nonexistent"))
-
-        with pytest.raises(ValueError, match="Unknown validator"):
-            run_validators(pipeline, store, provenance)
-
 
 # ---------------------------------------------------------------------------
-# ValidatorDecl model tests
+# Validator instance tests (replaces ValidatorDecl model tests)
 # ---------------------------------------------------------------------------
 
 
-class TestValidatorDecl:
-    def test_basic(self):
-        decl = ValidatorDecl(name="mutual_exclusion")
-        assert decl.name == "mutual_exclusion"
-        assert decl.config == {}
+class TestValidatorInstances:
+    def test_mutual_exclusion_basic(self):
+        v = MutualExclusion(field="customer_id", scope="merge", layers=[])
+        assert v.name == "mutual_exclusion"
 
-    def test_with_config(self):
-        decl = ValidatorDecl(
-            name="required_field",
-            config={"field": "customer_id", "layers": ["episodes"]},
-        )
-        assert decl.config["field"] == "customer_id"
+    def test_mutual_exclusion_config_dict(self):
+        v = MutualExclusion(field="customer_id", scope="merge", layers=[])
+        config = v.to_config_dict()
+        assert config["field"] == "customer_id"
 
     def test_pipeline_add_validator(self):
         p = Pipeline("test")
         assert p.validators == []
-        p.add_validator(ValidatorDecl(name="mutual_exclusion"))
+        p.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
         assert len(p.validators) == 1
-        assert p.validators[0].name == "mutual_exclusion"
 
     def test_pipeline_multiple_validators(self):
         p = Pipeline("test")
-        p.add_validator(ValidatorDecl(name="mutual_exclusion"))
-        p.add_validator(ValidatorDecl(name="required_field"))
+        p.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
+        p.add_validator(RequiredField(field="customer_id", layers=[]))
         assert len(p.validators) == 2
 
 
@@ -733,14 +673,14 @@ class TestComputeViolationId:
 
 
 # ---------------------------------------------------------------------------
-# PIIValidator tests
+# PII validator tests
 # ---------------------------------------------------------------------------
 
 
 class TestPIIValidator:
     def test_detects_credit_card(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="My card is 4111-1111-1111-1111 ok?")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         cc_violations = [v for v in violations if v.metadata["pattern"] == "credit_card"]
         assert len(cc_violations) == 1
         assert cc_violations[0].violation_type == "pii"
@@ -749,7 +689,7 @@ class TestPIIValidator:
 
     def test_detects_ssn(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="SSN: 123-45-6789")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].metadata["pattern"] == "ssn"
         assert "6789" in violations[0].metadata["redacted_value"]
@@ -757,14 +697,14 @@ class TestPIIValidator:
 
     def test_detects_email(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="Email me at user@example.com")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].metadata["pattern"] == "email"
         assert violations[0].metadata["redacted_value"] == "us***@example.com"
 
     def test_detects_phone(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="Call 555-867-5309")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) >= 1
         phone_violations = [v for v in violations if v.metadata["pattern"] == "phone"]
         assert len(phone_violations) >= 1
@@ -772,7 +712,7 @@ class TestPIIValidator:
 
     def test_clean_text_no_violations(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="This is clean text with no PII")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         assert violations == []
 
     def test_multiple_pii_in_one_artifact(self, store, provenance, ctx):
@@ -780,7 +720,7 @@ class TestPIIValidator:
             "a-1",
             content="Card: 4111-1111-1111-1111 and SSN: 123-45-6789",
         )
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         patterns = {v.metadata["pattern"] for v in violations}
         assert "credit_card" in patterns
         assert "ssn" in patterns
@@ -790,20 +730,19 @@ class TestPIIValidator:
             "a-1",
             content="Card: 4111-1111-1111-1111 and SSN: 123-45-6789",
         )
-        validator = PIIValidator()
-        validator._config = {"patterns": ["ssn"]}
+        validator = PII(layers=[], patterns=["ssn"])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].metadata["pattern"] == "ssn"
 
     def test_violation_has_violation_id(self, store, provenance, ctx):
         art = _make_artifact("a-1", content="SSN: 123-45-6789")
-        violations = PIIValidator().validate([art], ctx)
+        violations = PII(layers=[]).validate([art], ctx)
         assert violations[0].violation_id != ""
 
-    def test_registered_in_registry(self):
-        v = get_validator("pii")
-        assert isinstance(v, PIIValidator)
+    def test_pii_instantiation(self):
+        v = PII(layers=[])
+        assert isinstance(v, PII)
 
 
 # ---------------------------------------------------------------------------
@@ -1053,12 +992,12 @@ class TestParseConflictResponse:
 
 
 # ---------------------------------------------------------------------------
-# SemanticConflictValidator tests
+# SemanticConflict validator tests
 # ---------------------------------------------------------------------------
 
 
 def _mock_llm_for_validator(monkeypatch, response_content):
-    """Set up monkeypatches so SemanticConflictValidator can create an LLM client.
+    """Set up monkeypatches so SemanticConflict can create an LLM client.
 
     Returns a mock client instance for inspection (e.g. call_count).
     """
@@ -1090,8 +1029,7 @@ class TestSemanticConflictValidator:
 
         _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"layers": ["monthly"], "llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -1118,8 +1056,7 @@ class TestSemanticConflictValidator:
         )
         _mock_llm_for_validator(monkeypatch, conflict_json)
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].violation_type == "semantic_conflict"
@@ -1136,8 +1073,7 @@ class TestSemanticConflictValidator:
         conflict = {"conflicts": [{"claim_a": "A", "claim_b": "B", "explanation": "x", "confidence": "high"}]}
         _mock_llm_for_validator(monkeypatch, json.dumps(conflict))
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         v1 = validator.validate([art], ctx)
         v2 = validator.validate([art], ctx)
         assert v1[0].violation_id == v2[0].violation_id
@@ -1152,8 +1088,7 @@ class TestSemanticConflictValidator:
 
         _, call_count = _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}, "max_artifacts": 2}
+        validator = SemanticConflict(llm_config={"api_key": "test"}, max_artifacts=2)
         validator.validate(arts, ctx)
         assert call_count[0] == 2
 
@@ -1164,8 +1099,7 @@ class TestSemanticConflictValidator:
 
         _mock_llm_for_validator(monkeypatch, RuntimeError("LLM failed"))
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -1176,8 +1110,7 @@ class TestSemanticConflictValidator:
 
         _mock_llm_for_validator(monkeypatch, "not valid json at all")
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         violations = validator.validate([art], ctx)
         assert violations == []
 
@@ -1188,8 +1121,7 @@ class TestSemanticConflictValidator:
 
         _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
-        validator = get_validator("semantic_conflict")
-        validator._config = {"llm_config": {"api_key": "test"}}
+        validator = SemanticConflict(llm_config={"api_key": "test"})
         validator.validate([art], ctx)
 
         traces = store.list_artifacts("traces")
@@ -1199,11 +1131,10 @@ class TestSemanticConflictValidator:
     def test_no_llm_config_returns_empty(self, store, provenance, ctx):
         """No LLM config -> returns empty (can't create client)."""
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
-        validator = get_validator("semantic_conflict")
-        validator._config = {}
+        validator = SemanticConflict()
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_registered_in_registry(self):
-        v = get_validator("semantic_conflict")
-        assert isinstance(v, SemanticConflictValidator)
+    def test_instantiation(self):
+        v = SemanticConflict()
+        assert isinstance(v, SemanticConflict)

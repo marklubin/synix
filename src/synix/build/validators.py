@@ -1,8 +1,8 @@
 """Pluggable validator framework for domain-specific build validation.
 
-Provides an ABC + decorator registry pattern (matching transforms.py) for
-user-defined validators that return structured Violation objects with
-automatic provenance tracing.
+Provides an ABC for user-defined validators that return structured Violation
+objects with automatic provenance tracing. Validators use typed constructors
+instead of string-based config dicts.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.core.citations import extract_citations
 from synix.core.errors import atomic_write
-from synix.core.models import Artifact, Pipeline
+from synix.core.models import Artifact, Layer, Pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -300,12 +300,15 @@ class ViolationQueue:
 
     def resolve(self, violation_id: str, fix_action: str = "") -> None:
         if violation_id in self._state:
+            ts = datetime.now().isoformat()
             self._state[violation_id]["status"] = "resolved"
+            self._state[violation_id]["fix_action"] = fix_action
+            self._state[violation_id]["resolved_at"] = ts
             self._append_log(
                 {
                     "event": "resolved",
                     "violation_id": violation_id,
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": ts,
                     "fix_action": fix_action,
                 }
             )
@@ -348,12 +351,30 @@ class ViolationQueue:
 
 
 # ---------------------------------------------------------------------------
-# BaseValidator ABC + registry
+# BaseValidator ABC
 # ---------------------------------------------------------------------------
 
 
 class BaseValidator(ABC):
-    """Abstract base class for domain validators."""
+    """Abstract base class for domain validators.
+
+    Custom validators with typed constructors MUST override to_config_dict()
+    to return artifact scoping information.
+    """
+
+    name: str = ""
+
+    def to_config_dict(self) -> dict:
+        """Return config for artifact scoping.
+
+        Must return a dict with at minimum 'layers' (list of layer name strings)
+        for artifact scoping. Raises NotImplementedError by default — subclasses
+        with typed constructors must override.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} must override to_config_dict() "
+            "to return a dict with at minimum 'layers' for artifact scoping."
+        )
 
     @abstractmethod
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
@@ -361,39 +382,27 @@ class BaseValidator(ABC):
         ...
 
 
-_VALIDATORS: dict[str, type[BaseValidator]] = {}
-
-
-def register_validator(name: str):
-    """Decorator to register a validator class by name."""
-
-    def wrapper(cls: type[BaseValidator]) -> type[BaseValidator]:
-        _VALIDATORS[name] = cls
-        return cls
-
-    return wrapper
-
-
-def get_validator(name: str) -> BaseValidator:
-    """Get an instantiated validator by name."""
-    if name not in _VALIDATORS:
-        raise ValueError(f"Unknown validator: {name}. Available: {list(_VALIDATORS.keys())}")
-    return _VALIDATORS[name]()
-
-
 # ---------------------------------------------------------------------------
 # Built-in validators
 # ---------------------------------------------------------------------------
 
 
-@register_validator("mutual_exclusion")
-class MutualExclusionValidator(BaseValidator):
-    """Checks that merge artifacts don't mix values of a given metadata field.
+class MutualExclusion(BaseValidator):
+    """Checks that merge artifacts don't mix values of a given metadata field."""
 
-    Config:
-        field: metadata field to check (e.g. "customer_id")
-        scope: artifact type prefix to filter (e.g. "merge")
-    """
+    name = "mutual_exclusion"
+
+    def __init__(self, *, field: str, scope: str, layers: list[Layer]):
+        self._field_name = field
+        self._scope = scope
+        self._layers = layers
+
+    def to_config_dict(self) -> dict:
+        return {
+            "field": self._field_name,
+            "scope": self._scope,
+            "layers": [l.name for l in self._layers],
+        }
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         violations: list[Violation] = []
@@ -429,14 +438,20 @@ class MutualExclusionValidator(BaseValidator):
         return violations
 
 
-@register_validator("required_field")
-class RequiredFieldValidator(BaseValidator):
-    """Checks that artifacts in specified layers have a required metadata field.
+class RequiredField(BaseValidator):
+    """Checks that artifacts in specified layers have a required metadata field."""
 
-    Config:
-        field: metadata field to check (e.g. "customer_id")
-        layers: list of layer names to check
-    """
+    name = "required_field"
+
+    def __init__(self, *, field: str, layers: list[Layer]):
+        self._field_name = field
+        self._layers = layers
+
+    def to_config_dict(self) -> dict:
+        return {
+            "field": self._field_name,
+            "layers": [l.name for l in self._layers],
+        }
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         violations: list[Violation] = []
@@ -454,9 +469,10 @@ class RequiredFieldValidator(BaseValidator):
         return violations
 
 
-@register_validator("pii")
-class PIIValidator(BaseValidator):
+class PII(BaseValidator):
     """Detects PII patterns (credit cards, SSNs, emails, phone numbers)."""
+
+    name = "pii"
 
     PATTERNS = {
         "credit_card": re.compile(
@@ -469,6 +485,18 @@ class PIIValidator(BaseValidator):
         "email": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"),
         "phone": re.compile(r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"),
     }
+
+    def __init__(self, *, patterns: list[str] | None = None, severity: str = "warning", layers: list[Layer]):
+        self._patterns = patterns or list(self.PATTERNS.keys())
+        self._severity = severity
+        self._layers = layers
+
+    def to_config_dict(self) -> dict:
+        return {
+            "patterns": self._patterns,
+            "severity": self._severity,
+            "layers": [l.name for l in self._layers],
+        }
 
     @staticmethod
     def _redact(value: str, pattern_name: str) -> str:
@@ -487,12 +515,9 @@ class PIIValidator(BaseValidator):
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
         violations: list[Violation] = []
-        config = getattr(self, "_config", {})
-        enabled_patterns = config.get("patterns", list(self.PATTERNS.keys()))
-        severity = config.get("severity", "warning")
 
         for artifact in artifacts:
-            for pattern_name in enabled_patterns:
+            for pattern_name in self._patterns:
                 pattern = self.PATTERNS.get(pattern_name)
                 if pattern is None:
                     continue
@@ -503,7 +528,7 @@ class PIIValidator(BaseValidator):
                     violations.append(
                         Violation(
                             violation_type="pii",
-                            severity=severity,
+                            severity=self._severity,
                             message=f"PII detected ({pattern_name}): {redacted}",
                             label=artifact.label,
                             field="content",
@@ -553,37 +578,54 @@ def _parse_conflict_response(response_text: str) -> list[dict]:
     return conflicts
 
 
-@register_validator("semantic_conflict")
-class SemanticConflictValidator(BaseValidator):
-    """LLM-based validator that detects contradictions in synthesized artifacts.
+class SemanticConflict(BaseValidator):
+    """LLM-based validator that detects contradictions in synthesized artifacts."""
 
-    Config:
-        layers: list of layer names to check
-        llm_config: dict with LLM settings
-        max_artifacts: max artifacts to check (default: all)
-        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
-    """
+    name = "semantic_conflict"
+
+    def __init__(
+        self,
+        *,
+        layers: list[Layer] | None = None,
+        artifact_ids: list[str] | None = None,
+        llm_config: dict | None = None,
+        max_artifacts: int | None = None,
+        fail_open: bool = False,
+    ):
+        self._layers = layers or []
+        self._artifact_ids = artifact_ids or []
+        self._llm_config = llm_config or {}
+        self._max_artifacts = max_artifacts
+        self._fail_open = fail_open
+
+    def to_config_dict(self) -> dict:
+        config: dict = {}
+        if self._layers:
+            config["layers"] = [l.name for l in self._layers]
+        if self._artifact_ids:
+            config["artifact_ids"] = self._artifact_ids
+        if self._llm_config:
+            config["llm_config"] = self._llm_config
+        if self._max_artifacts is not None:
+            config["max_artifacts"] = self._max_artifacts
+        config["fail_open"] = self._fail_open
+        return config
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
-        config = getattr(self, "_config", {})
-        max_artifacts = config.get("max_artifacts")  # None = check all
-        fail_open = config.get("fail_open", False)
-
         violations: list[Violation] = []
 
         # Get LLM client: pre-built _llm_client (for testing) or create from llm_config
-        client = config.get("_llm_client")
+        client = getattr(self, "_llm_client", None)
         if client is None:
-            llm_config_dict = config.get("llm_config", {})
             try:
                 from synix.build.cassette import maybe_wrap_client
                 from synix.build.llm_client import LLMClient
                 from synix.core.config import LLMConfig
 
-                llm_cfg = LLMConfig.from_dict(llm_config_dict)
+                llm_cfg = LLMConfig.from_dict(self._llm_config)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
             except Exception as exc:
-                if fail_open:
+                if self._fail_open:
                     logger.warning("semantic_conflict: could not create LLM client (fail_open=True)")
                     return violations
                 msg = "semantic_conflict validator: could not create LLM client"
@@ -594,12 +636,12 @@ class SemanticConflictValidator(BaseValidator):
         try:
             prompt_template = prompt_path.read_text()
         except (FileNotFoundError, OSError) as exc:
-            if fail_open:
+            if self._fail_open:
                 logger.warning("semantic_conflict: prompt not found at %s (fail_open=True)", prompt_path)
                 return violations
             raise RuntimeError(f"semantic_conflict validator: prompt not found at {prompt_path}") from exc
 
-        # Optional search index for claim tracing (lazy import to avoid build→search dep)
+        # Optional search index for claim tracing (lazy import to avoid build->search dep)
         search_index = None
         try:
             import importlib
@@ -611,13 +653,13 @@ class SemanticConflictValidator(BaseValidator):
         except Exception:
             logger.warning("semantic_conflict: could not load search index for claim tracing")
 
-        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
-        if max_artifacts is not None and len(artifacts) > max_artifacts:
+        target = artifacts if self._max_artifacts is None else artifacts[: self._max_artifacts]
+        if self._max_artifacts is not None and len(artifacts) > self._max_artifacts:
             logger.info(
                 "semantic_conflict: checking %d of %d artifacts (max_artifacts=%d)",
-                max_artifacts,
+                self._max_artifacts,
                 len(artifacts),
-                max_artifacts,
+                self._max_artifacts,
             )
 
         for artifact in target:
@@ -705,16 +747,28 @@ class SemanticConflictValidator(BaseValidator):
 def _parse_citation_response(response_text: str) -> list[dict]:
     """Extract ungrounded claims list from LLM response (JSON in code blocks or raw).
 
-    Raises ValueError if the response cannot be parsed as valid JSON.
+    Handles truncated responses where the LLM hit max_tokens before completing
+    the JSON — strips the opening code fence and attempts to recover any
+    complete claim objects from the partial JSON.
+
+    Raises ValueError if the response cannot be parsed at all.
     """
+    # Try complete code fence first
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", response_text, re.DOTALL)
-    text = match.group(1).strip() if match else response_text.strip()
+    if match:
+        text = match.group(1).strip()
+    else:
+        # Strip opening fence even without closing (truncated response)
+        text = re.sub(r"^```(?:json)?\s*\n?", "", response_text.strip())
 
     try:
         data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        logger.warning("citation: LLM returned unparseable response: %s", text[:200])
-        raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from exc
+    except json.JSONDecodeError:
+        # Response may be truncated — try to salvage complete claim objects
+        data = _salvage_truncated_citation_json(text)
+        if data is None:
+            logger.warning("citation: LLM returned unparseable response: %s", text[:200])
+            raise ValueError(f"Could not parse LLM citation response: {text[:200]}") from None
 
     ungrounded = data.get("ungrounded", [])
     if not isinstance(ungrounded, list):
@@ -728,37 +782,77 @@ def _parse_citation_response(response_text: str) -> list[dict]:
     return ungrounded
 
 
-@register_validator("citation")
-class CitationValidator(BaseValidator):
-    """LLM-based validator that checks whether claims are grounded by synix:// citations.
+def _salvage_truncated_citation_json(text: str) -> dict | None:
+    """Attempt to recover complete claim objects from truncated JSON.
 
-    Config:
-        layers: list of layer names to check
-        llm_config: dict with LLM settings
-        max_artifacts: max artifacts to check (default: all)
-        fail_open: if True, degrade gracefully on infra errors (default: False — fail closed)
+    When the LLM hits max_tokens, the JSON is cut off mid-object.
+    We find all complete {"claim": ..., "suggestion": ...} objects
+    and return them in an {"ungrounded": [...]} wrapper.
     """
+    # Find all complete claim objects
+    pattern = r'\{\s*"claim"\s*:\s*"(?:[^"\\]|\\.)*"\s*,\s*"suggestion"\s*:\s*"(?:[^"\\]|\\.)*"\s*\}'
+    matches = re.findall(pattern, text)
+    if not matches:
+        return None
+
+    claims = []
+    for m in matches:
+        try:
+            claims.append(json.loads(m))
+        except json.JSONDecodeError:
+            continue
+
+    if not claims:
+        return None
+
+    logger.info("citation: salvaged %d complete claims from truncated response", len(claims))
+    return {"ungrounded": claims}
+
+
+class Citation(BaseValidator):
+    """LLM-based validator that checks whether claims are grounded by synix:// citations."""
+
+    name = "citation"
+
+    def __init__(
+        self,
+        *,
+        layers: list[Layer],
+        llm_config: dict | None = None,
+        max_artifacts: int | None = None,
+        fail_open: bool = False,
+    ):
+        self._layers = layers
+        self._llm_config = llm_config or {}
+        self._max_artifacts = max_artifacts
+        self._fail_open = fail_open
+
+    def to_config_dict(self) -> dict:
+        config: dict = {
+            "layers": [l.name for l in self._layers],
+        }
+        if self._llm_config:
+            config["llm_config"] = self._llm_config
+        if self._max_artifacts is not None:
+            config["max_artifacts"] = self._max_artifacts
+        config["fail_open"] = self._fail_open
+        return config
 
     def validate(self, artifacts: list[Artifact], ctx: ValidationContext) -> list[Violation]:
-        config = getattr(self, "_config", {})
-        max_artifacts = config.get("max_artifacts")  # None = check all
-        fail_open = config.get("fail_open", False)
-
         violations: list[Violation] = []
 
         # Get LLM client
-        client = config.get("_llm_client")
+        client = getattr(self, "_llm_client", None)
         if client is None:
-            llm_config_dict = config.get("llm_config", {})
             try:
                 from synix.build.cassette import maybe_wrap_client
                 from synix.build.llm_client import LLMClient
                 from synix.core.config import LLMConfig
 
-                llm_cfg = LLMConfig.from_dict(llm_config_dict)
+                llm_cfg = LLMConfig.from_dict(self._llm_config)
                 client = maybe_wrap_client(LLMClient(llm_cfg))
             except Exception as exc:
-                if fail_open:
+                if self._fail_open:
                     logger.warning("citation: could not create LLM client, skipping (fail_open=True)")
                     return violations
                 msg = "citation validator: could not create LLM client"
@@ -769,18 +863,18 @@ class CitationValidator(BaseValidator):
         try:
             prompt_template = prompt_path.read_text()
         except (FileNotFoundError, OSError) as exc:
-            if fail_open:
+            if self._fail_open:
                 logger.warning("citation: prompt not found at %s (fail_open=True)", prompt_path)
                 return violations
             raise RuntimeError(f"citation validator: prompt not found at {prompt_path}") from exc
 
-        target = artifacts if max_artifacts is None else artifacts[:max_artifacts]
-        if max_artifacts is not None and len(artifacts) > max_artifacts:
+        target = artifacts if self._max_artifacts is None else artifacts[: self._max_artifacts]
+        if self._max_artifacts is not None and len(artifacts) > self._max_artifacts:
             logger.info(
                 "citation: checking %d of %d artifacts (max_artifacts=%d)",
-                max_artifacts,
+                self._max_artifacts,
                 len(artifacts),
-                max_artifacts,
+                self._max_artifacts,
             )
 
         for artifact in target:
@@ -810,7 +904,7 @@ class CitationValidator(BaseValidator):
                     violations.append(
                         Violation(
                             violation_type="ungrounded_claim",
-                            severity="warning",
+                            severity="error",
                             message=f"Ungrounded claim: {claim[:80]}",
                             label=artifact.label,
                             field="content",
@@ -825,8 +919,16 @@ class CitationValidator(BaseValidator):
                     )
 
             except Exception:
-                logger.warning("citation: error checking %s, skipping", artifact.label, exc_info=True)
-                continue
+                logger.warning("citation: error checking %s", artifact.label, exc_info=True)
+                violations.append(
+                    Violation(
+                        violation_type="citation_check_failed",
+                        severity="error",
+                        message=f"Citation check failed for {artifact.label} (LLM response unparseable or missing)",
+                        label=artifact.label,
+                        field="content",
+                    )
+                )
 
         return violations
 
@@ -884,8 +986,8 @@ def run_validators(
 ) -> ValidationResult:
     """Run all validators declared in the pipeline.
 
-    For each ValidatorDecl in pipeline.validators:
-    1. Instantiate the registered validator
+    For each validator instance in pipeline.validators:
+    1. Get config via to_config_dict()
     2. Gather matching artifacts based on config (scope/layers)
     3. Run validation
     4. Auto-resolve provenance traces for violations that lack them
@@ -895,15 +997,10 @@ def run_validators(
     ctx = ValidationContext(store, provenance, pipeline)
     result = ValidationResult()
 
-    for decl in pipeline.validators:
-        validator = get_validator(decl.name)
+    for validator in pipeline.validators:
+        config = validator.to_config_dict()
 
-        # Pass config field to the validator instance
-        field_name = decl.config.get("field", "")
-        validator._field_name = field_name  # type: ignore[attr-defined]
-        validator._config = decl.config  # type: ignore[attr-defined]
-
-        artifacts = _gather_artifacts(store, decl.config)
+        artifacts = _gather_artifacts(store, config)
         violations = validator.validate(artifacts, ctx)
 
         # Auto-resolve provenance for violations without traces
@@ -912,6 +1009,6 @@ def run_validators(
                 v.provenance_trace = ctx.trace_field_origin(v.label, v.field)
 
         result.violations.extend(violations)
-        result.validators_run.append(decl.name)
+        result.validators_run.append(validator.name or type(validator).__name__)
 
     return result

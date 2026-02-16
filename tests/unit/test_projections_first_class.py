@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline, Projection
+from synix import Artifact, FlatFile, Pipeline, Source
+from synix import SearchIndex as SearchIndexLayer
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
 from synix.build.runner import (
@@ -22,6 +23,7 @@ from synix.build.runner import (
     run,
 )
 from synix.search.indexer import SearchIndex
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -68,49 +70,14 @@ def _monthly_pipeline(build_dir: Path) -> Pipeline:
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, monthly, core)
+    p.add(SearchIndexLayer("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
 
@@ -120,56 +87,14 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(
-            name="topics",
-            level=2,
-            depends_on=["episodes"],
-            transform="topical_rollup",
-            grouping="by_topic",
-            config={"topics": ["programming", "machine-learning"]},
-        )
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["topics"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    topics = TopicalRollup("topics", depends_on=[episodes], config={"topics": ["programming", "machine-learning"]})
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "topics", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, topics, core)
+    p.add(SearchIndexLayer("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
 
@@ -614,20 +539,16 @@ class TestProjectionStats:
 
 class TestTopicalRollupDefensiveFallback:
     def test_topical_rollup_no_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollupTransform succeeds when search_db_path doesn't exist."""
-        from synix.build.transforms import get_transform
-
+        """TopicalRollup succeeds when search_db_path doesn't exist."""
         # First, run parse + episodes to get episode artifacts
         monthly = _monthly_pipeline(build_dir)
         result = run(monthly, source_dir=str(source_dir))
-
-        from synix.build.artifacts import ArtifactStore
 
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
-        transform = get_transform("topical_rollup")
+        transform = TopicalRollup("test-topics")
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],
@@ -638,12 +559,10 @@ class TestTopicalRollupDefensiveFallback:
         assert results[0].artifact_type == "rollup"
 
     def test_topical_rollup_empty_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollupTransform succeeds when search db has no FTS5 table."""
+        """TopicalRollup succeeds when search db has no FTS5 table."""
         # Run a build to get episodes
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
-
-        from synix.build.artifacts import ArtifactStore
 
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
@@ -656,9 +575,7 @@ class TestTopicalRollupDefensiveFallback:
         conn.commit()
         conn.close()
 
-        from synix.build.transforms import get_transform
-
-        transform = get_transform("topical_rollup")
+        transform = TopicalRollup("test-topics")
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],

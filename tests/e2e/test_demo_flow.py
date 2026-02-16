@@ -46,24 +46,22 @@ def pipeline_file(workspace):
     """Write a pipeline.py into the workspace."""
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-monthly")
 pipeline.source_dir = "{workspace["source_dir"]}"
 pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="episode_summary", grouping="by_conversation"))
-pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month"))
-pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"], transform="core_synthesis", grouping="single", context_budget=10000))
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-pipeline.add_projection(Projection(name="memory-index", projection_type="search_index", sources=[
-    {{"layer": "episodes", "search": ["fulltext"]}},
-    {{"layer": "monthly", "search": ["fulltext"]}},
-    {{"layer": "core", "search": ["fulltext"]}},
-]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
+pipeline.add(transcripts, episodes, monthly, core)
+pipeline.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path
 
@@ -73,26 +71,24 @@ def topical_pipeline_file(workspace):
     """Write a pipeline_topical.py into the workspace."""
     path = workspace["root"] / "pipeline_topical.py"
     path.write_text(f"""
-from synix import Pipeline, Layer, Projection
+from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix.transforms import EpisodeSummary, TopicalRollup, CoreSynthesis
 
 pipeline = Pipeline("test-topical")
 pipeline.source_dir = "{workspace["source_dir"]}"
 pipeline.build_dir = "{workspace["build_dir"]}"
 pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
 
-pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="episode_summary", grouping="by_conversation"))
-pipeline.add_layer(Layer(name="topics", level=2, depends_on=["episodes"], transform="topical_rollup", grouping="by_topic", config={{
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+topics = TopicalRollup("topics", depends_on=[episodes], config={{
     "topics": ["programming", "devops", "ai-and-ml"],
-}}))
-pipeline.add_layer(Layer(name="core", level=3, depends_on=["topics"], transform="core_synthesis", grouping="single", context_budget=10000))
+}})
+core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-pipeline.add_projection(Projection(name="memory-index", projection_type="search_index", sources=[
-    {{"layer": "episodes", "search": ["fulltext"]}},
-    {{"layer": "topics", "search": ["fulltext"]}},
-    {{"layer": "core", "search": ["fulltext"]}},
-]))
-pipeline.add_projection(Projection(name="context-doc", projection_type="flat_file", sources=[{{"layer": "core"}}], config={{"output_path": "{workspace["build_dir"] / "context.md"}"}}))
+pipeline.add(transcripts, episodes, topics, core)
+pipeline.add(SearchIndex("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path
 

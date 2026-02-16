@@ -250,6 +250,9 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
     missing = []
     for aid, entry in manifest.items():
         level = entry.get("level", 0)
+        # Skip system artifacts (traces, etc.) — they have no provenance by design
+        if entry.get("layer") == "traces":
+            continue
         if level > 0 and aid not in provenance:
             missing.append(f"{aid} (level {level})")
 

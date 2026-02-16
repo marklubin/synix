@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-# Import to trigger registration
-import synix.transforms.parse  # noqa: F401
-import synix.transforms.summarize  # noqa: F401
 from synix import Artifact
-from synix.transforms.base import BaseTransform, get_transform
+from synix.build.llm_transforms import (
+    CoreSynthesis,
+    EpisodeSummary,
+    MonthlyRollup,
+    TopicalRollup,
+)
+from synix.build.parse_transform import ParseTransform
 
 
 class TestBaseTransform:
@@ -14,14 +17,14 @@ class TestBaseTransform:
 
     def test_prompt_template_loading(self):
         """Templates load from prompts/ directory without error."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
         template = transform.load_prompt("episode_summary")
         assert "{transcript}" in template
         assert "episode summary" in template.lower() or "summarizing" in template.lower()
 
     def test_prompt_id_versioning(self):
         """Same template produces same prompt_id; different template produces different id."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
 
         id1 = transform.get_prompt_id("episode_summary")
         id2 = transform.get_prompt_id("episode_summary")
@@ -32,32 +35,31 @@ class TestBaseTransform:
 
     def test_all_templates_loadable(self):
         """All four prompt templates load without error."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
         for name in ["episode_summary", "monthly_rollup", "topical_rollup", "core_memory"]:
             content = transform.load_prompt(name)
             assert len(content) > 0
 
-    def test_get_transform_unknown_raises(self):
-        """Requesting unknown transform raises ValueError."""
-        import pytest
 
-        with pytest.raises(ValueError, match="Unknown transform"):
-            get_transform("nonexistent_transform")
+class TestTransformInstantiation:
+    """Tests for transform direct instantiation."""
 
-
-class TestTransformRegistry:
-    """Tests for transform registration."""
-
-    def test_parse_transform_registered(self):
-        """ParseTransform is available via registry."""
-        transform = get_transform("parse")
+    def test_parse_transform_instantiates(self):
+        """ParseTransform is directly instantiable."""
+        transform = ParseTransform()
         assert transform is not None
 
-    def test_all_transforms_registered(self):
-        """All expected transforms are registered."""
-        for name in ["parse", "episode_summary", "monthly_rollup", "topical_rollup", "core_synthesis"]:
-            transform = get_transform(name)
-            assert isinstance(transform, BaseTransform)
+    def test_all_transforms_instantiate(self):
+        """All expected transforms are directly instantiable."""
+        transforms = [
+            ParseTransform(),
+            EpisodeSummary("test"),
+            MonthlyRollup("test"),
+            TopicalRollup("test"),
+            CoreSynthesis("test"),
+        ]
+        for t in transforms:
+            assert t is not None
 
 
 class TestParseTransformSourcePath:
@@ -70,7 +72,7 @@ class TestParseTransformSourcePath:
         (src / "alpha.md").write_text("Alpha content\n")
         (src / "beta.md").write_text("Beta content\n")
 
-        transform = get_transform("parse")
+        transform = ParseTransform()
         artifacts = transform.execute([], {"source_dir": str(src)})
 
         for art in artifacts:
@@ -86,7 +88,7 @@ class TestParseTransformSourcePath:
         sub.mkdir(parents=True)
         (sub / "alice.md").write_text("Alice bio\n")
 
-        transform = get_transform("parse")
+        transform = ParseTransform()
         artifacts = transform.execute([], {"source_dir": str(src)})
 
         assert len(artifacts) == 1
@@ -99,7 +101,7 @@ class TestParseTransformSourcePath:
         deep.mkdir(parents=True)
         (deep / "notes.md").write_text("Backend notes\n")
 
-        transform = get_transform("parse")
+        transform = ParseTransform()
         artifacts = transform.execute([], {"source_dir": str(src)})
 
         assert len(artifacts) == 1
@@ -137,7 +139,7 @@ class TestParseTransformSourcePath:
 
         (src / "export.json").write_text(json.dumps(export))
 
-        transform = get_transform("parse")
+        transform = ParseTransform()
         artifacts = transform.execute([], {"source_dir": str(src)})
 
         assert len(artifacts) >= 1
@@ -150,7 +152,7 @@ class TestEpisodeSummaryTransform:
 
     def test_episode_summary_prompt_construction(self, mock_llm, sample_artifacts):
         """Verify prompt includes transcript content."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
 
         results = transform.execute(transcripts[:1], {"llm_config": {}})
@@ -162,7 +164,7 @@ class TestEpisodeSummaryTransform:
 
     def test_episode_summary_output_artifact(self, mock_llm, sample_artifacts):
         """Output has correct type, metadata, prompt_id."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
 
         results = transform.execute(transcripts[:1], {"llm_config": {}})
@@ -178,7 +180,7 @@ class TestEpisodeSummaryTransform:
 
     def test_episode_summary_multiple_inputs(self, mock_llm, sample_artifacts):
         """Multiple transcripts produce multiple episodes."""
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
 
         results = transform.execute(transcripts, {"llm_config": {}})
@@ -210,7 +212,7 @@ class TestMonthlyRollupTransform:
             )
         ]
 
-        transform = get_transform("monthly_rollup")
+        transform = MonthlyRollup("test")
         results = transform.execute(episodes, {"llm_config": {}})
 
         assert len(results) == 2
@@ -231,7 +233,7 @@ class TestMonthlyRollupTransform:
                 metadata={"date": "2024-03-15", "title": "Test"},
             )
         ]
-        transform = get_transform("monthly_rollup")
+        transform = MonthlyRollup("test")
         results = transform.execute(episodes, {"llm_config": {}})
 
         assert len(results) == 1
@@ -260,7 +262,7 @@ class TestTopicalRollupTransform:
         ]
         topics = ["career", "health", "ai-projects"]
 
-        transform = get_transform("topical_rollup")
+        transform = TopicalRollup("test")
         results = transform.execute(
             episodes,
             {
@@ -286,7 +288,7 @@ class TestTopicalRollupTransform:
             for i in range(3)
         ]
 
-        transform = get_transform("topical_rollup")
+        transform = TopicalRollup("test")
         results = transform.execute(
             episodes,
             {
@@ -315,7 +317,7 @@ class TestCoreSynthesisTransform:
             for i in range(1, 4)
         ]
 
-        transform = get_transform("core_synthesis")
+        transform = CoreSynthesis("test")
         results = transform.execute(rollups, {"llm_config": {}, "context_budget": 5000})
 
         assert len(results) == 1
@@ -335,7 +337,7 @@ class TestCoreSynthesisTransform:
             )
         ]
 
-        transform = get_transform("core_synthesis")
+        transform = CoreSynthesis("test")
         results = transform.execute(rollups, {"llm_config": {}})
 
         assert results[0].prompt_id is not None

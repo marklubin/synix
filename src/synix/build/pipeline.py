@@ -6,8 +6,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from synix.build.dag import resolve_build_order
-from synix.core.models import Pipeline
+from synix.build.dag import compute_levels, resolve_build_order
+from synix.core.models import Pipeline, Source
 
 
 def load_pipeline(path: str) -> Pipeline:
@@ -56,16 +56,19 @@ def validate_pipeline(pipeline: Pipeline) -> None:
     # Check all depends_on reference existing layer names
     for layer in pipeline.layers:
         for dep in layer.depends_on:
-            if dep not in layer_names:
+            if dep.name not in layer_names:
                 raise ValueError(
-                    f"Layer '{layer.name}' depends on '{dep}', which does not exist. "
+                    f"Layer '{layer.name}' depends on '{dep.name}', which does not exist. "
                     f"Available layers: {sorted(layer_names)}"
                 )
 
-    # Check at least one level-0 layer (multiple roots are allowed for multi-source pipelines)
-    root_layers = [l for l in pipeline.layers if l.level == 0]
+    # Check at least one Source layer (root nodes)
+    root_layers = [l for l in pipeline.layers if isinstance(l, Source)]
     if len(root_layers) == 0:
-        raise ValueError("Pipeline must have at least one level-0 (source) layer, found none")
+        raise ValueError("Pipeline must have at least one Source layer, found none")
+
+    # Compute levels from DAG structure
+    compute_levels(pipeline.layers)
 
     # Check DAG is acyclic — resolve_build_order raises ValueError on cycles
     resolve_build_order(pipeline)

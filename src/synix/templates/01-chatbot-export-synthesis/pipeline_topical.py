@@ -6,9 +6,10 @@
 #
 # Usage:
 #   cd templates/01-chatbot-export-synthesis
-#   synix build pipeline_topical.py
+#   uvx synix build pipeline_topical.py
 
-from synix import Layer, Pipeline, Projection
+from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix.transforms import CoreSynthesis, EpisodeSummary, TopicalRollup
 
 pipeline = Pipeline("personal-memory-topical")
 
@@ -25,86 +26,53 @@ pipeline.llm_config = {
 # --- Layers ---
 
 # Level 0: Same raw transcripts (CACHED from first run)
-pipeline.add_layer(
-    Layer(
-        name="transcripts",
-        level=0,
-        transform="parse",
-    )
-)
+transcripts = Source("transcripts")
 
 # Level 1: Same episode summaries (CACHED from first run)
-pipeline.add_layer(
-    Layer(
-        name="episodes",
-        level=1,
-        depends_on=["transcripts"],
-        transform="episode_summary",
-        grouping="by_conversation",
-    )
-)
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 
 # Level 2: CHANGED — Topic-based rollups instead of monthly
 # LLM clusters episodes by topic, then synthesizes each cluster
-pipeline.add_layer(
-    Layer(
-        name="topics",
-        level=2,
-        depends_on=["episodes"],
-        transform="topical_rollup",
-        grouping="by_topic",
-        config={
-            "topics": [
-                "programming-and-tools",
-                "ai-and-llms",
-                "systems-and-infrastructure",
-                "debugging-and-testing",
-                "general",
-            ],
-        },
-    )
+topics = TopicalRollup(
+    "topics",
+    depends_on=[episodes],
+    config={
+        "topics": [
+            "programming-and-tools",
+            "ai-and-llms",
+            "systems-and-infrastructure",
+            "debugging-and-testing",
+            "general",
+        ],
+    },
 )
 
 # Level 3: Core memory — same transform, but new inputs (topics instead of monthly)
 # Will REBUILD because its dependency changed
 # For production use, upgrade to Opus for highest-quality synthesis:
 #   config={"llm_config": {"model": "claude-opus-4-6", "max_tokens": 4096}}
-pipeline.add_layer(
-    Layer(
-        name="core",
-        level=3,
-        depends_on=["topics"],
-        transform="core_synthesis",
-        grouping="single",
-        context_budget=10000,
-    )
-)
+core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+pipeline.add(transcripts, episodes, topics, core)
 
 # --- Projections ---
 
-pipeline.add_projection(
-    Projection(
-        name="memory-index",
-        projection_type="search_index",
-        sources=[
-            {"layer": "episodes", "search": ["fulltext", "semantic"]},
-            {"layer": "topics", "search": ["fulltext", "semantic"]},
-            {"layer": "core", "search": ["fulltext", "semantic"]},
-        ],
-        config={
-            "embedding_config": {
-                "provider": "fastembed",
-                "model": "BAAI/bge-small-en-v1.5",
-            },
+pipeline.add(
+    SearchIndex(
+        "memory-index",
+        sources=[episodes, topics, core],
+        search=["fulltext", "semantic"],
+        embedding_config={
+            "provider": "fastembed",
+            "model": "BAAI/bge-small-en-v1.5",
         },
     )
 )
 
-pipeline.add_projection(
-    Projection(
-        name="context-doc",
-        projection_type="flat_file",
-        sources=[{"layer": "core"}],
-        config={"output_path": "./build/context.md"},
+pipeline.add(
+    FlatFile(
+        "context-doc",
+        sources=[core],
+        output_path="./build/context.md",
     )
 )

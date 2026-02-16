@@ -6,8 +6,7 @@ import hashlib
 import re
 from collections import defaultdict
 
-from synix.build.transforms import BaseTransform, register_transform
-from synix.core.models import Artifact
+from synix.core.models import Artifact, Transform
 
 
 def _tokenize(text: str) -> set[str]:
@@ -197,8 +196,7 @@ def _build_merge_groups(
     return list(groups_map.values())
 
 
-@register_transform("merge")
-class MergeTransform(BaseTransform):
+class Merge(Transform):
     """Merge artifacts by content similarity with optional constraints.
 
     Config options:

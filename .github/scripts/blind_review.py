@@ -29,7 +29,7 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 
 def fetch_diff(repo: str, pr_number: str, token: str) -> str:
-    """Fetch PR diff via GitHub API, falling back to compare endpoint for large PRs."""
+    """Fetch PR diff via GitHub API, falling back to git diff for large PRs."""
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -37,16 +37,18 @@ def fetch_diff(repo: str, pr_number: str, token: str) -> str:
     }
     resp = requests.get(url, headers=headers, timeout=30)
     if resp.status_code == 406:
-        # Diff too large for pulls endpoint — use compare endpoint instead
-        print("Diff too large for pulls API (406), using compare endpoint...")
-        return _compare_diff_fallback(repo, pr_number, token)
+        # Diff too large for GitHub API — fall back to local git diff
+        print("Diff too large for API (406), falling back to git diff...")
+        return _git_diff_fallback(repo, pr_number, token)
     resp.raise_for_status()
     return resp.text
 
 
-def _compare_diff_fallback(repo: str, pr_number: str, token: str) -> str:
-    """Fetch diff via compare endpoint when the pulls endpoint returns 406."""
-    # Get PR base/head refs
+def _git_diff_fallback(repo: str, pr_number: str, token: str) -> str:
+    """Compute diff locally using git when the API can't generate it."""
+    import subprocess
+
+    # Fetch PR metadata to get base/head refs
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -55,36 +57,18 @@ def _compare_diff_fallback(repo: str, pr_number: str, token: str) -> str:
     resp = requests.get(url, headers=headers, timeout=15)
     resp.raise_for_status()
     pr_data = resp.json()
-    base = pr_data["base"]["sha"]
-    head = pr_data["head"]["sha"]
+    base_sha = pr_data["base"]["sha"]
+    head_sha = pr_data["head"]["sha"]
 
-    # Fetch diff from compare endpoint
-    compare_url = f"https://api.github.com/repos/{repo}/compare/{base}...{head}"
-    compare_headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3.diff",
-    }
-    resp = requests.get(compare_url, compare_headers, timeout=60)
-    if resp.status_code == 406:
-        # Both endpoints rejected — build a summary from the file list
-        print("Compare endpoint also returned 406, building file-list summary...")
-        resp2 = requests.get(
-            compare_url,
-            headers={**compare_headers, "Accept": "application/vnd.github.v3+json"},
-            timeout=30,
-        )
-        resp2.raise_for_status()
-        files = resp2.json().get("files", [])
-        lines = [f"# Diff too large for GitHub API — file summary ({len(files)} files)\n"]
-        for f in files:
-            lines.append(
-                f"{f['status']:10s} +{f.get('additions', 0):-4d} -{f.get('deletions', 0):-4d}  {f['filename']}"
-            )
-            if f.get("patch"):
-                lines.append(f["patch"][:2000])
-        return "\n".join(lines)
-    resp.raise_for_status()
-    return resp.text
+    result = subprocess.run(
+        ["git", "diff", f"{base_sha}...{head_sha}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"git diff failed: {result.stderr}")
+    return result.stdout
 
 
 def fetch_website(url: str) -> str:

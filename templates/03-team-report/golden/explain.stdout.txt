@@ -20,16 +20,16 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 │   └── ← ./sources/bios (3 .md files)
 ├── project_brief  source:parse  <STATS>
 │   └── ← ./sources/brief (1 .md file)
-├── work_styles  transform:work_style  <STATS>
+├── work_styles  transform:WorkStyleTransform  <STATS>
 │   ├── ← bios
-│   └── cache: all components match (v1: model source)
-├── team_dynamics  transform:dynamics  <STATS>
+│   └── cache: all components match (v2: model source transform_id)
+├── team_dynamics  transform:TeamDynamicsTransform  <STATS>
 │   ├── ← work_styles
-│   └── cache: all components match (v1: model source)
-└── final_report  transform:report  <STATS>
+│   └── cache: all components match (v2: model source transform_id)
+└── final_report  transform:FinalReportTransform  <STATS>
     ├── ← team_dynamics
     ├── ← project_brief
-    ├── cache: all components match (v1: model source)
+    ├── cache: all components match (v2: model source transform_id)
     └── → search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
         ├── ← bios
         ├── ← project_brief

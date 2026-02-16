@@ -4,20 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from synix import Artifact, Layer, Pipeline
+from synix import Artifact, Pipeline, Source
 from synix.artifacts.store import ArtifactStore
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint, compute_digest
 from synix.pipeline.dag import needs_rebuild, resolve_build_order
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 
 class TestResolveBuildOrder:
     def test_topological_sort_simple(self):
         """4 layers in correct order."""
         pipeline = Pipeline("test")
-        pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="summarize"))
-        pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"], transform="rollup"))
-        pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly"], transform="synthesize"))
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        core = CoreSynthesis("core", depends_on=[monthly])
+        pipeline.add(transcripts, episodes, monthly, core)
 
         order = resolve_build_order(pipeline)
         names = [l.name for l in order]
@@ -29,11 +31,12 @@ class TestResolveBuildOrder:
     def test_topological_sort_diamond(self):
         """Diamond dependency, no duplicate."""
         pipeline = Pipeline("test")
-        pipeline.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-        pipeline.add_layer(Layer(name="episodes", level=1, depends_on=["transcripts"], transform="summarize"))
-        pipeline.add_layer(Layer(name="monthly", level=2, depends_on=["episodes"], transform="rollup"))
-        pipeline.add_layer(Layer(name="topical", level=2, depends_on=["episodes"], transform="topic_rollup"))
-        pipeline.add_layer(Layer(name="core", level=3, depends_on=["monthly", "topical"], transform="synthesize"))
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        topical = TopicalRollup("topical", depends_on=[episodes])
+        core = CoreSynthesis("core", depends_on=[monthly, topical])
+        pipeline.add(transcripts, episodes, monthly, topical, core)
 
         order = resolve_build_order(pipeline)
         names = [l.name for l in order]
@@ -52,9 +55,12 @@ class TestResolveBuildOrder:
     def test_cycle_detection(self):
         """Circular dependency raises ValueError."""
         pipeline = Pipeline("test")
-        pipeline.add_layer(Layer(name="a", level=0, depends_on=["c"], transform="x"))
-        pipeline.add_layer(Layer(name="b", level=1, depends_on=["a"], transform="x"))
-        pipeline.add_layer(Layer(name="c", level=2, depends_on=["b"], transform="x"))
+        a = Source("a")
+        b = EpisodeSummary("b", depends_on=[a])
+        c = MonthlyRollup("c", depends_on=[b])
+        # Force a cycle: a -> c
+        a.depends_on = [c]
+        pipeline.add(a, b, c)
 
         with pytest.raises(ValueError, match="[Cc]ircular"):
             resolve_build_order(pipeline)

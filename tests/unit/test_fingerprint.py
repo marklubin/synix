@@ -243,62 +243,54 @@ class TestComputeProjectionFingerprint:
 
 
 class TestTransformFingerprint:
-    """Tests for BaseTransform.compute_fingerprint()."""
+    """Tests for Transform.compute_fingerprint()."""
 
     def test_compute_fingerprint_includes_source(self):
         """Transform fingerprint includes source code hash."""
-        # Import to trigger registration
-        import synix.build.llm_transforms  # noqa: F401
-        import synix.build.parse_transform  # noqa: F401
-        from synix.build.transforms import get_transform
+        from synix.transforms import EpisodeSummary
 
-        transform = get_transform("episode_summary")
-        fp = transform.compute_fingerprint({"llm_config": {"model": "test"}}, "episode_summary")
-        assert fp.scheme == "synix:transform:v1"
+        transform = EpisodeSummary("test-episodes")
+        fp = transform.compute_fingerprint({"llm_config": {"model": "test"}})
+        assert fp.scheme == "synix:transform:v2"
         assert "source" in fp.components
         assert "prompt" in fp.components
         assert "model" in fp.components
 
     def test_different_prompt_different_fingerprint(self):
-        """Changing prompt template changes the fingerprint."""
-        import synix.build.llm_transforms  # noqa: F401
-        import synix.build.parse_transform  # noqa: F401
-        from synix.build.transforms import get_transform
+        """Different prompt template changes the fingerprint."""
+        from synix.transforms import EpisodeSummary, MonthlyRollup
 
-        transform = get_transform("episode_summary")
-        fp1 = transform.compute_fingerprint({"llm_config": {}}, "episode_summary")
-        fp2 = transform.compute_fingerprint({"llm_config": {}}, "monthly_rollup")
+        ep_transform = EpisodeSummary("test-episodes")
+        mr_transform = MonthlyRollup("test-monthly")
+
+        fp1 = ep_transform.compute_fingerprint({"llm_config": {}})
+        fp2 = mr_transform.compute_fingerprint({"llm_config": {}})
         assert not fp1.matches(fp2)
         assert fp1.components["prompt"] != fp2.components["prompt"]
 
     def test_different_model_different_fingerprint(self):
         """Changing model config changes the fingerprint."""
-        import synix.build.llm_transforms  # noqa: F401
-        import synix.build.parse_transform  # noqa: F401
-        from synix.build.transforms import get_transform
+        from synix.transforms import EpisodeSummary
 
-        transform = get_transform("episode_summary")
-        fp1 = transform.compute_fingerprint({"llm_config": {"model": "a"}}, "episode_summary")
-        fp2 = transform.compute_fingerprint({"llm_config": {"model": "b"}}, "episode_summary")
+        transform = EpisodeSummary("test-episodes")
+        fp1 = transform.compute_fingerprint({"llm_config": {"model": "a"}})
+        fp2 = transform.compute_fingerprint({"llm_config": {"model": "b"}})
         assert not fp1.matches(fp2)
 
     def test_same_config_same_fingerprint(self):
         """Identical config produces identical fingerprint (deterministic)."""
-        import synix.build.llm_transforms  # noqa: F401
-        import synix.build.parse_transform  # noqa: F401
-        from synix.build.transforms import get_transform
+        from synix.transforms import EpisodeSummary
 
-        transform = get_transform("episode_summary")
+        transform = EpisodeSummary("test-episodes")
         config = {"llm_config": {"model": "test", "temperature": 0.3}}
-        fp1 = transform.compute_fingerprint(config, "episode_summary")
-        fp2 = transform.compute_fingerprint(config, "episode_summary")
+        fp1 = transform.compute_fingerprint(config)
+        fp2 = transform.compute_fingerprint(config)
         assert fp1.matches(fp2)
 
     def test_no_prompt_name_omits_prompt_component(self):
         """Without prompt_name, no prompt component in fingerprint."""
-        import synix.build.parse_transform  # noqa: F401
-        from synix.build.transforms import get_transform
+        from synix.build.parse_transform import ParseTransform
 
-        transform = get_transform("parse")
+        transform = ParseTransform()
         fp = transform.compute_fingerprint({})
         assert "prompt" not in fp.components

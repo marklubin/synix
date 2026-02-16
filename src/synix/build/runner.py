@@ -11,19 +11,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import synix.build.llm_transforms  # noqa: F401
-import synix.build.merge_transform  # noqa: F401
-
-# Import transform modules to trigger @register_transform decorators
-import synix.build.parse_transform  # noqa: F401
 from synix.build.artifacts import ArtifactStore
-from synix.build.dag import needs_rebuild, resolve_build_order
+from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
-from synix.build.transforms import get_transform
 from synix.core.logging import SynixLogger, Verbosity
-from synix.core.models import Artifact, Layer, Pipeline, Projection
+from synix.core.models import (
+    Artifact,
+    FlatFile,
+    Layer,
+    Pipeline,
+    SearchIndex,
+    Source,
+    Transform,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +94,11 @@ def run(
     provenance = ProvenanceTracker(build_dir)
     result = RunResult()
 
+    # Compute levels from DAG structure
+    compute_levels(pipeline.layers)
+
     # Create structured logger
-    logger = SynixLogger(
+    slogger = SynixLogger(
         verbosity=Verbosity(min(verbosity, Verbosity.DEBUG)),
         build_dir=build_dir,
         progress=progress,
@@ -101,152 +106,139 @@ def run(
 
     # Resolve build order
     build_order = resolve_build_order(pipeline)
-    logger.run_start(pipeline.name, len(build_order))
+    slogger.run_start(pipeline.name, len(build_order))
 
     # Artifacts produced per layer (layer_name -> list[Artifact])
     layer_artifacts: dict[str, list[Artifact]] = {}
 
     for layer in build_order:
         layer_start = time.time()
-        stats = LayerStats(name=layer.name, level=layer.level)
-        logger.layer_start(layer.name, layer.level)
+        stats = LayerStats(name=layer.name, level=layer._level)
+        slogger.layer_start(layer.name, layer._level)
 
-        # Gather inputs from dependent layers
-        inputs: list[Artifact] = []
-        if layer.depends_on:
-            for dep_name in layer.depends_on:
-                dep_artifacts = layer_artifacts.get(dep_name)
-                if dep_artifacts is None:
-                    # Load from store if not in memory (e.g., cached from previous run)
-                    dep_artifacts = store.list_artifacts(dep_name)
-                inputs.extend(dep_artifacts)
+        if isinstance(layer, Source):
+            # Source layer — call load()
+            source_config = _build_source_config(pipeline, layer, src_dir)
+            source_config["_logger"] = slogger
+            source_config["_layer_name"] = layer.name
 
-        # Build config for the transform
-        base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
-        transform_config: dict = {}
-        transform_config["llm_config"] = dict(base_llm_config)
-        transform_config["source_dir"] = src_dir
-        if layer.context_budget is not None:
-            transform_config["context_budget"] = layer.context_budget
-        if layer.config:
-            # Deep-merge llm_config from layer config over pipeline defaults
-            layer_llm = layer.config.get("llm_config")
-            layer_rest = {k: v for k, v in layer.config.items() if k != "llm_config"}
-            transform_config.update(layer_rest)
-            if layer_llm:
-                transform_config["llm_config"].update(layer_llm)
+            try:
+                artifacts = layer.load(source_config)
+            except Exception:
+                logger.warning("Source %s failed to load", layer.name, exc_info=True)
+                artifacts = []
 
-        # For topical rollup, pass the search index path
-        transform_config["search_db_path"] = str(build_dir / "search.db")
-        # Get the transform
-        transform = get_transform(layer.transform)
+            # Save source artifacts
+            for artifact in artifacts:
+                artifact.metadata["layer_name"] = layer.name
+                artifact.metadata["layer_level"] = layer._level
+                store.save_artifact(artifact, layer.name, layer._level)
+                provenance.record(artifact.label, parent_labels=[], prompt_id=None, model_config=None)
+                stats.built += 1
+                slogger.artifact_built(layer.name, artifact.label)
 
-        # Compute transform fingerprint (unified identity for source code + prompt + config + model)
-        prompt_name = _transform_to_prompt_name(layer.transform) if layer.level > 0 else None
-        transform_fp = transform.compute_fingerprint(transform_config, prompt_name) if layer.level > 0 else None
+            layer_artifacts[layer.name] = artifacts
 
-        # For non-parse layers, check if we can skip the transform entirely.
-        layer_built: list[Artifact] = []
+        elif isinstance(layer, Transform):
+            # Transform layer — gather inputs, split, execute
+            inputs = _gather_inputs(layer, layer_artifacts, store)
+            transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
 
-        if layer.level > 0 and _layer_fully_cached(layer, inputs, store, transform_fp):
-            # All cached — load existing artifacts
-            existing = store.list_artifacts(layer.name)
-            for art in existing:
-                art.metadata["layer_name"] = layer.name
-                art.metadata["layer_level"] = layer.level
-                layer_built.append(art)
-                stats.cached += 1
-                logger.artifact_cached(layer.name, art.label)
-        else:
-            # Execute transform to get candidate artifacts
-            # Pass the logger to transforms via config so LLM calls can be tracked
-            transform_config["_logger"] = logger
-            transform_config["_layer_name"] = layer.name
+            # Compute transform fingerprint
+            transform_fp = layer.compute_fingerprint(transform_config)
 
-            # Helper to save a single artifact immediately (save-as-you-go)
-            def _save_artifact(artifact: Artifact) -> None:
-                # Compute per-artifact build fingerprint
-                build_fp = None
-                if transform_fp is not None:
-                    build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
+            layer_built: list[Artifact] = []
 
-                rebuild, _reasons = needs_rebuild(
-                    artifact.label,
-                    artifact.input_ids,
-                    store,
-                    current_build_fingerprint=build_fp,
-                )
-                if rebuild:
-                    artifact.metadata["layer_name"] = layer.name
-                    artifact.metadata["layer_level"] = layer.level
-                    # Store fingerprints for future cache comparisons
-                    if build_fp is not None:
-                        artifact.metadata["build_fingerprint"] = build_fp.to_dict()
-                    if transform_fp is not None:
-                        artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
-                    store.save_artifact(artifact, layer.name, layer.level)
-                    parent_labels = _get_parent_labels(artifact, inputs)
-                    provenance.record(
-                        artifact.label,
-                        parent_labels=parent_labels,
-                        prompt_id=artifact.prompt_id,
-                        model_config=artifact.model_config,
-                    )
-                    layer_built.append(artifact)
-                    stats.built += 1
-                    logger.artifact_built(layer.name, artifact.label)
-                else:
-                    cached = store.load_artifact(artifact.label)
-                    if cached is not None:
-                        cached.metadata["layer_name"] = layer.name
-                        cached.metadata["layer_level"] = layer.level
-                        layer_built.append(cached)
-                    else:
-                        layer_built.append(artifact)
+            if _layer_fully_cached(layer, inputs, store, transform_fp):
+                # All cached — load existing artifacts
+                existing = store.list_artifacts(layer.name)
+                for art in existing:
+                    art.metadata["layer_name"] = layer.name
+                    art.metadata["layer_level"] = layer._level
+                    layer_built.append(art)
                     stats.cached += 1
-                    logger.artifact_cached(layer.name, artifact.label)
-
-            def _on_batch_complete(artifacts: list[Artifact]) -> None:
-                """Callback for concurrent executor — save each artifact immediately."""
-                for artifact in artifacts:
-                    _save_artifact(artifact)
-
-            # Split inputs into work units via the transform's split() method.
-            # Parallelism is determined entirely by split() — transforms that
-            # can't be parallelized return a single unit.
-            units = transform.split(inputs, transform_config)
-            use_concurrent = concurrency > 1 and len(units) > 1
-
-            if use_concurrent:
-                _execute_transform_concurrent(
-                    transform,
-                    units,
-                    transform_config,
-                    concurrency,
-                    on_complete=_on_batch_complete,
-                )
+                    slogger.artifact_cached(layer.name, art.label)
             else:
-                for unit_inputs, config_extras in units:
-                    merged_config = {**transform_config, **config_extras}
-                    new_artifacts = transform.execute(unit_inputs, merged_config)
-                    for artifact in new_artifacts:
+                # Execute transform
+                transform_config["_logger"] = slogger
+                transform_config["_layer_name"] = layer.name
+
+                def _save_artifact(
+                    artifact: Artifact, *, _layer=layer, _transform_fp=transform_fp, _inputs=inputs
+                ) -> None:
+                    # Compute per-artifact build fingerprint
+                    build_fp = compute_build_fingerprint(_transform_fp, artifact.input_ids)
+
+                    rebuild, _reasons = needs_rebuild(
+                        artifact.label,
+                        artifact.input_ids,
+                        store,
+                        current_build_fingerprint=build_fp,
+                    )
+                    if rebuild:
+                        artifact.metadata["layer_name"] = _layer.name
+                        artifact.metadata["layer_level"] = _layer._level
+                        artifact.metadata["build_fingerprint"] = build_fp.to_dict()
+                        artifact.metadata["transform_fingerprint"] = _transform_fp.to_dict()
+                        store.save_artifact(artifact, _layer.name, _layer._level)
+                        parent_labels = _get_parent_labels(artifact, _inputs)
+                        provenance.record(
+                            artifact.label,
+                            parent_labels=parent_labels,
+                            prompt_id=artifact.prompt_id,
+                            model_config=artifact.model_config,
+                        )
+                        layer_built.append(artifact)
+                        stats.built += 1
+                        slogger.artifact_built(_layer.name, artifact.label)
+                    else:
+                        cached = store.load_artifact(artifact.label)
+                        if cached is not None:
+                            cached.metadata["layer_name"] = _layer.name
+                            cached.metadata["layer_level"] = _layer._level
+                            layer_built.append(cached)
+                        else:
+                            layer_built.append(artifact)
+                        stats.cached += 1
+                        slogger.artifact_cached(_layer.name, artifact.label)
+
+                def _on_batch_complete(artifacts: list[Artifact]) -> None:
+                    for artifact in artifacts:
                         _save_artifact(artifact)
 
-        layer_artifacts[layer.name] = layer_built
+                # Split inputs into work units
+                units = layer.split(inputs, transform_config)
+                use_concurrent = concurrency > 1 and len(units) > 1
+
+                if use_concurrent:
+                    _execute_transform_concurrent(
+                        layer,
+                        units,
+                        transform_config,
+                        concurrency,
+                        on_complete=_on_batch_complete,
+                    )
+                else:
+                    for unit_inputs, config_extras in units:
+                        merged_config = {**transform_config, **config_extras}
+                        new_artifacts = layer.execute(unit_inputs, merged_config)
+                        for artifact in new_artifacts:
+                            _save_artifact(artifact)
+
+            layer_artifacts[layer.name] = layer_built
 
         stats.time_seconds = time.time() - layer_start
         result.layer_stats.append(stats)
         result.built += stats.built
         result.cached += stats.cached
         result.skipped += stats.skipped
-        logger.layer_finish(layer.name, stats.built, stats.cached)
+        slogger.layer_finish(layer.name, stats.built, stats.cached)
 
         # Materialize intermediate projections for this layer
-        # (e.g., episode search index so topical rollup can query it)
-        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=logger)
+        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=logger)
+    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
@@ -255,9 +247,54 @@ def run(
         result.validation = run_validators(pipeline, store, provenance)
 
     result.total_time = time.time() - start_time
-    logger.run_finish(result.total_time)
-    result.run_log = logger.run_log.to_dict()
+    slogger.run_finish(result.total_time)
+    result.run_log = slogger.run_log.to_dict()
     return result
+
+
+def _build_source_config(pipeline: Pipeline, source: Source, src_dir: str) -> dict:
+    """Build config dict for a Source layer."""
+    config: dict = {"source_dir": src_dir}
+    if source.dir:
+        config["source_dir"] = source.dir
+    return config
+
+
+def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, build_dir: Path) -> dict:
+    """Build config dict for a Transform layer."""
+    base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
+    transform_config: dict = {}
+    transform_config["llm_config"] = dict(base_llm_config)
+    transform_config["source_dir"] = src_dir
+    if layer.context_budget is not None:
+        transform_config["context_budget"] = layer.context_budget
+    if layer.config:
+        # Deep-merge llm_config from layer config over pipeline defaults
+        layer_llm = layer.config.get("llm_config")
+        layer_rest = {k: v for k, v in layer.config.items() if k != "llm_config"}
+        transform_config.update(layer_rest)
+        if layer_llm:
+            transform_config["llm_config"].update(layer_llm)
+
+    # For topical rollup, pass the search index path
+    transform_config["search_db_path"] = str(build_dir / "search.db")
+    return transform_config
+
+
+def _gather_inputs(
+    layer: Layer,
+    layer_artifacts: dict[str, list[Artifact]],
+    store: ArtifactStore,
+) -> list[Artifact]:
+    """Gather inputs from dependent layers."""
+    inputs: list[Artifact] = []
+    for dep in layer.depends_on:
+        dep_artifacts = layer_artifacts.get(dep.name)
+        if dep_artifacts is None:
+            # Load from store if not in memory (e.g., cached from previous run)
+            dep_artifacts = store.list_artifacts(dep.name)
+        inputs.extend(dep_artifacts)
+    return inputs
 
 
 def _layer_fully_cached(
@@ -312,7 +349,7 @@ def _get_parent_labels(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
 
 
 def _execute_transform_concurrent(
-    transform,
+    transform: Transform,
     units: list[tuple[list[Artifact], dict]],
     config: dict,
     concurrency: int,
@@ -321,19 +358,9 @@ def _execute_transform_concurrent(
     """Execute transform work units concurrently.
 
     Each unit is (unit_inputs, config_extras) as returned by transform.split().
-    Runs transform.execute(unit_inputs, merged_config) in parallel using a
-    thread pool. Calls on_complete(artifacts) as each finishes so artifacts
-    can be saved immediately (save-as-you-go).
-
-    Args:
-        transform: The transform instance to execute.
-        units: List of (unit_inputs, config_extras) tuples from split().
-        config: Base transform configuration dict.
-        concurrency: Maximum number of concurrent workers.
-        on_complete: Optional callback(list[Artifact]) called as each unit completes.
-
-    Returns:
-        List of output artifacts in the same order as units.
+    Uses copy.copy(transform) per worker as a best-effort guard against
+    accidental self mutation (shallow copy only — does NOT isolate nested
+    mutable state).
     """
     results: list[list[Artifact] | Exception] = [None] * len(units)  # type: ignore[list-item]
 
@@ -342,7 +369,6 @@ def _execute_transform_concurrent(
     _shared_keys = {"_logger"}
 
     # Pre-create a shared LLM client to avoid per-thread connection overhead
-    # _make_llm_client already applies cassette wrapping
     shared_client = None
     try:
         from synix.build.llm_transforms import _make_llm_client
@@ -355,6 +381,8 @@ def _execute_transform_concurrent(
 
     def _run_one(index: int, unit_inputs: list[Artifact], config_extras: dict) -> tuple[int, list[Artifact]]:
         """Execute the transform for a single unit, returning (index, artifacts)."""
+        # copy.copy() per worker: best-effort guard (shallow only)
+        worker_transform = copy.copy(transform)
         # Deep-copy mutable config to avoid cross-thread mutation, but share
         # non-copyable objects like the logger.
         shared = {k: config[k] for k in _shared_keys if k in config}
@@ -364,7 +392,7 @@ def _execute_transform_concurrent(
         worker_config.update(config_extras)
         if shared_client is not None:
             worker_config["_shared_llm_client"] = shared_client
-        return index, transform.execute(unit_inputs, worker_config)
+        return index, worker_transform.execute(unit_inputs, worker_config)
 
     first_error: Exception | None = None
 
@@ -399,17 +427,6 @@ def _execute_transform_concurrent(
     return all_artifacts
 
 
-def _transform_to_prompt_name(transform_name: str) -> str:
-    """Map transform name to prompt template filename."""
-    mapping = {
-        "episode_summary": "episode_summary",
-        "monthly_rollup": "monthly_rollup",
-        "topical_rollup": "topical_rollup",
-        "core_synthesis": "core_memory",
-    }
-    return mapping.get(transform_name, transform_name)
-
-
 def _materialize_layer_projections(
     pipeline: Pipeline,
     layer_name: str,
@@ -425,30 +442,30 @@ def _materialize_layer_projections(
     For flat_file projections: wait until all source layers are available.
     """
     for proj in pipeline.projections:
-        source_layers = [s["layer"] for s in proj.sources]
-        if layer_name not in source_layers:
+        source_layer_names = [s.name for s in proj.sources]
+        if layer_name not in source_layer_names:
             continue
 
-        if proj.projection_type == "flat_file":
+        if isinstance(proj, FlatFile):
             # Flat file only makes sense with all sources (e.g., core layer)
-            if not all(ln in layer_artifacts for ln in source_layers):
+            if not all(ln in layer_artifacts for ln in source_layer_names):
                 continue
             _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
-        elif proj.projection_type == "search_index":
+        elif isinstance(proj, SearchIndex):
             # Progressive: materialize with whatever sources are available
-            available_sources = [s for s in proj.sources if s["layer"] in layer_artifacts]
-            if available_sources:
+            available_names = [ln for ln in source_layer_names if ln in layer_artifacts]
+            if available_names:
                 _materialize_projection(
                     proj,
                     layer_artifacts,
                     build_dir,
-                    source_override=available_sources,
+                    source_layer_override=available_names,
                     logger=logger,
                     triggered_by=layer_name,
                 )
         else:
             # Unknown projection type — require all sources
-            if not all(ln in layer_artifacts for ln in source_layers):
+            if not all(ln in layer_artifacts for ln in source_layer_names):
                 continue
             _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
 
@@ -471,15 +488,18 @@ def _materialize_all_projections(
     for proj in pipeline.projections:
         # Gather all artifacts for this projection
         all_artifacts: list[Artifact] = []
-        for source in proj.sources:
-            all_artifacts.extend(layer_artifacts.get(source["layer"], []))
+        source_layer_names = [s.name for s in proj.sources]
+        for layer_name in source_layer_names:
+            all_artifacts.extend(layer_artifacts.get(layer_name, []))
 
         # Determine the last source layer (by build order) for triggered_by
-        source_layers = [s["layer"] for s in proj.sources]
-        last_layer = max(source_layers, key=lambda ln: layer_order.get(ln, 0)) if source_layers else None
+        last_layer = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0)) if source_layer_names else None
+
+        # Get projection config for cache key
+        proj_config = _get_projection_config(proj)
 
         # Check cache — skip if hash matches (includes projection config)
-        current_hash = _compute_projection_hash(all_artifacts, proj.config)
+        current_hash = _compute_projection_hash(all_artifacts, proj_config)
         cached_entry = cache.get(proj.name)
         if (
             cached_entry is not None
@@ -504,13 +524,13 @@ def _materialize_all_projections(
 
         # Update cache
         config_hash = (
-            hashlib.sha256(json.dumps(proj.config, sort_keys=True, default=str).encode()).hexdigest()
-            if proj.config
+            hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
+            if proj_config
             else None
         )
         cache[proj.name] = {
             "source_hash": current_hash,
-            "source_layers": source_layers,
+            "source_layers": source_layer_names,
             "artifact_count": len(all_artifacts),
             "config_hash": config_hash,
         }
@@ -519,18 +539,30 @@ def _materialize_all_projections(
     return stats
 
 
+def _get_projection_config(proj: Layer) -> dict:
+    """Extract projection config from a SearchIndex or FlatFile layer."""
+    if isinstance(proj, SearchIndex):
+        return {
+            "search": proj.search,
+            "embedding_config": proj.embedding_config,
+        }
+    elif isinstance(proj, FlatFile):
+        return {"output_path": proj.output_path}
+    return proj.config
+
+
 def _materialize_projection(
-    proj: Projection,
+    proj: Layer,
     layer_artifacts: dict[str, list[Artifact]],
     build_dir: Path,
-    source_override: list[dict] | None = None,
+    source_layer_override: list[str] | None = None,
     logger: SynixLogger | None = None,
     triggered_by: str | None = None,
 ) -> bool:
     """Materialize a single projection.
 
     Args:
-        source_override: If provided, use these sources instead of proj.sources.
+        source_layer_override: If provided, use these layer names instead of proj.sources.
             Used for progressive (intermediate) materialization.
         logger: Optional logger for projection events.
         triggered_by: Name of the layer that triggered this materialization.
@@ -538,13 +570,12 @@ def _materialize_projection(
     Returns:
         True if materialization was skipped (no-op), False if work was done.
     """
-    sources = source_override if source_override is not None else proj.sources
+    source_layer_names = source_layer_override if source_layer_override is not None else [s.name for s in proj.sources]
 
     all_artifacts: list[Artifact] = []
     sources_config: list[dict] = []
 
-    for source in sources:
-        layer_name = source["layer"]
+    for layer_name in source_layer_names:
         artifacts = layer_artifacts.get(layer_name, [])
         all_artifacts.extend(artifacts)
         for art in artifacts:
@@ -552,27 +583,32 @@ def _materialize_projection(
             sources_config.append({"layer": layer_name, "level": level})
             break
 
-    if logger:
-        logger.projection_start(proj.name, proj.projection_type, triggered_by=triggered_by)
+    if isinstance(proj, SearchIndex):
+        proj_type = "search_index"
+    elif isinstance(proj, FlatFile):
+        proj_type = "flat_file"
+    else:
+        proj_type = "unknown"
 
-    if proj.projection_type == "search_index":
+    if logger:
+        logger.projection_start(proj.name, proj_type, triggered_by=triggered_by)
+
+    if isinstance(proj, SearchIndex):
         # Use projection registry to avoid direct search import
         try:
             projection = get_projection("search_index", build_dir)
         except ValueError as exc:
             logger.warning("Projection %r unavailable: %s", proj.name, exc)
             return True
-        config = dict(proj.config)  # preserve projection-level config (embedding_config, etc.)
+        config = dict(proj.config)
         config["sources"] = sources_config
         if logger:
             config["_synix_logger"] = logger
         projection.materialize(all_artifacts, config)
         projection.close()
-    elif proj.projection_type == "flat_file":
+    elif isinstance(proj, FlatFile):
         projection = FlatFileProjection()
-        config = dict(proj.config)
-        if "output_path" not in config:
-            config["output_path"] = str(build_dir / "context.md")
+        config = {"output_path": proj.output_path}
         projection.materialize(all_artifacts, config)
 
     if logger:

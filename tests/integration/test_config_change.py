@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from synix import Layer, Pipeline, Projection
-from synix.pipeline.runner import run
-from synix.search.index import SearchIndex
+from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix.build.runner import run
+from synix.search.index import SearchIndex as SearchIdx
+from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -35,49 +36,14 @@ def _monthly_pipeline(build_dir: Path) -> Pipeline:
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(name="monthly", level=2, depends_on=["episodes"], transform="monthly_rollup", grouping="by_month")
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["monthly"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    monthly = MonthlyRollup("monthly", depends_on=[episodes])
+    core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "monthly", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, monthly, core)
+    p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
 
@@ -87,56 +53,14 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
     p.build_dir = str(build_dir)
     p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
-    p.add_layer(Layer(name="transcripts", level=0, transform="parse"))
-    p.add_layer(
-        Layer(
-            name="episodes",
-            level=1,
-            depends_on=["transcripts"],
-            transform="episode_summary",
-            grouping="by_conversation",
-        )
-    )
-    p.add_layer(
-        Layer(
-            name="topics",
-            level=2,
-            depends_on=["episodes"],
-            transform="topical_rollup",
-            grouping="by_topic",
-            config={"topics": ["programming", "machine-learning"]},
-        )
-    )
-    p.add_layer(
-        Layer(
-            name="core",
-            level=3,
-            depends_on=["topics"],
-            transform="core_synthesis",
-            grouping="single",
-            context_budget=10000,
-        )
-    )
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    topics = TopicalRollup("topics", depends_on=[episodes], config={"topics": ["programming", "machine-learning"]})
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-    p.add_projection(
-        Projection(
-            name="memory-index",
-            projection_type="search_index",
-            sources=[
-                {"layer": "episodes", "search": ["fulltext"]},
-                {"layer": "topics", "search": ["fulltext"]},
-                {"layer": "core", "search": ["fulltext"]},
-            ],
-        )
-    )
-    p.add_projection(
-        Projection(
-            name="context-doc",
-            projection_type="flat_file",
-            sources=[{"layer": "core"}],
-            config={"output_path": str(build_dir / "context.md")},
-        )
-    )
+    p.add(transcripts, episodes, topics, core)
+    p.add(SearchIndex("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
 
@@ -150,12 +74,11 @@ class TestConfigChange:
         topical = _topical_pipeline(build_dir)
         result2 = run(topical, source_dir=str(source_dir))
 
-        # Transcripts: all cached
+        # Transcripts: Source layers always re-parse (built > 0)
         t_stats = next(s for s in result2.layer_stats if s.name == "transcripts")
-        assert t_stats.built == 0
-        assert t_stats.cached > 0
+        assert t_stats.built > 0
 
-        # Episodes: all cached
+        # Episodes: all cached (same transcript content → same artifact IDs)
         e_stats = next(s for s in result2.layer_stats if s.name == "episodes")
         assert e_stats.built == 0
         assert e_stats.cached > 0
@@ -173,7 +96,7 @@ class TestConfigChange:
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
 
-        index1 = SearchIndex(build_dir / "search.db")
+        index1 = SearchIdx(build_dir / "search.db")
         results1 = index1.query("programming")
         ids1 = {r.label for r in results1}
         index1.close()
@@ -181,7 +104,7 @@ class TestConfigChange:
         topical = _topical_pipeline(build_dir)
         run(topical, source_dir=str(source_dir))
 
-        index2 = SearchIndex(build_dir / "search.db")
+        index2 = SearchIdx(build_dir / "search.db")
         results2 = index2.query("programming")
         ids2 = {r.label for r in results2}
         index2.close()

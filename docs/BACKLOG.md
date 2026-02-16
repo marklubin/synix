@@ -100,7 +100,7 @@ The multi-provider LLM infrastructure already supports per-layer `llm_config` ov
 When the LLM can't auto-resolve a contradiction, let the user type free-text instructions for a guided retry. Requires: `BaseFixer.guided_fix()` method, `semantic_guided_fix.txt` prompt, CLI free-text input. Single retry, no infinite loop.
 
 ### PII auto-redaction fixer
-PIIValidator detects only; a `PIIRedactionFixer` would auto-replace patterns with redacted versions (e.g., `4111****1111`). Non-interactive.
+`PII` validator detects only; a `PIIRedaction` fixer would auto-replace patterns with redacted versions (e.g., `4111****1111`). Non-interactive.
 
 ### Rules-based post-resolution validation
 After a semantic fix is applied, re-run the conflict prompt to verify the fix actually resolved the contradiction. Warn if the conflict persists.

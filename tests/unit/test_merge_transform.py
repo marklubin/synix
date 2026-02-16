@@ -1,17 +1,14 @@
-"""Tests for the merge transform — similarity grouping with constraints."""
+"""Tests for the merge transform -- similarity grouping with constraints."""
 
 from __future__ import annotations
 
-# Ensure merge transform is registered
-import synix.build.merge_transform  # noqa: F401
 from synix import Artifact
 from synix.build.merge_transform import (
-    MergeTransform,
+    Merge,
     _build_merge_groups,
     _parse_constraints,
     jaccard_similarity,
 )
-from synix.build.transforms import get_transform
 
 
 class TestSimilarityComputation:
@@ -94,13 +91,13 @@ class TestConstraintParsing:
         assert _parse_constraints([]) == []
 
 
-class TestMergeTransformRegistration:
-    """Tests for transform registry integration."""
+class TestMergeInstantiation:
+    """Tests for direct Merge class instantiation."""
 
-    def test_merge_transform_registered(self):
-        """MergeTransform is available via the registry."""
-        transform = get_transform("merge")
-        assert isinstance(transform, MergeTransform)
+    def test_merge_transform_instantiation(self):
+        """Merge can be instantiated directly."""
+        transform = Merge("merge-layer")
+        assert isinstance(transform, Merge)
 
 
 class TestMergeSimilarArtifacts:
@@ -123,7 +120,7 @@ class TestMergeSimilarArtifacts:
             metadata={"customer_id": "bob", "week": "47"},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -155,7 +152,7 @@ class TestMergeSimilarArtifacts:
             metadata={"customer_id": "bob"},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -182,7 +179,7 @@ class TestMergeSimilarArtifacts:
             metadata={"customer_id": "bob", "week": "47"},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -214,7 +211,7 @@ class TestMergeSimilarArtifacts:
             metadata={},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
 
         # With low threshold, they merge
         results_low = transform.execute(
@@ -259,7 +256,7 @@ class TestMergeMetadata:
             metadata={"customer_id": "bob"},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -291,7 +288,7 @@ class TestMergeMetadata:
             metadata={"customer_id": "bob"},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -323,7 +320,7 @@ class TestMergeMetadata:
             metadata={},
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -344,14 +341,14 @@ class TestMergeCacheKey:
 
     def test_cache_key_includes_threshold(self):
         """Changing similarity_threshold changes the cache key."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         key_85 = transform.get_cache_key({"similarity_threshold": 0.85})
         key_92 = transform.get_cache_key({"similarity_threshold": 0.92})
         assert key_85 != key_92
 
     def test_cache_key_includes_constraints(self):
         """Changing constraints changes the cache key."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         key_no_constraint = transform.get_cache_key(
             {
                 "similarity_threshold": 0.85,
@@ -368,7 +365,7 @@ class TestMergeCacheKey:
 
     def test_cache_key_deterministic(self):
         """Same config produces same cache key."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         config = {
             "similarity_threshold": 0.85,
             "constraints": ["NEVER merge records with different customer_id"],
@@ -379,7 +376,7 @@ class TestMergeCacheKey:
 
     def test_cache_key_constraint_order_independent(self):
         """Constraints in different order produce same cache key (they are sorted)."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         key_a = transform.get_cache_key(
             {
                 "constraints": ["no different customer_id", "no different region"],
@@ -398,7 +395,7 @@ class TestMergeEdgeCases:
 
     def test_empty_inputs(self):
         """Empty input list returns empty output."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute([], {"similarity_threshold": 0.85})
         assert results == []
 
@@ -410,7 +407,7 @@ class TestMergeEdgeCases:
             content="Some content here",
             metadata={"customer_id": "alice"},
         )
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute([art], {"similarity_threshold": 0.85})
         assert len(results) == 1
         assert results[0].label == "extract-only"
@@ -427,7 +424,7 @@ class TestMergeEdgeCases:
             for i in range(3)
         ]
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             arts,
             {
@@ -455,7 +452,7 @@ class TestMergeEdgeCases:
             metadata={},  # No customer_id
         )
 
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         results = transform.execute(
             [art_a, art_b],
             {
@@ -469,7 +466,7 @@ class TestMergeEdgeCases:
 
     def test_default_threshold(self):
         """Default threshold is 0.85 when not specified."""
-        transform = get_transform("merge")
+        transform = Merge("merge-layer")
         # Create artifacts with identical content (similarity = 1.0 > 0.85 default)
         arts = [
             Artifact(label="a", artifact_type="extract", content="Exact same content here for testing", metadata={}),
