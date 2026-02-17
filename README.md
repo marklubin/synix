@@ -148,7 +148,88 @@ Pre-built transforms for common agent memory patterns. Import from `synix.transf
 | `uvx synix fix` | *(Experimental)* LLM-assisted repair of violations |
 | `uvx synix lineage <id>` | Show the full provenance chain for an artifact |
 | `uvx synix clean` | Delete the build directory |
-| `uvx synix batch-build run` | *(Experimental)* Submit a batch build via OpenAI Batch API |
+| `uvx synix batch-build plan` | *(Experimental)* Dry-run showing which layers would batch vs sync |
+| `uvx synix batch-build run` | *(Experimental)* Submit a batch build via OpenAI Batch API. `--poll` to wait |
+| `uvx synix batch-build resume <id>` | *(Experimental)* Resume a previously submitted batch build |
+| `uvx synix batch-build list` | *(Experimental)* Show all batch build instances and their status |
+| `uvx synix batch-build status <id>` | *(Experimental)* Detailed status for a specific batch build. `--latest` for most recent |
+
+## Batch Build (Experimental)
+
+> **Warning:** Batch build is experimental. Commands, state formats, and behavior may change in future releases.
+
+The OpenAI Batch API processes LLM requests asynchronously at **50% cost** with a 24-hour SLA. Synix wraps this into `batch-build` — submit your pipeline, disconnect, come back when it's done.
+
+### Quick Example
+
+```python
+# pipeline.py — mixed-provider pipeline
+pipeline.llm_config = {
+    "provider": "openai",           # OpenAI layers → batch mode (automatic)
+    "model": "gpt-4o",
+}
+
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+
+# Force this layer to run synchronously via Anthropic
+core = CoreSynthesis("core", depends_on=[monthly], batch=False)
+core.config = {"llm_config": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}}
+```
+
+```bash
+# Submit and wait for completion
+uvx synix batch-build run pipeline.py --poll
+```
+
+### Poll vs Resume
+
+**Poll workflow** — submit and wait in a single session:
+
+```bash
+uvx synix batch-build run pipeline.py --poll --poll-interval 120
+```
+
+**Resume workflow** — submit, disconnect, come back later:
+
+```bash
+# Submit (exits after first batch is submitted)
+uvx synix batch-build run pipeline.py
+#   Build ID: batch-a1b2c3d4
+#   Resume with: synix batch-build resume batch-a1b2c3d4 pipeline.py --poll
+
+# Check on it later
+uvx synix batch-build status --latest
+
+# Resume and poll to completion
+uvx synix batch-build resume batch-a1b2c3d4 pipeline.py --poll
+```
+
+### The `batch` Parameter
+
+Each transform accepts an optional `batch` parameter controlling whether it uses the Batch API:
+
+| Value | Behavior |
+|-------|----------|
+| `None` (default) | Auto-detect: batch if the layer's provider is native OpenAI, sync otherwise. |
+| `True` | Force batch mode. Raises an error if the provider is not native OpenAI. |
+| `False` | Force synchronous execution, even if the provider supports batch. |
+
+```python
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])              # auto
+monthly = MonthlyRollup("monthly", depends_on=[episodes], batch=True)        # force batch
+core = CoreSynthesis("core", depends_on=[monthly], batch=False)              # force sync
+```
+
+### Provider Restrictions
+
+Batch mode **only works with native OpenAI** (`provider="openai"` with no custom `base_url`). Transforms using Anthropic, DeepSeek, or OpenAI-compatible endpoints via `base_url` always run synchronously. Setting `batch=True` on a non-OpenAI layer is a hard error.
+
+### Transform Requirements
+
+Transforms used in batch builds must be **stateless** — their `execute()` method must be idempotent and produce deterministic prompts from the same inputs. All built-in transforms (`EpisodeSummary`, `MonthlyRollup`, `TopicalRollup`, `CoreSynthesis`) meet this requirement.
+
+See [docs/batch-build.md](docs/batch-build.md) for the full specification including state management, error handling, and the request collection protocol.
 
 ## Key Capabilities
 
