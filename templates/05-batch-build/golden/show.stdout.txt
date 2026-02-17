@@ -1,10 +1,14 @@
 
 Layer: team_summary (L2)  Type: team_summary
 
-This team combines complementary strengths that create a well-rounded collaborative unit. Alice's systematic,
-architecture-focused thinking provides the technical backbone, while Bob's user-centered iterative approach ensures
-human needs stay central to every decision. Carol bridges analytical rigor with inclusive leadership, naturally
-connecting the team's technical and people-oriented strengths. Their shared mentoring instincts and patience with
-complexity suggest they'll build on each other's work rather than compete, with Alice guiding infrastructure decisions,
-Bob championing accessibility and user experience, and Carol ensuring the team stays grounded in both data and equity.
-Together, they are strongest when tackling projects that demand both deep technical work and meaningful human impact.
+                                                      Team Summary
+
+This team combines complementary analytical and creative strengths that position them well for complex, user-focused
+work. Alice and Carol both bring methodical, analytical approaches grounded in technical expertise—Alice in distributed
+systems and Carol in data-driven climate modeling—while Bob introduces a user-centric, creative perspective that ensures
+their solutions remain accessible and innovative. Their natural collaboration pattern likely centers on Carol and Alice
+driving technical problem-solving and deep analysis, while Bob advocates for user needs and practical implementation,
+with all three leveraging their communication skills to bridge technical and human-centered concerns. Collectively, they
+excel at tackling multifaceted challenges that require both rigorous analytical thinking and thoughtful design,
+supported by a shared commitment to collaboration, knowledge-sharing, and inclusive problem-solving that Carol actively
+models through her mentoring approach.

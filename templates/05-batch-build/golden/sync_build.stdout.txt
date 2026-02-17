@@ -1,0 +1,27 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: batch-build-demo                                                                                           │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 3                                                                                                            │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
+    └─ search  <MATERIALIZED>
+  ✓ team_summary (level 2)  <BUILD_COUNTS>  <TIME>
+    └─ search  <MATERIALIZED>
+    └─ search  <MATERIALIZED>
+                        Build Summary
+╭──────────────┬──────────────┬───────┬────────┬─────────────╮
+│ Layer        │    Level     │ Built │ Cached │     Skipped │
+├──────────────┼──────────────┼───────┼────────┼─────────────┤
+│ bios         │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search   │ search_index │       │        │ <MATERIALIZED> │
+│ work_styles  │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search   │ search_index │       │        │ <MATERIALIZED> │
+│ team_summary │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search   │ search_index │       │        │ <MATERIALIZED> │
+╰──────────────┴──────────────┴───────┴────────┴─────────────╯
+
+<BUILD_TOTAL>

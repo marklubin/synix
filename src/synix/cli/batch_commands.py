@@ -134,13 +134,26 @@ def list_builds(build_dir: str):
 
 
 @batch_build.command()
-@click.argument("build_id")
+@click.argument("build_id", required=False, default=None)
+@click.option("--latest", is_flag=True, help="Show status for the most recent build.")
 @click.option("--build-dir", type=click.Path(), default="./build", help="Build directory.")
-def status(build_id: str, build_dir: str):
+def status(build_id: str | None, latest: bool, build_dir: str):
     """Detailed status for a specific build instance."""
     _experimental_warning()
 
     from synix.build.batch_state import BatchState
+
+    if latest:
+        builds = BatchState.list_builds(Path(build_dir))
+        if not builds:
+            console.print("[red]No batch builds found.[/red]")
+            raise SystemExit(1)
+        # Sort by creation time, pick most recent
+        builds.sort(key=lambda b: b.created_at, reverse=True)
+        build_id = builds[0].build_id
+    elif build_id is None:
+        console.print("[red]Provide a BUILD_ID or use --latest.[/red]")
+        raise SystemExit(1)
 
     try:
         state = BatchState(Path(build_dir), build_id)
@@ -174,13 +187,16 @@ def status(build_id: str, build_dir: str):
         batch_table.add_column("Layer")
         batch_table.add_column("Requests")
         batch_table.add_column("Status")
+        batch_table.add_column("OpenAI Dashboard")
 
         for bid, b in batches.items():
+            dashboard_url = f"https://platform.openai.com/batches/{bid}" if bid.startswith("batch_") else "—"
             batch_table.add_row(
                 bid[:20],
                 b["layer"],
                 str(len(b.get("keys", []))),
                 b["status"],
+                f"[link={dashboard_url}]{dashboard_url}[/link]" if dashboard_url != "—" else "—",
             )
         console.print(batch_table)
         console.print()
@@ -258,6 +274,11 @@ def _print_result(result) -> None:
         console.print(f"[bold]Layers Pending:[/bold] {', '.join(result.layers_pending)}")
     if result.batches_submitted:
         console.print(f"[bold]Batches:[/bold] {len(result.batches_submitted)}")
+        for bid in result.batches_submitted:
+            if bid.startswith("batch_"):
+                console.print(
+                    f"  [link=https://platform.openai.com/batches/{bid}]https://platform.openai.com/batches/{bid}[/link]"
+                )
     if result.total_time:
         console.print(f"[bold]Time:[/bold] {result.total_time:.1f}s")
 

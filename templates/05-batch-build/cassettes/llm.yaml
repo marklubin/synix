@@ -1,4 +1,71 @@
-- key: 1fea795cf45f718e714e160d0e408babccbdc67e02571385c4d9ebf69db47022
+- key: c3b05494ef6a474398fadd9099ee463188e36d7232da08a12ab42fb755dddb63
+  meta: {}
+  request:
+    model: gpt-4o-mini
+    params:
+      max_tokens: 512
+      temperature: 0.3
+    prompt_preview: 'Given this person''s background, infer their likely work style in 2-3 sentences. Cover how they approach
+      problems, what role they naturally take in a team, and how their interests shape their work.
+
+
+      Ca'
+    provider: openai
+  response:
+    input_tokens: 87
+    model: gpt-4o-mini-2024-07-18
+    output_tokens: 86
+    text: Carol Okafor likely approaches problems with a strong analytical mindset, leveraging her deep understanding of atmospheric
+      physics to tackle complex climate modeling challenges. In a team setting, she probably takes on a collaborative role,
+      using her mentorship experience to foster inclusivity and encourage diverse perspectives, which enhances problem-solving.
+      Her passion for supporting underrepresented students in STEM likely drives her to create a positive and empowering work
+      environment, where knowledge sharing and innovation thrive.
+- key: ee0129e8abfceaafb403270ccb12295a083457256eb89e7b7ad484ab042cc5de
+  meta: {}
+  request:
+    model: gpt-4o-mini
+    params:
+      max_tokens: 512
+      temperature: 0.3
+    prompt_preview: 'Given this person''s background, infer their likely work style in 2-3 sentences. Cover how they approach
+      problems, what role they naturally take in a team, and how their interests shape their work.
+
+
+      Bo'
+    provider: openai
+  response:
+    input_tokens: 85
+    model: gpt-4o-mini-2024-07-18
+    output_tokens: 96
+    text: Bob Martinez likely approaches problems with a user-centered mindset, prioritizing accessibility to ensure that
+      his designs are inclusive and functional for a diverse audience. In a team setting, he probably takes on a collaborative
+      role, leveraging his startup experience to foster innovation while also valuing input from others. His interest in pottery
+      suggests a hands-on, creative approach to his work, indicating that he enjoys exploring tactile and visual elements
+      in design, which may enhance his ability to create engaging and user-friendly products.
+- key: 9a59e9b1021f12d4149b7edf3509c272c3f371909e8cd033171589cd28368d09
+  meta: {}
+  request:
+    model: gpt-4o-mini
+    params:
+      max_tokens: 512
+      temperature: 0.3
+    prompt_preview: 'Given this person''s background, infer their likely work style in 2-3 sentences. Cover how they approach
+      problems, what role they naturally take in a team, and how their interests shape their work.
+
+
+      Al'
+    provider: openai
+  response:
+    input_tokens: 85
+    model: gpt-4o-mini-2024-07-18
+    output_tokens: 92
+    text: Alice Chen likely approaches problems with a methodical and analytical mindset, leveraging her extensive experience
+      in backend engineering and distributed systems to break down complex challenges into manageable components. In a team
+      setting, she probably takes on a supportive role, sharing her technical expertise while fostering collaboration and
+      open communication among team members. Her interest in hiking suggests she values exploration and resilience, which
+      may translate into her work style as she seeks innovative solutions and embraces challenges with a positive, adventurous
+      spirit.
+- key: 99c87560f73cd72b3d10ec684cdef74a9d75424a13bc682eae4b1c130263a0d2
   meta: {}
   request:
     model: claude-haiku-4-5-20251001
@@ -6,17 +73,53 @@
       max_tokens: 1024
       temperature: 0.3
     prompt_preview: 'These are work style profiles for each team member. Write a team summary (3-5 sentences) covering how
-      these styles complement each other, natural collaboration patterns, and collective strengths.'
+      these styles complement each other, natural collaboration patterns, and collective strengths.
+
+
+      - w'
     provider: anthropic
   response:
-    input_tokens: 380
+    input_tokens: 364
     model: claude-haiku-4-5-20251001
-    output_tokens: 180
-    text: 'This team combines complementary strengths that create a well-rounded collaborative unit. Alice''s systematic,
-      architecture-focused thinking provides the technical backbone, while Bob''s user-centered iterative approach ensures
-      human needs stay central to every decision. Carol bridges analytical rigor with inclusive leadership, naturally
-      connecting the team''s technical and people-oriented strengths. Their shared mentoring instincts and patience with
-      complexity suggest they''ll build on each other''s work rather than compete, with Alice guiding infrastructure
-      decisions, Bob championing accessibility and user experience, and Carol ensuring the team stays grounded in both
-      data and equity. Together, they are strongest when tackling projects that demand both deep technical work and
-      meaningful human impact.'
+    output_tokens: 183
+    text: '# Team Summary
+
+
+      This team brings together complementary strengths that create a well-rounded collaborative unit. Alice''s methodical
+      backend expertise and problem-solving resilience provide a strong technical foundation, while Bob''s user-centered design
+      philosophy and creative hands-on approach ensure that solutions are both innovative and accessible. Carol''s analytical
+      rigor in complex systems thinking, combined with her mentorship orientation and commitment to inclusive collaboration,
+      helps the team maintain focus on impact while fostering psychological safety and knowledge-sharing. Together, they naturally
+      gravitate toward a collaborative model where Alice tackles technical architecture, Bob translates needs into intuitive
+      experiences, and Carol ensures solutions are grounded in rigorous analysis and team cohesion. Their collective strength
+      lies in balancing technical depth, user empathy, and inclusive problem-solving—enabling them to build products that
+      are simultaneously robust, accessible, and thoughtfully designed.'
+- key: 802ab293cca73c742f2f9d551ffea69767b8cf1892ef89fbcd95851e04c9f521
+  meta: {}
+  request:
+    model: claude-haiku-4-5-20251001
+    params:
+      max_tokens: 1024
+      temperature: 0.3
+    prompt_preview: 'These are work style profiles for each team member. Write a team summary (3-5 sentences) covering how
+      these styles complement each other, natural collaboration patterns, and collective strengths.
+
+
+      - w'
+    provider: anthropic
+  response:
+    input_tokens: 364
+    model: claude-haiku-4-5-20251001
+    output_tokens: 176
+    text: '# Team Summary
+
+
+      This team combines complementary analytical and creative strengths that position them well for complex, user-focused
+      work. Alice and Carol both bring methodical, analytical approaches grounded in technical expertise—Alice in distributed
+      systems and Carol in data-driven climate modeling—while Bob introduces a user-centric, creative perspective that ensures
+      their solutions remain accessible and innovative. Their natural collaboration pattern likely centers on Carol and Alice
+      driving technical problem-solving and deep analysis, while Bob advocates for user needs and practical implementation,
+      with all three leveraging their communication skills to bridge technical and human-centered concerns. Collectively,
+      they excel at tackling multifaceted challenges that require both rigorous analytical thinking and thoughtful design,
+      supported by a shared commitment to collaboration, knowledge-sharing, and inclusive problem-solving that Carol actively
+      models through her mentoring approach.'
