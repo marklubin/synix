@@ -6,9 +6,13 @@ Combines all input artifacts into a single output via a prompt template.
 from __future__ import annotations
 
 import hashlib
+import logging
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
+from synix.ext._render import render_template
+
+logger = logging.getLogger(__name__)
 
 
 class ReduceSynthesis(Transform):
@@ -45,8 +49,9 @@ class ReduceSynthesis(Transform):
         self.artifact_type = artifact_type
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt text in cache key."""
-        return hashlib.sha256(self.prompt.encode()).hexdigest()[:16]
+        """Include prompt and artifact_type in cache key."""
+        parts = f"{self.prompt}\x00{self.artifact_type}"
+        return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """N:1 — all inputs in a single unit."""
@@ -64,7 +69,11 @@ class ReduceSynthesis(Transform):
         sorted_inputs = sorted(inputs, key=lambda a: a.artifact_id)
         artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
 
-        rendered = self.prompt.replace("{artifacts}", artifacts_text).replace("{count}", str(len(inputs)))
+        rendered = render_template(
+            self.prompt,
+            artifacts=artifacts_text,
+            count=str(len(inputs)),
+        )
 
         response = _logged_complete(
             client,

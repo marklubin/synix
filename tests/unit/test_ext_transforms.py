@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from synix import Artifact
 from synix.ext import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
+from synix.ext._render import render_template
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -19,6 +22,64 @@ def _make_artifact(label: str, content: str = "content", **metadata) -> Artifact
         content=content,
         metadata=metadata,
     )
+
+
+# ---------------------------------------------------------------------------
+# render_template
+# ---------------------------------------------------------------------------
+
+
+class TestRenderTemplate:
+    """Tests for safe prompt template rendering."""
+
+    def test_basic_substitution(self):
+        result = render_template("Hello {artifact}", artifact="world")
+        assert result == "Hello world"
+
+    def test_multiple_placeholders(self):
+        result = render_template("{label}: {artifact}", label="Alice", artifact="content")
+        assert result == "Alice: content"
+
+    def test_placeholder_in_value_escaped(self):
+        """User content containing placeholder tokens is not double-substituted."""
+        result = render_template(
+            "Label: {label}\nContent: {artifact}",
+            label="bio-alice",
+            artifact="Her note said {label} is important",
+        )
+        assert "Label: bio-alice" in result
+        assert "Her note said {label} is important" in result
+
+    def test_nested_placeholder_escaped(self):
+        """Accumulated content with {artifact} doesn't get replaced."""
+        result = render_template(
+            "Current: {accumulated}\nNew: {artifact}",
+            accumulated="Previous text mentioned {artifact} template",
+            artifact="actual new content",
+        )
+        assert "Previous text mentioned {artifact} template" in result
+        assert "actual new content" in result
+
+    def test_all_placeholders(self):
+        """All known placeholders work."""
+        result = render_template(
+            "{artifact}|{artifacts}|{label}|{artifact_type}|{group_key}|{count}|{accumulated}|{step}|{total}",
+            artifact="a",
+            artifacts="b",
+            label="c",
+            artifact_type="d",
+            group_key="e",
+            count="f",
+            accumulated="g",
+            step="h",
+            total="i",
+        )
+        assert result == "a|b|c|d|e|f|g|h|i"
+
+    def test_missing_placeholder_preserved(self):
+        """Placeholders not in kwargs are left as-is."""
+        result = render_template("Hello {artifact} and {unknown}", artifact="world")
+        assert result == "Hello world and {unknown}"
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +149,12 @@ class TestMapSynthesis:
         t2 = MapSynthesis("ws", prompt="Prompt B")
         assert t1.get_cache_key({}) != t2.get_cache_key({})
 
+    def test_cache_key_changes_with_artifact_type(self):
+        """Different artifact_type produces different cache keys."""
+        t1 = MapSynthesis("ws", prompt="x", artifact_type="summary")
+        t2 = MapSynthesis("ws", prompt="x", artifact_type="analysis")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
     def test_fingerprint_includes_callable(self):
         """Fingerprint includes callable component when label_fn is set."""
         fn = lambda a: a.label  # noqa: E731
@@ -105,6 +172,19 @@ class TestMapSynthesis:
         """Default 1:1 estimate."""
         t = MapSynthesis("ws", prompt="x")
         assert t.estimate_output_count(5) == 5
+
+    def test_placeholder_injection_safe(self, mock_llm):
+        """User content with placeholder tokens doesn't cause double-substitution."""
+        t = MapSynthesis("ws", prompt="Label: {label}\nContent: {artifact}")
+        inp = Artifact(
+            label="bio-alice",
+            artifact_type="test",
+            content="The {label} variable was mentioned in the text",
+        )
+        t.execute([inp], {"llm_config": {}})
+        sent = mock_llm[0]["messages"][0]["content"]
+        assert "Label: bio-alice" in sent
+        assert "The {label} variable was mentioned in the text" in sent
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +231,7 @@ class TestGroupSynthesis:
         units = t.split(inputs, {})
         assert len(units) == 2
 
-    def test_on_missing_group(self, mock_llm, capsys):
+    def test_on_missing_group(self, mock_llm, caplog):
         """on_missing='group' collects missing-key artifacts under missing_key."""
         inputs = [
             _make_artifact("ep-1", team="alpha"),
@@ -163,16 +243,16 @@ class TestGroupSynthesis:
             prompt="{artifacts}",
             on_missing="group",
         )
-        units = t.split(inputs, {})
+        with caplog.at_level(logging.WARNING, logger="synix.ext.group_synthesis"):
+            units = t.split(inputs, {})
         group_keys = [cfg["_group_key"] for _, cfg in units]
         assert "_ungrouped" in group_keys
         assert "alpha" in group_keys
 
-        captured = capsys.readouterr()
-        assert "missing field 'team'" in captured.err
-        assert "grouped as '_ungrouped'" in captured.err
+        assert "missing field 'team'" in caplog.text
+        assert "grouped as '_ungrouped'" in caplog.text
 
-    def test_on_missing_skip(self, mock_llm, capsys):
+    def test_on_missing_skip(self, mock_llm, caplog):
         """on_missing='skip' drops artifacts without the key."""
         inputs = [
             _make_artifact("ep-1", team="alpha"),
@@ -184,12 +264,12 @@ class TestGroupSynthesis:
             prompt="{artifacts}",
             on_missing="skip",
         )
-        units = t.split(inputs, {})
+        with caplog.at_level(logging.WARNING, logger="synix.ext.group_synthesis"):
+            units = t.split(inputs, {})
         assert len(units) == 1  # only alpha group
         assert units[0][1]["_group_key"] == "alpha"
 
-        captured = capsys.readouterr()
-        assert "skipped" in captured.err
+        assert "skipped" in caplog.text
 
     def test_on_missing_error(self):
         """on_missing='error' raises ValueError immediately."""
@@ -223,7 +303,7 @@ class TestGroupSynthesis:
         results = t.execute(inputs, {"llm_config": {}})
         assert results[0].label == "cust-alpha"
 
-    def test_custom_missing_key(self, mock_llm, capsys):
+    def test_custom_missing_key(self, mock_llm, caplog):
         """Custom missing_key changes the ungrouped group name."""
         inputs = [_make_artifact("ep-1")]  # no team
         t = GroupSynthesis(
@@ -233,7 +313,8 @@ class TestGroupSynthesis:
             on_missing="group",
             missing_key="no-team",
         )
-        units = t.split(inputs, {})
+        with caplog.at_level(logging.WARNING, logger="synix.ext.group_synthesis"):
+            units = t.split(inputs, {})
         assert units[0][1]["_group_key"] == "no-team"
 
     def test_placeholders_substituted(self, mock_llm):
@@ -280,6 +361,24 @@ class TestGroupSynthesis:
         t = GroupSynthesis("s", group_by=fn, prompt="x")
         fp = t.compute_fingerprint({})
         assert "callable" in fp.components
+
+    def test_cache_key_changes_with_group_by(self):
+        """Different group_by keys produce different cache keys."""
+        t1 = GroupSynthesis("s", group_by="team", prompt="x")
+        t2 = GroupSynthesis("s", group_by="region", prompt="x")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
+    def test_cache_key_changes_with_on_missing(self):
+        """Different on_missing produces different cache keys."""
+        t1 = GroupSynthesis("s", group_by="k", prompt="x", on_missing="group")
+        t2 = GroupSynthesis("s", group_by="k", prompt="x", on_missing="skip")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
+    def test_cache_key_changes_with_artifact_type(self):
+        """Different artifact_type produces different cache keys."""
+        t1 = GroupSynthesis("s", group_by="k", prompt="x", artifact_type="summary")
+        t2 = GroupSynthesis("s", group_by="k", prompt="x", artifact_type="report")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +440,12 @@ class TestReduceSynthesis:
         # Both should appear, sorted by artifact_id (content hash)
         assert "aaa" in sent
         assert "zzz" in sent
+
+    def test_cache_key_changes_with_artifact_type(self):
+        """Different artifact_type produces different cache keys."""
+        t1 = ReduceSynthesis("r", prompt="x", label="out", artifact_type="summary")
+        t2 = ReduceSynthesis("r", prompt="x", label="out", artifact_type="report")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +566,24 @@ class TestFoldSynthesis:
         t2 = FoldSynthesis("fold", prompt="x", initial="b", label="out")
         assert t1.get_cache_key({}) != t2.get_cache_key({})
 
+    def test_cache_key_includes_sort_by(self):
+        """Cache key differs when sort_by changes."""
+        t1 = FoldSynthesis("fold", prompt="x", sort_by="date", label="out")
+        t2 = FoldSynthesis("fold", prompt="x", sort_by="title", label="out")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
+    def test_cache_key_includes_artifact_type(self):
+        """Cache key differs when artifact_type changes."""
+        t1 = FoldSynthesis("fold", prompt="x", label="out", artifact_type="summary")
+        t2 = FoldSynthesis("fold", prompt="x", label="out", artifact_type="report")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
+    def test_cache_key_none_vs_string_sort_by(self):
+        """Cache key differs between None and string sort_by."""
+        t1 = FoldSynthesis("fold", prompt="x", sort_by=None, label="out")
+        t2 = FoldSynthesis("fold", prompt="x", sort_by="date", label="out")
+        assert t1.get_cache_key({}) != t2.get_cache_key({})
+
     def test_fingerprint_includes_callable_sort_by(self):
         """Fingerprint includes callable when sort_by is a callable."""
         fn = lambda a: a.label  # noqa: E731
@@ -480,3 +603,36 @@ class TestFoldSynthesis:
         t.execute(inputs, {"llm_config": {}})
         sent = mock_llm[0]["messages"][0]["content"]
         assert "Acc: []" in sent
+
+    def test_accumulated_content_with_placeholder_tokens(self, mock_llm):
+        """Accumulated LLM response containing {artifact} doesn't cause injection."""
+        # First call returns content with a placeholder token in it
+        from unittest.mock import MagicMock
+
+        call_count = 0
+
+        def mock_complete(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            resp = MagicMock()
+            if call_count == 1:
+                resp.content = "Summary so far. The {artifact} was interesting."
+            else:
+                resp.content = "Final summary."
+            resp.input_tokens = 10
+            resp.output_tokens = 10
+            return resp
+
+        from unittest.mock import patch
+
+        t = FoldSynthesis(
+            "fold",
+            prompt="Current: {accumulated}\nNew: {artifact}",
+            initial="Start.",
+            label="out",
+        )
+        inputs = [_make_artifact("ep-0", "event 0"), _make_artifact("ep-1", "event 1")]
+        with patch("synix.build.llm_transforms.LLMClient.complete", side_effect=mock_complete):
+            results = t.execute(inputs, {"llm_config": {}})
+
+        assert results[0].content == "Final summary."

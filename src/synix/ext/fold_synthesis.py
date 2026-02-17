@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import logging
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
+from synix.ext._render import render_template
+
+logger = logging.getLogger(__name__)
 
 
 class FoldSynthesis(Transform):
@@ -53,8 +57,11 @@ class FoldSynthesis(Transform):
         self.artifact_type = artifact_type
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt text and initial value in cache key."""
-        combined = f"{self.prompt}\x00{self.initial}"
+        """Include prompt, initial, sort_by, and artifact_type in cache key."""
+        sort_by_str = ""
+        if self.sort_by is not None:
+            sort_by_str = self.sort_by if isinstance(self.sort_by, str) else repr(self.sort_by)
+        combined = f"{self.prompt}\x00{self.initial}\x00{sort_by_str}\x00{self.artifact_type}"
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
@@ -97,12 +104,13 @@ class FoldSynthesis(Transform):
         total = len(sorted_inputs)
 
         for step, inp in enumerate(sorted_inputs, 1):
-            rendered = (
-                self.prompt.replace("{accumulated}", accumulated)
-                .replace("{artifact}", inp.content)
-                .replace("{label}", inp.label)
-                .replace("{step}", str(step))
-                .replace("{total}", str(total))
+            rendered = render_template(
+                self.prompt,
+                accumulated=accumulated,
+                artifact=inp.content,
+                label=inp.label,
+                step=str(step),
+                total=str(total),
             )
 
             response = _logged_complete(

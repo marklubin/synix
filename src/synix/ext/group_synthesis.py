@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import sys
+import logging
 from collections import defaultdict
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
+from synix.ext._render import render_template
+
+logger = logging.getLogger(__name__)
 
 
 class GroupSynthesis(Transform):
@@ -60,8 +63,10 @@ class GroupSynthesis(Transform):
         self.missing_key = missing_key
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt text in cache key."""
-        return hashlib.sha256(self.prompt.encode()).hexdigest()[:16]
+        """Include prompt, group_by, on_missing, missing_key, and artifact_type in cache key."""
+        group_by_str = self.group_by if isinstance(self.group_by, str) else repr(self.group_by)
+        parts = f"{self.prompt}\x00{group_by_str}\x00{self.on_missing}\x00{self.missing_key}\x00{self.artifact_type}"
+        return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
         """Add callable fingerprint component if group_by is a callable."""
@@ -106,16 +111,19 @@ class GroupSynthesis(Transform):
         if missing_count > 0:
             field_desc = self.group_by if isinstance(self.group_by, str) else "callable"
             if self.on_missing == "group":
-                print(
-                    f"[synix] Warning: GroupSynthesis '{self.name}': {missing_count} artifact(s) "
-                    f"missing field '{field_desc}', grouped as '{self.missing_key}'",
-                    file=sys.stderr,
+                logger.warning(
+                    "GroupSynthesis '%s': %d artifact(s) missing field '%s', grouped as '%s'",
+                    self.name,
+                    missing_count,
+                    field_desc,
+                    self.missing_key,
                 )
             elif self.on_missing == "skip":
-                print(
-                    f"[synix] Warning: GroupSynthesis '{self.name}': {missing_count} artifact(s) "
-                    f"missing field '{field_desc}', skipped",
-                    file=sys.stderr,
+                logger.warning(
+                    "GroupSynthesis '%s': %d artifact(s) missing field '%s', skipped",
+                    self.name,
+                    missing_count,
+                    field_desc,
                 )
 
         return [(artifacts, {"_group_key": group_key}) for group_key, artifacts in sorted(groups.items())]
@@ -141,11 +149,12 @@ class GroupSynthesis(Transform):
         sorted_inputs = sorted(inputs, key=lambda a: a.artifact_id)
         artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
 
-        rendered = (
-            self.prompt.replace("{group_key}", group_key)
-            .replace("{artifacts}", artifacts_text)
-            .replace("{count}", str(len(inputs)))
-            .replace("{artifact_type}", self.artifact_type)
+        rendered = render_template(
+            self.prompt,
+            group_key=group_key,
+            artifacts=artifacts_text,
+            count=str(len(inputs)),
+            artifact_type=self.artifact_type,
         )
 
         response = _logged_complete(

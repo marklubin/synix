@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import logging
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
+from synix.ext._render import render_template
+
+logger = logging.getLogger(__name__)
 
 
 class MapSynthesis(Transform):
@@ -45,8 +49,9 @@ class MapSynthesis(Transform):
         self.artifact_type = artifact_type
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt text in cache key so prompt changes invalidate cache."""
-        return hashlib.sha256(self.prompt.encode()).hexdigest()[:16]
+        """Include prompt and artifact_type in cache key."""
+        parts = f"{self.prompt}\x00{self.artifact_type}"
+        return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
         """Add callable fingerprint component if label_fn is set."""
@@ -68,10 +73,11 @@ class MapSynthesis(Transform):
         prompt_id = self._make_prompt_id()
 
         inp = inputs[0]
-        rendered = (
-            self.prompt.replace("{artifact}", inp.content)
-            .replace("{label}", inp.label)
-            .replace("{artifact_type}", inp.artifact_type)
+        rendered = render_template(
+            self.prompt,
+            artifact=inp.content,
+            label=inp.label,
+            artifact_type=inp.artifact_type,
         )
 
         response = _logged_complete(
