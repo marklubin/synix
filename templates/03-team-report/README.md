@@ -4,11 +4,12 @@ Multi-layer team analysis pipeline: parse bios and a project brief, infer work s
 
 ## What This Demonstrates
 
+- **`synix.ext` configurable transforms** — no custom Transform subclasses needed
+- `MapSynthesis` (1:1): bio → work style profile
+- `ReduceSynthesis` (N:1): work styles → team dynamics analysis
+- `FoldSynthesis` (sequential N:1): team dynamics + project brief → staffing report
 - Two independent level-0 source layers (bios + project brief)
-- 1:1 LLM transform (bio -> work style profile)
-- Many:1 rollup (work styles -> team dynamics analysis)
-- Multi-input synthesis (team dynamics + project brief -> final staffing report)
-- Custom validator (max_length on final report)
+- Domain validator (`RequiredField` on final report)
 - Full-text search across all 5 layers with provenance
 - Incremental rebuild (second run is instant — everything cached)
 
@@ -58,12 +59,45 @@ uvx synix search 'frontend'
 
 ### Change the project
 
-Edit `sources/brief/project_brief.md` with your own project description. The pipeline will regenerate work style matches, team dynamics, and the staffing report based on the new brief.
+Edit `sources/brief/project_brief.md` with your own project description. The pipeline will regenerate the team dynamics and staffing report based on the new brief.
 
 ### Customize the pipeline
 
-Open `pipeline.py` to see how layers, transforms, and validators are wired. Key things to try:
+Open `pipeline.py` to see how layers and ext transforms are wired. Key things to try:
 
+- Change the prompts in `MapSynthesis`, `ReduceSynthesis`, or `FoldSynthesis`
 - Add a new layer (e.g., `skills_matrix` that cross-references bios against the project brief)
 - Change the LLM model or temperature in `pipeline.llm_config`
 - Add a validator (e.g., `pii` to check for email addresses in bios)
+
+## Custom Transforms
+
+The ext transforms cover common patterns, but you can always write a custom `Transform` subclass for full control. Here's the equivalent of `MapSynthesis` as a custom class:
+
+```python
+from synix import Transform
+from synix.build.llm_transforms import _get_llm_client, _logged_complete
+from synix.core.models import Artifact
+
+class WorkStyleTransform(Transform):
+    """One bio -> one work style profile. Default split gives 1:1."""
+
+    def execute(self, inputs, config):
+        bio = inputs[0]
+        client = _get_llm_client(config)
+        response = _logged_complete(
+            client, config,
+            messages=[{"role": "user", "content": f"Infer work style:\n\n{bio.content}"}],
+            artifact_desc=f"work-style {bio.label}",
+        )
+        return [Artifact(
+            label=f"ws-{bio.label}",
+            artifact_type="work_style",
+            content=response.content,
+            input_ids=[bio.artifact_id],
+            prompt_id="work_style_v1",
+            model_config=config.get("llm_config"),
+        )]
+```
+
+Use custom transforms when you need logic beyond simple prompt templating — e.g., filtering inputs, conditional branching, or multi-step LLM chains within a single transform.
