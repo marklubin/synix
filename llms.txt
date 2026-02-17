@@ -1,112 +1,101 @@
+```
 # synix
 
 > A build system for agent memory
 
 ## What it does
 
-Synix transforms raw conversations into hierarchical memory structures with full provenance tracking and incremental rebuilds. Define your memory architecture in Python, build it like code, then change it—only affected layers rebuild.
+Synix transforms raw conversation data into hierarchical, searchable memory with full provenance tracking. Declare your memory architecture in Python, build it incrementally, then change it — only affected layers rebuild. Think `make` or `dbt`, but for AI agent memory.
 
 ## Key concepts
 
-- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — typed Python object in the build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchIndex`/`FlatFile` for projections.
-- **Pipeline** — declared in Python. Dependencies are object references via `depends_on`.
-- **Projection** — materializes artifacts into usable outputs. `SearchIndex` (SQLite FTS5 + optional embeddings), `FlatFile` (markdown context doc).
-- **Provenance** — every artifact traces back to its inputs, always included in search results.
-- **Cache/Rebuild** — fingerprint comparison: if inputs, prompt, or config changed, rebuild. Otherwise skip.
+- **Pipeline** — Python definition of your memory architecture (sources, transforms, projections)
+- **Layer** — typed processing step in the build DAG (Source, Transform, SearchIndex, FlatFile)
+- **Artifact** — immutable, versioned build output with content-addressed identity (SHA256)
+- **Transform** — LLM-powered processing step that converts inputs to outputs
+- **Projection** — materialized output (search index or flat file) for agent consumption
+- **Provenance** — every artifact traces back through dependency graph to source conversations
+- **Fingerprint** — build cache key capturing inputs, prompts, model config, and transform code
 
 ## Installation and quick start
 
 ```bash
-# Initialize with source data
-uvx synix init my-project --from ~/exports/chatgpt.json
+# Install and initialize
+uvx synix init my-project
 cd my-project
 
-# Build the pipeline
+# Add API key and source files, then build
 uvx synix build
 
-# Search with provenance
-uvx synix search "rust programming"
+# Search and explore
+uvx synix search "hiking"
 uvx synix list
 uvx synix show final-report
 ```
 
 ## CLI commands
 
-```bash
-uvx synix init <name>                 # Create new project with sources and pipeline
-uvx synix build                       # Run pipeline, only rebuild what changed
-uvx synix plan                        # Dry-run showing what would build
-uvx synix search <query>              # Full-text search with provenance chains
-uvx synix list [layer]               # List all artifacts, optionally by layer
-uvx synix show <id>                  # Display artifact content and metadata
-uvx synix lineage <id>               # Show full provenance tree
-uvx synix validate                   # Run validators against build artifacts
-uvx synix clean                      # Delete build directory
-```
+- `uvx synix init <name>` — scaffold new project with pipeline and sources
+- `uvx synix build` — run pipeline, rebuild only what changed
+- `uvx synix plan` — dry-run showing what would build and estimated cost
+- `uvx synix search <query>` — full-text/semantic search with provenance
+- `uvx synix list [layer]` — show all artifacts, optionally filtered
+- `uvx synix show <id>` — display artifact content
+- `uvx synix lineage <id>` — show provenance chain
+- `uvx synix batch-build run` — submit via OpenAI Batch API for 50% cost savings
+- `uvx synix validate` — run declared validators on build artifacts
+- `uvx synix clean` — delete build directory
 
 ## Architecture overview
 
 ```
 src/synix/
-├── core/models.py          # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
+├── core/models.py          # Pipeline, Layer, Transform base classes
 ├── build/
-│   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
-│   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions
-│   ├── dag.py             # DAG resolution — build order from depends_on references
-│   ├── artifacts.py       # Artifact storage — save/load/query (filesystem-backed)
-│   ├── provenance.py      # Provenance tracking — record and query lineage chains
-│   ├── fingerprint.py     # Build fingerprints — synix:transform:v2 scheme
-│   ├── llm_transforms.py  # Built-in LLM transforms (EpisodeSummary, MonthlyRollup, etc.)
-│   └── transforms.py      # Transform base + registry
+│   ├── runner.py           # Execute pipeline, walk DAG, run transforms
+│   ├── artifacts.py        # Artifact storage, content-addressed cache
+│   ├── fingerprint.py      # Build fingerprints for cache invalidation
+│   ├── llm_transforms.py   # Built-in transforms (EpisodeSummary, etc.)
+│   ├── validators.py       # Validation framework
+│   └── batch.py           # OpenAI Batch API support
 ├── search/
-│   ├── indexer.py         # SQLite FTS5 — build, query, shadow swap
-│   ├── embeddings.py      # Embedding provider — fastembed, OpenAI, cached
-│   └── retriever.py       # Hybrid search — keyword + semantic + RRF fusion
-└── cli/                   # Click CLI commands
+│   ├── indexer.py          # SQLite FTS5 + semantic indexing
+│   ├── retriever.py        # Hybrid search with RRF fusion
+│   └── embeddings.py       # Embedding providers (OpenAI, fastembed)
+├── transforms/             # Re-exports: EpisodeSummary, MonthlyRollup, etc.
+├── validators/             # Re-exports: PII, Citation, SemanticConflict
+└── cli/                   # Click commands with Rich formatting
 ```
 
 ## Pipeline definition
 
+Python-first pipeline definitions with real object references:
+
 ```python
 from synix import Pipeline, Source, SearchIndex
-from synix.ext import MapSynthesis, ReduceSynthesis
+from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("my-pipeline")
-pipeline.source_dir = "./sources"
-pipeline.llm_config = {
-    "provider": "anthropic",
-    "model": "claude-haiku-4-5-20251001",
-}
+pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}
 
-# Parse source files
-bios = Source("bios", dir="./sources/bios")
+# Define layers
+transcripts = Source("transcripts", source_dir="./sources")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+core = CoreSynthesis("core", depends_on=[monthly])
 
-# 1:1 transform
-work_styles = MapSynthesis(
-    "work_styles",
-    depends_on=[bios],
-    prompt="Infer this person's work style:\n\n{artifact}",
-)
-
-# N:1 synthesis
-report = ReduceSynthesis(
-    "report",
-    depends_on=[work_styles],
-    prompt="Write team analysis from these profiles:\n\n{artifacts}",
-    label="team-report",
-)
-
-pipeline.add(bios, work_styles, report)
-pipeline.add(SearchIndex("search", sources=[work_styles, report]))
+# Add to pipeline
+pipeline.add(transcripts, episodes, monthly, core)
+pipeline.add(SearchIndex("search", sources=[episodes, monthly, core]))
 ```
 
 ## Important constraints
 
-- **SQLite only** — no external databases, everything is filesystem-backed
-- **No web UI** — pure CLI tool focused on build system workflow
-- **Python 3.11+** — uses modern Python features for pipeline definition
-- **LLM provider required** — needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
-- **Content-addressed** — artifacts identified by SHA256, enables reliable caching
-- **Fingerprint-based caching** — captures inputs, prompts, model config, and transform source code
-- **Fail-fast design** — never silently ignore errors, always surface problems to user
+- **SQLite only** — no external databases required, filesystem + SQLite FTS5
+- **Local execution** — no web UI, CLI-first tool
+- **Content-addressed caching** — artifacts identified by SHA256 of content
+- **Python 3.11+ required** — uses modern Python features
+- **LLM providers** — OpenAI and Anthropic native, others via base_url override
+- **Fingerprint-based rebuilds** — change prompt/model/config → automatic cache invalidation
+- **Experimental features** — batch-build and validate/fix workflows may change
+```
