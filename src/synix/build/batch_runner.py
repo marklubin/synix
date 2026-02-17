@@ -30,7 +30,7 @@ from synix.build.runner import (
     _layer_fully_cached,
 )
 from synix.core.config import LLMConfig
-from synix.core.models import Pipeline, Source, Transform
+from synix.core.models import Artifact, Pipeline, Source, Transform
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +325,46 @@ def _run_source_layer(
     layer_artifacts[layer.name] = artifacts
 
 
+def _save_or_cache_artifact(
+    artifact,
+    layer: Transform,
+    inputs: list,
+    store: ArtifactStore,
+    provenance: ProvenanceTracker,
+    transform_fp,
+) -> Artifact:
+    """Check cache, save if needed, record provenance. Returns the final artifact."""
+
+    build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
+    rebuild, _reasons = needs_rebuild(
+        artifact.label,
+        artifact.input_ids,
+        store,
+        current_build_fingerprint=build_fp,
+    )
+    if rebuild:
+        artifact.metadata["layer_name"] = layer.name
+        artifact.metadata["layer_level"] = layer._level
+        artifact.metadata["build_fingerprint"] = build_fp.to_dict()
+        artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
+        store.save_artifact(artifact, layer.name, layer._level)
+        parent_labels = _get_parent_labels(artifact, inputs)
+        provenance.record(
+            artifact.label,
+            parent_labels=parent_labels,
+            prompt_id=artifact.prompt_id,
+            model_config=artifact.model_config,
+        )
+        return artifact
+    else:
+        cached = store.load_artifact(artifact.label)
+        if cached is not None:
+            cached.metadata["layer_name"] = layer.name
+            cached.metadata["layer_level"] = layer._level
+            return cached
+        return artifact
+
+
 def _run_sync_transform(
     layer: Transform,
     pipeline: Pipeline,
@@ -354,35 +394,7 @@ def _run_sync_transform(
             merged_config = {**transform_config, **config_extras}
             new_artifacts = layer.execute(unit_inputs, merged_config)
             for artifact in new_artifacts:
-                build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
-                rebuild, _reasons = needs_rebuild(
-                    artifact.label,
-                    artifact.input_ids,
-                    store,
-                    current_build_fingerprint=build_fp,
-                )
-                if rebuild:
-                    artifact.metadata["layer_name"] = layer.name
-                    artifact.metadata["layer_level"] = layer._level
-                    artifact.metadata["build_fingerprint"] = build_fp.to_dict()
-                    artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
-                    store.save_artifact(artifact, layer.name, layer._level)
-                    parent_labels = _get_parent_labels(artifact, inputs)
-                    provenance.record(
-                        artifact.label,
-                        parent_labels=parent_labels,
-                        prompt_id=artifact.prompt_id,
-                        model_config=artifact.model_config,
-                    )
-                    layer_built.append(artifact)
-                else:
-                    cached = store.load_artifact(artifact.label)
-                    if cached is not None:
-                        cached.metadata["layer_name"] = layer.name
-                        cached.metadata["layer_level"] = layer._level
-                        layer_built.append(cached)
-                    else:
-                        layer_built.append(artifact)
+                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
 
     layer_artifacts[layer.name] = layer_built
 
@@ -442,33 +454,7 @@ def _run_batch_transform(
             new_artifacts = layer.execute(unit_inputs, merged_config)
             # Result was available — save artifacts
             for artifact in new_artifacts:
-                build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
-                rebuild, _reasons = needs_rebuild(
-                    artifact.label,
-                    artifact.input_ids,
-                    store,
-                    current_build_fingerprint=build_fp,
-                )
-                if rebuild:
-                    artifact.metadata["layer_name"] = layer.name
-                    artifact.metadata["layer_level"] = layer._level
-                    artifact.metadata["build_fingerprint"] = build_fp.to_dict()
-                    artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
-                    store.save_artifact(artifact, layer.name, layer._level)
-                    parent_labels = _get_parent_labels(artifact, inputs)
-                    provenance.record(
-                        artifact.label,
-                        parent_labels=parent_labels,
-                        prompt_id=artifact.prompt_id,
-                        model_config=artifact.model_config,
-                    )
-                    layer_built.append(artifact)
-                else:
-                    cached = store.load_artifact(artifact.label)
-                    if cached is not None:
-                        layer_built.append(cached)
-                    else:
-                        layer_built.append(artifact)
+                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
         except BatchCollecting:
             collecting = True
         except BatchInProgress:
@@ -525,8 +511,9 @@ def _poll_and_resume(
         bid for bid, b in batches.items() if b["status"] not in ("completed", "failed", "expired", "cancelled")
     ]
 
-    max_polls = 1440  # 24h at 60s intervals
-    for _ in range(max_polls):
+    max_duration = 86400  # 24 hours
+    poll_start = time.time()
+    while (time.time() - poll_start) < max_duration:
         all_done = True
         for batch_id in active_batch_ids:
             try:
