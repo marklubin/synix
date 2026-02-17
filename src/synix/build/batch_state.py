@@ -76,7 +76,7 @@ class BatchState:
         errors:    {request_key: {code, message}}
     """
 
-    def __init__(self, build_dir: Path, build_id: str):
+    def __init__(self, build_dir: Path, build_id: str, *, _skip_load: bool = False):
         self.build_dir = Path(build_dir)
         self.build_id = build_id
         self._instance_dir = self.build_dir / "builds" / build_id
@@ -90,7 +90,8 @@ class BatchState:
         self._results: dict[str, dict] = {}
         self._errors: dict[str, dict] = {}
 
-        self._load_state()
+        if not _skip_load:
+            self._load_state()
 
     @classmethod
     def create_fresh(cls, build_dir: Path, build_id: str) -> BatchState:
@@ -99,18 +100,7 @@ class BatchState:
         Use this to recover from corrupted state files instead of
         bypassing __init__ manually.
         """
-        instance = object.__new__(cls)
-        instance.build_dir = Path(build_dir)
-        instance.build_id = build_id
-        instance._instance_dir = instance.build_dir / "builds" / build_id
-        instance._manifest_path = instance._instance_dir / "manifest.json"
-        instance._state_path = instance._instance_dir / "batch_state.json"
-        instance._pending = {}
-        instance._batch_map = {}
-        instance._batches = {}
-        instance._results = {}
-        instance._errors = {}
-        return instance
+        return cls(build_dir, build_id, _skip_load=True)
 
     def _load_state(self) -> None:
         """Load batch state from disk. Corrupted JSON -> quarantine + raise."""
@@ -271,9 +261,12 @@ class BatchState:
         """Compute a hash of the pipeline definition for change detection.
 
         Includes layer names, types, dependencies, llm_config, per-layer
-        config, and batch mode — so changing model, temperature, or
-        batch=True/False between submit and resume is detected.
+        config, batch mode, and transform fingerprints (source code + prompts)
+        — so changing model, temperature, batch=True/False, prompts, or
+        transform logic between submit and resume is detected.
         """
+        from synix.core.models import Transform
+
         parts = [pipeline.name, pipeline.source_dir, pipeline.build_dir]
         # Include pipeline-level llm_config
         if pipeline.llm_config:
@@ -288,5 +281,10 @@ class BatchState:
             # Include batch mode for transforms
             if hasattr(layer, "batch"):
                 parts.append(f"  batch:{layer.batch}")
+            # Include transform fingerprint (source code + prompts + cache key)
+            if isinstance(layer, Transform):
+                config = dict(pipeline.llm_config) if pipeline.llm_config else {}
+                fp = layer.compute_fingerprint(config)
+                parts.append(f"  fp:{fp.digest}")
         raw = "|".join(parts)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]

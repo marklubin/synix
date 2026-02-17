@@ -298,7 +298,11 @@ def _resolve_batch_mode(layer: Transform, pipeline: Pipeline) -> str:
         return "batch"
 
     # batch=None (auto) — batch only if native OpenAI provider (no base_url override)
+    # and the transform actually benefits from batching (produces multiple outputs)
     if is_openai_native:
+        # N:1 transforms (estimate_output_count always 1) don't benefit from batching
+        if layer.estimate_output_count(3) <= 1:
+            return "sync"
         if not _has_cassette_responses():
             api_key = llm_config.resolve_api_key()
             if not api_key:
@@ -456,6 +460,7 @@ def _run_batch_transform(
     collecting = False
     in_progress = False
 
+    failed_units: list[str] = []
     for unit_inputs, config_extras in units:
         merged_config = {**transform_config, **config_extras}
         try:
@@ -469,7 +474,10 @@ def _run_batch_transform(
             in_progress = True
             break
         except BatchRequestFailed as exc:
-            raise RuntimeError(f"Batch request failed for layer {layer.name!r}: {exc}") from exc
+            # Record per-unit failure and continue with remaining units
+            unit_desc = ", ".join(a.label for a in unit_inputs) if unit_inputs else "unknown"
+            logger.warning("Batch request failed for layer %r unit [%s]: %s", layer.name, unit_desc, exc)
+            failed_units.append(unit_desc)
 
     if in_progress:
         layer_artifacts[layer.name] = layer_built
@@ -484,7 +492,17 @@ def _run_batch_transform(
         layer_artifacts[layer.name] = layer_built
         return "submitted"
 
-    # All results were available
+    # Report per-unit failures (non-fatal — other units still processed)
+    if failed_units:
+        for unit_desc in failed_units:
+            batch_state.store_error(
+                f"{layer.name}:{unit_desc}",
+                "batch_request_failed",
+                f"Batch request failed for unit [{unit_desc}] in layer {layer.name!r}",
+            )
+        batch_state.save()
+
+    # All results were available (some may have failed)
     layer_artifacts[layer.name] = layer_built
     return "completed"
 
