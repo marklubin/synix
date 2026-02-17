@@ -70,8 +70,14 @@ Run two pipeline variants side-by-side on the same source data, compare outputs.
 ### Cost estimation improvements
 `synix plan` currently estimates costs based on token counts and model pricing. Could be improved with historical cost tracking (actual vs estimated) and budget alerts.
 
-### Backend batch API support
-Leverage provider batch APIs (OpenAI `/v1/batches`, Anthropic Message Batches, DeepSeek equivalent) for bulk rebuilds where latency isn't critical. Submit N requests as a batch, poll for results. Typically 50% cheaper than synchronous calls. Good fit for full pipeline rebuilds overnight or large corpus ingestion. Would require an async runner mode that submits the batch, persists the batch ID, and resumes when results are ready.
+### Backend batch API support — hardening
+OpenAI Batch API support shipped as experimental in `synix batch-build` (PR #71). Remaining hardening for GA:
+
+- **Schema versioning** for `manifest.json` and `batch_state.json` (add `schema_version` field, migration story)
+- **Batch chunking** for large layers (split into multiple batches by request count/bytes to respect OpenAI file size limits)
+- **Concurrency guard** — detect concurrent `resume` processes on the same build_id (file lock or explicit single-writer enforcement)
+- **Anthropic Message Batches** — extend to Anthropic's batch API (currently OpenAI-only)
+- **Store pipeline path in manifest** so `resume` doesn't require re-specifying it
 
 ### Request-level batching (multi-input prompts)
 Pack multiple inputs into a single LLM request and ask for multiple labeled outputs. e.g., send 5 transcripts in one prompt, get 5 episode summaries back as a JSON array keyed by conversation ID. Benefits: fewer API calls (lower latency, fewer rate limit hits), amortizes system prompt tokens across N inputs. Tradeoff: need reliable structured output parsing to split responses back into individual artifacts. Natural fit for 1:1 transforms like episode summaries. Would add a configurable `batch_size` to layer config, with single-input as fallback.
@@ -107,6 +113,13 @@ After a semantic fix is applied, re-run the conflict prompt to verify the fix ac
 
 ### Trace toggle
 `--trace=off|on` flag to skip trace artifact storage during validation/fixing. Currently always-on.
+
+---
+
+## CLI
+
+### Shell completion
+Add a `synix completions` command that outputs shell completion scripts for bash/zsh/fish (Click has built-in support via `_SYNIX_COMPLETE` env var). Optionally `synix completions --install` to write to the user's shell rc file. Standard pattern used by `rustup`, `gh`, `poetry`, etc. Works with `uv tool install synix` but not ephemeral `uvx synix`.
 
 ---
 
