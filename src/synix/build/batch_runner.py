@@ -107,21 +107,8 @@ def batch_run(
         batch_state = BatchState(build_dir, build_id)
     except RuntimeError:
         if reset_state:
-            # Clear corrupted state
-            instance_dir = build_dir / "builds" / build_id
-            state_path = instance_dir / "batch_state.json"
             # State file was already quarantined by BatchState, just create fresh
-            batch_state = BatchState.__new__(BatchState)
-            batch_state.build_dir = build_dir
-            batch_state.build_id = build_id
-            batch_state._instance_dir = instance_dir
-            batch_state._manifest_path = instance_dir / "manifest.json"
-            batch_state._state_path = state_path
-            batch_state._pending = {}
-            batch_state._batch_map = {}
-            batch_state._batches = {}
-            batch_state._results = {}
-            batch_state._errors = {}
+            batch_state = BatchState.create_fresh(build_dir, build_id)
         else:
             raise
 

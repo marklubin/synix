@@ -92,6 +92,26 @@ class BatchState:
 
         self._load_state()
 
+    @classmethod
+    def create_fresh(cls, build_dir: Path, build_id: str) -> BatchState:
+        """Create a fresh BatchState with empty in-memory state, skipping disk load.
+
+        Use this to recover from corrupted state files instead of
+        bypassing __init__ manually.
+        """
+        instance = object.__new__(cls)
+        instance.build_dir = Path(build_dir)
+        instance.build_id = build_id
+        instance._instance_dir = instance.build_dir / "builds" / build_id
+        instance._manifest_path = instance._instance_dir / "manifest.json"
+        instance._state_path = instance._instance_dir / "batch_state.json"
+        instance._pending = {}
+        instance._batch_map = {}
+        instance._batches = {}
+        instance._results = {}
+        instance._errors = {}
+        return instance
+
     def _load_state(self) -> None:
         """Load batch state from disk. Corrupted JSON -> quarantine + raise."""
         if not self._state_path.exists():
@@ -248,11 +268,25 @@ class BatchState:
 
     @staticmethod
     def compute_pipeline_hash(pipeline) -> str:
-        """Compute a hash of the pipeline definition for change detection."""
+        """Compute a hash of the pipeline definition for change detection.
+
+        Includes layer names, types, dependencies, llm_config, per-layer
+        config, and batch mode — so changing model, temperature, or
+        batch=True/False between submit and resume is detected.
+        """
         parts = [pipeline.name, pipeline.source_dir, pipeline.build_dir]
+        # Include pipeline-level llm_config
+        if pipeline.llm_config:
+            parts.append(f"llm_config:{json.dumps(dict(pipeline.llm_config), sort_keys=True)}")
         for layer in pipeline.layers:
             parts.append(f"{layer.name}:{type(layer).__qualname__}")
             for dep in layer.depends_on:
                 parts.append(f"  dep:{dep.name}")
+            # Include per-layer config if present
+            if hasattr(layer, "config") and layer.config:
+                parts.append(f"  config:{json.dumps(layer.config, sort_keys=True)}")
+            # Include batch mode for transforms
+            if hasattr(layer, "batch"):
+                parts.append(f"  batch:{layer.batch}")
         raw = "|".join(parts)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
