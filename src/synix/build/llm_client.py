@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -40,6 +41,12 @@ class LLMClient:
     def _create_client(self):
         """Create the underlying SDK client based on provider."""
         api_key = self.config.resolve_api_key()
+
+        # In cassette replay mode, provide a placeholder key so SDK clients
+        # can be constructed without real credentials (no API calls are made).
+        cassette_mode = os.environ.get("SYNIX_CASSETTE_MODE", "off").lower()
+        if not api_key and cassette_mode == "replay":
+            api_key = "sk-replay-placeholder"
 
         if self.config.provider == "anthropic":
             import anthropic
