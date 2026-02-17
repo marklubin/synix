@@ -260,7 +260,13 @@ def batch_run(
 
 
 def _resolve_batch_mode(layer: Transform, pipeline: Pipeline) -> str:
-    """Determine whether a layer should run in batch or sync mode."""
+    """Determine whether a layer should run in batch or sync mode.
+
+    Batch mode is only supported for ``provider="openai"`` with the default
+    base URL (platform.openai.com).  Custom base URLs, DeepSeek, and
+    openai-compatible providers are NOT supported — the OpenAI Batch API is
+    a platform-specific feature.
+    """
     if layer.batch is False:
         return "sync"
 
@@ -270,13 +276,19 @@ def _resolve_batch_mode(layer: Transform, pipeline: Pipeline) -> str:
         base_config.update(layer.config["llm_config"])
     llm_config = LLMConfig.from_dict(base_config)
 
-    is_openai = llm_config.provider in ("openai", "deepseek", "openai-compatible")
+    is_openai_native = llm_config.provider == "openai" and not llm_config.base_url
 
     if layer.batch is True:
-        if not is_openai:
+        if llm_config.provider != "openai":
             raise ValueError(
                 f"Layer {layer.name!r} has batch=True but uses provider "
-                f"{llm_config.provider!r}. Batch mode requires an OpenAI-compatible provider."
+                f"{llm_config.provider!r}. Batch mode requires provider='openai'."
+            )
+        if llm_config.base_url:
+            raise ValueError(
+                f"Layer {layer.name!r} has batch=True but sets a custom base_url "
+                f"({llm_config.base_url!r}). The OpenAI Batch API only works with "
+                f"the default OpenAI platform URL."
             )
         # Validate API key (skip when cassette responses exist — no real API needed)
         if not _has_cassette_responses():
@@ -285,8 +297,8 @@ def _resolve_batch_mode(layer: Transform, pipeline: Pipeline) -> str:
                 raise ValueError(f"Layer {layer.name!r} requires OPENAI_API_KEY for batch mode.")
         return "batch"
 
-    # batch=None (auto) — batch if OpenAI provider
-    if is_openai:
+    # batch=None (auto) — batch only if native OpenAI provider (no base_url override)
+    if is_openai_native:
         if not _has_cassette_responses():
             api_key = llm_config.resolve_api_key()
             if not api_key:
@@ -310,11 +322,7 @@ def _run_source_layer(
     source_config = _build_source_config(pipeline, layer, src_dir)
     source_config["_layer_name"] = layer.name
 
-    try:
-        artifacts = layer.load(source_config)
-    except Exception:
-        logger.warning("Source %s failed to load", layer.name, exc_info=True)
-        artifacts = []
+    artifacts = layer.load(source_config)
 
     for artifact in artifacts:
         artifact.metadata["layer_name"] = layer.name
@@ -461,7 +469,7 @@ def _run_batch_transform(
             in_progress = True
             break
         except BatchRequestFailed as exc:
-            logger.warning("Request failed for layer %s: %s", layer.name, exc)
+            raise RuntimeError(f"Batch request failed for layer {layer.name!r}: {exc}") from exc
 
     if in_progress:
         layer_artifacts[layer.name] = layer_built
@@ -521,8 +529,7 @@ def _poll_and_resume(
                 if not done:
                     all_done = False
             except Exception as exc:
-                logger.warning("Error checking batch %s: %s", batch_id, exc)
-                all_done = False
+                raise RuntimeError(f"Error checking batch {batch_id}: {exc}") from exc
 
         if all_done:
             # Re-run the layer to produce artifacts from cached results
@@ -552,10 +559,8 @@ def _load_cassette_responses(build_dir: Path) -> dict | None:
     responses_path = Path(cassette_dir) / "batch_responses.json"
     if not responses_path.exists():
         return None
-    try:
-        return json.loads(responses_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return None
+    # Fail hard on parse errors — corrupted cassette file must not be silently ignored
+    return json.loads(responses_path.read_text())
 
 
 def _has_cassette_responses() -> bool:
@@ -587,7 +592,14 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
         elif isinstance(layer, Transform):
             try:
                 mode = _resolve_batch_mode(layer, pipeline)
-            except (ValueError, click.UsageError):
+            except ValueError as exc:
+                # Missing API key is OK in plan mode — show as sync.
+                # Provider/base_url misconfiguration should still fail loud.
+                if "API_KEY" in str(exc):
+                    mode = "sync"
+                else:
+                    raise
+            except click.UsageError:
                 mode = "sync"
             info["mode"] = mode
             info["batch_param"] = layer.batch
