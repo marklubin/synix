@@ -182,7 +182,7 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     # 2. Build with mocked LLM — returns different content per call
     call_count = 0
     mock_responses = [
-        # 3x work_style (one per bio)
+        # 3x work_style (one per bio, via MapSynthesis)
         _make_mock_response(
             "Alice is a systematic thinker who thrives on technical depth. "
             "She naturally takes the architect role and brings hiking "
@@ -196,14 +196,18 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
             "Carol is a rigorous analyst who leads with data. "
             "Her academic background makes her the team's methodologist."
         ),
-        # 1x team_dynamics
+        # 1x team_dynamics (via ReduceSynthesis)
         _make_mock_response(
             "This team combines deep backend expertise, user-centered design, "
             "and data science rigor. Alice and Carol share analytical thinking "
             "while Bob bridges technical work with user needs. The main risk "
             "is geographic distribution across three time zones."
         ),
-        # 1x final_report
+        # 2x final_report (via FoldSynthesis — one call per input)
+        _make_mock_response(
+            "Initial draft based on team dynamics analysis. The team has "
+            "complementary skills across backend, design, and data science."
+        ),
         _make_mock_response(
             "Alice should own the backend sensor ingestion pipeline given her "
             "distributed systems expertise. Bob should lead the dashboard UI "
@@ -233,8 +237,8 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
         )
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-    # Verify all 5 LLM calls were made (3 work_style + 1 dynamics + 1 report)
-    assert call_count == 5
+    # Verify all 6 LLM calls: 3 work_style (Map) + 1 dynamics (Reduce) + 2 report (Fold)
+    assert call_count == 6
 
     # 3. Validate — should pass (mock responses are under 5000 chars)
     result = runner.invoke(
@@ -262,30 +266,20 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     assert "hiking" in result.output.lower()
 
 
-def test_init_validate_fails_on_long_content(runner, tmp_path, monkeypatch):
-    """Validate catches final_report content that exceeds max_chars."""
+def test_init_validate_passes_with_valid_metadata(runner, tmp_path, monkeypatch):
+    """Validate passes when required metadata (input_count) is present."""
     monkeypatch.chdir(tmp_path)
 
     # Init
-    runner.invoke(main, ["init", "long-test"])
-    project_dir = tmp_path / "long-test"
+    runner.invoke(main, ["init", "valid-test"])
+    project_dir = tmp_path / "valid-test"
     pipeline_path = str(project_dir / "pipeline.py")
     monkeypatch.chdir(project_dir)
 
-    # Build — work_styles and dynamics are short, final_report is too long
-    call_count = 0
-    short = _make_mock_response("Short mock response.")
-    long_resp = _make_mock_response("x" * 6000)
+    # Build with mocked LLM
+    short = _make_mock_response("Mock response.")
 
-    def mock_complete(**kwargs):
-        nonlocal call_count
-        call_count += 1
-        # Calls 1-4 are work_styles (3) + dynamics (1), call 5 is final_report
-        if call_count <= 4:
-            return short
-        return long_resp
-
-    with patch("synix.build.llm_client.LLMClient.complete", side_effect=mock_complete):
+    with patch("synix.build.llm_client.LLMClient.complete", return_value=short):
         result = runner.invoke(
             main,
             [
@@ -299,7 +293,7 @@ def test_init_validate_fails_on_long_content(runner, tmp_path, monkeypatch):
         )
         assert result.exit_code == 0
 
-    # Validate should fail on the oversized final_report
+    # Validate should pass — FoldSynthesis always sets input_count
     result = runner.invoke(
         main,
         [
@@ -309,5 +303,5 @@ def test_init_validate_fails_on_long_content(runner, tmp_path, monkeypatch):
             str(project_dir / "build"),
         ],
     )
-    assert result.exit_code != 0
-    assert "max_length" in result.output.lower() or "6000" in result.output
+    assert result.exit_code == 0
+    assert "required_field" in result.output.lower()

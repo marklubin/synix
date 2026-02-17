@@ -1,19 +1,19 @@
-"""team_report demo case — init-style pipeline with multi-level DAG.
+"""team_report demo case — ext transforms pipeline with multi-level DAG.
 
 Flow:
   1. Plan     — show the DAG and what will be built
-  2. Build    — parse bios + brief, infer work styles, roll up team dynamics,
-                synthesize final report
+  2. Build    — parse bios + brief, map work styles, reduce team dynamics,
+                fold final report
   3. Search   — query across all layers
-  4. Validate — check final report length
+  4. Validate — check final report has input_count
   5. Rebuild  — second run, everything cached
   6. Explain  — show cache decisions inline
 
 This demonstrates:
   - Two independent level-0 source layers (bios + project_brief)
-  - 1:1 LLM transform (bio → work style profile)
-  - Many:1 rollup (work styles → team dynamics)
-  - Multi-input synthesis (team dynamics + brief → final report)
+  - MapSynthesis: 1:1 LLM transform (bio → work style profile)
+  - ReduceSynthesis: N:1 rollup (work styles → team dynamics)
+  - FoldSynthesis: sequential accumulation (team dynamics + brief → final report)
   - Full-text search across all 5 layers with provenance
   - Incremental rebuild (second run is instant)
   - Explain-cache with inline fingerprint breakdown
@@ -36,7 +36,7 @@ case = {
         {"name": "note_search", "command": ["synix", "demo", "note", "3/6 Searching across all layers..."]},
         {"name": "search", "command": ["synix", "search", "climate dashboard", "--mode", "keyword", "--limit", "3"]},
         # Step 4: Validate
-        {"name": "note_validate", "command": ["synix", "demo", "note", "4/6 Validating final report length..."]},
+        {"name": "note_validate", "command": ["synix", "demo", "note", "4/6 Validating final report..."]},
         {"name": "validate", "command": ["synix", "validate", "PIPELINE", "--json"], "capture_json": True},
         # Step 5: Rebuild — everything cached
         {
