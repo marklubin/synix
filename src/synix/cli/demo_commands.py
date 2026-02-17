@@ -346,6 +346,12 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Drop embedding progress lines — presence varies with projection cache state
         if re.search(r"└─ embeddings\s+\d+/\d+", line):
             continue
+        # Normalize batch build IDs (random per run)
+        line = re.sub(r"\bbatch-[0-9a-f]{8}\b", "batch-<ID>", line)
+        # Normalize pipeline hashes in batch-build table cells (12-char hex between │ delimiters)
+        line = re.sub(r"(│\s*)[0-9a-f]{12}(\s*│)", r"\1<PIPELINE_HASH>\2", line)
+        # Normalize datetime stamps in batch-build table cells (between │ delimiters)
+        line = re.sub(r"(│\s*)\d{4}-\d{2}-\d{2} \d{2}:\d{2}(\s*│)", r"\1<DATETIME>\2", line)
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)

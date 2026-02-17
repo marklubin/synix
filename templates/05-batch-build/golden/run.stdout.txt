@@ -1,0 +1,9 @@
+[Experimental] Batch build uses OpenAI Batch API. This feature may change.
+  Build ID: batch-<ID>
+  Pipeline: pipeline.py
+
+
+Status: completed
+Build ID: batch-<ID>
+Layers Completed: bios, work_styles, team_summary
+Time: <TIME>

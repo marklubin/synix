@@ -1,0 +1,17 @@
+{
+  "9a59e9b1021f12d4149b7edf3509c272c3f371909e8cd033171589cd28368d09": {
+    "content": "Alice approaches problems systematically and with patience, given her deep expertise in distributed systems—work that rewards methodical thinking and long-term focus. In team settings, she likely takes on a technical leadership role, leveraging her 12 years of experience to guide architecture decisions and help others navigate complex challenges. Her multilingual abilities and love of hiking suggest she values diverse perspectives and endurance, which translates to thorough code reviews and a collaborative, steady approach to problem-solving.",
+    "model": "gpt-4o-mini",
+    "tokens": {"input": 90, "output": 95}
+  },
+  "ee0129e8abfceaafb403270ccb12295a083457256eb89e7b7ad484ab042cc5de": {
+    "content": "Bob approaches problems with a user-centered, iterative mindset—his accessibility focus suggests he dives deep into edge cases and advocates for overlooked users. In team settings, he takes on a collaborative mentoring role, drawing on startup experience to balance pragmatism with idealism. His pottery teaching hints at patience and an ability to guide others through complex processes, so he thrives when projects have clear human benefit.",
+    "model": "gpt-4o-mini",
+    "tokens": {"input": 88, "output": 82}
+  },
+  "c3b05494ef6a474398fadd9099ee463188e36d7232da08a12ab42fb755dddb63": {
+    "content": "Carol approaches problems with rigorous analytical thinking and a systems-level perspective, drawing on her deep technical training in atmospheric physics. In team settings, she naturally gravitates toward mentoring and knowledge-sharing roles, given her volunteer commitment to supporting underrepresented students. Her passion for climate science and equity in STEM drives her to seek work where technical excellence and inclusive leadership reinforce each other.",
+    "model": "gpt-4o-mini",
+    "tokens": {"input": 92, "output": 78}
+  }
+}

@@ -1,0 +1,11 @@
+[Experimental] Batch build uses OpenAI Batch API. This feature may change.
+                             Batch Build Plan
+┏━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Level ┃ Layer        ┃ Type                    ┃ Mode   ┃ Est. Requests ┃
+┡━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│  <N>  │ bios         │ Source                  │ source │ —             │
+│  <N>  │ work_styles  │ WorkStyleBatchTransform │ batch  │  <N>  │
+│  <N>  │ team_summary │ TeamSummaryTransform    │ sync   │ —             │
+└───────┴──────────────┴─────────────────────────┴────────┴───────────────┘
+
+  1 layer(s) will use Batch API, 1 will run synchronously.

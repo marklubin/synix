@@ -1,0 +1,22 @@
+- key: 1fea795cf45f718e714e160d0e408babccbdc67e02571385c4d9ebf69db47022
+  meta: {}
+  request:
+    model: claude-haiku-4-5-20251001
+    params:
+      max_tokens: 1024
+      temperature: 0.3
+    prompt_preview: 'These are work style profiles for each team member. Write a team summary (3-5 sentences) covering how
+      these styles complement each other, natural collaboration patterns, and collective strengths.'
+    provider: anthropic
+  response:
+    input_tokens: 380
+    model: claude-haiku-4-5-20251001
+    output_tokens: 180
+    text: 'This team combines complementary strengths that create a well-rounded collaborative unit. Alice''s systematic,
+      architecture-focused thinking provides the technical backbone, while Bob''s user-centered iterative approach ensures
+      human needs stay central to every decision. Carol bridges analytical rigor with inclusive leadership, naturally
+      connecting the team''s technical and people-oriented strengths. Their shared mentoring instincts and patience with
+      complexity suggest they''ll build on each other''s work rather than compete, with Alice guiding infrastructure
+      decisions, Bob championing accessibility and user experience, and Carol ensuring the team stays grounded in both
+      data and equity. Together, they are strongest when tackling projects that demand both deep technical work and
+      meaningful human impact.'

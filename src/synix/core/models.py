@@ -127,9 +127,11 @@ class Transform(Layer):
         depends_on: list[Layer] | None = None,
         config: dict | None = None,
         context_budget: int | None = None,
+        batch: bool | None = None,
     ):
         super().__init__(name, depends_on=depends_on, config=config)
         self.context_budget = context_budget
+        self.batch = batch
 
     @abstractmethod
     def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:

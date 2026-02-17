@@ -76,6 +76,7 @@ def cli():
 
 # Import subcommand modules to register commands
 from synix.cli.artifact_commands import list_artifacts, show_artifact  # noqa: E402, F401
+from synix.cli.batch_commands import batch_build  # noqa: E402, F401
 from synix.cli.build_commands import build, plan, run_alias  # noqa: E402, F401
 from synix.cli.clean_commands import clean  # noqa: E402, F401
 from synix.cli.demo_commands import demo  # noqa: E402, F401
@@ -105,3 +106,4 @@ main.add_command(demo)
 main.add_command(info)
 main.add_command(init)
 main.add_command(llms)
+main.add_command(batch_build, name="batch-build")
