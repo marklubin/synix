@@ -1,0 +1,7 @@
+[Experimental] Batch build uses OpenAI Batch API. This feature may change.
+Build: batch-<ID>
+Status: completed
+Pipeline Hash: <PIPELINE_HASH>
+Created: <DATETIME>
+Layers Completed: bios, work_styles, team_summary
+Current Layer: —

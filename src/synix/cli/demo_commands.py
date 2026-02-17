@@ -352,6 +352,18 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"(│\s*)[0-9a-f]{12}(\s*│)", r"\1<PIPELINE_HASH>\2", line)
         # Normalize datetime stamps in batch-build table cells (between │ delimiters)
         line = re.sub(r"(│\s*)\d{4}-\d{2}-\d{2} \d{2}:\d{2}(\s*│)", r"\1<DATETIME>\2", line)
+        # Normalize pipeline hashes in "Pipeline Hash: <hash>" lines (status output)
+        line = re.sub(r"(Pipeline Hash:\s*)[0-9a-f]{16,}", r"\1<PIPELINE_HASH>", line)
+        # Normalize full datetime in status output (YYYY-MM-DD HH:MM:SS)
+        line = re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", "<DATETIME>", line)
+        # Normalize OpenAI dashboard URLs
+        line = re.sub(
+            r"https://platform\.openai\.com/batches/\S+",
+            "https://platform.openai.com/batches/<BATCH_ID>",
+            line,
+        )
+        # Normalize OpenAI batch IDs (batch_<hex> from real API runs)
+        line = re.sub(r"\bbatch_[A-Za-z0-9_]+\b", "batch_<OPENAI_ID>", line)
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)
