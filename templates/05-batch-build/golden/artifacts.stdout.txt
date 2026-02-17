@@ -1,0 +1,24 @@
+                bios (L0) — 3 artifacts
+╭──────────────┬─────────────┬──────┬─────────────────╮
+│ Label        │ Artifact ID │ Date │ Title / Summary │
+├──────────────┼─────────────┼──────┼─────────────────┤
+│ t-text-alice │ 4bcc984     │      │ Alice           │
+│ t-text-bob   │ 01dfeaf     │      │ Bob             │
+│ t-text-carol │ b732c72     │      │ Carol           │
+╰──────────────┴─────────────┴──────┴─────────────────╯
+
+                                 work_styles (L1) — 3 artifacts
+╭──────────┬─────────────┬──────┬──────────────────────────────────────────────────────────────╮
+│ Label    │ Artifact ID │ Date │ Title / Summary                                              │
+├──────────┼─────────────┼──────┼──────────────────────────────────────────────────────────────┤
+│ ws-alice │ c0bc718     │      │ Alice approaches problems systematically and with patienc... │
+│ ws-bob   │ a8ab49f     │      │ Bob approaches problems with a user-centered, iterative m... │
+│ ws-carol │ 8295d9d     │      │ Carol approaches problems with rigorous analytical thinki... │
+╰──────────┴─────────────┴──────┴──────────────────────────────────────────────────────────────╯
+
+                                  team_summary (L2) — 1 artifacts
+╭──────────────┬─────────────┬──────┬──────────────────────────────────────────────────────────────╮
+│ Label        │ Artifact ID │ Date │ Title / Summary                                              │
+├──────────────┼─────────────┼──────┼──────────────────────────────────────────────────────────────┤
+│ team-summary │ 43c497d     │      │ This team combines complementary strengths that create a ... │
+╰──────────────┴─────────────┴──────┴──────────────────────────────────────────────────────────────╯

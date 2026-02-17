@@ -1,0 +1,6 @@
+[Experimental] Batch build uses OpenAI Batch API. This feature may change.
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ Build ID       ┃ Status    ┃ Pipeline Hash ┃ Created          ┃ Layers Done ┃ Current ┃ Errors ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ batch-<ID> │ completed │ <PIPELINE_HASH>  │ <DATETIME> │  <N>  │ —       │ —      │
+└────────────────┴───────────┴───────────────┴──────────────────┴─────────────┴─────────┴────────┘
