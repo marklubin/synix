@@ -110,3 +110,8 @@ register_adapter([".json"])(_parse_json_autodetect)
 from synix.adapters.text import parse_text  # noqa: E402
 
 register_adapter([".txt", ".md"])(parse_text)
+
+# Claude Code JSONL session files
+from synix.adapters.claude_code import parse_claude_code  # noqa: E402
+
+register_adapter([".jsonl"])(parse_claude_code)

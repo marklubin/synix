@@ -144,8 +144,8 @@ class TestEmbeddingConfig:
         config = EmbeddingConfig()
         assert config.provider == "fastembed"
         assert config.model == "BAAI/bge-small-en-v1.5"
-        assert config.dimensions == 384
-        assert config.batch_size == 64
+        assert config.dimensions is None
+        assert config.batch_size == 16
         assert config.concurrency == 4
 
     def test_from_dict(self):

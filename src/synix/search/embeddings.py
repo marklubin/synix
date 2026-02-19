@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import struct
 import warnings
@@ -25,6 +26,17 @@ def _suppress_hf_warnings() -> None:
 
 from synix.core.config import EmbeddingConfig
 from synix.core.errors import atomic_write
+
+logger = logging.getLogger(__name__)
+
+
+def _is_payload_too_large(exc: Exception) -> bool:
+    """Check if an exception represents a 413 Payload Too Large error."""
+    if hasattr(exc, "status_code") and exc.status_code == 413:
+        return True
+    # Some providers return 413 in the message
+    msg = str(exc).lower()
+    return "413" in msg and ("payload" in msg or "too large" in msg or "request entity" in msg)
 
 
 class FastEmbedBackend:
@@ -84,20 +96,34 @@ class OpenAIBackend:
             api_key = self.config.resolve_api_key()
             if api_key:
                 kwargs["api_key"] = api_key
-            if self.config.base_url:
-                kwargs["base_url"] = self.config.base_url
+            base_url = self.config.resolve_base_url()
+            if base_url:
+                kwargs["base_url"] = base_url
             self._client = OpenAI(**kwargs)
         return self._client
 
-    def _embed_chunk(self, texts: list[str]) -> list[list[float]]:
+    _MAX_413_DEPTH = 10  # prevent unbounded recursion on persistent 413s
+
+    def _embed_chunk(self, texts: list[str], _depth: int = 0) -> list[list[float]]:
         client = self._get_client()
         kwargs: dict = {
             "model": self.config.model,
             "input": texts,
         }
-        if self.config.dimensions:
+        if self.config.dimensions is not None:
             kwargs["dimensions"] = self.config.dimensions
-        response = client.embeddings.create(**kwargs)
+        try:
+            response = client.embeddings.create(**kwargs)
+        except Exception as exc:
+            if _is_payload_too_large(exc) and len(texts) > 1 and _depth < self._MAX_413_DEPTH:
+                mid = len(texts) // 2
+                logger.warning(
+                    "413 payload too large with %d texts, retrying with halved batch (depth %d)",
+                    len(texts),
+                    _depth + 1,
+                )
+                return self._embed_chunk(texts[:mid], _depth + 1) + self._embed_chunk(texts[mid:], _depth + 1)
+            raise
         sorted_data = sorted(response.data, key=lambda d: d.index)
         return [d.embedding for d in sorted_data]
 
