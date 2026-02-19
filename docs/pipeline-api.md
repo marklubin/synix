@@ -64,7 +64,10 @@ work_styles = MapSynthesis(
 |-----------|------|---------|-------------|
 | `prompt` | `str` | *required* | Template with `{artifact}`, `{label}`, `{artifact_type}` placeholders |
 | `label_fn` | `Callable[[Artifact], str] \| None` | `None` | Custom label derivation. Default: `{name}-{input_label}` |
+| `metadata_fn` | `Callable[[Artifact], dict] \| None` | `None` | Custom metadata derivation from the input artifact. Merged on top of auto-propagated input metadata |
 | `artifact_type` | `str` | `"summary"` | Output artifact type |
+
+**Metadata propagation:** MapSynthesis automatically copies input artifact metadata to the output (1:1 natural inheritance). The `metadata_fn` result and `source_label` are merged on top.
 
 **Custom labels:**
 
@@ -98,6 +101,7 @@ by_customer = GroupSynthesis(
 | `group_by` | `str \| Callable[[Artifact], str]` | *required* | Metadata key or callable that returns the group key |
 | `prompt` | `str` | *required* | Template with `{group_key}`, `{artifacts}`, `{count}`, `{artifact_type}` placeholders |
 | `label_prefix` | `str \| None` | `None` | Prefix for output labels. Default: derived from `group_by` key |
+| `metadata_fn` | `Callable[[str, list[Artifact]], dict] \| None` | `None` | Custom metadata from `(group_key, inputs)`. Merged on top of default `group_key` and `input_count` |
 | `artifact_type` | `str` | `"summary"` | Output artifact type |
 | `on_missing` | `str` | `"group"` | Behavior when metadata key is absent (see below) |
 | `missing_key` | `str` | `"_ungrouped"` | Group name for missing-key artifacts when `on_missing="group"` |
@@ -139,6 +143,7 @@ team_dynamics = ReduceSynthesis(
 |-----------|------|---------|-------------|
 | `prompt` | `str` | *required* | Template with `{artifacts}`, `{count}` placeholders |
 | `label` | `str` | *required* | Fixed output label |
+| `metadata_fn` | `Callable[[list[Artifact]], dict] \| None` | `None` | Custom metadata from the input list. Merged on top of default `input_count` |
 | `artifact_type` | `str` | `"summary"` | Output artifact type |
 
 ### FoldSynthesis (N:1 sequential)
@@ -167,6 +172,7 @@ progressive = FoldSynthesis(
 | `initial` | `str` | `""` | Starting value for the accumulator |
 | `sort_by` | `str \| Callable \| None` | `None` | Metadata key, callable, or `None` (sort by `artifact_id`) |
 | `label` | `str` | *required* | Fixed output label |
+| `metadata_fn` | `Callable[[list[Artifact]], dict] \| None` | `None` | Custom metadata from the input list. Merged on top of default `input_count` |
 | `artifact_type` | `str` | `"summary"` | Output artifact type |
 
 FoldSynthesis always runs synchronously (never batched) because each step depends on the previous.
@@ -200,6 +206,7 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 |--------|-----------|-------|
 | **ChatGPT** | `.json` | `conversations.json` exports. Handles regeneration branches via `current_node` |
 | **Claude** | `.json` | Claude conversation exports with `chat_messages` arrays |
+| **Claude Code** | `.jsonl` | Claude Code session transcripts. Extracts user/assistant turns, skips tool blocks |
 | **Text / Markdown** | `.txt`, `.md` | YAML frontmatter support. Auto-detects conversation turns (`User:` / `Assistant:` prefixes) |
 
 ## Projections

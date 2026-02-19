@@ -31,13 +31,16 @@ class LLMConfig:
 
     Config precedence: explicit config > env vars > defaults.
 
-    Environment variables:
+    API key resolution order:
+    1. Explicit ``api_key`` field
+    2. Custom env var via ``api_key_env`` (e.g. ``"TOGETHER_API_KEY"``)
+    3. ``SYNIX_API_KEY`` (universal fallback for all providers)
+    4. Provider-specific env var (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
+
+    Other environment variables:
     - SYNIX_LLM_PROVIDER: override provider
     - SYNIX_LLM_MODEL: override model
     - SYNIX_LLM_BASE_URL: override base_url
-    - ANTHROPIC_API_KEY: API key for Anthropic provider
-    - OPENAI_API_KEY: API key for OpenAI / OpenAI-compatible providers
-    - DEEPSEEK_API_KEY: API key for DeepSeek provider
     """
 
     provider: str = "anthropic"
@@ -114,7 +117,13 @@ class EmbeddingConfig:
 
     Supports two backends:
     - "fastembed": Local ONNX-based embeddings (default, no API key needed)
-    - "openai": OpenAI API embeddings (requires OPENAI_API_KEY)
+    - "openai": OpenAI API embeddings
+
+    API key resolution order:
+    1. Explicit ``api_key`` field
+    2. Custom env var via ``api_key_env``
+    3. ``SYNIX_EMBEDDING_API_KEY``
+    4. ``OPENAI_API_KEY``
     """
 
     provider: str = "fastembed"
