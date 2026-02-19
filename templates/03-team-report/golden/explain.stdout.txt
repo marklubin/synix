@@ -22,7 +22,7 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 │   └── ← ./sources/brief (1 .md file)
 ├── work_styles  transform:MapSynthesis  <STATS>
 │   ├── ← bios
-│   └── cache: all components match (v2: callable config model source transform_id)
+│   └── cache: all components match (v2: config label_fn model source transform_id)
 ├── team_dynamics  transform:ReduceSynthesis  <STATS>
 │   ├── ← work_styles
 │   └── cache: all components match (v2: config model source transform_id)

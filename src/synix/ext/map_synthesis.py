@@ -8,10 +8,12 @@ from __future__ import annotations
 import hashlib
 import inspect
 import logging
+from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
 from synix.ext._render import render_template
+from synix.ext._util import stable_callable_repr
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,8 @@ class MapSynthesis(Transform):
         *,
         depends_on: list | None = None,
         prompt: str,
-        label_fn: object | None = None,
+        label_fn: Callable | None = None,
+        metadata_fn: Callable | None = None,
         artifact_type: str = "summary",
         config: dict | None = None,
         batch: bool | None = None,
@@ -46,24 +49,32 @@ class MapSynthesis(Transform):
         super().__init__(name, depends_on=depends_on, config=config, batch=batch)
         self.prompt = prompt
         self.label_fn = label_fn
+        self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt and artifact_type in cache key."""
-        parts = f"{self.prompt}\x00{self.artifact_type}"
+        """Include prompt, artifact_type, and metadata_fn in cache key."""
+        metadata_fn_str = stable_callable_repr(self.metadata_fn) if self.metadata_fn is not None else ""
+        parts = f"{self.prompt}\x00{self.artifact_type}\x00{metadata_fn_str}"
         return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
-        """Add callable fingerprint component if label_fn is set."""
+        """Add callable fingerprint components for label_fn and metadata_fn."""
         fp = super().compute_fingerprint(config)
+        callables = {}
         if self.label_fn is not None:
+            callables["label_fn"] = self.label_fn
+        if self.metadata_fn is not None:
+            callables["metadata_fn"] = self.metadata_fn
+        if callables:
             from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
 
             components = dict(fp.components)
-            try:
-                components["callable"] = fingerprint_value(inspect.getsource(self.label_fn))
-            except (OSError, TypeError):
-                components["callable"] = fingerprint_value(repr(self.label_fn))
+            for key, fn in callables.items():
+                try:
+                    components[key] = fingerprint_value(inspect.getsource(fn))
+                except (OSError, TypeError):
+                    components[key] = fingerprint_value(repr(fn))
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
@@ -92,6 +103,12 @@ class MapSynthesis(Transform):
         else:
             label = f"{self.name}-{inp.label}"
 
+        # Propagate input metadata, overlaid with transform-specific fields
+        output_metadata = dict(inp.metadata)
+        if self.metadata_fn is not None:
+            output_metadata.update(self.metadata_fn(inp))
+        output_metadata["source_label"] = inp.label
+
         return [
             Artifact(
                 label=label,
@@ -100,6 +117,7 @@ class MapSynthesis(Transform):
                 input_ids=[inp.artifact_id],
                 prompt_id=prompt_id,
                 model_config=model_config,
+                metadata=output_metadata,
             )
         ]
 

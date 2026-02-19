@@ -251,9 +251,6 @@ class SearchIndex(Layer):
         self.sources = sources
         self.search = search or ["fulltext"]
         self.embedding_config = embedding_config or {}
-        # Store embedding_config in self.config for downstream access
-        if embedding_config:
-            self.config["embedding_config"] = embedding_config
 
 
 class FlatFile(Layer):

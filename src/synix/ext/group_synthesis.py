@@ -9,10 +9,12 @@ import hashlib
 import inspect
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
 from synix.ext._render import render_template
+from synix.ext._util import stable_callable_repr
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +45,10 @@ class GroupSynthesis(Transform):
         name: str,
         *,
         depends_on: list | None = None,
-        group_by: str | object,
+        group_by: str | Callable,
         prompt: str,
         label_prefix: str | None = None,
+        metadata_fn: Callable | None = None,
         artifact_type: str = "summary",
         on_missing: str = "group",
         missing_key: str = "_ungrouped",
@@ -56,6 +59,7 @@ class GroupSynthesis(Transform):
         self.group_by = group_by
         self.prompt = prompt
         self.label_prefix = label_prefix
+        self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
         if on_missing not in ("group", "skip", "error"):
             raise ValueError(f"on_missing must be 'group', 'skip', or 'error', got {on_missing!r}")
@@ -63,22 +67,32 @@ class GroupSynthesis(Transform):
         self.missing_key = missing_key
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt, group_by, on_missing, missing_key, and artifact_type in cache key."""
-        group_by_str = self.group_by if isinstance(self.group_by, str) else repr(self.group_by)
-        parts = f"{self.prompt}\x00{group_by_str}\x00{self.on_missing}\x00{self.missing_key}\x00{self.artifact_type}"
+        """Include prompt, group_by, on_missing, missing_key, artifact_type, and metadata_fn in cache key."""
+        group_by_str = self.group_by if isinstance(self.group_by, str) else stable_callable_repr(self.group_by)
+        metadata_fn_str = stable_callable_repr(self.metadata_fn) if self.metadata_fn is not None else ""
+        parts = (
+            f"{self.prompt}\x00{group_by_str}\x00{self.on_missing}"
+            f"\x00{self.missing_key}\x00{self.artifact_type}\x00{metadata_fn_str}"
+        )
         return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
-        """Add callable fingerprint component if group_by is a callable."""
+        """Add callable fingerprint components for group_by and metadata_fn."""
         fp = super().compute_fingerprint(config)
+        callables = {}
         if callable(self.group_by) and not isinstance(self.group_by, str):
+            callables["group_by"] = self.group_by
+        if self.metadata_fn is not None:
+            callables["metadata_fn"] = self.metadata_fn
+        if callables:
             from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
 
             components = dict(fp.components)
-            try:
-                components["callable"] = fingerprint_value(inspect.getsource(self.group_by))
-            except (OSError, TypeError):
-                components["callable"] = fingerprint_value(repr(self.group_by))
+            for key, fn in callables.items():
+                try:
+                    components[key] = fingerprint_value(inspect.getsource(fn))
+                except (OSError, TypeError):
+                    components[key] = fingerprint_value(repr(fn))
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
@@ -168,6 +182,10 @@ class GroupSynthesis(Transform):
         slug = group_key.lower().replace(" ", "-")
         label = f"{prefix}-{slug}"
 
+        output_metadata = {"group_key": group_key, "input_count": len(inputs)}
+        if self.metadata_fn is not None:
+            output_metadata.update(self.metadata_fn(group_key, inputs))
+
         return [
             Artifact(
                 label=label,
@@ -176,7 +194,7 @@ class GroupSynthesis(Transform):
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
-                metadata={"group_key": group_key, "input_count": len(inputs)},
+                metadata=output_metadata,
             )
         ]
 

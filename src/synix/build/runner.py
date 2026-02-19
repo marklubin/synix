@@ -206,6 +206,25 @@ def run(
                     for artifact in artifacts:
                         _save_artifact(artifact)
 
+                # Build lookup of cached artifacts by sorted input_ids for per-unit cache checks
+                existing_artifacts = store.list_artifacts(layer.name)
+                cached_by_inputs: dict[tuple[str, ...], list[Artifact]] = {}
+                for art in existing_artifacts:
+                    stored_tfp_data = art.metadata.get("transform_fingerprint")
+                    if stored_tfp_data is not None:
+                        stored_fp = Fingerprint.from_dict(stored_tfp_data)
+                        if transform_fp.matches(stored_fp):
+                            key = tuple(sorted(art.input_ids))
+                            cached_by_inputs.setdefault(key, []).append(art)
+
+                def _on_cached(cached_arts: list[Artifact]) -> None:
+                    for cached_art in cached_arts:
+                        cached_art.metadata["layer_name"] = layer.name
+                        cached_art.metadata["layer_level"] = layer._level
+                        layer_built.append(cached_art)
+                        stats.cached += 1
+                        slogger.artifact_cached(layer.name, cached_art.label)
+
                 # Split inputs into work units
                 units = layer.split(inputs, transform_config)
                 use_concurrent = concurrency > 1 and len(units) > 1
@@ -217,9 +236,17 @@ def run(
                         transform_config,
                         concurrency,
                         on_complete=_on_batch_complete,
+                        cached_by_inputs=cached_by_inputs,
+                        on_cached=_on_cached,
                     )
                 else:
                     for unit_inputs, config_extras in units:
+                        # Per-unit cache check
+                        unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
+                        cached_arts = cached_by_inputs.get(unit_input_ids)
+                        if cached_arts:
+                            _on_cached(cached_arts)
+                            continue
                         merged_config = {**transform_config, **config_extras}
                         new_artifacts = layer.execute(unit_inputs, merged_config)
                         for artifact in new_artifacts:
@@ -354,6 +381,8 @@ def _execute_transform_concurrent(
     config: dict,
     concurrency: int,
     on_complete=None,
+    cached_by_inputs: dict[tuple[str, ...], list[Artifact]] | None = None,
+    on_cached=None,
 ) -> list[Artifact]:
     """Execute transform work units concurrently.
 
@@ -361,8 +390,26 @@ def _execute_transform_concurrent(
     Uses copy.copy(transform) per worker as a best-effort guard against
     accidental self mutation (shallow copy only — does NOT isolate nested
     mutable state).
+
+    Units whose input_ids match ``cached_by_inputs`` are skipped (reported
+    via ``on_cached``) and never submitted to the thread pool.
     """
-    results: list[list[Artifact] | Exception] = [None] * len(units)  # type: ignore[list-item]
+    # Filter out cached units before submitting to pool
+    units_to_run: list[tuple[int, list[Artifact], dict]] = []
+    for i, (unit_inputs, config_extras) in enumerate(units):
+        if cached_by_inputs:
+            unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
+            cached_arts = cached_by_inputs.get(unit_input_ids)
+            if cached_arts:
+                if on_cached:
+                    on_cached(cached_arts)
+                continue
+        units_to_run.append((i, unit_inputs, config_extras))
+
+    if not units_to_run:
+        return []
+
+    results: list[list[Artifact] | Exception] = [None] * len(units_to_run)  # type: ignore[list-item]
 
     # Keys that should be shared (not deep-copied) across workers because they
     # contain non-picklable objects (e.g. logger with file handles).
@@ -398,8 +445,8 @@ def _execute_transform_concurrent(
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
-            pool.submit(_run_one, i, unit_inputs, config_extras): i
-            for i, (unit_inputs, config_extras) in enumerate(units)
+            pool.submit(_run_one, seq_idx, unit_inputs, config_extras): seq_idx
+            for seq_idx, (_orig_idx, unit_inputs, config_extras) in enumerate(units_to_run)
         }
 
         for future in as_completed(futures):
@@ -477,7 +524,12 @@ def _materialize_all_projections(
     build_dir: Path,
     logger: SynixLogger | None = None,
 ) -> list[ProjectionStats]:
-    """Materialize all projections after the full build (with caching)."""
+    """Materialize all projections after the full build (with caching).
+
+    Uses split hashing: content hash (artifact IDs) and embedding config
+    hash are tracked independently. When only the embedding config changes,
+    FTS5 is preserved and only embeddings are regenerated.
+    """
     cache = _load_projection_cache(build_dir)
     stats: list[ProjectionStats] = []
 
@@ -495,44 +547,49 @@ def _materialize_all_projections(
         # Determine the last source layer (by build order) for triggered_by
         last_layer = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0)) if source_layer_names else None
 
-        # Get projection config for cache key
-        proj_config = _get_projection_config(proj)
+        # Compute separate hashes for content and embedding config
+        content_hash = _compute_content_only_hash(all_artifacts)
+        embedding_hash = _compute_embedding_config_hash(proj) if isinstance(proj, SearchIndex) else None
 
-        # Check cache — skip if hash matches (includes projection config)
-        current_hash = _compute_projection_hash(all_artifacts, proj_config)
         cached_entry = cache.get(proj.name)
-        if (
+        content_cached = (
             cached_entry is not None
-            and cached_entry.get("source_hash") == current_hash
+            and cached_entry.get("content_hash") == content_hash
             and cached_entry.get("artifact_count") == len(all_artifacts)
-        ):
+        )
+        embedding_cached = cached_entry is not None and cached_entry.get("embedding_hash") == embedding_hash
+
+        if content_cached and embedding_cached:
+            # Fully cached — skip everything
             if logger:
                 logger.projection_cached(proj.name, triggered_by=last_layer)
             stats.append(ProjectionStats(name=proj.name, status="cached"))
-            continue
+        elif content_cached and not embedding_cached and isinstance(proj, SearchIndex):
+            # FTS5 is fine, only re-embed
+            if logger:
+                logger.projection_start(proj.name, "search_index", triggered_by=last_layer)
+            _regenerate_embeddings_only(proj, all_artifacts, build_dir, logger=logger)
+            if logger:
+                logger.projection_finish(proj.name, triggered_by=last_layer)
+            stats.append(ProjectionStats(name=proj.name, status="built"))
+        else:
+            # Full rebuild
+            cached = _materialize_projection(
+                proj,
+                layer_artifacts,
+                build_dir,
+                logger=logger,
+                triggered_by=last_layer,
+            )
+            status = "cached" if cached else "built"
+            stats.append(ProjectionStats(name=proj.name, status=status))
 
-        # Materialize
-        cached = _materialize_projection(
-            proj,
-            layer_artifacts,
-            build_dir,
-            logger=logger,
-            triggered_by=last_layer,
-        )
-        status = "cached" if cached else "built"
-        stats.append(ProjectionStats(name=proj.name, status=status))
-
-        # Update cache
-        config_hash = (
-            hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
-            if proj_config
-            else None
-        )
+        # Update cache with split hashes
         cache[proj.name] = {
-            "source_hash": current_hash,
+            "content_hash": content_hash,
+            "embedding_hash": embedding_hash,
             "source_layers": source_layer_names,
             "artifact_count": len(all_artifacts),
-            "config_hash": config_hash,
         }
 
     _save_projection_cache(build_dir, cache)
@@ -601,6 +658,7 @@ def _materialize_projection(
             logger.warning("Projection %r unavailable: %s", proj.name, exc)
             return True
         config = dict(proj.config)
+        config["embedding_config"] = proj.embedding_config
         config["sources"] = sources_config
         if logger:
             config["_synix_logger"] = logger
@@ -628,6 +686,46 @@ def _compute_projection_hash(artifacts: list[Artifact], proj_config: dict | None
         config_str = json.dumps(proj_config, sort_keys=True, default=str)
         parts += "|config:" + config_str
     return hashlib.sha256(parts.encode()).hexdigest()
+
+
+def _compute_content_only_hash(artifacts: list[Artifact]) -> str:
+    """Compute a hash over sorted artifact IDs only (no config)."""
+    hashes = sorted(a.artifact_id for a in artifacts if a.artifact_id)
+    return hashlib.sha256("|".join(hashes).encode()).hexdigest()
+
+
+def _compute_embedding_config_hash(proj) -> str | None:
+    """Compute a hash over embedding identity fields only."""
+    if not isinstance(proj, SearchIndex):
+        return None
+    if not proj.embedding_config:
+        return None
+    # Only identity fields: provider, model, dimensions
+    identity = {
+        "provider": proj.embedding_config.get("provider", "fastembed"),
+        "model": proj.embedding_config.get("model", "BAAI/bge-small-en-v1.5"),
+        "dimensions": proj.embedding_config.get("dimensions"),
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def _regenerate_embeddings_only(
+    proj,
+    artifacts: list[Artifact],
+    build_dir: Path,
+    logger=None,
+) -> None:
+    """Re-generate embeddings without rebuilding FTS5."""
+    embedding_config = proj.embedding_config
+    if not embedding_config or not artifacts:
+        return
+    try:
+        projection = get_projection("search_index", build_dir)
+    except ValueError:
+        logger.warning("Cannot regenerate embeddings: search_index projection unavailable")
+        return
+    synix_logger = logger if logger else None
+    projection._generate_embeddings(embedding_config, artifacts, synix_logger)
 
 
 def _load_projection_cache(build_dir: Path) -> dict:

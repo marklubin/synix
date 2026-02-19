@@ -218,11 +218,14 @@ def _plan_layer(
 
     # Estimate parallel unit count from split() if the layer will be built
     if step.status != "cached" and inputs:
-        try:
-            units = layer.split(inputs, transform_config)
-            step.parallel_units = len(units)
-        except Exception:
-            step.parallel_units = 1
+        if upstream_dirty and hasattr(layer, "estimate_output_count"):
+            step.parallel_units = layer.estimate_output_count(len(inputs))
+        else:
+            try:
+                units = layer.split(inputs, transform_config)
+                step.parallel_units = len(units)
+            except Exception:
+                step.parallel_units = 1
 
     return step
 
@@ -620,7 +623,13 @@ def _plan_projection(
     store: ArtifactStore | None,
 ) -> ProjectionPlan:
     """Analyze a projection to determine its plan status."""
-    from synix.build.runner import PROJECTION_CACHE_FILE, _compute_projection_hash, _get_projection_config
+    from synix.build.runner import (
+        PROJECTION_CACHE_FILE,
+        _compute_content_only_hash,
+        _compute_embedding_config_hash,
+        _compute_projection_hash,
+        _get_projection_config,
+    )
 
     source_layers = [s.name for s in proj.sources]
     build_dir = Path(pipeline.build_dir)
@@ -668,28 +677,57 @@ def _plan_projection(
             embedding_config=embedding_config,
         )
 
-    # Compute current hash including projection config
-    proj_config = _get_projection_config(proj)
-    current_hash = _compute_projection_hash(all_artifacts, proj_config)
+    # Support both old (source_hash) and new (content_hash/embedding_hash) cache formats
+    if "content_hash" in cached_entry:
+        # New split-hash format
+        content_hash = _compute_content_only_hash(all_artifacts)
+        emb_hash = _compute_embedding_config_hash(proj) if isinstance(proj, SearchIndex) else None
 
-    if cached_entry.get("source_hash") == current_hash and cached_entry.get("artifact_count") == artifact_count:
-        return ProjectionPlan(
-            name=proj.name,
-            projection_type=proj_type,
-            source_layers=source_layers,
-            status="cached",
-            artifact_count=artifact_count,
-            reason="all cached",
-            embedding_config=embedding_config,
+        content_cached = (
+            cached_entry.get("content_hash") == content_hash and cached_entry.get("artifact_count") == artifact_count
         )
+        embedding_cached = cached_entry.get("embedding_hash") == emb_hash
 
-    # Determine reason: check if config changed vs artifacts changed
-    reason = "source artifacts changed"
-    if cached_entry.get("config_hash") is not None and proj_config:
-        old_config_hash = cached_entry["config_hash"]
-        new_config_hash = hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
-        if old_config_hash != new_config_hash:
-            reason = "projection config changed"
+        if content_cached and embedding_cached:
+            return ProjectionPlan(
+                name=proj.name,
+                projection_type=proj_type,
+                source_layers=source_layers,
+                status="cached",
+                artifact_count=artifact_count,
+                reason="all cached",
+                embedding_config=embedding_config,
+            )
+
+        # Determine reason
+        reasons = []
+        if not content_cached:
+            reasons.append("source artifacts changed")
+        if not embedding_cached:
+            reasons.append("embedding config changed")
+        reason = ", ".join(reasons)
+    else:
+        # Legacy format — single source_hash
+        proj_config = _get_projection_config(proj)
+        current_hash = _compute_projection_hash(all_artifacts, proj_config)
+
+        if cached_entry.get("source_hash") == current_hash and cached_entry.get("artifact_count") == artifact_count:
+            return ProjectionPlan(
+                name=proj.name,
+                projection_type=proj_type,
+                source_layers=source_layers,
+                status="cached",
+                artifact_count=artifact_count,
+                reason="all cached",
+                embedding_config=embedding_config,
+            )
+
+        reason = "source artifacts changed"
+        if cached_entry.get("config_hash") is not None and proj_config:
+            old_config_hash = cached_entry["config_hash"]
+            new_config_hash = hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
+            if old_config_hash != new_config_hash:
+                reason = "projection config changed"
 
     return ProjectionPlan(
         name=proj.name,

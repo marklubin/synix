@@ -6,11 +6,14 @@ Combines all input artifacts into a single output via a prompt template.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import logging
+from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform
 from synix.ext._render import render_template
+from synix.ext._util import stable_callable_repr
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class ReduceSynthesis(Transform):
         depends_on: list | None = None,
         prompt: str,
         label: str,
+        metadata_fn: Callable | None = None,
         artifact_type: str = "summary",
         config: dict | None = None,
         batch: bool | None = None,
@@ -46,12 +50,28 @@ class ReduceSynthesis(Transform):
         super().__init__(name, depends_on=depends_on, config=config, batch=batch)
         self.prompt = prompt
         self.label_value = label
+        self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt and artifact_type in cache key."""
-        parts = f"{self.prompt}\x00{self.artifact_type}"
+        """Include prompt, artifact_type, and metadata_fn in cache key."""
+        metadata_fn_str = stable_callable_repr(self.metadata_fn) if self.metadata_fn is not None else ""
+        parts = f"{self.prompt}\x00{self.artifact_type}\x00{metadata_fn_str}"
         return hashlib.sha256(parts.encode()).hexdigest()[:16]
+
+    def compute_fingerprint(self, config: dict):
+        """Add callable fingerprint component if metadata_fn is set."""
+        fp = super().compute_fingerprint(config)
+        if self.metadata_fn is not None:
+            from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
+
+            components = dict(fp.components)
+            try:
+                components["metadata_fn"] = fingerprint_value(inspect.getsource(self.metadata_fn))
+            except (OSError, TypeError):
+                components["metadata_fn"] = fingerprint_value(repr(self.metadata_fn))
+            return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
+        return fp
 
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """N:1 — all inputs in a single unit."""
@@ -82,6 +102,10 @@ class ReduceSynthesis(Transform):
             artifact_desc=f"{self.name}",
         )
 
+        output_metadata = {"input_count": len(inputs)}
+        if self.metadata_fn is not None:
+            output_metadata.update(self.metadata_fn(inputs))
+
         return [
             Artifact(
                 label=self.label_value,
@@ -90,7 +114,7 @@ class ReduceSynthesis(Transform):
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
-                metadata={"input_count": len(inputs)},
+                metadata=output_metadata,
             )
         ]
 

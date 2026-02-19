@@ -160,7 +160,7 @@ class TestMapSynthesis:
         fn = lambda a: a.label  # noqa: E731
         t = MapSynthesis("ws", prompt="x", label_fn=fn)
         fp = t.compute_fingerprint({})
-        assert "callable" in fp.components
+        assert "label_fn" in fp.components
 
     def test_fingerprint_without_callable(self):
         """Fingerprint omits callable when label_fn is None."""
@@ -360,7 +360,7 @@ class TestGroupSynthesis:
         fn = lambda a: "x"  # noqa: E731
         t = GroupSynthesis("s", group_by=fn, prompt="x")
         fp = t.compute_fingerprint({})
-        assert "callable" in fp.components
+        assert "group_by" in fp.components
 
     def test_cache_key_changes_with_group_by(self):
         """Different group_by keys produce different cache keys."""
@@ -589,7 +589,7 @@ class TestFoldSynthesis:
         fn = lambda a: a.label  # noqa: E731
         t = FoldSynthesis("fold", prompt="x", sort_by=fn, label="out")
         fp = t.compute_fingerprint({})
-        assert "callable" in fp.components
+        assert "sort_by" in fp.components
 
     def test_batch_always_false(self):
         """FoldSynthesis always has batch=False."""

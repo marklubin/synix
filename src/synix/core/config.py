@@ -31,13 +31,16 @@ class LLMConfig:
 
     Config precedence: explicit config > env vars > defaults.
 
-    Environment variables:
+    API key resolution order:
+    1. Explicit ``api_key`` field
+    2. Custom env var via ``api_key_env`` (e.g. ``"TOGETHER_API_KEY"``)
+    3. ``SYNIX_API_KEY`` (universal fallback for all providers)
+    4. Provider-specific env var (ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
+
+    Other environment variables:
     - SYNIX_LLM_PROVIDER: override provider
     - SYNIX_LLM_MODEL: override model
     - SYNIX_LLM_BASE_URL: override base_url
-    - ANTHROPIC_API_KEY: API key for Anthropic provider
-    - OPENAI_API_KEY: API key for OpenAI / OpenAI-compatible providers
-    - DEEPSEEK_API_KEY: API key for DeepSeek provider
     """
 
     provider: str = "anthropic"
@@ -47,6 +50,7 @@ class LLMConfig:
     max_completion_tokens: int | None = None  # OpenAI reasoning/newer models; overrides max_tokens
     base_url: str | None = None  # For OpenAI-compatible APIs (Ollama, vLLM, DeepSeek)
     api_key: str | None = None  # Override; defaults to env var
+    api_key_env: str | None = None  # Custom env var name (e.g. "TOGETHER_API_KEY")
 
     @classmethod
     def from_dict(cls, data: dict) -> LLMConfig:
@@ -83,13 +87,22 @@ class LLMConfig:
             config.base_url = data["base_url"]
         if "api_key" in data:
             config.api_key = data["api_key"]
+        if "api_key_env" in data:
+            config.api_key_env = data["api_key_env"]
 
         return config
 
     def resolve_api_key(self) -> str | None:
-        """Resolve the API key: explicit > env var per provider."""
+        """Resolve the API key: explicit > api_key_env > SYNIX_API_KEY > provider default."""
         if self.api_key:
             return self.api_key
+        if self.api_key_env:
+            val = os.environ.get(self.api_key_env)
+            if val:
+                return val
+        synix_key = os.environ.get("SYNIX_API_KEY")
+        if synix_key:
+            return synix_key
         if self.provider == "anthropic":
             return os.environ.get("ANTHROPIC_API_KEY")
         if self.provider == "deepseek":
@@ -104,15 +117,22 @@ class EmbeddingConfig:
 
     Supports two backends:
     - "fastembed": Local ONNX-based embeddings (default, no API key needed)
-    - "openai": OpenAI API embeddings (requires OPENAI_API_KEY)
+    - "openai": OpenAI API embeddings
+
+    API key resolution order:
+    1. Explicit ``api_key`` field
+    2. Custom env var via ``api_key_env``
+    3. ``SYNIX_EMBEDDING_API_KEY``
+    4. ``OPENAI_API_KEY``
     """
 
     provider: str = "fastembed"
     model: str = "BAAI/bge-small-en-v1.5"
-    dimensions: int = 384
+    dimensions: int | None = None
     base_url: str | None = None
     api_key: str | None = None
-    batch_size: int = 64
+    api_key_env: str | None = None  # Custom env var name
+    batch_size: int = 16
     concurrency: int = 4  # concurrent API calls (OpenAI only; ignored for FastEmbed)
 
     @classmethod
@@ -129,6 +149,8 @@ class EmbeddingConfig:
             config.base_url = data["base_url"]
         if "api_key" in data:
             config.api_key = data["api_key"]
+        if "api_key_env" in data:
+            config.api_key_env = data["api_key_env"]
         if "batch_size" in data:
             config.batch_size = data["batch_size"]
         if "concurrency" in data:
@@ -136,7 +158,20 @@ class EmbeddingConfig:
         return config
 
     def resolve_api_key(self) -> str | None:
-        """Resolve the API key: explicit > env var."""
+        """Resolve the API key: explicit > api_key_env > SYNIX_EMBEDDING_API_KEY > OPENAI_API_KEY."""
         if self.api_key:
             return self.api_key
+        if self.api_key_env:
+            val = os.environ.get(self.api_key_env)
+            if val:
+                return val
+        synix_key = os.environ.get("SYNIX_EMBEDDING_API_KEY")
+        if synix_key:
+            return synix_key
         return os.environ.get("OPENAI_API_KEY")
+
+    def resolve_base_url(self) -> str | None:
+        """Resolve base URL: explicit > env var."""
+        if self.base_url:
+            return self.base_url
+        return os.environ.get("OPENAI_BASE_URL")
