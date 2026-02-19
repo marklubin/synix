@@ -1,6 +1,6 @@
 """Synix — A build system for agent memory."""
 
-__version__ = "0.12.2"
+__version__ = "0.13.0"
 
 from synix.core.models import (  # noqa: F401
     Artifact,
