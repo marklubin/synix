@@ -72,6 +72,18 @@ class DeployConfig:
 
 
 @dataclass
+class LoggingConfig:
+    file_level: str = "DEBUG"
+    stderr_level: str = "INFO"
+
+    def get_file_level(self) -> int:
+        return getattr(logging, self.file_level.upper(), logging.DEBUG)
+
+    def get_stderr_level(self) -> int:
+        return getattr(logging, self.stderr_level.upper(), logging.INFO)
+
+
+@dataclass
 class NotificationConfig:
     webhook_url: str = ""
     source: str = ""
@@ -89,6 +101,7 @@ class MeshConfig:
     bundle: BundleConfig = field(default_factory=BundleConfig)
     deploy: DeployConfig = field(default_factory=DeployConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
+    logging_config: LoggingConfig = field(default_factory=LoggingConfig)
 
     @property
     def mesh_dir(self) -> Path:
@@ -183,6 +196,13 @@ def load_mesh_config(path: Path) -> MeshConfig:
         source=notif.get("source", name),
     )
 
+    # Logging config
+    log_cfg = data.get("logging", {})
+    logging_config = LoggingConfig(
+        file_level=log_cfg.get("file_level", LoggingConfig.file_level),
+        stderr_level=log_cfg.get("stderr_level", LoggingConfig.stderr_level),
+    )
+
     # Env var overrides
     if env_port := os.environ.get("SYNIX_MESH_PORT"):
         server.port = int(env_port)
@@ -200,6 +220,7 @@ def load_mesh_config(path: Path) -> MeshConfig:
         bundle=bundle,
         deploy=deploy,
         notifications=notifications,
+        logging_config=logging_config,
     )
 
 
@@ -208,9 +229,11 @@ def ensure_mesh_dirs(config: MeshConfig, role: str) -> None:
     mesh_dir = config.mesh_dir
     mesh_dir.mkdir(parents=True, exist_ok=True)
 
+    (mesh_dir / "logs").mkdir(parents=True, exist_ok=True)
     if role == "server":
         (mesh_dir / "server" / "sessions").mkdir(parents=True, exist_ok=True)
         (mesh_dir / "server" / "build").mkdir(parents=True, exist_ok=True)
         (mesh_dir / "server" / "bundles").mkdir(parents=True, exist_ok=True)
     elif role == "client":
         (mesh_dir / "client" / "build").mkdir(parents=True, exist_ok=True)
+        (mesh_dir / "client" / "sessions-archive").mkdir(parents=True, exist_ok=True)

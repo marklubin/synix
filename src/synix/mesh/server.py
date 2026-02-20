@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import json
 import logging
@@ -12,11 +13,12 @@ from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from synix.mesh.auth import AuthMiddleware
 from synix.mesh.config import MeshConfig
+from synix.mesh.logging import mesh_event
 from synix.mesh.scheduler import BuildScheduler
 from synix.mesh.store import SessionStore
 
@@ -38,13 +40,41 @@ def create_app(config: MeshConfig) -> Starlette:
         max_delay=config.server.build_max_delay,
     )
 
-    # Track cluster state
+    # Track cluster state — protected by _state_lock (1F)
     start_time = time.time()
     build_count = 0
     members: dict[str, dict] = {}  # hostname -> {last_heartbeat, term_counter, ...}
     current_bundle_etag: str = ""
     current_bundle_path: Path | None = None
     _build_task: asyncio.Task | None = None  # tracked to prevent GC
+    _state_lock = asyncio.Lock()
+
+    # --- Term fencing helper (1C) ---
+    def _check_term(request: Request) -> JSONResponse | None:
+        """Check term from request headers. Returns 409 response if stale, None if OK."""
+        raw_term = request.headers.get("X-Mesh-Term", "")
+        if not raw_term:
+            return None  # No term header = no fencing (backward compat)
+        try:
+            request_term = int(raw_term)
+        except ValueError:
+            return None
+        # Check against highest known term from any member
+        max_known_term = 0
+        for info in members.values():
+            member_term = info.get("term_counter", 0)
+            if member_term > max_known_term:
+                max_known_term = member_term
+        if request_term < max_known_term:
+            return JSONResponse(
+                {
+                    "error": "stale term",
+                    "current_term": max_known_term,
+                    "received_term": request_term,
+                },
+                status_code=409,
+            )
+        return None
 
     async def health(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
@@ -52,18 +82,24 @@ def create_app(config: MeshConfig) -> Starlette:
     async def status(request: Request) -> JSONResponse:
         counts = store.count()
         uptime = time.time() - start_time
-        return JSONResponse(
-            {
-                "status": "ok",
-                "build_count": build_count,
-                "sessions": counts,
-                "uptime_seconds": round(uptime, 1),
-                "members": list(members.keys()),
-                "scheduler": scheduler.get_status(),
-            }
-        )
+        async with _state_lock:
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "build_count": build_count,
+                    "sessions": counts,
+                    "uptime_seconds": round(uptime, 1),
+                    "members": list(members.keys()),
+                    "scheduler": scheduler.get_status(),
+                }
+            )
 
     async def submit_session(request: Request) -> JSONResponse:
+        # Term fencing (1C)
+        term_err = _check_term(request)
+        if term_err is not None:
+            return term_err
+
         try:
             body = await request.json()
         except (json.JSONDecodeError, ValueError) as exc:
@@ -100,6 +136,14 @@ def create_app(config: MeshConfig) -> Starlette:
         is_new = store.submit(session_id, project_dir, content, submitted_by)
 
         if is_new:
+            actual_sha = expected_sha256 or hashlib.sha256(content).hexdigest()
+            mesh_event(
+                logger,
+                logging.INFO,
+                f"Session submitted: {session_id} from {submitted_by}",
+                "session_submitted",
+                {"hostname": submitted_by, "session_id": session_id, "sha256": actual_sha, "project_dir": project_dir},
+            )
             await scheduler.notify_new_session()
 
         return JSONResponse(
@@ -112,10 +156,17 @@ def create_app(config: MeshConfig) -> Starlette:
 
     async def trigger_build(request: Request) -> JSONResponse:
         nonlocal _build_task
+
+        # Term fencing (1C)
+        term_err = _check_term(request)
+        if term_err is not None:
+            return term_err
+
         result = await scheduler.force_rebuild()
         status_code = 200 if result == "started" else 202
         if result == "started":
-            _build_task = asyncio.create_task(_run_build())
+            async with _state_lock:
+                _build_task = asyncio.create_task(_run_build())
         return JSONResponse({"status": result}, status_code=status_code)
 
     async def artifact_manifest(request: Request) -> JSONResponse:
@@ -131,8 +182,7 @@ def create_app(config: MeshConfig) -> Starlette:
         return JSONResponse(manifest, headers=headers)
 
     async def artifact_bundle(request: Request) -> Response:
-        nonlocal current_bundle_path, current_bundle_etag
-
+        """Serve the current build bundle using FileResponse for streaming (1E)."""
         if current_bundle_path is None or not current_bundle_path.exists():
             return JSONResponse({"error": "no bundle available"}, status_code=404)
 
@@ -141,9 +191,21 @@ def create_app(config: MeshConfig) -> Starlette:
         if if_none_match and if_none_match == current_bundle_etag:
             return Response(status_code=304)
 
-        bundle_bytes = current_bundle_path.read_bytes()
-        return Response(
-            content=bundle_bytes,
+        requester = request.headers.get("X-Mesh-Node", "unknown")
+        bundle_size = current_bundle_path.stat().st_size
+        mesh_event(
+            logger,
+            logging.INFO,
+            f"Artifact pull by {requester}",
+            "artifact_pull",
+            {
+                "hostname": requester,
+                "etag": current_bundle_etag,
+                "bundle_size": bundle_size,
+            },
+        )
+        return FileResponse(
+            path=str(current_bundle_path),
             media_type="application/gzip",
             headers={
                 "ETag": current_bundle_etag,
@@ -236,45 +298,111 @@ def create_app(config: MeshConfig) -> Starlette:
                 status_code=409,
             )
 
-        # Term fencing — reject stale terms (compare counter as int)
-        current_member = members.get(hostname)
-        if current_member:
-            stored_counter = current_member.get("term_counter", 0)
-            if stored_counter > term_counter:
-                return JSONResponse(
-                    {
-                        "error": "stale term",
-                        "current_counter": stored_counter,
-                        "received_counter": term_counter,
-                    },
-                    status_code=409,
-                )
+        async with _state_lock:
+            # Term fencing — reject stale terms (compare counter as int)
+            current_member = members.get(hostname)
+            if current_member:
+                stored_counter = current_member.get("term_counter", 0)
+                if stored_counter > term_counter:
+                    return JSONResponse(
+                        {
+                            "error": "stale term",
+                            "current_counter": stored_counter,
+                            "received_counter": term_counter,
+                        },
+                        status_code=409,
+                    )
 
-        members[hostname] = {
-            "last_heartbeat": time.time(),
-            "term_counter": term_counter,
-            "term_leader": term_leader,
-            "config_hash": config_hash_received,
-        }
+            members[hostname] = {
+                "last_heartbeat": time.time(),
+                "term_counter": term_counter,
+                "term_leader": term_leader,
+                "config_hash": config_hash_received,
+            }
 
+        mesh_event(
+            logger,
+            logging.DEBUG,
+            f"Heartbeat from {hostname}",
+            "heartbeat_received",
+            {
+                "hostname": hostname,
+                "term_counter": term_counter,
+                "config_hash": config_hash_received,
+            },
+        )
         return JSONResponse({"status": "ok", "members": len(members)})
 
-    async def cluster_state(request: Request) -> JSONResponse:
+    async def cluster_info(request: Request) -> JSONResponse:
+        async with _state_lock:
+            return JSONResponse(
+                {
+                    "members": {
+                        hostname: {
+                            "last_heartbeat": info["last_heartbeat"],
+                            "term": {
+                                "counter": info.get("term_counter", 0),
+                                "leader_id": info.get("term_leader", ""),
+                            },
+                        }
+                        for hostname, info in members.items()
+                    },
+                    "config_hash": config.cluster.config_hash,
+                    "member_count": len(members),
+                }
+            )
+
+    # --- Session sync endpoints (Part 2) ---
+    _sessions_manifest_etag: str = ""
+
+    async def sessions_manifest(request: Request) -> Response:
+        """Return JSON manifest of all sessions for client sync."""
+        nonlocal _sessions_manifest_etag
+
+        all_sessions = store.list_all_sessions()
+        # Compute ETag from sorted session IDs + project_dirs
+        etag_payload = "|".join(f"{s['session_id']}:{s['project_dir']}" for s in all_sessions)
+        etag = f'"{hashlib.sha256(etag_payload.encode()).hexdigest()[:16]}"'
+        _sessions_manifest_etag = etag
+
+        # Check If-None-Match
+        if_none_match = request.headers.get("If-None-Match", "")
+        if if_none_match and if_none_match == etag:
+            return Response(status_code=304)
+
         return JSONResponse(
             {
-                "members": {
-                    hostname: {
-                        "last_heartbeat": info["last_heartbeat"],
-                        "term": {
-                            "counter": info.get("term_counter", 0),
-                            "leader_id": info.get("term_leader", ""),
-                        },
+                "sessions": [
+                    {
+                        "session_id": s["session_id"],
+                        "project_dir": s["project_dir"],
+                        "jsonl_sha256": s["jsonl_sha256"],
                     }
-                    for hostname, info in members.items()
-                },
-                "config_hash": config.cluster.config_hash,
-                "member_count": len(members),
-            }
+                    for s in all_sessions
+                ],
+                "count": len(all_sessions),
+            },
+            headers={"ETag": etag},
+        )
+
+    async def session_file(request: Request) -> Response:
+        """Download a raw .jsonl.gz session file."""
+        session_id = request.path_params["session_id"]
+        project_dir = request.query_params.get("project_dir", "default")
+
+        file_path = store.get_session_file_path(session_id, project_dir)
+        if file_path is None:
+            return JSONResponse(
+                {"error": "session file not found", "session_id": session_id, "project_dir": project_dir},
+                status_code=404,
+            )
+
+        return FileResponse(
+            path=str(file_path),
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{file_path.name}"',
+            },
         )
 
     async def _run_build() -> None:
@@ -286,7 +414,19 @@ def create_app(config: MeshConfig) -> Starlette:
             logger.warning("Build already running, skipping", exc_info=True)
             return
 
+        pending_count = scheduler.pending_count
+        mesh_event(
+            logger,
+            logging.INFO,
+            f"Build started ({pending_count} pending)",
+            "build_started",
+            {
+                "pending_count": pending_count,
+            },
+        )
+
         while True:
+            build_start = time.time()
             try:
                 build_dir = server_dir / "build"
                 build_dir.mkdir(parents=True, exist_ok=True)
@@ -305,13 +445,22 @@ def create_app(config: MeshConfig) -> Starlette:
                 pipeline.build_dir = str(build_dir)
                 result = await asyncio.to_thread(run, pipeline, source_dir=source_dir)
 
-                build_count += 1
-                logger.info(
-                    "Build #%d completed: built=%d cached=%d time=%.1fs",
-                    build_count,
-                    result.built,
-                    result.cached,
-                    result.total_time,
+                async with _state_lock:
+                    build_count += 1
+                    local_build_count = build_count
+
+                build_duration = time.time() - build_start
+                mesh_event(
+                    logger,
+                    logging.INFO,
+                    f"Build #{local_build_count} completed: built={result.built} cached={result.cached}",
+                    "build_completed",
+                    {
+                        "build_number": local_build_count,
+                        "duration": round(build_duration, 1),
+                        "built": result.built,
+                        "cached": result.cached,
+                    },
                 )
 
                 # 4. Run server deploy hooks
@@ -327,7 +476,7 @@ def create_app(config: MeshConfig) -> Starlette:
                     except Exception:
                         logger.error("Deploy hooks failed", exc_info=True)
 
-                # 5. Create bundle
+                # 5. Create bundle — pre-compute ETag (1E)
                 try:
                     from synix.mesh.package import create_bundle
 
@@ -337,17 +486,29 @@ def create_app(config: MeshConfig) -> Starlette:
                         config.bundle.include,
                         config.bundle.exclude,
                     )
-                    current_bundle_path = bundle_path
-                    bundle_hash = hashlib.sha256(bundle_path.read_bytes()).hexdigest()[:16]
-                    current_bundle_etag = f'"{bundle_hash}"'
+                    bundle_bytes = bundle_path.read_bytes()
+                    bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()[:16]
+                    async with _state_lock:
+                        current_bundle_path = bundle_path
+                        current_bundle_etag = f'"{bundle_hash}"'
+                    mesh_event(
+                        logger,
+                        logging.INFO,
+                        f"Bundle created: {bundle_path.name}",
+                        "bundle_created",
+                        {
+                            "size_bytes": len(bundle_bytes),
+                            "etag": f'"{bundle_hash}"',
+                        },
+                    )
                 except Exception:
                     logger.error("Bundle creation failed", exc_info=True)
 
                 # 6. Mark sessions as processed
                 unprocessed = store.get_unprocessed()
                 if unprocessed:
-                    session_ids = [s["session_id"] for s in unprocessed]
-                    store.mark_processed(session_ids)
+                    session_keys = [(s["session_id"], s["project_dir"]) for s in unprocessed]
+                    store.mark_processed(session_keys)
 
                 # 7. Send notification
                 if config.notifications.webhook_url:
@@ -359,7 +520,7 @@ def create_app(config: MeshConfig) -> Starlette:
                             config.notifications.source,
                             "build_complete",
                             {
-                                "build_number": build_count,
+                                "build_number": local_build_count,
                                 "built": result.built,
                                 "cached": result.cached,
                                 "time": result.total_time,
@@ -368,28 +529,55 @@ def create_app(config: MeshConfig) -> Starlette:
                     except Exception:
                         logger.error("Notification failed", exc_info=True)
 
-            except Exception:
-                logger.error("Build failed", exc_info=True)
+            except Exception as exc:
+                mesh_event(logger, logging.ERROR, f"Build failed: {exc}", "build_failed", {"error": str(exc)})
 
             # 8. Complete scheduler and check if another build is needed
             needs_another = await scheduler.complete_build()
             if not needs_another:
                 break
 
+    # --- Scheduler background loop (1B) ---
+    async def _scheduler_loop() -> None:
+        """Poll scheduler and auto-start builds when thresholds are met."""
+        nonlocal _build_task
+        while True:
+            await asyncio.sleep(30)
+            try:
+                if await scheduler.should_build():
+                    async with _state_lock:
+                        if _build_task is None or _build_task.done():
+                            _build_task = asyncio.create_task(_run_build())
+            except Exception:
+                logger.warning("Scheduler loop check failed", exc_info=True)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: Starlette):
+        """Start background scheduler loop on startup."""
+        task = asyncio.create_task(_scheduler_loop())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
     routes = [
         Route("/api/v1/health", health),
         Route("/api/v1/status", status),
         Route("/api/v1/sessions", submit_session, methods=["POST"]),
+        Route("/api/v1/sessions/manifest", sessions_manifest),
+        Route("/api/v1/sessions/{session_id}/file", session_file),
         Route("/api/v1/builds/status", build_status),
         Route("/api/v1/builds/trigger", trigger_build, methods=["POST"]),
         Route("/api/v1/artifacts/manifest", artifact_manifest),
         Route("/api/v1/artifacts/bundle", artifact_bundle),
         Route("/api/v1/search", search, methods=["POST"]),
         Route("/api/v1/heartbeat", heartbeat, methods=["POST"]),
-        Route("/api/v1/cluster", cluster_state),
+        Route("/api/v1/cluster", cluster_info),
     ]
 
-    app = Starlette(routes=routes)
+    app = Starlette(routes=routes, lifespan=lifespan)
     app.add_middleware(AuthMiddleware, token=config.token)
 
     # Attach components for testing access

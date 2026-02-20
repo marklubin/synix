@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 import shlex
 import subprocess
+import time
 from pathlib import Path
+
+from synix.mesh.logging import mesh_event
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +24,16 @@ def run_deploy_hooks(commands: list[str], build_dir: Path) -> None:
     """
     for cmd in commands:
         rendered = cmd.replace("{build_dir}", shlex.quote(str(build_dir)))
-        logger.info("Running deploy hook: %s", rendered)
+        mesh_event(
+            logger,
+            logging.INFO,
+            f"Deploy hook started: {rendered}",
+            "deploy_started",
+            {
+                "command": rendered,
+            },
+        )
+        start = time.time()
         result = subprocess.run(
             rendered,
             shell=True,
@@ -30,12 +42,23 @@ def run_deploy_hooks(commands: list[str], build_dir: Path) -> None:
             capture_output=True,
             text=True,
         )
+        duration = time.time() - start
         if result.returncode != 0:
-            logger.error(
-                "Deploy hook failed: cmd=%r rc=%d stderr=%s",
-                rendered,
-                result.returncode,
-                result.stderr,
+            mesh_event(
+                logger,
+                logging.ERROR,
+                f"Deploy hook failed: {rendered} (rc={result.returncode})",
+                "deploy_failed",
+                {"command": rendered, "returncode": result.returncode, "stderr": result.stderr[:500]},
             )
             raise RuntimeError(f"Deploy hook failed (rc={result.returncode}): {rendered}")
-        logger.debug("Deploy hook succeeded: %s", rendered)
+        mesh_event(
+            logger,
+            logging.INFO,
+            f"Deploy hook completed: {rendered}",
+            "deploy_completed",
+            {
+                "command": rendered,
+                "duration": round(duration, 1),
+            },
+        )

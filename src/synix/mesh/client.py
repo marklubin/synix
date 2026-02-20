@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gzip
 import hashlib
 import json
 import logging
@@ -21,6 +22,7 @@ from synix.mesh.cluster import (
 )
 from synix.mesh.config import MeshConfig
 from synix.mesh.deploy import run_deploy_hooks
+from synix.mesh.logging import mesh_event
 from synix.mesh.package import extract_bundle
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class MeshClient:
         self.server_url = self.cluster_state.server_url
         self._submitted: set[str] = set()  # sha256 hashes of submitted files
         self._current_etag = ""
+        self._archive_etag = ""  # ETag for sessions manifest
         self._consecutive_heartbeat_failures = 0
         self._running = False
         self._http: httpx.AsyncClient | None = None
@@ -118,10 +121,19 @@ class MeshClient:
                 json=payload,
                 headers=headers,
             )
-            if resp.status_code == 200:
+            if resp.status_code in (200, 201):
                 self._submitted.add(sha256)
                 self._save_submitted_state()
-                logger.info("Submitted %s (sha256=%s...)", file_path.name, sha256[:12])
+                mesh_event(
+                    logger,
+                    logging.INFO,
+                    f"Submitted {file_path.name}",
+                    "file_submitted",
+                    {
+                        "file_name": file_path.name,
+                        "sha256": sha256,
+                    },
+                )
             else:
                 logger.warning(
                     "Submit failed for %s: %s %s",
@@ -134,12 +146,17 @@ class MeshClient:
 
     # --- Puller loop ---
     async def _puller_loop(self):
-        """Periodically check for new artifact bundles."""
+        """Periodically check for new artifact bundles, then sync sessions."""
         while self._running:
             try:
                 await self._pull_artifacts()
             except Exception:
                 logger.warning("Pull failed", exc_info=True)
+            # Session sync — lower priority, runs after each pull cycle
+            try:
+                await self._sync_sessions()
+            except Exception:
+                logger.warning("Session sync failed", exc_info=True)
             await asyncio.sleep(self.config.client.pull_interval)
 
     async def _pull_artifacts(self):
@@ -174,9 +191,15 @@ class MeshClient:
                 except RuntimeError:
                     logger.warning("Client deploy hooks failed", exc_info=True)
 
-            logger.info(
-                "Pulled and deployed new artifacts (etag=%s)",
-                self._current_etag[:12] if self._current_etag else "none",
+            mesh_event(
+                logger,
+                logging.INFO,
+                f"Artifacts pulled (etag={self._current_etag[:12]})",
+                "artifacts_pulled",
+                {
+                    "etag": self._current_etag,
+                    "bundle_size": len(resp.content),
+                },
             )
         elif resp.status_code == 404:
             logger.debug("No bundle available yet")
@@ -194,7 +217,13 @@ class MeshClient:
                 else:
                     self._consecutive_heartbeat_failures += 1
                     if self._consecutive_heartbeat_failures >= 3:
-                        logger.warning("3 consecutive heartbeat failures — triggering election")
+                        mesh_event(
+                            logger,
+                            logging.WARNING,
+                            "3 consecutive heartbeat failures — triggering election",
+                            "election_triggered",
+                            {"consecutive_failures": self._consecutive_heartbeat_failures},
+                        )
                         await self._trigger_election()
                         self._consecutive_heartbeat_failures = 0
             except Exception:
@@ -239,21 +268,55 @@ class MeshClient:
             except Exception:
                 return False
 
-        winner = elect_leader(
+        # elect_leader uses sync ping_fn — run in thread to avoid blocking event loop
+        winner = await asyncio.to_thread(
+            elect_leader,
             self.config.cluster.leader_candidates,
             ping_fn,
             self.cluster_state.my_hostname,
         )
 
         if winner == self.cluster_state.my_hostname:
-            logger.info("Won election — promoting to server")
+            mesh_event(
+                logger,
+                logging.INFO,
+                f"Election result: {winner} (self)",
+                "election_result",
+                {
+                    "winner": winner,
+                    "new_term": self.cluster_state.term.counter + 1,
+                },
+            )
+            # Bootstrap server store from local session archive before promoting
+            archive_dir = self.config.mesh_dir / "client" / "sessions-archive"
+            if archive_dir.exists() and any(archive_dir.rglob("*.jsonl.gz")):
+                from synix.mesh.store import SessionStore
+
+                server_dir = self.config.mesh_dir / "server"
+                server_dir.mkdir(parents=True, exist_ok=True)
+                imported = SessionStore.bootstrap_from_archive(
+                    db_path=server_dir / "sessions.db",
+                    sessions_dir=server_dir / "sessions",
+                    archive_dir=archive_dir,
+                )
+                logger.info("Bootstrapped %d sessions from archive for new leader", imported)
+
             self.cluster_state.term.counter += 1
             self.cluster_state.term.leader_id = self.cluster_state.my_hostname
             self.cluster_state.role = "server"
             self.cluster_state.save(self.state_path)
             # Server startup handled by caller/systemd
         elif winner:
-            logger.info("Election winner: %s — updating server URL", winner)
+            mesh_event(
+                logger,
+                logging.INFO,
+                f"Election result: {winner}",
+                "election_result",
+                {
+                    "winner": winner,
+                    "new_term": self.cluster_state.term.counter + 1,
+                },
+            )
             self.server_url = f"http://{winner}:{self.config.server.port}"
             self.cluster_state.server_url = self.server_url
             self.cluster_state.term.counter += 1
@@ -264,6 +327,119 @@ class MeshClient:
             self._save_submitted_state()
         else:
             logger.error("Election failed — no reachable candidates")
+
+    # --- Session sync ---
+    async def _sync_sessions(self):
+        """Sync session archive from server. Downloads missing sessions."""
+        headers = auth_headers(self.config.token, self.cluster_state.my_hostname)
+        if self._archive_etag:
+            headers["If-None-Match"] = self._archive_etag
+
+        try:
+            resp = await self._http.get(
+                f"{self.server_url}/api/v1/sessions/manifest",
+                headers=headers,
+            )
+        except Exception:
+            logger.debug("Session manifest fetch failed", exc_info=True)
+            return
+
+        if resp.status_code == 304:
+            return  # No changes
+
+        if resp.status_code != 200:
+            logger.debug("Session manifest returned %s", resp.status_code)
+            return
+
+        self._archive_etag = resp.headers.get("ETag", "")
+        manifest = resp.json()
+        server_sessions = manifest.get("sessions", [])
+
+        # Load local manifest
+        archive_dir = self.config.mesh_dir / "client" / "sessions-archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        local_manifest = self._load_archive_manifest()
+
+        # Find missing sessions
+        downloaded = 0
+        for session in server_sessions:
+            sid = session["session_id"]
+            pdir = session["project_dir"]
+            sha256 = session["jsonl_sha256"]
+            key = f"{sid}:{pdir}"
+
+            if key in local_manifest and local_manifest[key]["sha256"] == sha256:
+                continue  # Already have this one
+
+            # Download individual session file
+            try:
+                dl_headers = auth_headers(self.config.token, self.cluster_state.my_hostname)
+                dl_resp = await self._http.get(
+                    f"{self.server_url}/api/v1/sessions/{sid}/file",
+                    params={"project_dir": pdir},
+                    headers=dl_headers,
+                )
+                if dl_resp.status_code != 200:
+                    logger.warning("Failed to download session %s: %s", sid, dl_resp.status_code)
+                    continue
+
+                # Verify SHA-256 of decompressed content
+                gz_bytes = dl_resp.content
+                try:
+                    decompressed = gzip.decompress(gz_bytes)
+                except Exception:
+                    logger.warning("Failed to decompress session %s", sid, exc_info=True)
+                    continue
+
+                actual_sha = hashlib.sha256(decompressed).hexdigest()
+                if actual_sha != sha256:
+                    logger.warning(
+                        "SHA-256 mismatch for session %s: expected %s got %s",
+                        sid,
+                        sha256[:12],
+                        actual_sha[:12],
+                    )
+                    continue
+
+                # Write to archive
+                session_dir = archive_dir / pdir
+                session_dir.mkdir(parents=True, exist_ok=True)
+                (session_dir / f"{sid}.jsonl.gz").write_bytes(gz_bytes)
+
+                local_manifest[key] = {"project_dir": pdir, "sha256": sha256}
+                downloaded += 1
+
+            except Exception:
+                logger.warning("Failed to download session %s", sid, exc_info=True)
+
+        if downloaded > 0:
+            self._save_archive_manifest(local_manifest)
+            mesh_event(
+                logger,
+                logging.INFO,
+                f"Session sync: downloaded {downloaded}/{len(server_sessions)}",
+                "session_sync",
+                {"downloaded_count": downloaded, "total_count": len(server_sessions)},
+            )
+
+    def _load_archive_manifest(self) -> dict[str, dict]:
+        """Load local archive manifest. Returns {key: {project_dir, sha256}}."""
+        manifest_path = self.config.mesh_dir / "client" / "sessions-archive" / "manifest.json"
+        if not manifest_path.exists():
+            return {}
+        try:
+            data = json.loads(manifest_path.read_text())
+            return data.get("sessions", {})
+        except Exception:
+            logger.warning("Failed to load archive manifest", exc_info=True)
+            return {}
+
+    def _save_archive_manifest(self, sessions: dict[str, dict]) -> None:
+        """Save local archive manifest."""
+        manifest_path = self.config.mesh_dir / "client" / "sessions-archive" / "manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"etag": self._archive_etag, "sessions": sessions}
+        manifest_path.write_text(json.dumps(data, indent=2))
 
     # --- State persistence ---
     def _load_submitted_state(self):

@@ -76,6 +76,7 @@ def run_server(name: str):
     import uvicorn
 
     from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.logging import setup_mesh_logging
     from synix.mesh.server import create_app
 
     config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
@@ -84,6 +85,12 @@ def run_server(name: str):
         sys.exit(1)
 
     config = load_mesh_config(config_path)
+    setup_mesh_logging(
+        config.mesh_dir,
+        "server",
+        file_level=config.logging_config.get_file_level(),
+        stderr_level=config.logging_config.get_stderr_level(),
+    )
     app = create_app(config)
 
     console.print(f"[green]Starting mesh server '[bold]{name}[/bold]' on port {config.server.port}[/green]")
@@ -96,6 +103,7 @@ def run_client(name: str):
     """Start the mesh client daemon."""
     from synix.mesh.client import MeshClient
     from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.logging import setup_mesh_logging
 
     config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
     if not config_path.exists():
@@ -103,6 +111,12 @@ def run_client(name: str):
         sys.exit(1)
 
     config = load_mesh_config(config_path)
+    setup_mesh_logging(
+        config.mesh_dir,
+        "client",
+        file_level=config.logging_config.get_file_level(),
+        stderr_level=config.logging_config.get_stderr_level(),
+    )
     client = MeshClient(config)
 
     console.print(f"[green]Starting mesh client '[bold]{name}[/bold]'[/green]")
@@ -344,6 +358,43 @@ def cmd_rotate_token(name: str):
     except ValueError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
+
+
+@mesh.command()
+@click.option("--name", required=True, help="Mesh name")
+@click.option("--refresh", default=3, help="Refresh interval in seconds")
+@click.option("--lines", default=20, help="Number of log lines to display")
+def dashboard(name: str, refresh: int, lines: int):
+    """Live dashboard showing mesh health, members, and activity."""
+    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.dashboard import run_dashboard
+
+    mesh_dir = DEFAULT_MESH_ROOT / name
+    if not mesh_dir.exists():
+        console.print(f"[red]Error:[/red] Mesh '{name}' not found")
+        sys.exit(1)
+
+    # Load config for token and server URL
+    config_path = mesh_dir / "synix-mesh.toml"
+    token = ""
+    server_url = ""
+    if config_path.exists():
+        config = load_mesh_config(config_path)
+        token = config.token
+
+    state_path = mesh_dir / "state.json"
+    if state_path.exists():
+        state = json.loads(state_path.read_text())
+        server_url = state.get("server_url", "")
+
+    run_dashboard(
+        mesh_dir=mesh_dir,
+        name=name,
+        token=token,
+        server_url=server_url,
+        refresh_interval=refresh,
+        log_lines=lines,
+    )
 
 
 @mesh.command()
