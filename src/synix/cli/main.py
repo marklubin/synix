@@ -84,6 +84,7 @@ from synix.cli.fix_commands import fix  # noqa: E402, F401
 from synix.cli.info_commands import info  # noqa: E402, F401
 from synix.cli.init_commands import init  # noqa: E402, F401
 from synix.cli.llms_commands import llms  # noqa: E402, F401
+from synix.cli.mesh_commands import mesh  # noqa: E402, F401
 from synix.cli.search_commands import search  # noqa: E402, F401
 from synix.cli.validate_commands import validate  # noqa: E402, F401
 from synix.cli.verify_commands import diff, lineage, status, verify  # noqa: E402, F401
@@ -107,3 +108,4 @@ main.add_command(info)
 main.add_command(init)
 main.add_command(llms)
 main.add_command(batch_build, name="batch-build")
+main.add_command(mesh)

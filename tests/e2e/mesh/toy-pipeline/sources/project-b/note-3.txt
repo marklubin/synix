@@ -1,0 +1,3 @@
+user: Tell me about Rust ownership.
+
+assistant: Rust's ownership system is a set of rules the compiler checks at compile time. Each value has a single owner, and when the owner goes out of scope the value is dropped. This eliminates memory bugs without needing a garbage collector.
