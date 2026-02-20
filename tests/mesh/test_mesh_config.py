@@ -9,6 +9,7 @@ import pytest
 from synix.mesh.config import (
     ClusterConfig,
     MeshConfig,
+    ServerConfig,
     ensure_mesh_dirs,
     load_mesh_config,
 )
@@ -60,6 +61,34 @@ class TestLoadMeshConfig:
         monkeypatch.setenv("SYNIX_MESH_SOURCE_WATCH_DIR", "/custom/watch")
         config = load_mesh_config(mesh_toml_file)
         assert config.source.watch_dir == "/custom/watch"
+
+
+class TestLegacyConfigKeys:
+    def test_build_batch_threshold_uses_default(self, tmp_path):
+        """Legacy build_batch_threshold is ignored; default quiet_period is used."""
+        toml_path = tmp_path / "legacy.toml"
+        toml_path.write_text('[mesh]\nname = "legacy"\n\n[server]\nbuild_batch_threshold = 45\n')
+        config = load_mesh_config(toml_path)
+        # Old value (45) is NOT used — semantics are incompatible (count vs seconds)
+        assert config.server.build_quiet_period == ServerConfig.build_quiet_period
+
+    def test_quiet_period_takes_precedence_over_legacy(self, tmp_path):
+        """If both keys are present, build_quiet_period wins."""
+        toml_path = tmp_path / "both.toml"
+        toml_path.write_text('[mesh]\nname = "both"\n\n[server]\nbuild_quiet_period = 90\nbuild_batch_threshold = 45\n')
+        config = load_mesh_config(toml_path)
+        assert config.server.build_quiet_period == 90
+
+    def test_legacy_key_logs_warning(self, tmp_path, caplog):
+        """Legacy key emits a removal warning."""
+        toml_path = tmp_path / "legacy-warn.toml"
+        toml_path.write_text('[mesh]\nname = "warn"\n\n[server]\nbuild_batch_threshold = 30\n')
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="synix.mesh.config"):
+            load_mesh_config(toml_path)
+        assert "build_batch_threshold" in caplog.text
+        assert "removed" in caplog.text.lower()
 
 
 class TestMeshDir:

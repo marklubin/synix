@@ -32,8 +32,8 @@ def mesh_config_dict():
         "server": {
             "port": 7433,
             "build_min_interval": 300,
-            "build_batch_threshold": 5,
-            "build_max_delay": 900,
+            "build_quiet_period": 60,
+            "build_max_delay": 1800,
         },
         "client": {
             "scan_interval": 30,

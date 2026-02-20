@@ -36,7 +36,7 @@ def create_app(config: MeshConfig) -> Starlette:
     )
     scheduler = BuildScheduler(
         min_interval=config.server.build_min_interval,
-        batch_threshold=config.server.build_batch_threshold,
+        quiet_period=config.server.build_quiet_period,
         max_delay=config.server.build_max_delay,
     )
 
