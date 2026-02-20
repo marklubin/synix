@@ -60,6 +60,8 @@ class TestGenericServerSourceLoad:
         assert meta["session_id"] == "sess-042"
         assert meta["project_dir"] == "my-project"
         assert meta["submitted_by"] == "laptop-1"
+        assert meta["subsession_seq"] == 0
+        assert meta["parent_session_id"] == "sess-042"
 
     def test_multiple_sessions(self, store):
         store.submit("s1", "proj", b"content one", "node-1")
@@ -91,3 +93,47 @@ class TestGenericServerSourceLoad:
 
         assert len(artifacts) == 1
         assert artifacts[0].artifact_id.startswith("sha256:")
+
+
+class TestSubsessionLabels:
+    def test_seq_zero_uses_original_label(self, store):
+        store.submit("s1", "p", b"content-0", "n", subsession_seq=0)
+
+        source = GenericServerSource(store=store)
+        artifacts = source.load({})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].label == "t-mesh-s1"
+        assert artifacts[0].metadata["subsession_seq"] == 0
+
+    def test_seq_nonzero_uses_sub_suffix(self, store):
+        store.submit("s1", "p", b"content-1", "n", subsession_seq=1)
+
+        source = GenericServerSource(store=store)
+        artifacts = source.load({})
+
+        assert len(artifacts) == 1
+        assert artifacts[0].label == "t-mesh-s1-sub0001"
+        assert artifacts[0].metadata["subsession_seq"] == 1
+
+    def test_multiple_subsessions_produce_distinct_labels(self, store):
+        store.submit("s1", "p", b"c0", "n", subsession_seq=0)
+        store.submit("s1", "p", b"c1", "n", subsession_seq=1)
+        store.submit("s1", "p", b"c2", "n", subsession_seq=2)
+
+        source = GenericServerSource(store=store)
+        artifacts = source.load({})
+
+        labels = {a.label for a in artifacts}
+        assert labels == {"t-mesh-s1", "t-mesh-s1-sub0001", "t-mesh-s1-sub0002"}
+
+    def test_subsession_metadata_has_parent_session_id(self, store):
+        store.submit("s1", "p", b"c5", "n", subsession_seq=5)
+
+        source = GenericServerSource(store=store)
+        artifacts = source.load({})
+
+        meta = artifacts[0].metadata
+        assert meta["parent_session_id"] == "s1"
+        assert meta["session_id"] == "s1"
+        assert meta["subsession_seq"] == 5

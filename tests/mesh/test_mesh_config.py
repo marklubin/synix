@@ -10,6 +10,7 @@ from synix.mesh.config import (
     ClusterConfig,
     MeshConfig,
     ServerConfig,
+    SourceConfig,
     ensure_mesh_dirs,
     load_mesh_config,
 )
@@ -61,6 +62,30 @@ class TestLoadMeshConfig:
         monkeypatch.setenv("SYNIX_MESH_SOURCE_WATCH_DIR", "/custom/watch")
         config = load_mesh_config(mesh_toml_file)
         assert config.source.watch_dir == "/custom/watch"
+
+
+class TestIncrementalConfig:
+    def test_defaults(self, tmp_path):
+        toml_path = tmp_path / "minimal.toml"
+        toml_path.write_text('[mesh]\nname = "min"\n')
+        config = load_mesh_config(toml_path)
+        assert config.source.incremental is True
+        assert config.source.min_turns == 4
+        assert config.source.idle_timeout == 120
+
+    def test_custom_values(self, tmp_path):
+        toml_path = tmp_path / "custom.toml"
+        toml_path.write_text('[mesh]\nname = "c"\n\n[source]\nincremental = false\nmin_turns = 8\nidle_timeout = 60\n')
+        config = load_mesh_config(toml_path)
+        assert config.source.incremental is False
+        assert config.source.min_turns == 8
+        assert config.source.idle_timeout == 60
+
+    def test_source_config_dataclass_defaults(self):
+        sc = SourceConfig()
+        assert sc.incremental is True
+        assert sc.min_turns == 4
+        assert sc.idle_timeout == 120
 
 
 class TestLegacyConfigKeys:

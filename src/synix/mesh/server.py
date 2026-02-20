@@ -109,6 +109,7 @@ def create_app(config: MeshConfig) -> Starlette:
 
         session_id = body.get("session_id")
         project_dir = body.get("project_dir", "default")
+        subsession_seq = body.get("subsession_seq", 0)
         content_b64 = body.get("content")
         expected_sha256 = body.get("sha256")
 
@@ -134,16 +135,22 @@ def create_app(config: MeshConfig) -> Starlette:
                 )
 
         submitted_by = request.headers.get("X-Mesh-Node", "unknown")
-        is_new = store.submit(session_id, project_dir, content, submitted_by)
+        is_new = store.submit(session_id, project_dir, content, submitted_by, subsession_seq=subsession_seq)
 
         if is_new:
             actual_sha = expected_sha256 or hashlib.sha256(content).hexdigest()
             mesh_event(
                 logger,
                 logging.INFO,
-                f"Session submitted: {session_id} from {submitted_by}",
+                f"Session submitted: {session_id} seq={subsession_seq} from {submitted_by}",
                 "session_submitted",
-                {"hostname": submitted_by, "session_id": session_id, "sha256": actual_sha, "project_dir": project_dir},
+                {
+                    "hostname": submitted_by,
+                    "session_id": session_id,
+                    "subsession_seq": subsession_seq,
+                    "sha256": actual_sha,
+                    "project_dir": project_dir,
+                },
             )
             await scheduler.notify_new_session()
 
@@ -361,8 +368,10 @@ def create_app(config: MeshConfig) -> Starlette:
         nonlocal _sessions_manifest_etag
 
         all_sessions = store.list_all_sessions()
-        # Compute ETag from sorted session IDs + project_dirs
-        etag_payload = "|".join(f"{s['session_id']}:{s['project_dir']}" for s in all_sessions)
+        # Compute ETag from sorted session IDs + project_dirs + subsession_seq
+        etag_payload = "|".join(
+            f"{s['session_id']}:{s['project_dir']}:{s.get('subsession_seq', 0)}" for s in all_sessions
+        )
         etag = f'"{hashlib.sha256(etag_payload.encode()).hexdigest()[:16]}"'
         _sessions_manifest_etag = etag
 
@@ -377,6 +386,7 @@ def create_app(config: MeshConfig) -> Starlette:
                     {
                         "session_id": s["session_id"],
                         "project_dir": s["project_dir"],
+                        "subsession_seq": s.get("subsession_seq", 0),
                         "jsonl_sha256": s["jsonl_sha256"],
                     }
                     for s in all_sessions
@@ -390,8 +400,9 @@ def create_app(config: MeshConfig) -> Starlette:
         """Download a raw .jsonl.gz session file."""
         session_id = request.path_params["session_id"]
         project_dir = request.query_params.get("project_dir", "default")
+        subsession_seq = int(request.query_params.get("subsession_seq", "0"))
 
-        file_path = store.get_session_file_path(session_id, project_dir)
+        file_path = store.get_session_file_path(session_id, project_dir, subsession_seq=subsession_seq)
         if file_path is None:
             return JSONResponse(
                 {"error": "session file not found", "session_id": session_id, "project_dir": project_dir},
@@ -517,7 +528,9 @@ def create_app(config: MeshConfig) -> Starlette:
                 # 6. Mark sessions as processed
                 unprocessed = store.get_unprocessed()
                 if unprocessed:
-                    session_keys = [(s["session_id"], s["project_dir"]) for s in unprocessed]
+                    session_keys = [
+                        (s["session_id"], s["project_dir"], s.get("subsession_seq", 0)) for s in unprocessed
+                    ]
                     store.mark_processed(session_keys)
 
                 # 7. Send notification

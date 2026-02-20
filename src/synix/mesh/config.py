@@ -20,6 +20,9 @@ class SourceConfig:
     patterns: list[str] = field(default_factory=lambda: ["**/*.jsonl"])
     exclude: list[str] = field(default_factory=list)
     env_var: str = "SYNIX_SOURCE_DIR"
+    incremental: bool = True
+    min_turns: int = 4
+    idle_timeout: int = 120
 
 
 @dataclass
@@ -148,6 +151,9 @@ def load_mesh_config(path: Path) -> MeshConfig:
         patterns=_get_list(src, "patterns", SourceConfig().patterns),
         exclude=_get_list(src, "exclude", []),
         env_var=src.get("env_var", SourceConfig.env_var),
+        incremental=src.get("incremental", SourceConfig.incremental),
+        min_turns=src.get("min_turns", SourceConfig.min_turns),
+        idle_timeout=src.get("idle_timeout", SourceConfig.idle_timeout),
     )
 
     # Server config
