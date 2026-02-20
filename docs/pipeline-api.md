@@ -210,6 +210,11 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 | **Codex** | `.jsonl` | Codex `history.jsonl` and rollout session traces. Emits transcript and transcript_turn artifacts |
 | **Text / Markdown** | `.txt`, `.md` | YAML frontmatter support. Auto-detects conversation turns (`User:` / `Assistant:` prefixes) |
 
+For `.jsonl` files, parser precedence is:
+1. Codex rollout envelope (`type` + `payload`)
+2. Codex `history.jsonl` row shape (`session_id`, `ts`, `text` in file named `history.jsonl`)
+3. Claude Code session JSONL fallback
+
 ## Projections
 
 Import from `synix`:

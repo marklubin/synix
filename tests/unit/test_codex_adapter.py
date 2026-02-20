@@ -130,6 +130,28 @@ def test_parse_codex_non_codex_jsonl_returns_empty(tmp_path):
     assert parse_codex(path) == []
 
 
+def test_parse_codex_history_requires_history_filename(tmp_path):
+    path = tmp_path / "events.jsonl"
+    _write_jsonl(path, [{"session_id": "sess-a", "ts": 1770863525, "text": "hello"}])
+    assert parse_codex(path) == []
+
+
+def test_parse_codex_sorts_turns_by_timestamp(tmp_path):
+    path = tmp_path / "history.jsonl"
+    _write_jsonl(
+        path,
+        [
+            {"session_id": "sess-a", "ts": 1770863547, "text": "second"},
+            {"session_id": "sess-a", "ts": 1770863525, "text": "first"},
+        ],
+    )
+    artifacts = parse_codex(path)
+    transcript = [a for a in artifacts if a.artifact_type == "transcript"][0]
+    assert "User: first" in transcript.content
+    assert "User: second" in transcript.content
+    assert transcript.content.index("User: first") < transcript.content.index("User: second")
+
+
 def test_registry_jsonl_autodetect_codex(tmp_path):
     path = tmp_path / "history.jsonl"
     _write_jsonl(path, [{"session_id": "sess-a", "ts": 1770863525, "text": "hello"}])
@@ -137,6 +159,12 @@ def test_registry_jsonl_autodetect_codex(tmp_path):
     artifacts = parse_file(path)
     assert len(artifacts) == 2  # one transcript + one turn
     assert all(a.metadata["source"] == "codex" for a in artifacts)
+
+
+def test_registry_jsonl_does_not_misclassify_history_shape_in_non_history_file(tmp_path):
+    path = tmp_path / "events.jsonl"
+    _write_jsonl(path, [{"session_id": "sess-a", "ts": 1770863525, "text": "hello"}])
+    assert parse_file(path) == []
 
 
 def test_registry_jsonl_autodetect_claude_code(tmp_path):

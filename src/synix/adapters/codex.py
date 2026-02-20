@@ -37,6 +37,14 @@ def _parse_iso_date(ts: str) -> str:
         return ""
 
 
+def _parse_iso_epoch(ts: str) -> float | None:
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
 def _extract_codex_message_text(content: object) -> str:
     """Extract text blocks from Codex message content list."""
     if not isinstance(content, list):
@@ -60,7 +68,13 @@ def _build_artifacts(
 ) -> list[Artifact]:
     artifacts: list[Artifact] = []
     for session_id in sorted(sessions):
-        turns = sessions[session_id]
+        turns = sorted(
+            sessions[session_id],
+            key=lambda t: (
+                t.get("sort_ts") if isinstance(t.get("sort_ts"), float | int) else float("inf"),
+                t.get("seq", 0),
+            ),
+        )
         if not turns:
             continue
 
@@ -77,6 +91,11 @@ def _build_artifacts(
                 "date": date,
                 "message_count": len(turns),
                 "source_path": source_path.name,
+                # Structured aliases for downstream generic processing.
+                "meta.source.adapter": "codex",
+                "meta.chat.session_id": session_id,
+                "meta.time.date": date,
+                "meta.source.path": source_path.name,
             }
         )
         artifacts.append(
@@ -98,6 +117,11 @@ def _build_artifacts(
                 "phase": turn.get("phase", ""),
                 "date": turn.get("date", ""),
                 "source_path": source_path.name,
+                "meta.source.adapter": "codex",
+                "meta.chat.session_id": session_id,
+                "meta.chat.role": turn["role"],
+                "meta.time.timestamp": turn.get("timestamp", ""),
+                "meta.time.date": turn.get("date", ""),
             }
             role_prefix = "User" if turn["role"] == "user" else "Assistant"
             artifacts.append(
@@ -111,120 +135,154 @@ def _build_artifacts(
     return artifacts
 
 
-def _parse_history(events: list[dict], filepath: Path, max_chars: int) -> list[Artifact]:
-    sessions: dict[str, list[dict]] = defaultdict(list)
-    for event in events:
-        session_id = event.get("session_id")
-        text = event.get("text")
-        ts = event.get("ts")
-        if not isinstance(session_id, str) or not isinstance(text, str) or not text.strip():
-            continue
-        iso_ts = ""
-        date = ""
-        if isinstance(ts, (int, float)):
-            dt = datetime.fromtimestamp(ts, tz=UTC)
-            iso_ts = dt.isoformat()
-            date = dt.strftime("%Y-%m-%d")
-        sessions[session_id].append(
-            {
-                "role": "user",
-                "text": text.strip(),
-                "timestamp": iso_ts,
-                "date": date,
-                "phase": "",
-            }
-        )
+def _is_history_row(row: dict, filepath: Path) -> bool:
+    # Tighten detection: Codex history parser only applies to history.jsonl shape.
+    if filepath.name != "history.jsonl":
+        return False
+    return (
+        isinstance(row.get("session_id"), str)
+        and isinstance(row.get("text"), str)
+        and isinstance(row.get("ts"), (int, float))
+    )
 
-    return _build_artifacts(sessions=sessions, base_metadata={}, max_chars=max_chars, source_path=filepath)
+
+def _parse_history_row(
+    row: dict,
+    *,
+    sessions: dict[str, list[dict]],
+    seq: int,
+) -> None:
+    # history.jsonl rows are user prompt history records in Codex.
+    session_id = row.get("session_id")
+    text = row.get("text")
+    ts = row.get("ts")
+    if not isinstance(session_id, str) or not isinstance(text, str) or not text.strip():
+        return
+    if not isinstance(ts, (int, float)):
+        return
+    dt = datetime.fromtimestamp(ts, tz=UTC)
+    sessions[session_id].append(
+        {
+            "role": "user",
+            "text": text.strip(),
+            "timestamp": dt.isoformat(),
+            "date": dt.strftime("%Y-%m-%d"),
+            "phase": "",
+            "sort_ts": float(ts),
+            "seq": seq,
+        }
+    )
 
 
 def _default_session_id(filepath: Path) -> str:
     stem = filepath.stem
-    if stem.startswith("rollout-"):
-        parts = stem.split("-")
-        if len(parts) >= 2:
-            return "-".join(parts[-5:])
+    match = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", stem)
+    if match:
+        return match.group(1)
     return stem
 
 
-def _parse_rollout(events: list[dict], filepath: Path, max_chars: int) -> list[Artifact]:
-    default_session_id = _default_session_id(filepath)
-    sessions: dict[str, list[dict]] = defaultdict(list)
-    base_metadata: dict[str, dict] = defaultdict(dict)
-    known_session_id: str | None = None
+def _is_rollout_row(row: dict) -> bool:
+    return isinstance(row.get("type"), str) and "payload" in row
 
-    for event in events:
-        event_type = event.get("type")
-        payload = event.get("payload")
-        timestamp = event.get("timestamp", "")
-        date = _parse_iso_date(timestamp) if isinstance(timestamp, str) else ""
 
-        if event_type == "session_meta" and isinstance(payload, dict):
-            sid = payload.get("id") if isinstance(payload.get("id"), str) else default_session_id
-            known_session_id = sid
-            base_metadata[sid].update(
-                {
-                    "cwd": payload.get("cwd", ""),
-                    "cli_version": payload.get("cli_version", ""),
-                    "model_provider": payload.get("model_provider", ""),
-                }
-            )
-            continue
+def _parse_rollout_row(
+    row: dict,
+    *,
+    default_session_id: str,
+    sessions: dict[str, list[dict]],
+    base_metadata: dict[str, dict],
+    state: dict[str, str | None],
+    seq: int,
+) -> None:
+    event_type = row.get("type")
+    payload = row.get("payload")
+    timestamp = row.get("timestamp", "")
+    date = _parse_iso_date(timestamp) if isinstance(timestamp, str) else ""
+    sort_ts = _parse_iso_epoch(timestamp) if isinstance(timestamp, str) else None
 
-        if event_type != "response_item" or not isinstance(payload, dict):
-            continue
-        if payload.get("type") != "message":
-            continue
-        role = payload.get("role")
-        if role not in ("user", "assistant"):
-            continue
-        text = _extract_codex_message_text(payload.get("content"))
-        if not text:
-            continue
-        sid = known_session_id or default_session_id
-        sessions[sid].append(
+    if event_type == "session_meta" and isinstance(payload, dict):
+        sid = payload.get("id") if isinstance(payload.get("id"), str) else default_session_id
+        state["known_session_id"] = sid
+        base_metadata[sid].update(
             {
-                "role": role,
-                "text": text,
-                "timestamp": timestamp if isinstance(timestamp, str) else "",
-                "date": date,
-                "phase": payload.get("phase", ""),
+                "cwd": payload.get("cwd", ""),
+                "cli_version": payload.get("cli_version", ""),
+                "model_provider": payload.get("model_provider", ""),
             }
         )
+        return
 
-    return _build_artifacts(
-        sessions=sessions,
-        base_metadata=base_metadata,
-        max_chars=max_chars,
-        source_path=filepath,
+    if event_type != "response_item" or not isinstance(payload, dict):
+        return
+    if payload.get("type") != "message":
+        return
+    role = payload.get("role")
+    if role not in ("user", "assistant"):
+        return
+    text = _extract_codex_message_text(payload.get("content"))
+    if not text:
+        return
+
+    sid = state.get("known_session_id") or default_session_id
+    sessions[sid].append(
+        {
+            "role": role,
+            "text": text,
+            "timestamp": timestamp if isinstance(timestamp, str) else "",
+            "date": date,
+            "phase": payload.get("phase", ""),
+            "sort_ts": sort_ts,
+            "seq": seq,
+        }
     )
 
 
 def parse_codex(filepath: str | Path, max_chars: int = DEFAULT_MAX_CHARS) -> list[Artifact]:
     """Parse Codex history/session JSONL into transcript and transcript_turn artifacts."""
     path = Path(filepath)
-    events: list[dict] = []
+    mode: str | None = None
+    default_session_id = _default_session_id(path)
+    sessions: dict[str, list[dict]] = defaultdict(list)
+    base_metadata: dict[str, dict] = defaultdict(dict)
+    state: dict[str, str | None] = {"known_session_id": None}
+    parsed_rows = 0
+
     with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+        for seq, line in enumerate(f, start=1):
+            stripped = line.strip()
+            if not stripped:
                 continue
             try:
-                parsed = json.loads(line)
+                parsed = json.loads(stripped)
             except json.JSONDecodeError:
                 continue
-            if isinstance(parsed, dict):
-                events.append(parsed)
+            if not isinstance(parsed, dict):
+                continue
 
-    if not events:
+            if mode is None:
+                if _is_rollout_row(parsed):
+                    mode = "rollout"
+                elif _is_history_row(parsed, path):
+                    mode = "history"
+                else:
+                    # Unknown JSONL shape; avoid false-positive classification.
+                    return []
+
+            if mode == "rollout":
+                _parse_rollout_row(
+                    parsed,
+                    default_session_id=default_session_id,
+                    sessions=sessions,
+                    base_metadata=base_metadata,
+                    state=state,
+                    seq=seq,
+                )
+                parsed_rows += 1
+            elif mode == "history":
+                _parse_history_row(parsed, sessions=sessions, seq=seq)
+                parsed_rows += 1
+
+    if parsed_rows == 0:
         return []
-
-    # Codex history.jsonl format: session_id + ts + text.
-    if all(isinstance(e.get("session_id"), str) and "text" in e for e in events):
-        return _parse_history(events, path, max_chars)
-
-    # Codex rollout format: top-level envelope with type + payload.
-    if any("payload" in e and isinstance(e.get("type"), str) for e in events):
-        return _parse_rollout(events, path, max_chars)
-
-    return []
+    return _build_artifacts(sessions=sessions, base_metadata=base_metadata, max_chars=max_chars, source_path=path)
