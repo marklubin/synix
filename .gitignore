@@ -26,6 +26,9 @@ venv/
 ENV/
 env/
 
+# Claude Code
+.claude/
+
 # IDE
 .idea/
 .vscode/
