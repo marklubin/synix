@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: find
-        run: echo "templates=$(ls -d templates/*/  | sed 's|/$||' | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+        run: echo "templates=$(find templates -maxdepth 2 -name case.py -printf '%h\n' | sort | jq -R -s -c 'split("\n") | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
 
   demo-smoke:
     runs-on: ubuntu-latest
