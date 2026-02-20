@@ -486,8 +486,17 @@ def create_app(config: MeshConfig) -> Starlette:
                         config.bundle.include,
                         config.bundle.exclude,
                     )
-                    bundle_bytes = bundle_path.read_bytes()
-                    bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()[:16]
+                    # Stream hash computation — avoid reading full bundle into memory
+                    h = hashlib.sha256()
+                    bundle_size = 0
+                    with open(bundle_path, "rb") as f:
+                        while True:
+                            chunk = f.read(65536)
+                            if not chunk:
+                                break
+                            h.update(chunk)
+                            bundle_size += len(chunk)
+                    bundle_hash = h.hexdigest()[:16]
                     async with _state_lock:
                         current_bundle_path = bundle_path
                         current_bundle_etag = f'"{bundle_hash}"'
@@ -497,7 +506,7 @@ def create_app(config: MeshConfig) -> Starlette:
                         f"Bundle created: {bundle_path.name}",
                         "bundle_created",
                         {
-                            "size_bytes": len(bundle_bytes),
+                            "size_bytes": bundle_size,
                             "etag": f'"{bundle_hash}"',
                         },
                     )

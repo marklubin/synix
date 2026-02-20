@@ -115,7 +115,11 @@ class MeshClient:
         }
 
         try:
-            headers = auth_headers(self.config.token, self.cluster_state.my_hostname)
+            headers = auth_headers(
+                self.config.token,
+                self.cluster_state.my_hostname,
+                term_counter=self.cluster_state.term.counter,
+            )
             resp = await self._http.post(
                 f"{self.server_url}/api/v1/sessions",
                 json=payload,

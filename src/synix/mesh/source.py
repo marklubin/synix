@@ -45,7 +45,8 @@ class GenericServerSource(Source):
         artifacts: list[Artifact] = []
         for session in unprocessed:
             session_id = session["session_id"]
-            content_bytes = self._store.get_session_content(session_id)
+            project_dir = session["project_dir"]
+            content_bytes = self._store.get_session_content(session_id, project_dir=project_dir)
             if content_bytes is None:
                 logger.warning("Could not read content for session %s, skipping", session_id)
                 continue

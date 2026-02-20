@@ -22,11 +22,13 @@ def generate_token() -> str:
     return f"{TOKEN_PREFIX}{secrets.token_hex(32)}"
 
 
-def auth_headers(token: str, node_name: str = "") -> dict[str, str]:
+def auth_headers(token: str, node_name: str = "", term_counter: int | None = None) -> dict[str, str]:
     """Build request headers for authenticated mesh API calls."""
     headers = {"Authorization": f"Bearer {token}"}
     if node_name:
         headers["X-Mesh-Node"] = node_name
+    if term_counter is not None:
+        headers["X-Mesh-Term"] = str(term_counter)
     return headers
 
 
