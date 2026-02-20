@@ -1,0 +1,73 @@
+services:
+  server:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/mesh/Containerfile
+    command: synix mesh server --name test-mesh
+    ports:
+      - "7433:7433"
+    volumes:
+      - server-data:/data
+    environment:
+      - SYNIX_MESH_ROOT=/data
+      - SYNIX_CASSETTE_MODE=replay
+      - SYNIX_CASSETTE_DIR=/app/tests/e2e/mesh/cassettes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7433/api/v1/health"]
+      interval: 5s
+      retries: 10
+      start_period: 10s
+
+  client-a:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/mesh/Containerfile
+    command: synix mesh client --name test-mesh
+    volumes:
+      - client-a-sources:/sources
+      - client-a-data:/data
+    environment:
+      - SYNIX_MESH_ROOT=/data
+      - SYNIX_MESH_SERVER_URL=http://server:7433
+      - SYNIX_MESH_SOURCE_WATCH_DIR=/sources
+    depends_on:
+      server:
+        condition: service_healthy
+
+  client-b:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/mesh/Containerfile
+    command: synix mesh client --name test-mesh
+    volumes:
+      - client-b-sources:/sources
+      - client-b-data:/data
+    environment:
+      - SYNIX_MESH_ROOT=/data
+      - SYNIX_MESH_SERVER_URL=http://server:7433
+      - SYNIX_MESH_SOURCE_WATCH_DIR=/sources
+    depends_on:
+      server:
+        condition: service_healthy
+
+  test-runner:
+    build:
+      context: ../../../
+      dockerfile: tests/e2e/mesh/Containerfile
+    command: pytest tests/e2e/mesh/ -v --timeout=120
+    environment:
+      - SERVER_URL=http://server:7433
+      - MESH_TOKEN=msh_testtoken1234567890abcdef1234567890abcdef1234567890abcdef12345678
+    volumes:
+      - client-a-sources:/sources-a
+      - client-b-sources:/sources-b
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  server-data:
+  client-a-sources:
+  client-a-data:
+  client-b-sources:
+  client-b-data:

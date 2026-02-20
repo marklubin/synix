@@ -1,0 +1,41 @@
+[mesh]
+name = "test-mesh"
+token = "msh_testtoken1234567890abcdef1234567890abcdef1234567890abcdef12345678"
+
+[pipeline]
+path = "./pipeline.py"
+
+[source]
+watch_dir = "/sources"
+patterns = ["**/*.txt"]
+exclude = []
+env_var = "SYNIX_SOURCE_DIR"
+
+[server]
+port = 7433
+build_min_interval = 5
+build_batch_threshold = 1
+build_max_delay = 10
+
+[client]
+scan_interval = 5
+pull_interval = 10
+heartbeat_interval = 30
+
+[cluster]
+leader_candidates = []
+leader_timeout = 90
+
+[bundle]
+include = ["manifest.json", "context.md"]
+exclude = ["search.db", "*.lock"]
+
+[deploy.server]
+commands = []
+
+[deploy.client]
+commands = []
+
+[notifications]
+webhook_url = ""
+source = "test-mesh"

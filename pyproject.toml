@@ -27,6 +27,9 @@ dependencies = [
     "python-dotenv>=1.0",
     "fastembed>=0.4",
     "pyyaml>=6.0",
+    "starlette>=0.40",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
@@ -58,6 +61,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["mesh: mesh distributed build tests"]
 
 [tool.ruff]
 line-length = 120
@@ -73,6 +77,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["F841", "B007", "B011", "E501"]
+"tests/**" = ["F841", "B007", "B011", "E501", "E731"]
 "templates/**" = ["E501"]
 "src/synix/search/embeddings.py" = ["E402"]  # imports after warning suppression

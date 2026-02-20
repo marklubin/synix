@@ -1,0 +1,3 @@
+user: Explain Docker containers.
+
+assistant: Docker containers are lightweight, standalone executable packages that include everything needed to run a piece of software. They isolate applications from their environment, ensuring consistency across development, testing, and production.

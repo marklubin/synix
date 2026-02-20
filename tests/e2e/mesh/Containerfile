@@ -1,0 +1,17 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# Copy project
+COPY . /app/
+
+# Install synix with all deps
+RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir -e .
+
+# Copy toy pipeline to working dir
+RUN cp -r /app/tests/e2e/mesh/toy-pipeline/* /app/
+
+EXPOSE 7433
