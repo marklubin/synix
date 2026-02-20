@@ -6,23 +6,32 @@ Synix Mesh distributes pipeline builds across machines. A central server receive
 
 Mesh assumes all machines are connected via [Tailscale](https://tailscale.com/) (or an equivalent private network). Internet-routable deployments are not supported.
 
+## Installation
+
+Mesh dependencies (starlette, uvicorn, httpx) are optional extras, not included in base synix. Install them on every machine that will join the mesh:
+
+```bash
+uv pip install synix[mesh]
+# or
+pip install synix[mesh]
+```
+
+> **Note:** Mesh daemons run as persistent systemd services, so you need a real installation — not `uvx` (which creates ephemeral environments). All mesh commands in this guide use `synix` directly, not `uvx synix`.
+
 ## Quick Start
 
 ```bash
-# Install mesh dependencies (not included in base synix)
-pip install synix[mesh]
-
 # 1. Create a mesh — generates config and shared token
-uvx synix mesh create --name my-mesh --pipeline ./pipeline.py
+synix mesh create --name my-mesh --pipeline ./pipeline.py
 
 # 2. Provision this machine as the server
-uvx synix mesh provision --name my-mesh --role server
+synix mesh provision --name my-mesh --role server
 
 # 3. On another machine: provision as a client
-uvx synix mesh provision --name my-mesh --role client --server server-hostname:7433
+synix mesh provision --name my-mesh --role client --server server-hostname:7433
 
 # 4. Check status
-uvx synix mesh status --name my-mesh
+synix mesh status --name my-mesh
 ```
 
 After provisioning, both server and client run as systemd user services. The client watches its configured directory for new source files, submits them to the server, and pulls artifact bundles after each build.
@@ -125,17 +134,17 @@ All mesh commands are under the `synix mesh` subgroup.
 
 | Command | Purpose |
 |---------|---------|
-| `uvx synix mesh create --name NAME --pipeline PATH` | Create a new mesh (generates config and token) |
-| `uvx synix mesh provision --name NAME --role server\|client [--server HOST:PORT]` | Provision this machine as a member |
-| `uvx synix mesh server --name NAME` | Start the server daemon |
-| `uvx synix mesh client --name NAME` | Start the client daemon |
-| `uvx synix mesh status --name NAME` | Show mesh health, members, and last build info |
-| `uvx synix mesh submit --name NAME FILE` | One-shot source file submission |
-| `uvx synix mesh build --name NAME` | Force trigger a build on the server |
-| `uvx synix mesh deploy --name NAME` | Force run local deploy hooks |
-| `uvx synix mesh list` | List all meshes on this machine |
-| `uvx synix mesh rotate-token --name NAME` | Generate a new mesh token |
-| `uvx synix mesh destroy --name NAME` | Remove mesh config, data, and stop services |
+| `synix mesh create --name NAME --pipeline PATH` | Create a new mesh (generates config and token) |
+| `synix mesh provision --name NAME --role server\|client [--server HOST:PORT]` | Provision this machine as a member |
+| `synix mesh server --name NAME` | Start the server daemon |
+| `synix mesh client --name NAME` | Start the client daemon |
+| `synix mesh status --name NAME` | Show mesh health, members, and last build info |
+| `synix mesh submit --name NAME FILE` | One-shot source file submission |
+| `synix mesh build --name NAME` | Force trigger a build on the server |
+| `synix mesh deploy --name NAME` | Force run local deploy hooks |
+| `synix mesh list` | List all meshes on this machine |
+| `synix mesh rotate-token --name NAME` | Generate a new mesh token |
+| `synix mesh destroy --name NAME` | Remove mesh config, data, and stop services |
 
 ### Provisioning
 
@@ -143,10 +152,10 @@ Provisioning creates the data directory structure, copies the config, and instal
 
 ```bash
 # Server — starts listening for submissions and running builds
-uvx synix mesh provision --name my-mesh --role server
+synix mesh provision --name my-mesh --role server
 
 # Client — needs the server address
-uvx synix mesh provision --name my-mesh --role client --server obispo:7433
+synix mesh provision --name my-mesh --role client --server obispo:7433
 ```
 
 After provisioning, the daemon starts automatically and persists across reboots via `systemctl --user enable`.
@@ -156,13 +165,13 @@ After provisioning, the daemon starts automatically and persists across reboots 
 You don't need to wait for the client watcher cycle. Submit files directly:
 
 ```bash
-uvx synix mesh submit --name my-mesh ./session.jsonl
+synix mesh submit --name my-mesh ./session.jsonl
 ```
 
 Force a build on the server (useful after manual submissions or to reprocess with an updated pipeline):
 
 ```bash
-uvx synix mesh build --name my-mesh
+synix mesh build --name my-mesh
 ```
 
 If a build is already in progress, the command returns immediately with a "queued" status. The queued build runs automatically after the current one finishes.
@@ -249,11 +258,11 @@ If a token is compromised, rotate it:
 
 ```bash
 # Generate new token and update local config
-uvx synix mesh rotate-token --name my-mesh
+synix mesh rotate-token --name my-mesh
 
 # Re-provision every node (copies new config)
-uvx synix mesh provision --name my-mesh --role server        # on server
-uvx synix mesh provision --name my-mesh --role client --server HOST:PORT  # on each client
+synix mesh provision --name my-mesh --role server        # on server
+synix mesh provision --name my-mesh --role client --server HOST:PORT  # on each client
 ```
 
 Rotation requires brief downtime — clients are rejected until re-provisioned with the new token.
@@ -304,14 +313,3 @@ source = "my-mesh"
 
 Notifications are best-effort — failures are logged but never block builds.
 
-## Installation
-
-Mesh dependencies (starlette, uvicorn, httpx) are optional extras, not included in base synix:
-
-```bash
-pip install synix[mesh]
-# or with uv
-uv pip install synix[mesh]
-```
-
-If you install synix without the `[mesh]` extra, the `synix mesh` commands will import-error with a clear message about missing dependencies.
