@@ -88,8 +88,8 @@ exclude = ["**/subagents/**"]             # patterns to skip
 [server]
 port = 7433                               # HTTP port
 build_min_interval = 300                  # minimum seconds between builds
-build_batch_threshold = 5                 # trigger build immediately at N pending files
-build_max_delay = 900                     # maximum seconds to wait before building
+build_quiet_period = 60                   # seconds after last submission before building
+build_max_delay = 1800                    # safety net — force build if submissions never stop
 
 [client]
 scan_interval = 30                        # seconds between directory scans
@@ -188,11 +188,11 @@ The server exposes an HTTP API on the configured port. All endpoints except `/ap
 
 ## Build Scheduling
 
-The server doesn't build on every submission. A debounce scheduler manages build timing:
+The server doesn't build on every submission. A quiet-period debounce scheduler manages build timing:
 
+- **Quiet period** (`build_quiet_period`): wait this many seconds after the last submission before starting a build. Each new submission resets the timer. This naturally handles backfill — on first start, clients flood the server with files, and the build only fires once the flood stops.
 - **Minimum interval** (`build_min_interval`): minimum seconds between builds
-- **Batch threshold** (`build_batch_threshold`): if this many files are pending, build immediately
-- **Maximum delay** (`build_max_delay`): never wait longer than this to start a build
+- **Maximum delay** (`build_max_delay`): safety net — force a build even if submissions keep trickling in forever
 
 Only one build runs at a time. If new files arrive during a build, they queue for the next run. Triggering a build via `mesh build` during an active build returns HTTP 202 and queues a follow-up.
 

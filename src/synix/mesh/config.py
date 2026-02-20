@@ -26,8 +26,8 @@ class SourceConfig:
 class ServerConfig:
     port: int = 7433
     build_min_interval: int = 300
-    build_batch_threshold: int = 5
-    build_max_delay: int = 900
+    build_quiet_period: int = 60
+    build_max_delay: int = 1800
 
 
 @dataclass
@@ -155,7 +155,7 @@ def load_mesh_config(path: Path) -> MeshConfig:
     server = ServerConfig(
         port=srv.get("port", ServerConfig.port),
         build_min_interval=srv.get("build_min_interval", ServerConfig.build_min_interval),
-        build_batch_threshold=srv.get("build_batch_threshold", ServerConfig.build_batch_threshold),
+        build_quiet_period=srv.get("build_quiet_period", ServerConfig.build_quiet_period),
         build_max_delay=srv.get("build_max_delay", ServerConfig.build_max_delay),
     )
 

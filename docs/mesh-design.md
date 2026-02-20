@@ -168,8 +168,8 @@ env_var = "SYNIX_SOURCE_DIR"              # server sets this before build
 [server]
 port = 7433
 build_min_interval = 300                  # 5 min between builds
-build_batch_threshold = 5                 # immediate if 5+ pending
-build_max_delay = 900                     # 15 min max wait
+build_quiet_period = 60                   # wait for submissions to stop
+build_max_delay = 1800                    # 30 min safety net
 
 [client]
 scan_interval = 30
@@ -259,7 +259,7 @@ State machine with single-flight enforcement:
 ```
 
 - **IDLE**: no pending sessions, no active build
-- **QUEUED**: pending sessions accumulating; transitions to RUNNING when `pending >= batch_threshold` OR `time_since_first_pending >= max_delay`
+- **QUEUED**: pending sessions accumulating; transitions to RUNNING when `quiet_period` elapses after last submission OR `time_since_first_pending >= max_delay`
 - **RUNNING**: build in progress via `asyncio.to_thread()`; new sessions arriving during build go to QUEUED (coalesced)
 - Only one build runs at a time
 - `builds/trigger` during RUNNING: sets a `force_rebuild` flag, returns **202 Accepted** with `{"status": "queued", "message": "Build in progress, rebuild queued on completion"}`. The CLI retries with exponential backoff (1s, 2s, 4s) until the queued build completes or 120s timeout.

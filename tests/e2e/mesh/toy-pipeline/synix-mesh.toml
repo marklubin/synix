@@ -14,8 +14,8 @@ env_var = "SYNIX_SOURCE_DIR"
 [server]
 port = 7433
 build_min_interval = 5
-build_batch_threshold = 1
-build_max_delay = 10
+build_quiet_period = 2
+build_max_delay = 30
 
 [client]
 scan_interval = 5

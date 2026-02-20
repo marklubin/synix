@@ -1,6 +1,8 @@
-"""Tests for synix.mesh.scheduler — build scheduler with state machine."""
+"""Tests for synix.mesh.scheduler — build scheduler with quiet-period debounce."""
 
 from __future__ import annotations
+
+import time
 
 import pytest
 
@@ -11,7 +13,7 @@ pytestmark = pytest.mark.mesh
 
 @pytest.fixture
 def scheduler():
-    return BuildScheduler(min_interval=10, batch_threshold=3, max_delay=60)
+    return BuildScheduler(min_interval=10, quiet_period=5, max_delay=60)
 
 
 class TestStateTransitions:
@@ -47,34 +49,70 @@ class TestStateTransitions:
         await scheduler.complete_build()
         assert scheduler.pending_count == 0
         assert scheduler.first_pending_at is None
+        assert scheduler.last_submission_at is None
 
 
-class TestBatchThreshold:
+class TestQuietPeriod:
     @pytest.mark.asyncio
-    async def test_below_threshold_no_build(self, scheduler):
-        # threshold=3, submit 2
+    async def test_no_build_during_active_submissions(self, scheduler):
+        """Submissions keep arriving — quiet period hasn't elapsed."""
         await scheduler.notify_new_session()
-        await scheduler.notify_new_session()
-        # Need to have enough time since last build
         scheduler.last_build_at = 0.0
+        # last_submission_at is ~now, quiet_period=5 hasn't passed
         assert await scheduler.should_build() is False
 
     @pytest.mark.asyncio
-    async def test_at_threshold_triggers_build(self, scheduler):
-        for _ in range(3):
-            await scheduler.notify_new_session()
+    async def test_build_after_quiet_period(self, scheduler):
+        """Submissions stopped, quiet period elapsed — build fires."""
+        await scheduler.notify_new_session()
         scheduler.last_build_at = 0.0
+        # Simulate quiet period elapsed
+        scheduler.last_submission_at = time.monotonic() - scheduler.quiet_period - 1
+        assert await scheduler.should_build() is True
+
+    @pytest.mark.asyncio
+    async def test_new_submission_resets_quiet_timer(self, scheduler):
+        """A new submission arriving resets the quiet timer."""
+        await scheduler.notify_new_session()
+        scheduler.last_build_at = 0.0
+        # Simulate quiet period almost elapsed
+        scheduler.last_submission_at = time.monotonic() - scheduler.quiet_period + 1
+        # New submission arrives — resets the timer
+        await scheduler.notify_new_session()
+        assert await scheduler.should_build() is False
+
+    @pytest.mark.asyncio
+    async def test_backfill_waits_for_all_submissions(self, scheduler):
+        """Simulates a backfill: many submissions, build only after they stop."""
+        scheduler.last_build_at = 0.0
+        for _ in range(100):
+            await scheduler.notify_new_session()
+        # All 100 submitted ~now — quiet period not elapsed
+        assert scheduler.pending_count == 100
+        assert await scheduler.should_build() is False
+        # Simulate quiet period passing
+        scheduler.last_submission_at = time.monotonic() - scheduler.quiet_period - 1
         assert await scheduler.should_build() is True
 
 
 class TestMaxDelay:
     @pytest.mark.asyncio
-    async def test_max_delay_triggers_build(self, scheduler):
+    async def test_max_delay_forces_build(self, scheduler):
+        """Even if submissions keep coming, max_delay forces a build."""
         await scheduler.notify_new_session()
         scheduler.last_build_at = 0.0
-        # Simulate that first_pending_at was long ago
-        scheduler.first_pending_at = scheduler.first_pending_at - scheduler.max_delay - 1
+        # last_submission_at is recent (quiet period NOT elapsed)
+        # but first_pending_at was long ago (max_delay exceeded)
+        scheduler.first_pending_at = time.monotonic() - scheduler.max_delay - 1
         assert await scheduler.should_build() is True
+
+    @pytest.mark.asyncio
+    async def test_max_delay_not_reached(self, scheduler):
+        """Within max_delay, submissions still active — no build."""
+        await scheduler.notify_new_session()
+        scheduler.last_build_at = 0.0
+        # Neither quiet period nor max_delay exceeded
+        assert await scheduler.should_build() is False
 
 
 class TestMinInterval:
@@ -82,10 +120,9 @@ class TestMinInterval:
     async def test_respects_min_interval(self, scheduler):
         for _ in range(5):
             await scheduler.notify_new_session()
-        # Simulate a very recent build
-        import time
-
-        scheduler.last_build_at = time.monotonic()
+        # Quiet period elapsed but min_interval not met
+        scheduler.last_submission_at = time.monotonic() - scheduler.quiet_period - 1
+        scheduler.last_build_at = time.monotonic()  # just built
         assert await scheduler.should_build() is False
 
 
@@ -136,3 +173,4 @@ class TestGetStatus:
         assert status["state"] == "idle"
         assert status["pending_count"] == 0
         assert status["force_rebuild"] is False
+        assert status["last_submission_at"] is None
