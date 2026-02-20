@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import gzip
 import hashlib
 import json
 import logging
@@ -97,8 +96,7 @@ class MeshClient:
 
     async def _submit_file(self, file_path: Path, content: bytes, sha256: str) -> None:
         """Submit a single file to the server."""
-        compressed = gzip.compress(content)
-        encoded = base64.b64encode(compressed).decode()
+        encoded = base64.b64encode(content).decode()
 
         # Derive project_dir and session_id from path
         watch_dir = Path(os.path.expanduser(self.config.source.watch_dir))

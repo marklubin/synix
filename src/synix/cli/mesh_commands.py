@@ -171,7 +171,6 @@ def status(name: str):
 def submit(name: str, file_path: str):
     """One-shot source file submission to mesh server."""
     import base64
-    import gzip
     import hashlib
 
     import httpx
@@ -199,8 +198,7 @@ def submit(name: str, file_path: str):
     path = Path(file_path)
     content = path.read_bytes()
     sha256 = hashlib.sha256(content).hexdigest()
-    compressed = gzip.compress(content)
-    encoded = base64.b64encode(compressed).decode()
+    encoded = base64.b64encode(content).decode()
 
     payload = {
         "session_id": path.stem,
