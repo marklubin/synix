@@ -16,7 +16,7 @@ console = Console()
 
 @click.group()
 def mesh():
-    """Manage synix meshes for distributed builds."""
+    """[Experimental] Manage synix meshes for distributed builds."""
     pass
 
 
