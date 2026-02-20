@@ -1292,22 +1292,34 @@ dependencies = [
     { name = "anthropic" },
     { name = "click" },
     { name = "fastembed" },
-    { name = "httpx" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "rich" },
+]
+
+[package.optional-dependencies]
+mesh = [
+    { name = "httpx" },
     { name = "starlette" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+mesh-dev = [
+    { name = "httpx" },
+    { name = "starlette" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
@@ -1315,22 +1327,31 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.40.0" },
     { name = "click", specifier = ">=8.0" },
     { name = "fastembed", specifier = ">=0.4" },
-    { name = "httpx", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'mesh'", specifier = ">=0.27" },
     { name = "openai", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
-    { name = "starlette", specifier = ">=0.40" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "starlette", marker = "extra == 'mesh'", specifier = ">=0.40" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'mesh'", specifier = ">=0.30" },
 ]
+provides-extras = ["mesh"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.9.0" },
+    { name = "starlette", specifier = ">=0.40" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+mesh-dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "starlette", specifier = ">=0.40" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 
 [[package]]

@@ -18,7 +18,7 @@ class TestRunDeployHooks:
         """The {build_dir} placeholder is replaced with the actual path."""
         marker = tmp_path / "proof.txt"
         run_deploy_hooks(
-            ['echo "{build_dir}" > "{build_dir}/proof.txt"'],
+            ["echo {build_dir} > {build_dir}/proof.txt"],
             tmp_path,
         )
         assert marker.exists()

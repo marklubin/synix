@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -19,7 +20,7 @@ def run_deploy_hooks(commands: list[str], build_dir: Path) -> None:
     Commands run with ``shell=True``, timeout of 300s, ``cwd=build_dir``.
     """
     for cmd in commands:
-        rendered = cmd.replace("{build_dir}", str(build_dir))
+        rendered = cmd.replace("{build_dir}", shlex.quote(str(build_dir)))
         logger.info("Running deploy hook: %s", rendered)
         result = subprocess.run(
             rendered,

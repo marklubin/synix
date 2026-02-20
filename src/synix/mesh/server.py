@@ -41,9 +41,10 @@ def create_app(config: MeshConfig) -> Starlette:
     # Track cluster state
     start_time = time.time()
     build_count = 0
-    members: dict[str, dict] = {}  # hostname -> {last_heartbeat, term, config_hash}
+    members: dict[str, dict] = {}  # hostname -> {last_heartbeat, term_counter, ...}
     current_bundle_etag: str = ""
     current_bundle_path: Path | None = None
+    _build_task: asyncio.Task | None = None  # tracked to prevent GC
 
     async def health(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
@@ -110,10 +111,11 @@ def create_app(config: MeshConfig) -> Starlette:
         return JSONResponse(scheduler.get_status())
 
     async def trigger_build(request: Request) -> JSONResponse:
+        nonlocal _build_task
         result = await scheduler.force_rebuild()
         status_code = 200 if result == "started" else 202
         if result == "started":
-            asyncio.create_task(_run_build())
+            _build_task = asyncio.create_task(_run_build())
         return JSONResponse({"status": result}, status_code=status_code)
 
     async def artifact_manifest(request: Request) -> JSONResponse:
@@ -208,11 +210,19 @@ def create_app(config: MeshConfig) -> Starlette:
             return JSONResponse({"error": "invalid JSON"}, status_code=400)
 
         hostname = body.get("hostname", "")
-        term = body.get("term", 0)
+        raw_term = body.get("term", 0)
         config_hash_received = body.get("config_hash", "")
 
         if not hostname:
             return JSONResponse({"error": "missing hostname"}, status_code=400)
+
+        # Normalize term — accept dict {"counter": N, "leader_id": S} or bare int
+        if isinstance(raw_term, dict):
+            term_counter = raw_term.get("counter", 0)
+            term_leader = raw_term.get("leader_id", "")
+        else:
+            term_counter = int(raw_term)
+            term_leader = ""
 
         # Config hash validation
         expected_hash = config.cluster.config_hash
@@ -226,17 +236,24 @@ def create_app(config: MeshConfig) -> Starlette:
                 status_code=409,
             )
 
-        # Term fencing — reject stale terms
+        # Term fencing — reject stale terms (compare counter as int)
         current_member = members.get(hostname)
-        if current_member and current_member.get("term", 0) > term:
-            return JSONResponse(
-                {"error": "stale term", "current": current_member["term"], "received": term},
-                status_code=409,
-            )
+        if current_member:
+            stored_counter = current_member.get("term_counter", 0)
+            if stored_counter > term_counter:
+                return JSONResponse(
+                    {
+                        "error": "stale term",
+                        "current_counter": stored_counter,
+                        "received_counter": term_counter,
+                    },
+                    status_code=409,
+                )
 
         members[hostname] = {
             "last_heartbeat": time.time(),
-            "term": term,
+            "term_counter": term_counter,
+            "term_leader": term_leader,
             "config_hash": config_hash_received,
         }
 
@@ -248,7 +265,10 @@ def create_app(config: MeshConfig) -> Starlette:
                 "members": {
                     hostname: {
                         "last_heartbeat": info["last_heartbeat"],
-                        "term": info["term"],
+                        "term": {
+                            "counter": info.get("term_counter", 0),
+                            "leader_id": info.get("term_leader", ""),
+                        },
                     }
                     for hostname, info in members.items()
                 },

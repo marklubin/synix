@@ -46,12 +46,26 @@ def create_bundle(build_dir: Path, include: list[str], exclude: list[str]) -> Pa
     return tarball_path
 
 
+def _validate_tar_members(tar: tarfile.TarFile, dest: Path) -> list[tarfile.TarInfo]:
+    """Validate tar members for path traversal attacks (pre-3.12 safety)."""
+    safe_members = []
+    for member in tar.getmembers():
+        member_path = (dest / member.name).resolve()
+        if not str(member_path).startswith(str(dest.resolve())):
+            logger.warning("Skipping tar member with path traversal: %s", member.name)
+            continue
+        if member.issym() or member.islnk():
+            logger.warning("Skipping symlink/hardlink in tar: %s", member.name)
+            continue
+        safe_members.append(member)
+    return safe_members
+
+
 def extract_bundle(tarball: Path, dest: Path) -> None:
     """Extract a tar.gz bundle to *dest* directory.
 
     Creates *dest* if it does not exist.  Uses ``filter='data'`` for
-    security on Python 3.12+; falls back to plain ``extractall`` on
-    earlier versions.
+    security on Python 3.12+; validates members manually on earlier versions.
     """
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -59,6 +73,7 @@ def extract_bundle(tarball: Path, dest: Path) -> None:
         if sys.version_info >= (3, 12):
             tar.extractall(path=dest, filter="data")
         else:
-            tar.extractall(path=dest)  # noqa: S202 — pre-3.12 fallback
+            safe = _validate_tar_members(tar, dest)
+            tar.extractall(path=dest, members=safe)
 
     logger.info("Extracted bundle %s to %s", tarball.name, dest)
