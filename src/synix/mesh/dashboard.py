@@ -202,7 +202,7 @@ class MeshDashboard:
             scheduler = s.get("scheduler", {})
             sched_state = scheduler.get("state", "unknown")
             last_build_ago = scheduler.get("last_build_secs_ago")
-            last_build_str = _format_secs_ago(last_build_ago) if last_build_ago else "never"
+            last_build_str = _format_secs_ago(last_build_ago) if last_build_ago is not None else "never"
 
             builds = s.get("build_count", 0)
             lines.append(f"Builds: {builds}       Sessions: {total} total, {pending} pending    Uptime: {uptime}")

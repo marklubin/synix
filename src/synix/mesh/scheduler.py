@@ -51,7 +51,6 @@ class BuildScheduler:
         self.last_build_at: float = 0.0
         self._force_rebuild = False
         self._pending_at_build_start: int = 0
-        self._build_started_at: float = 0.0
         self._lock = asyncio.Lock()
 
     async def notify_new_session(self) -> None:
@@ -121,7 +120,6 @@ class BuildScheduler:
             self.state = BuildState.RUNNING
             self._force_rebuild = False
             self._pending_at_build_start = self.pending_count
-            self._build_started_at = time.monotonic()
             logger.info(
                 "Build started (pending_count=%d)",
                 self.pending_count,
@@ -147,10 +145,12 @@ class BuildScheduler:
             if force or arrived_during_build > 0:
                 self.pending_count = arrived_during_build
                 if arrived_during_build > 0:
-                    # Reset timing to when mid-build arrivals started, not
-                    # the pre-build era. This prevents max_delay from firing
-                    # immediately after a build completes.
-                    self.first_pending_at = self._build_started_at
+                    # Reset timing to now (build completion), not the pre-build
+                    # era. Using _build_started_at would give phantom age equal
+                    # to build duration, potentially triggering premature
+                    # max_delay. Using now means max_delay counts from when
+                    # these sessions actually became schedulable.
+                    self.first_pending_at = now
                     # last_submission_at stays as-is (tracks the most recent
                     # mid-build arrival for quiet-period evaluation)
                 else:
