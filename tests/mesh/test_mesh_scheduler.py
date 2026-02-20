@@ -46,6 +46,7 @@ class TestStateTransitions:
         for _ in range(5):
             await scheduler.notify_new_session()
         await scheduler.start_build()
+        # No new sessions during build
         await scheduler.complete_build()
         assert scheduler.pending_count == 0
         assert scheduler.first_pending_at is None
@@ -164,6 +165,58 @@ class TestSingleFlight:
         await scheduler.notify_new_session()
         await scheduler.start_build()
         assert await scheduler.should_build() is False
+
+
+class TestCoalescedSessions:
+    """Sessions arriving during a running build should not be forgotten."""
+
+    @pytest.mark.asyncio
+    async def test_sessions_during_build_trigger_requeue(self, scheduler):
+        """If sessions arrive while a build is running, complete_build returns True."""
+        await scheduler.notify_new_session()
+        await scheduler.start_build()
+        # 3 new sessions arrive during the build
+        for _ in range(3):
+            await scheduler.notify_new_session()
+        needs_another = await scheduler.complete_build()
+        assert needs_another is True
+        assert scheduler.state == BuildState.QUEUED
+        assert scheduler.pending_count == 3
+
+    @pytest.mark.asyncio
+    async def test_no_sessions_during_build_goes_idle(self, scheduler):
+        """No sessions during build → IDLE, pending_count=0."""
+        for _ in range(5):
+            await scheduler.notify_new_session()
+        await scheduler.start_build()
+        needs_another = await scheduler.complete_build()
+        assert needs_another is False
+        assert scheduler.state == BuildState.IDLE
+        assert scheduler.pending_count == 0
+
+    @pytest.mark.asyncio
+    async def test_coalesced_preserves_submission_timing(self, scheduler):
+        """Coalesced sessions keep their last_submission_at for quiet-period tracking."""
+        await scheduler.notify_new_session()
+        await scheduler.start_build()
+        await scheduler.notify_new_session()
+        await scheduler.complete_build()
+        # last_submission_at should still be set (from the mid-build arrival)
+        assert scheduler.last_submission_at is not None
+        assert scheduler.first_pending_at is not None
+
+    @pytest.mark.asyncio
+    async def test_force_plus_coalesced(self, scheduler):
+        """Force rebuild + coalesced sessions: requeued with pending from mid-build."""
+        await scheduler.notify_new_session()
+        await scheduler.start_build()
+        await scheduler.force_rebuild()
+        await scheduler.notify_new_session()
+        needs_another = await scheduler.complete_build()
+        assert needs_another is True
+        assert scheduler.state == BuildState.QUEUED
+        # 1 session arrived during build
+        assert scheduler.pending_count == 1
 
 
 class TestGetStatus:

@@ -40,19 +40,17 @@ class BuildScheduler:
         min_interval: int = 300,
         quiet_period: int = 60,
         max_delay: int = 1800,
-        # Legacy — kept for backward compat but no longer drives trigger logic
-        batch_threshold: int = 0,
     ):
         self.state = BuildState.IDLE
         self.min_interval = min_interval
         self.quiet_period = quiet_period
         self.max_delay = max_delay
-        self.batch_threshold = batch_threshold
         self.pending_count = 0
         self.first_pending_at: float | None = None
         self.last_submission_at: float | None = None
         self.last_build_at: float = 0.0
         self._force_rebuild = False
+        self._pending_at_build_start: int = 0
         self._lock = asyncio.Lock()
 
     async def notify_new_session(self) -> None:
@@ -116,24 +114,43 @@ class BuildScheduler:
                 raise RuntimeError("Build already running — single-flight violation")
             self.state = BuildState.RUNNING
             self._force_rebuild = False
+            self._pending_at_build_start = self.pending_count
             logger.info(
                 "Build started (pending_count=%d)",
                 self.pending_count,
             )
 
     async def complete_build(self) -> bool:
-        """Transition from RUNNING. Returns True if another build is needed."""
+        """Transition from RUNNING. Returns True if another build is needed.
+
+        Sessions that arrived *during* the build (i.e. pending_count grew beyond
+        what it was at start_build) are preserved as pending for the next cycle.
+        """
         async with self._lock:
             self.last_build_at = time.monotonic()
+
+            # Sessions arriving during the build weren't included in this build
+            arrived_during_build = max(0, self.pending_count - self._pending_at_build_start)
+
+            if self._force_rebuild or arrived_during_build > 0:
+                self.pending_count = arrived_during_build
+                # Keep first_pending_at and last_submission_at so the quiet-period
+                # timer tracks the new arrivals correctly
+                if arrived_during_build == 0:
+                    self.first_pending_at = None
+                    self.last_submission_at = None
+                self.state = BuildState.QUEUED
+                if self._force_rebuild:
+                    reason = "force rebuild"
+                else:
+                    reason = f"{arrived_during_build} sessions arrived during build"
+                logger.info("Build completed, queuing another (%s)", reason)
+                self._force_rebuild = False
+                return True
+
             self.pending_count = 0
             self.first_pending_at = None
             self.last_submission_at = None
-
-            if self._force_rebuild:
-                self.state = BuildState.QUEUED
-                logger.info("Build completed, force rebuild queued")
-                return True
-
             self.state = BuildState.IDLE
             logger.info("Build completed, state -> IDLE")
             return False

@@ -152,10 +152,23 @@ def load_mesh_config(path: Path) -> MeshConfig:
 
     # Server config
     srv = data.get("server", {})
+
+    # Backward compat: build_batch_threshold was renamed to build_quiet_period in v0.14.1
+    quiet_period = srv.get("build_quiet_period", None)
+    if quiet_period is None and "build_batch_threshold" in srv:
+        logger.warning(
+            "Deprecated config key 'build_batch_threshold' — rename to 'build_quiet_period' "
+            "(seconds of quiet before triggering a build). Using value %d as quiet_period.",
+            srv["build_batch_threshold"],
+        )
+        quiet_period = srv["build_batch_threshold"]
+    if quiet_period is None:
+        quiet_period = ServerConfig.build_quiet_period
+
     server = ServerConfig(
         port=srv.get("port", ServerConfig.port),
         build_min_interval=srv.get("build_min_interval", ServerConfig.build_min_interval),
-        build_quiet_period=srv.get("build_quiet_period", ServerConfig.build_quiet_period),
+        build_quiet_period=quiet_period,
         build_max_delay=srv.get("build_max_delay", ServerConfig.build_max_delay),
     )
 
