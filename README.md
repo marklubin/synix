@@ -153,10 +153,10 @@ Pre-built transforms for common agent memory patterns. Import from `synix.transf
 | `uvx synix batch-build resume <id>` | *(Experimental)* Resume a previously submitted batch build |
 | `uvx synix batch-build list` | *(Experimental)* Show all batch build instances and their status |
 | `uvx synix batch-build status <id>` | *(Experimental)* Detailed status for a specific batch build. `--latest` for most recent |
-| `synix mesh create` | *(Experimental)* Create a new mesh with config and token. Requires `synix[mesh]` install |
-| `synix mesh provision` | *(Experimental)* Join this machine to a mesh as server or client |
-| `synix mesh status` | *(Experimental)* Show mesh health, members, and last build |
-| `synix mesh list` | *(Experimental)* List all meshes on this machine |
+| `uvx 'synix[mesh]' mesh create` | *(Experimental)* Create a new mesh with config and token |
+| `uvx 'synix[mesh]' mesh provision` | *(Experimental)* Join this machine to a mesh as server or client |
+| `uvx 'synix[mesh]' mesh status` | *(Experimental)* Show mesh health, members, and last build |
+| `uvx 'synix[mesh]' mesh list` | *(Experimental)* List all meshes on this machine |
 
 ## Batch Build (Experimental)
 
@@ -242,19 +242,16 @@ See [docs/batch-build.md](docs/batch-build.md) for the full specification includ
 Synix Mesh distributes pipeline builds across machines over a private network (Tailscale). A central server receives source files from clients, runs builds, and distributes artifact bundles back. Clients automatically watch local directories, submit new files, and pull results.
 
 ```bash
-# Mesh requires extra dependencies (not included in base synix)
-uv pip install synix[mesh]
-
-# Create a mesh and provision machines
-synix mesh create --name my-mesh --pipeline ./pipeline.py
-synix mesh provision --name my-mesh --role server
-synix mesh provision --name my-mesh --role client --server server-host:7433
+# Mesh needs the [mesh] extra for its dependencies
+uvx 'synix[mesh]' mesh create --name my-mesh --pipeline ./pipeline.py
+uvx 'synix[mesh]' mesh provision --name my-mesh --role server
+uvx 'synix[mesh]' mesh provision --name my-mesh --role client --server server-host:7433
 
 # Check status
-synix mesh status --name my-mesh
+uvx 'synix[mesh]' mesh status --name my-mesh
 ```
 
-Mesh daemons run as persistent systemd services, so they require a real installation (not `uvx`). Features: debounced build scheduling, ETag-based artifact distribution, shared-token auth, automatic leader election with term-based fencing, deploy hooks, webhook notifications.
+All mesh state persists in `~/.synix-mesh/` on disk. Features: debounced build scheduling, ETag-based artifact distribution, shared-token auth, automatic leader election with term-based fencing, deploy hooks, webhook notifications.
 
 See [docs/mesh.md](docs/mesh.md) for the full guide — configuration, server API, failover protocol, security model, and data layout.
 
