@@ -59,6 +59,19 @@ def _format_age(timestamp: float) -> str:
     return f"{int(age / 3600)}h {int((age % 3600) / 60)}m ago"
 
 
+def _format_secs_ago(secs: float | None) -> str:
+    """Format a 'seconds ago' value as human-readable age."""
+    if secs is None:
+        return "never"
+    if secs < 0:
+        return "just now"
+    if secs < 60:
+        return f"{int(secs)}s ago"
+    if secs < 3600:
+        return f"{int(secs / 60)}m ago"
+    return f"{int(secs / 3600)}h {int((secs % 3600) / 60)}m ago"
+
+
 def _format_uptime(seconds: float) -> str:
     """Format uptime as Xh Ym."""
     if seconds < 60:
@@ -188,8 +201,8 @@ class MeshDashboard:
             pending = sessions.get("pending", 0)
             scheduler = s.get("scheduler", {})
             sched_state = scheduler.get("state", "unknown")
-            last_build = scheduler.get("last_build_at", 0)
-            last_build_str = _format_age(last_build) if last_build > 0 else "never"
+            last_build_ago = scheduler.get("last_build_secs_ago")
+            last_build_str = _format_secs_ago(last_build_ago) if last_build_ago else "never"
 
             builds = s.get("build_count", 0)
             lines.append(f"Builds: {builds}       Sessions: {total} total, {pending} pending    Uptime: {uptime}")

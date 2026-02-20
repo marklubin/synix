@@ -153,15 +153,18 @@ def load_mesh_config(path: Path) -> MeshConfig:
     # Server config
     srv = data.get("server", {})
 
-    # Backward compat: build_batch_threshold was renamed to build_quiet_period in v0.14.1
+    # build_batch_threshold (file count trigger) was replaced by build_quiet_period
+    # (seconds of quiet) in v0.14.1. The two have incompatible semantics — a count
+    # cannot be converted to seconds — so we warn and use the default.
     quiet_period = srv.get("build_quiet_period", None)
     if quiet_period is None and "build_batch_threshold" in srv:
         logger.warning(
-            "Deprecated config key 'build_batch_threshold' — rename to 'build_quiet_period' "
-            "(seconds of quiet before triggering a build). Using value %d as quiet_period.",
+            "Config key 'build_batch_threshold' was removed in v0.14.1. "
+            "Builds now use quiet-period debounce: set 'build_quiet_period' (seconds) "
+            "instead. Ignoring old value %d and using default %ds.",
             srv["build_batch_threshold"],
+            ServerConfig.build_quiet_period,
         )
-        quiet_period = srv["build_batch_threshold"]
     if quiet_period is None:
         quiet_period = ServerConfig.build_quiet_period
 

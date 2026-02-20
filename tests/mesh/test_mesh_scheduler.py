@@ -226,4 +226,6 @@ class TestGetStatus:
         assert status["state"] == "idle"
         assert status["pending_count"] == 0
         assert status["force_rebuild"] is False
-        assert status["last_submission_at"] is None
+        assert status["last_submission_secs_ago"] is None
+        assert status["first_pending_secs_ago"] is None
+        assert status["last_build_secs_ago"] is None

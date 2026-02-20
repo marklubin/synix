@@ -51,6 +51,7 @@ class BuildScheduler:
         self.last_build_at: float = 0.0
         self._force_rebuild = False
         self._pending_at_build_start: int = 0
+        self._build_started_at: float = 0.0
         self._lock = asyncio.Lock()
 
     async def notify_new_session(self) -> None:
@@ -108,13 +109,19 @@ class BuildScheduler:
             return False
 
     async def start_build(self) -> None:
-        """Transition to RUNNING state. Raises if already RUNNING."""
+        """Transition to RUNNING state. Raises if already RUNNING.
+
+        Note: this relies on single-threaded asyncio (one event loop). The
+        _lock is an asyncio.Lock, not a threading lock. If the server ever
+        moves to threaded workers, this needs a threading.Lock instead.
+        """
         async with self._lock:
             if self.state == BuildState.RUNNING:
                 raise RuntimeError("Build already running — single-flight violation")
             self.state = BuildState.RUNNING
             self._force_rebuild = False
             self._pending_at_build_start = self.pending_count
+            self._build_started_at = time.monotonic()
             logger.info(
                 "Build started (pending_count=%d)",
                 self.pending_count,
@@ -125,27 +132,36 @@ class BuildScheduler:
 
         Sessions that arrived *during* the build (i.e. pending_count grew beyond
         what it was at start_build) are preserved as pending for the next cycle.
+        Their timing is reset so max_delay counts from when they actually arrived,
+        not from the pre-build pending set.
         """
         async with self._lock:
-            self.last_build_at = time.monotonic()
+            now = time.monotonic()
+            self.last_build_at = now
+            force = self._force_rebuild
+            self._force_rebuild = False
 
             # Sessions arriving during the build weren't included in this build
             arrived_during_build = max(0, self.pending_count - self._pending_at_build_start)
 
-            if self._force_rebuild or arrived_during_build > 0:
+            if force or arrived_during_build > 0:
                 self.pending_count = arrived_during_build
-                # Keep first_pending_at and last_submission_at so the quiet-period
-                # timer tracks the new arrivals correctly
-                if arrived_during_build == 0:
+                if arrived_during_build > 0:
+                    # Reset timing to when mid-build arrivals started, not
+                    # the pre-build era. This prevents max_delay from firing
+                    # immediately after a build completes.
+                    self.first_pending_at = self._build_started_at
+                    # last_submission_at stays as-is (tracks the most recent
+                    # mid-build arrival for quiet-period evaluation)
+                else:
                     self.first_pending_at = None
                     self.last_submission_at = None
                 self.state = BuildState.QUEUED
-                if self._force_rebuild:
-                    reason = "force rebuild"
+                if arrived_during_build > 0:
+                    reason = f"{arrived_during_build} sessions during build"
                 else:
-                    reason = f"{arrived_during_build} sessions arrived during build"
+                    reason = "force rebuild"
                 logger.info("Build completed, queuing another (%s)", reason)
-                self._force_rebuild = False
                 return True
 
             self.pending_count = 0
@@ -169,12 +185,23 @@ class BuildScheduler:
             return "started"
 
     def get_status(self) -> dict:
-        """Return current scheduler state as dict."""
+        """Return current scheduler state as dict.
+
+        Timestamps are converted to "seconds ago" floats (rounded to 1 decimal)
+        since raw monotonic values are meaningless to external consumers.
+        """
+        now = time.monotonic()
+
+        def _ago(ts: float | None) -> float | None:
+            if ts is None or ts == 0.0:
+                return None
+            return round(now - ts, 1)
+
         return {
             "state": self.state.value,
             "pending_count": self.pending_count,
-            "first_pending_at": self.first_pending_at,
-            "last_submission_at": self.last_submission_at,
-            "last_build_at": self.last_build_at,
+            "first_pending_secs_ago": _ago(self.first_pending_at),
+            "last_submission_secs_ago": _ago(self.last_submission_at),
+            "last_build_secs_ago": _ago(self.last_build_at),
             "force_rebuild": self._force_rebuild,
         }
