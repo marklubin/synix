@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import base64
-import gzip
 import hashlib
 
 
 class TestSessionFlow:
     def _make_session_payload(self, session_id: str, content: str, project_dir: str = "default"):
         raw = content.encode()
-        compressed = gzip.compress(raw)
-        encoded = base64.b64encode(compressed).decode()
-        sha256 = hashlib.sha256(compressed).hexdigest()
+        encoded = base64.b64encode(raw).decode()
+        sha256 = hashlib.sha256(raw).hexdigest()
         return {
             "session_id": session_id,
             "project_dir": project_dir,
@@ -51,7 +49,7 @@ class TestSessionFlow:
         assert resp.status_code == 400
 
     def test_submit_sha256_mismatch_rejected(self, test_client, authed_headers):
-        content = gzip.compress(b"test")
+        content = b"test content for sha check"
         payload = {
             "session_id": "bad-sha",
             "content": base64.b64encode(content).decode(),

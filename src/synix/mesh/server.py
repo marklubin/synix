@@ -50,7 +50,7 @@ def create_app(config: MeshConfig) -> Starlette:
     _state_lock = asyncio.Lock()
 
     # --- Term fencing helper (1C) ---
-    def _check_term(request: Request) -> JSONResponse | None:
+    async def _check_term(request: Request) -> JSONResponse | None:
         """Check term from request headers. Returns 409 response if stale, None if OK."""
         raw_term = request.headers.get("X-Mesh-Term", "")
         if not raw_term:
@@ -59,12 +59,13 @@ def create_app(config: MeshConfig) -> Starlette:
             request_term = int(raw_term)
         except ValueError:
             return None
-        # Check against highest known term from any member
-        max_known_term = 0
-        for info in members.values():
-            member_term = info.get("term_counter", 0)
-            if member_term > max_known_term:
-                max_known_term = member_term
+        # Check against highest known term from any member (under lock)
+        async with _state_lock:
+            max_known_term = 0
+            for info in members.values():
+                member_term = info.get("term_counter", 0)
+                if member_term > max_known_term:
+                    max_known_term = member_term
         if request_term < max_known_term:
             return JSONResponse(
                 {
@@ -96,7 +97,7 @@ def create_app(config: MeshConfig) -> Starlette:
 
     async def submit_session(request: Request) -> JSONResponse:
         # Term fencing (1C)
-        term_err = _check_term(request)
+        term_err = await _check_term(request)
         if term_err is not None:
             return term_err
 
@@ -158,7 +159,7 @@ def create_app(config: MeshConfig) -> Starlette:
         nonlocal _build_task
 
         # Term fencing (1C)
-        term_err = _check_term(request)
+        term_err = await _check_term(request)
         if term_err is not None:
             return term_err
 
