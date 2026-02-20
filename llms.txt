@@ -4,90 +4,107 @@
 
 ## What it does
 
-Synix transforms conversation exports into searchable, hierarchical memory with full provenance tracking. Declarative Python pipelines define how raw conversations become episode summaries, monthly rollups, and core memory documents. Content-addressed caching means only affected layers rebuild when you change prompts or add new data.
+Synix transforms raw conversation histories into structured, searchable memory with full provenance tracking. It takes ChatGPT exports, Claude conversations, or plain text files and processes them through configurable LLM transforms to create hierarchical memory artifacts — episode summaries, monthly rollups, topical clusters, and core memory documents. Change a prompt or add new sources, and only affected artifacts rebuild incrementally.
 
 ## Key concepts
 
-- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory) with SHA256 content addressing
-- **Layer** — typed object in the build DAG (Source for inputs, Transform subclasses for LLM steps, SearchIndex/FlatFile for projections)
-- **Pipeline** — declared in Python using `Pipeline.add(*layers)` with automatic routing of transforms to layers and projections
-- **Projection** — materializes artifacts into SearchIndex (SQLite FTS5 + embeddings) or FlatFile (markdown context doc)
-- **Provenance** — every artifact traces back to source conversations, always included in search results
-- **Cache/Rebuild** — fingerprint comparison of inputs + prompts + config triggers rebuilds only when needed
+- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory) with content-addressed SHA256 identity
+- **Layer** — typed Python object in the build DAG: `Source` for inputs, `Transform` subclasses for LLM steps, `SearchIndex`/`FlatFile` for projections
+- **Pipeline** — declared in Python using `Pipeline.add(*layers)` which routes transforms to layers and projections automatically
+- **Projection** — materializes artifacts into usable outputs: `SearchIndex` (SQLite FTS5 + optional embeddings), `FlatFile` (markdown context doc)
+- **Provenance** — every artifact traces back to its inputs, always included in search results
+- **Cache/Rebuild** — fingerprint comparison: if inputs, prompts, or model config changed, rebuild; otherwise skip
 
 ## Installation and quick start
 
 ```bash
-# Install and scaffold
+# Install and initialize
 uvx synix init my-project
 cd my-project
 
-# Add API key (see pipeline.py for provider config)
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Build pipeline
+# Add API key, then build
 uvx synix build
 
 # Browse and search
-uvx synix list
-uvx synix search "hiking"
-uvx synix show final-report
+uvx synix list                    # all artifacts, grouped by layer
+uvx synix search "hiking"         # full-text search with provenance
+uvx synix show final-report       # render an artifact
 ```
 
 ## CLI commands
 
-- `uvx synix init <name>` — scaffold new project with sources and pipeline
-- `uvx synix build` — run pipeline, only rebuild what changed
-- `uvx synix plan` — dry-run showing what would build
-- `uvx synix list [layer]` — show all artifacts, optionally filtered
-- `uvx synix show <id>` — display artifact by label or ID prefix
-- `uvx synix search <query>` — full-text search with provenance
-- `uvx synix lineage <id>` — show full dependency chain
-- `uvx synix validate` — run validators against artifacts (experimental)
+- `uvx synix init <name>` — scaffold new project with sources, pipeline, and README
+- `uvx synix build [pipeline.py]` — run pipeline, materialize projections (only rebuilds what changed)  
+- `uvx synix plan [pipeline.py]` — dry-run showing what would build without running transforms
+- `uvx synix list [layer]` — list artifacts, optionally filtered by layer
+- `uvx synix search <query>` — search with provenance chains (`--layers`, `--mode hybrid` for semantic)
+- `uvx synix show <id>` — display artifact by label or ID prefix (`--raw` for JSON)
+- `uvx synix lineage <id>` — show full provenance tree for an artifact
+- `uvx synix validate` — *(experimental)* run validators against build artifacts
 - `uvx synix clean` — delete build directory
 
 ## Architecture overview
 
 ```
 src/synix/
-├── __init__.py            # Public API
-├── core/models.py         # Layer hierarchy, Pipeline class
+├── __init__.py            # Public API: Pipeline, Source, Transform, SearchIndex, FlatFile, Artifact
+├── core/models.py         # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
 ├── build/
-│   ├── runner.py          # Execute pipeline, walk DAG
-│   ├── artifacts.py       # Artifact storage (filesystem-backed)
-│   ├── llm_transforms.py  # EpisodeSummary, MonthlyRollup, etc.
-│   ├── fingerprint.py     # synix:transform:v2 scheme
-│   └── projections.py     # SearchIndex, FlatFile materialization
+│   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
+│   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions
+│   ├── artifacts.py       # Artifact storage — save/load/query (filesystem-backed)
+│   ├── llm_transforms.py  # Built-in LLM transforms (EpisodeSummary, MonthlyRollup, etc.)
+│   ├── transforms.py      # Transform base + registry
+│   ├── validators.py      # Built-in validators (PII, SemanticConflict, Citation, etc.)
+│   └── projections.py     # Projection dispatch
+├── ext/                   # Configurable transforms: MapSynthesis, GroupSynthesis, etc.
 ├── search/
-│   ├── indexer.py         # SQLite FTS5 + embeddings
-│   └── retriever.py       # Hybrid search with RRF fusion
+│   ├── indexer.py         # SQLite FTS5 — build, query, shadow swap  
+│   ├── embeddings.py      # Embedding provider — fastembed, OpenAI, cached
+│   └── retriever.py       # Hybrid search — keyword + semantic + RRF fusion
 ├── cli/                   # Click CLI commands
-└── templates/             # Demo pipelines for synix init
+├── adapters/              # Source parsers (ChatGPT, Claude, text)
+└── templates/             # Bundled demo pipelines
 ```
 
 ## Pipeline definition
 
+Pipelines are Python files. Layers are real objects with dependencies as object references:
+
 ```python
 from synix import Pipeline, Source, SearchIndex
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
 pipeline.source_dir = "./sources"
 pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}
 
-transcripts = Source("transcripts")
-episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-monthly = MonthlyRollup("monthly", depends_on=[episodes])
-core = CoreSynthesis("core", depends_on=[monthly])
+# Parse source files  
+bios = Source("bios", dir="./sources/bios")
 
-pipeline.add(transcripts, episodes, monthly, core)
-pipeline.add(SearchIndex("search", sources=[episodes, monthly, core]))
+# 1:1 transform — apply prompt to each input
+work_styles = MapSynthesis(
+    "work_styles", depends_on=[bios],
+    prompt="Infer this person's work style:\n\n{artifact}",
+    artifact_type="work_style"
+)
+
+# N:1 transform — combine all inputs into one output
+report = ReduceSynthesis(
+    "report", depends_on=[work_styles], 
+    prompt="Write team analysis:\n\n{artifacts}",
+    label="team-report"
+)
+
+pipeline.add(bios, work_styles, report)
+pipeline.add(SearchIndex("search", sources=[work_styles, report]))
 ```
 
 ## Important constraints
 
-- SQLite + filesystem only (no external databases)
-- Python 3.11+ required
-- No web UI (CLI and Python API only)
-- Source adapters: ChatGPT JSON, Claude JSON, text/markdown files
-- LLM providers: Anthropic, OpenAI, or OpenAI-compatible via base_url
+- **SQLite only** — no external databases (Postgres, Neo4j, etc.)
+- **No web UI** — CLI-based workflow
+- **Python 3.11+** required
+- **Local execution** — no hosted/cloud version
+- **LLM API keys** required (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`)
+- **Filesystem-backed** — all state in local build directory, no network dependencies beyond LLM APIs
