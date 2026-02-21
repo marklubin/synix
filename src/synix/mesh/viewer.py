@@ -773,39 +773,38 @@ def dispatch(cmd: str, current: ViewState) -> ViewState:
 
 
 def run_viewer(name: str) -> None:
-    """Launch the interactive memory viewer."""
+    """Launch the interactive memory viewer in the alternate screen buffer."""
     console = Console()
     ctx = load_mesh_context(name, console=console)
     vs = ViewState()
 
-    while True:
-        console.clear()
+    with console.screen():
+        while True:
+            console.clear()
 
-        if vs.view == "overview":
-            render_overview(ctx)
-        elif vs.view == "artifacts":
-            vs.artifact_labels = render_artifacts(ctx, layer_filter=vs.layer_filter)
-        elif vs.view == "detail":
-            render_detail(ctx, label=vs.artifact_label)
-        elif vs.view == "search":
-            results = render_search(ctx, query=vs.search_query)
-            vs.search_results = results
-        elif vs.view == "config":
-            render_config(ctx)
-        elif vs.view == "builds":
-            render_builds(ctx)
-        elif vs.view == "pipeline":
-            render_pipeline(ctx)
+            if vs.view == "overview":
+                render_overview(ctx)
+            elif vs.view == "artifacts":
+                vs.artifact_labels = render_artifacts(ctx, layer_filter=vs.layer_filter)
+            elif vs.view == "detail":
+                render_detail(ctx, label=vs.artifact_label)
+            elif vs.view == "search":
+                results = render_search(ctx, query=vs.search_query)
+                vs.search_results = results
+            elif vs.view == "config":
+                render_config(ctx)
+            elif vs.view == "builds":
+                render_builds(ctx)
+            elif vs.view == "pipeline":
+                render_pipeline(ctx)
 
-        print_nav_hints(console, vs.view)
+            print_nav_hints(console, vs.view)
 
-        try:
-            cmd = input("> ").strip()
-        except (KeyboardInterrupt, EOFError):
-            break
+            try:
+                cmd = input("> ").strip()
+            except (KeyboardInterrupt, EOFError):
+                break
 
-        vs = dispatch(cmd, vs)
-        if vs.view == "quit":
-            break
-
-    console.print("\n[dim]Viewer closed.[/dim]")
+            vs = dispatch(cmd, vs)
+            if vs.view == "quit":
+                break
