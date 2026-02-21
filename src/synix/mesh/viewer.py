@@ -698,13 +698,13 @@ def render_pipeline(ctx: MeshContext) -> None:
 def print_nav_hints(console: Console, view: str) -> None:
     """Print navigation hints for the current view."""
     hints = {
-        "overview": "  [a]rtifacts  [s]earch  [c]onfig  [b]uilds  [p]ipeline  [q]uit",
-        "artifacts": "  [#] view artifact  [a <layer>] filter  [enter] back  [q]uit",
-        "detail": "  [enter] back  [q]uit",
-        "search": "  [#] view artifact  [s <query>] new search  [enter] back  [q]uit",
-        "config": "  [enter] back  [q]uit",
-        "builds": "  [enter] back  [q]uit",
-        "pipeline": "  [enter] back  [q]uit",
+        "overview": r"  \[a]rtifacts  \[s]earch  \[c]onfig  \[b]uilds  \[p]ipeline  \[q]uit",
+        "artifacts": r"  \[#] view artifact  \[a <layer>] filter  \[enter] back  \[q]uit",
+        "detail": r"  \[enter] back  \[q]uit",
+        "search": r"  \[#] view artifact  \[s <query>] new search  \[enter] back  \[q]uit",
+        "config": r"  \[enter] back  \[q]uit",
+        "builds": r"  \[enter] back  \[q]uit",
+        "pipeline": r"  \[enter] back  \[q]uit",
     }
     console.print(hints.get(view, "  [enter] back  [q]uit"))
 
