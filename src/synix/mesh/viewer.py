@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import httpx
@@ -188,7 +188,7 @@ def render_overview(ctx: MeshContext) -> None:
     )
 
 
-def render_artifacts(ctx: MeshContext, layer_filter: str = "") -> None:
+def render_artifacts(ctx: MeshContext, layer_filter: str = "") -> list[str]:
     """Render artifact list, optionally filtered by layer. Returns ordered labels."""
     from synix.build.artifacts import ArtifactStore
 
@@ -196,14 +196,14 @@ def render_artifacts(ctx: MeshContext, layer_filter: str = "") -> None:
 
     if not ctx.build_dir.exists():
         c.print("[dim]No build directory found.[/dim]")
-        return
+        return []
 
     store = ArtifactStore(ctx.build_dir)
     manifest = store._manifest
 
     if not manifest:
         c.print("[dim]No artifacts found.[/dim]")
-        return
+        return []
 
     # Group by layer, sorted by level
     by_layer: dict[str, list[tuple[str, dict]]] = {}
@@ -218,7 +218,7 @@ def render_artifacts(ctx: MeshContext, layer_filter: str = "") -> None:
             c.print(f"[dim]No artifacts found in layer:[/dim] {layer_filter}")
         else:
             c.print("[dim]No artifacts found.[/dim]")
-        return
+        return []
 
     sorted_layers = sorted(
         by_layer.items(),
@@ -317,23 +317,26 @@ def render_detail(ctx: MeshContext, label: str) -> None:
     c.print("  ".join(meta_parts))
     c.print()
 
-    # Provenance chain
+    # Provenance chain (depth-limited to avoid stack overflow on deep DAGs)
     provenance = ProvenanceTracker(ctx.build_dir)
     chain = provenance.get_chain(resolved)
     if chain:
         prov_tree = Tree("[bold]Provenance:[/bold]")
+        max_depth = 10
 
-        def _add_parents(node, lbl, visited=None):
+        def _add_parents(node, lbl, visited=None, depth=0):
             if visited is None:
                 visited = set()
-            if lbl in visited:
+            if lbl in visited or depth >= max_depth:
+                if depth >= max_depth:
+                    node.add("[dim]... (truncated)[/dim]")
                 return
             visited.add(lbl)
             rec = provenance.get_record(lbl)
             if rec:
                 for parent_label in sorted(rec.parent_labels):
                     child = node.add(f"[dim]{parent_label}[/dim]")
-                    _add_parents(child, parent_label, visited)
+                    _add_parents(child, parent_label, visited, depth + 1)
 
         _add_parents(prov_tree, resolved)
         c.print(prov_tree)
@@ -463,6 +466,8 @@ def render_config(ctx: MeshContext) -> None:
 
 def _format_toml_value(val: object) -> str:
     """Format a TOML value for display."""
+    if isinstance(val, bool):
+        return "true" if val else "false"
     if isinstance(val, str):
         return f'"{val}"' if val else '[dim]""[/dim]'
     if isinstance(val, list):
@@ -592,14 +597,7 @@ def print_nav_hints(console: Console, view: str) -> None:
 
 def dispatch(cmd: str, current: ViewState) -> ViewState:
     """Parse user input and return updated ViewState."""
-    new = ViewState(
-        view=current.view,
-        layer_filter=current.layer_filter,
-        artifact_label=current.artifact_label,
-        search_query=current.search_query,
-        search_results=current.search_results,
-        artifact_labels=current.artifact_labels,
-    )
+    new = replace(current)
 
     if not cmd:
         # Enter with no input → back to overview
@@ -668,9 +666,7 @@ def run_viewer(name: str) -> None:
         if vs.view == "overview":
             render_overview(ctx)
         elif vs.view == "artifacts":
-            labels = render_artifacts(ctx, layer_filter=vs.layer_filter)
-            if labels:
-                vs.artifact_labels = labels
+            vs.artifact_labels = render_artifacts(ctx, layer_filter=vs.layer_filter)
         elif vs.view == "detail":
             render_detail(ctx, label=vs.artifact_label)
         elif vs.view == "search":
