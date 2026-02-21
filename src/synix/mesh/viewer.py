@@ -36,6 +36,7 @@ class MeshContext:
     token: str
     role: str
     console: Console
+    pipeline_path: str = ""
 
 
 @dataclass
@@ -84,6 +85,7 @@ def load_mesh_context(name: str, console: Console | None = None) -> MeshContext:
         token=config.token,
         role=role,
         console=console or Console(),
+        pipeline_path=config.pipeline_path,
     )
 
 
@@ -577,6 +579,117 @@ def _format_scheduler_info(data: dict) -> str:
     return "\n".join(lines)
 
 
+def render_pipeline(ctx: MeshContext) -> None:
+    """Render the pipeline definition: metadata, layer DAG, and projections."""
+    from synix.build.dag import resolve_build_order
+    from synix.build.pipeline import load_pipeline
+    from synix.core.models import FlatFile, SearchIndex, Source, Transform
+
+    c = ctx.console
+
+    # Resolve pipeline path relative to config directory
+    pipeline_path = ctx.pipeline_path
+    if pipeline_path and not Path(pipeline_path).is_absolute():
+        pipeline_path = str(ctx.config_path.parent / pipeline_path)
+
+    if not pipeline_path:
+        c.print("[red]No pipeline path configured.[/red]")
+        return
+
+    try:
+        pipeline = load_pipeline(pipeline_path)
+    except FileNotFoundError:
+        c.print(f"[red]Pipeline file not found:[/red] {pipeline_path}")
+        return
+    except (ImportError, ValueError, TypeError) as exc:
+        c.print(f"[red]Failed to load pipeline:[/red] {exc}")
+        return
+
+    # -- Section 1: Pipeline metadata --
+    meta_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+    meta_table.add_column("Key", style="bold")
+    meta_table.add_column("Value")
+
+    meta_table.add_row("Name", pipeline.name)
+    meta_table.add_row("Source dir", pipeline.source_dir)
+    meta_table.add_row("Build dir", pipeline.build_dir)
+    meta_table.add_row("Concurrency", str(pipeline.concurrency))
+
+    if pipeline.llm_config:
+        model = pipeline.llm_config.get("model", "")
+        provider = pipeline.llm_config.get("provider", "")
+        if model:
+            meta_table.add_row("Model", model)
+        if provider:
+            meta_table.add_row("Provider", provider)
+
+    c.print(Panel(meta_table, title="[bold]Pipeline[/bold]", border_style="green"))
+    c.print()
+
+    # -- Section 2: Layer DAG --
+    build_order = resolve_build_order(pipeline)
+    dag_tree = Tree("[bold]Layer DAG[/bold]")
+
+    for layer in build_order:
+        type_name = "Source" if isinstance(layer, Source) else type(layer).__name__
+        style = get_layer_style(layer._level)
+        node_label = f"[{style}]{layer.name}[/{style}] (L{layer._level}) \u2014 {type_name}"
+        node = dag_tree.add(node_label)
+
+        for dep in layer.depends_on:
+            node.add(f"[dim]\u2190 {dep.name}[/dim]")
+
+        if isinstance(layer, Transform):
+            if layer.prompt_name:
+                node.add(f"[dim]prompt: {layer.prompt_name}[/dim]")
+            if layer.context_budget:
+                node.add(f"[dim]context_budget: {layer.context_budget}[/dim]")
+
+    c.print(dag_tree)
+    c.print()
+
+    # -- Section 3: Projections --
+    if pipeline.projections:
+        proj_table = Table(
+            title="[bold]Projections[/bold]",
+            box=box.ROUNDED,
+            show_header=True,
+        )
+        proj_table.add_column("Name", style="bold")
+        proj_table.add_column("Type")
+        proj_table.add_column("Sources")
+        proj_table.add_column("Details")
+
+        for proj in pipeline.projections:
+            source_names = ", ".join(s.name for s in proj.sources)
+            if isinstance(proj, SearchIndex):
+                proj_type = "SearchIndex"
+                details_parts = [f"search: {proj.search}"]
+                if proj.embedding_config:
+                    details_parts.append(f"embeddings: {proj.embedding_config}")
+                details = "  ".join(details_parts)
+            elif isinstance(proj, FlatFile):
+                proj_type = "FlatFile"
+                details = f"output: {proj.output_path}"
+            else:
+                proj_type = type(proj).__name__
+                details = ""
+            proj_table.add_row(proj.name, proj_type, source_names, details)
+
+        c.print(proj_table)
+        c.print()
+
+    # -- Validators/Fixers summary --
+    if pipeline.validators or pipeline.fixers:
+        counts = []
+        if pipeline.validators:
+            counts.append(f"{len(pipeline.validators)} validator(s)")
+        if pipeline.fixers:
+            counts.append(f"{len(pipeline.fixers)} fixer(s)")
+        c.print(f"[dim]{', '.join(counts)} configured[/dim]")
+        c.print()
+
+
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
@@ -585,12 +698,13 @@ def _format_scheduler_info(data: dict) -> str:
 def print_nav_hints(console: Console, view: str) -> None:
     """Print navigation hints for the current view."""
     hints = {
-        "overview": "  [a]rtifacts  [s]earch  [c]onfig  [b]uilds  [q]uit",
+        "overview": "  [a]rtifacts  [s]earch  [c]onfig  [b]uilds  [p]ipeline  [q]uit",
         "artifacts": "  [#] view artifact  [a <layer>] filter  [enter] back  [q]uit",
         "detail": "  [enter] back  [q]uit",
         "search": "  [#] view artifact  [s <query>] new search  [enter] back  [q]uit",
         "config": "  [enter] back  [q]uit",
         "builds": "  [enter] back  [q]uit",
+        "pipeline": "  [enter] back  [q]uit",
     }
     console.print(hints.get(view, "  [enter] back  [q]uit"))
 
@@ -631,6 +745,10 @@ def dispatch(cmd: str, current: ViewState) -> ViewState:
 
     if action in ("b", "builds"):
         new.view = "builds"
+        return new
+
+    if action in ("p", "pipeline"):
+        new.view = "pipeline"
         return new
 
     # Number → drill into artifact (from artifacts or search view)
@@ -676,6 +794,8 @@ def run_viewer(name: str) -> None:
             render_config(ctx)
         elif vs.view == "builds":
             render_builds(ctx)
+        elif vs.view == "pipeline":
+            render_pipeline(ctx)
 
         print_nav_hints(console, vs.view)
 

@@ -20,6 +20,7 @@ from synix.mesh.viewer import (
     render_config,
     render_detail,
     render_overview,
+    render_pipeline,
     render_search,
 )
 
@@ -127,6 +128,7 @@ leader_candidates = []
         token="msh_test",
         role="server",
         console=console,
+        pipeline_path="./pipeline.py",
     )
 
 
@@ -382,3 +384,146 @@ class TestDispatch:
         vs = ViewState()
         result = dispatch("exit", vs)
         assert result.view == "quit"
+
+    def test_p_goes_to_pipeline(self):
+        vs = ViewState()
+        result = dispatch("p", vs)
+        assert result.view == "pipeline"
+
+    def test_pipeline_full_word(self):
+        vs = ViewState()
+        result = dispatch("pipeline", vs)
+        assert result.view == "pipeline"
+
+
+SAMPLE_PIPELINE = """\
+from synix import Pipeline, Source, FlatFile, SearchIndex
+from synix.transforms import EpisodeSummary, CoreSynthesis
+
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+core = CoreSynthesis("core", depends_on=[episodes])
+
+search = SearchIndex("search", sources=[episodes, core])
+context = FlatFile("context", sources=[core], output_path="./build/context.md")
+
+pipeline = Pipeline(
+    "test-pipeline",
+    source_dir="./sources",
+    build_dir="./build",
+    concurrency=3,
+    llm_config={"model": "claude-sonnet-4-20250514", "provider": "anthropic"},
+)
+pipeline.add(transcripts, episodes, core, search, context)
+"""
+
+
+@pytest.fixture
+def pipeline_ctx(tmp_path, build_dir):
+    """Create a MeshContext with a real pipeline.py file."""
+    mesh_dir = tmp_path / "mesh"
+    mesh_dir.mkdir()
+
+    # Write the pipeline file into the mesh dir
+    pipeline_file = mesh_dir / "pipeline.py"
+    pipeline_file.write_text(SAMPLE_PIPELINE)
+
+    config_content = f"""\
+[mesh]
+name = "test-viewer"
+token = "msh_testtoken{"a" * 60}"
+
+[pipeline]
+path = "./pipeline.py"
+
+[source]
+watch_dir = "/sources"
+patterns = ["**/*.json"]
+
+[server]
+port = 7433
+
+[cluster]
+leader_candidates = []
+"""
+    (mesh_dir / "synix-mesh.toml").write_text(config_content)
+
+    state = {"role": "server", "server_url": "", "my_hostname": "test-host"}
+    (mesh_dir / "state.json").write_text(json.dumps(state))
+
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=True, width=120)
+
+    return MeshContext(
+        name="test-viewer",
+        config_path=mesh_dir / "synix-mesh.toml",
+        mesh_dir=mesh_dir,
+        build_dir=build_dir,
+        state=state,
+        server_url="",
+        token="msh_test",
+        role="server",
+        console=console,
+        pipeline_path="./pipeline.py",
+    )
+
+
+def _get_pipeline_output(ctx: MeshContext) -> str:
+    """Extract rendered text from the console buffer."""
+    ctx.console.file.seek(0)
+    return ctx.console.file.read()
+
+
+class TestRenderPipeline:
+    def test_shows_pipeline_name(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "test-pipeline" in output
+
+    def test_shows_layers_in_tree(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "transcripts" in output
+        assert "episodes" in output
+        assert "core" in output
+
+    def test_shows_layer_types(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "Source" in output
+        assert "EpisodeSummary" in output
+        assert "CoreSynthesis" in output
+
+    def test_shows_dependencies(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        # Dependency arrows
+        assert "\u2190" in output
+
+    def test_shows_projections(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "Projections" in output
+        assert "SearchIndex" in output
+        assert "FlatFile" in output
+        assert "search" in output
+        assert "context" in output
+
+    def test_shows_metadata(self, pipeline_ctx):
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "Concurrency" in output
+        assert "3" in output
+        assert "claude-sonnet" in output
+
+    def test_pipeline_not_found(self, pipeline_ctx):
+        pipeline_ctx.pipeline_path = "./nonexistent.py"
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "not found" in output
+
+    def test_no_pipeline_path(self, pipeline_ctx):
+        pipeline_ctx.pipeline_path = ""
+        render_pipeline(pipeline_ctx)
+        output = _get_pipeline_output(pipeline_ctx)
+        assert "No pipeline path" in output
