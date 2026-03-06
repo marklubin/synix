@@ -18,9 +18,9 @@ from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
 from synix.build.search_surfaces import (
-    search_surface_handles,
     search_surface_ready,
     surface_local_path,
+    transform_runtime_search_updates,
     validate_search_surface_uses,
 )
 from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
@@ -34,6 +34,7 @@ from synix.core.models import (
     SearchSurface,
     Source,
     Transform,
+    TransformContext,
 )
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,7 @@ def run(
             # Transform layer — gather inputs, split, execute
             inputs = _gather_inputs(layer, layer_artifacts, store)
             transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
+            transform_ctx = _build_transform_context(pipeline, layer, src_dir, build_dir, transform_config)
 
             # Compute transform fingerprint
             transform_fp = layer.compute_fingerprint(transform_config)
@@ -190,8 +192,7 @@ def run(
                     slogger.artifact_cached(layer.name, art.label)
             else:
                 # Execute transform
-                transform_config["_logger"] = slogger
-                transform_config["_layer_name"] = layer.name
+                transform_ctx = transform_ctx.with_updates({"_logger": slogger, "_layer_name": layer.name})
 
                 def _save_artifact(
                     artifact: Artifact,
@@ -290,14 +291,14 @@ def run(
                         slogger.artifact_cached(layer.name, cached_art.label)
 
                 # Split inputs into work units
-                units = layer.split(inputs, transform_config)
+                units = layer.split(inputs, transform_ctx)
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
                     _execute_transform_concurrent(
                         layer,
                         units,
-                        transform_config,
+                        transform_ctx,
                         concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
@@ -311,8 +312,8 @@ def run(
                         if cached_arts:
                             _on_cached(cached_arts, unit_inputs)
                             continue
-                        merged_config = {**transform_config, **config_extras}
-                        new_artifacts = layer.execute(unit_inputs, merged_config)
+                        unit_ctx = transform_ctx.with_updates(config_extras)
+                        new_artifacts = layer.execute(unit_inputs, unit_ctx)
                         for artifact in new_artifacts:
                             _save_artifact(artifact, parent_inputs=unit_inputs)
 
@@ -424,7 +425,7 @@ def _provenance_parent_labels(
 
 
 def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, build_dir: Path) -> dict:
-    """Build config dict for a Transform layer."""
+    """Build fingerprint-stable config dict for a Transform layer."""
     base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
     transform_config: dict = {}
     transform_config["llm_config"] = dict(base_llm_config)
@@ -438,22 +439,31 @@ def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, 
         transform_config.update(layer_rest)
         if layer_llm:
             transform_config["llm_config"].update(layer_llm)
-
-    search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
-    if search_uses:
-        handles = search_surface_handles(build_dir, search_uses)
-        transform_config["search_surfaces"] = handles
-        if len(search_uses) == 1:
-            # Keep the single-surface handle easy to consume for bundled
-            # transforms while retaining search_db_path as a migration shim.
-            default_handle = handles[search_uses[0].name]
-            transform_config["search_surface"] = default_handle
-            transform_config["search_db_path"] = default_handle["db_path"]
-    elif any(isinstance(proj, SearchIndex) for proj in pipeline.projections):
-        # Legacy compatibility path for transforms that still rely on the
-        # global search projection convention.
-        transform_config["search_db_path"] = str(build_dir / "search.db")
     return transform_config
+
+
+def _build_transform_context(
+    pipeline: Pipeline,
+    layer: Transform,
+    src_dir: str,
+    build_dir: Path,
+    transform_config: dict,
+) -> TransformContext:
+    """Build the runtime transform context with explicit capabilities."""
+    runtime_updates = {
+        "workspace": {
+            "source_dir": src_dir,
+            "build_dir": str(build_dir),
+        }
+    }
+    runtime_updates.update(
+        transform_runtime_search_updates(
+            layer,
+            build_dir=build_dir,
+            projections=pipeline.projections,
+        )
+    )
+    return TransformContext.from_value(transform_config).with_updates(runtime_updates)
 
 
 def _materialize_layer_search_surfaces(
@@ -560,7 +570,7 @@ def _get_parent_labels(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
 def _execute_transform_concurrent(
     transform: Transform,
     units: list[tuple[list[Artifact], dict]],
-    config: dict,
+    config: TransformContext | dict,
     concurrency: int,
     on_complete=None,
     cached_by_inputs: dict[tuple[str, ...], list[Artifact]] | None = None,
@@ -621,6 +631,8 @@ def _execute_transform_concurrent(
 
     # Keys that should be shared (not deep-copied) across workers because they
     # contain non-picklable objects (e.g. logger with file handles).
+    base_ctx = TransformContext.from_value(config)
+    base_config = base_ctx.to_dict()
     _shared_keys = {"_logger"}
 
     # Pre-create a shared LLM client to avoid per-thread connection overhead
@@ -628,7 +640,7 @@ def _execute_transform_concurrent(
     try:
         from synix.build.llm_transforms import _make_llm_client
 
-        shared_client = _make_llm_client(config)
+        shared_client = _make_llm_client(base_config)
     except ImportError:
         pass  # Non-LLM transforms don't need a shared client
     except Exception:
@@ -640,14 +652,15 @@ def _execute_transform_concurrent(
         worker_transform = copy.copy(transform)
         # Deep-copy mutable config to avoid cross-thread mutation, but share
         # non-copyable objects like the logger.
-        shared = {k: config[k] for k in _shared_keys if k in config}
-        copyable = {k: v for k, v in config.items() if k not in _shared_keys}
+        shared = {k: base_config[k] for k in _shared_keys if k in base_config}
+        copyable = {k: v for k, v in base_config.items() if k not in _shared_keys}
         worker_config = copy.deepcopy(copyable)
         worker_config.update(shared)
         worker_config.update(config_extras)
         if shared_client is not None:
             worker_config["_shared_llm_client"] = shared_client
-        return index, worker_transform.execute(unit_inputs, worker_config)
+        worker_ctx = TransformContext.from_value(worker_config)
+        return index, worker_transform.execute(unit_inputs, worker_ctx)
 
     first_error: Exception | None = None
 

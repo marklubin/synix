@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 from synix.ext._render import render_template
 from synix.ext._util import stable_callable_repr
 
@@ -90,8 +90,9 @@ class FoldSynthesis(Transform):
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """N:1 — single unit (sequential by nature)."""
+        ctx = self.get_context(ctx)
         return [(inputs, {})]
 
     def estimate_output_count(self, input_count: int) -> int:
@@ -106,9 +107,10 @@ class FoldSynthesis(Transform):
         else:
             return sorted(inputs, key=self.sort_by)
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
         prompt_id = self._make_prompt_id()
 
         sorted_inputs = self._sort_inputs(inputs)
@@ -127,7 +129,7 @@ class FoldSynthesis(Transform):
 
             response = _logged_complete(
                 client,
-                config,
+                ctx,
                 messages=[{"role": "user", "content": rendered}],
                 artifact_desc=f"{self.name} step {step}/{total}",
             )

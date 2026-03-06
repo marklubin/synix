@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from synix.core.models import Pipeline, SearchSurface, Transform
+from synix.core.models import Pipeline, SearchIndex, SearchSurface, Transform
+from synix.core.search_handles import SearchSurfaceHandle
 
 
 def surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
@@ -12,18 +14,40 @@ def surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
     return build_dir / "surfaces" / f"{surface.name}.db"
 
 
-def search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, dict]:
-    """Build lightweight search-surface handles for transform config injection."""
+def search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, SearchSurfaceHandle]:
+    """Build typed search-surface handles for transform runtime context."""
     return {
-        surface.name: {
-            "name": surface.name,
-            "kind": "search_surface",
-            "db_path": str(surface_local_path(build_dir, surface)),
-            "modes": list(surface.modes),
-            "sources": [source.name for source in surface.sources],
-        }
+        surface.name: SearchSurfaceHandle(
+            name=surface.name,
+            db_path=str(surface_local_path(build_dir, surface)),
+            modes=tuple(surface.modes),
+            sources=tuple(source.name for source in surface.sources),
+        )
         for surface in surfaces
     }
+
+
+def transform_runtime_search_updates(
+    layer: Transform,
+    *,
+    build_dir: Path,
+    projections: list,
+) -> dict[str, Any]:
+    """Build runtime-only search capability injection for a transform."""
+    runtime_updates: dict[str, Any] = {}
+    search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
+    if search_uses:
+        handles = search_surface_handles(build_dir, search_uses)
+        runtime_updates["search_surfaces"] = handles
+        if len(search_uses) == 1:
+            default_handle = handles[search_uses[0].name]
+            runtime_updates["search_surface"] = default_handle
+            runtime_updates["search_db_path"] = default_handle.db_path
+    elif any(isinstance(proj, SearchIndex) for proj in projections):
+        # Legacy compatibility path for transforms that still rely on the
+        # global search projection convention.
+        runtime_updates["search_db_path"] = str(build_dir / "search.db")
+    return runtime_updates
 
 
 def search_surface_ready(surface: SearchSurface, available_layer_names: set[str]) -> bool:

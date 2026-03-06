@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 from synix.ext._render import render_template
 from synix.ext._util import stable_callable_repr
 
@@ -103,8 +103,9 @@ class GroupSynthesis(Transform):
             return self.group_by(artifact)
         return artifact.metadata.get(self.group_by)
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """Group by metadata key or callable, one unit per group."""
+        ctx = self.get_context(ctx)
         groups: dict[str, list[Artifact]] = defaultdict(list)
         missing_count = 0
 
@@ -146,18 +147,18 @@ class GroupSynthesis(Transform):
     def estimate_output_count(self, input_count: int) -> int:
         return max(input_count // 2, 1)
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        group_key = config.get("_group_key")
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        group_key = ctx.get("_group_key")
         if group_key is None:
             # Called directly without split — process all groups sequentially
             results: list[Artifact] = []
-            for unit_inputs, config_extras in self.split(inputs, config):
-                merged = {**config, **config_extras}
-                results.extend(self.execute(unit_inputs, merged))
+            for unit_inputs, config_extras in self.split(inputs, ctx):
+                results.extend(self.execute(unit_inputs, ctx.with_updates(config_extras)))
             return results
 
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
         prompt_id = self._make_prompt_id()
 
         # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
@@ -174,7 +175,7 @@ class GroupSynthesis(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": rendered}],
             artifact_desc=f"{self.name} group-{group_key}",
         )

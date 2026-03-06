@@ -10,9 +10,19 @@ from pathlib import Path
 from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
-from synix.build.search_surfaces import search_surface_handles, validate_search_surface_uses
+from synix.build.search_surfaces import transform_runtime_search_updates, validate_search_surface_uses
 from synix.core.config import LLMConfig, redact_api_key
-from synix.core.models import Artifact, FlatFile, Layer, Pipeline, SearchIndex, SearchSurface, Source, Transform
+from synix.core.models import (
+    Artifact,
+    FlatFile,
+    Layer,
+    Pipeline,
+    SearchIndex,
+    SearchSurface,
+    Source,
+    Transform,
+    TransformContext,
+)
 
 # Default token estimates per LLM call
 DEFAULT_INPUT_TOKENS_PER_CALL = 2000
@@ -188,19 +198,19 @@ def _plan_layer(
         transform_config.update(layer_rest)
         if layer_llm:
             transform_config["llm_config"].update(layer_llm)
-
-    search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
-    if search_uses:
-        handles = search_surface_handles(Path(pipeline.build_dir), search_uses)
-        transform_config["search_surfaces"] = handles
-        if len(search_uses) == 1:
-            default_handle = handles[search_uses[0].name]
-            transform_config["search_surface"] = default_handle
-            transform_config["search_db_path"] = default_handle["db_path"]
-    elif any(isinstance(proj, SearchIndex) for proj in pipeline.projections):
-        # Legacy compatibility path for transforms that still rely on the
-        # global search projection convention.
-        transform_config["search_db_path"] = str(Path(pipeline.build_dir) / "search.db")
+    runtime_ctx = TransformContext.from_value(transform_config).with_updates(
+        {
+            "workspace": {
+                "source_dir": src_dir,
+                "build_dir": str(Path(pipeline.build_dir)),
+            },
+            **transform_runtime_search_updates(
+                layer,
+                build_dir=Path(pipeline.build_dir),
+                projections=pipeline.projections,
+            ),
+        }
+    )
 
     # Compute transform fingerprint
     transform_fp = layer.compute_fingerprint(transform_config)
@@ -241,7 +251,7 @@ def _plan_layer(
             step.parallel_units = layer.estimate_output_count(len(inputs))
         else:
             try:
-                units = layer.split(inputs, transform_config)
+                units = layer.split(inputs, runtime_ctx)
                 step.parallel_units = len(units)
             except Exception:
                 step.parallel_units = 1
@@ -462,7 +472,8 @@ def _plan_transform_layer(
         # Check per-artifact which are stale
         try:
             config = transform_config or {}
-            units = layer.split(inputs, config)
+            runtime_ctx = TransformContext.from_value(config)
+            units = layer.split(inputs, runtime_ctx)
             # Build a set of all input IDs covered by existing artifacts
             existing_by_inputs: dict[tuple[str, ...], bool] = {}
             for art in existing:

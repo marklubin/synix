@@ -17,8 +17,10 @@ import hashlib
 import inspect
 import json
 from abc import abstractmethod
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -138,7 +140,7 @@ class Transform(Layer):
         self.batch = batch
 
     @abstractmethod
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         """Transform input artifacts into output artifacts.
 
         Returns a list because some transforms produce multiple outputs
@@ -146,12 +148,12 @@ class Transform(Layer):
         """
         ...
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """Split inputs into independently-processable work units.
 
         Each unit is (unit_inputs, config_extras). The runner calls split()
         to determine parallelism, then executes each unit (potentially
-        concurrently) via execute(unit_inputs, {**config, **config_extras}).
+        concurrently) via execute(unit_inputs, ctx.with_updates(config_extras)).
 
         Default: 1:1 — one unit per input artifact. When inputs is empty
         (e.g., source/parse transforms), returns a single unit so execute()
@@ -166,6 +168,21 @@ class Transform(Layer):
     def estimate_output_count(self, input_count: int) -> int:
         """Estimate number of output artifacts for plan mode. Default: 1:1."""
         return input_count
+
+    def get_context(self, value: TransformContext | dict | None = None) -> TransformContext:
+        """Normalize runtime config into a public TransformContext."""
+        return TransformContext.from_value(value)
+
+    def get_search_surface(
+        self,
+        ctx: TransformContext | dict | None,
+        surface: str | Layer | None = None,
+        *,
+        required: bool = False,
+    ):
+        """Resolve a declared build-time search surface from the runtime context."""
+        context = self.get_context(ctx)
+        return context.search(surface=surface, transform=self, required=required)
 
     def load_prompt(self, name: str) -> str:
         """Load a prompt template from the prompts/ directory."""
@@ -313,6 +330,97 @@ class FlatFile(Layer):
         super().__init__(name, depends_on=list(sources), config=config or {})
         self.sources = sources
         self.output_path = output_path
+
+
+class TransformContext(MutableMapping[str, Any]):
+    """Runtime context passed to transforms.
+
+    It behaves like the legacy config dict for compatibility, but also exposes
+    explicit capability interfaces such as ``ctx.search(...)``.
+    """
+
+    _RUNTIME_ONLY_KEYS = frozenset(
+        {
+            "llm_config",
+            "search_surface",
+            "search_surfaces",
+            "search_db_path",
+            "workspace",
+            "_logger",
+            "_layer_name",
+            "_shared_llm_client",
+        }
+    )
+
+    def __init__(self, data: dict[str, Any] | None = None):
+        self._data: dict[str, Any] = dict(data or {})
+
+    @classmethod
+    def from_value(cls, value: TransformContext | dict | None = None) -> TransformContext:
+        """Wrap a dict-like config into a TransformContext."""
+        if isinstance(value, cls):
+            return value
+        return cls(value)
+
+    def with_updates(self, updates: dict[str, Any] | None = None) -> TransformContext:
+        """Return a new context with ``updates`` merged on top."""
+        merged = dict(self._data)
+        if updates:
+            merged.update(updates)
+        return TransformContext(merged)
+
+    def search(
+        self,
+        surface: str | Layer | None = None,
+        *,
+        transform: Transform | None = None,
+        required: bool = False,
+    ):
+        """Resolve an explicit search surface handle for transform code."""
+        from synix.core.search_handles import resolve_search_surface_handle
+
+        return resolve_search_surface_handle(self._data, surface=surface, transform=transform, required=required)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a shallow dict copy of the underlying data."""
+        return dict(self._data)
+
+    @property
+    def config(self) -> dict[str, Any]:
+        """User-facing transform config without runtime-injected capabilities."""
+        return {k: v for k, v in self._data.items() if k not in self._RUNTIME_ONLY_KEYS}
+
+    @property
+    def llm_config(self) -> dict[str, Any]:
+        """Resolved LLM configuration for this invocation."""
+        llm_config = self._data.get("llm_config", {})
+        return dict(llm_config) if isinstance(llm_config, dict) else {}
+
+    @property
+    def workspace(self) -> dict[str, Any]:
+        """Build-scoped workspace metadata for this invocation."""
+        workspace = self._data.get("workspace", {})
+        return dict(workspace) if isinstance(workspace, dict) else {}
+
+    @property
+    def logger(self) -> Any:
+        """Structured logger injected by the runner when available."""
+        return self._data.get("_logger")
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._data[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 # ---------------------------------------------------------------------------

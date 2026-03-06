@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from synix.adapters.registry import get_supported_extensions, parse_file
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 
 
 class ParseTransform(Transform):
@@ -14,9 +14,9 @@ class ParseTransform(Transform):
     def __init__(self, name: str = "_parse", **kwargs):
         super().__init__(name, **kwargs)
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         """Parse all recognized export files in source_dir."""
-        source_dir = Path(config["source_dir"])
+        source_dir = Path(ctx["source_dir"])
         artifacts: list[Artifact] = []
 
         # Collect all files matching supported extensions

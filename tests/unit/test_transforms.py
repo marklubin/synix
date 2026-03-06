@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from synix import Artifact
+import pytest
+
+from synix import (
+    Artifact,
+    SearchSurface,
+    SearchSurfaceUnavailableError,
+    TransformContext,
+)
+from synix import (
+    SearchSurfaceHandle as PublicSearchSurfaceHandle,
+)
 from synix.build.llm_transforms import (
     CoreSynthesis,
     EpisodeSummary,
@@ -10,6 +20,7 @@ from synix.build.llm_transforms import (
     TopicalRollup,
 )
 from synix.build.parse_transform import ParseTransform
+from synix.search.indexer import SearchIndex
 
 
 class TestBaseTransform:
@@ -244,6 +255,47 @@ class TestMonthlyRollupTransform:
 class TestTopicalRollupTransform:
     """Tests for topical rollup LLM transform."""
 
+    def test_transform_context_exposes_public_search_handle(self, tmp_path):
+        """Transforms resolve declared search surfaces through a typed public handle."""
+        db_path = tmp_path / "episode-search.db"
+        index = SearchIndex(db_path)
+        index.create()
+        index.insert(
+            Artifact(
+                label="ep-1",
+                artifact_type="episode",
+                content="Discussion about career planning and AI projects.",
+                metadata={"date": "2024-03-15", "title": "Career chat"},
+            ),
+            "episodes",
+            1,
+        )
+        index.close()
+
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
+        ctx = TransformContext(
+            {
+                "topics": ["career"],
+                "search_surfaces": {
+                    "episode-search": {
+                        "name": "episode-search",
+                        "kind": "search_surface",
+                        "db_path": str(db_path),
+                        "modes": ["fulltext"],
+                        "sources": ["episodes"],
+                    }
+                },
+            }
+        )
+
+        handle = transform.get_search_surface(ctx, required=True)
+
+        assert isinstance(handle, PublicSearchSurfaceHandle)
+        assert handle is not None
+        results = handle.query("career", layers=["episodes"])
+        assert [result.label for result in results] == ["ep-1"]
+
     def test_topical_rollup_produces_per_topic(self, mock_llm):
         """3 topics configured → 3 topic artifacts."""
         episodes = [
@@ -300,6 +352,37 @@ class TestTopicalRollupTransform:
         assert len(results) == 1
         # All 3 episodes should be in input_ids
         assert len(results[0].input_ids) == 3
+
+    def test_topical_rollup_requires_declared_surface_when_unavailable(self, mock_llm, tmp_path):
+        """A declared-but-missing search surface is a hard error, not a silent fallback."""
+        episodes = [
+            Artifact(
+                label="ep-1",
+                artifact_type="episode",
+                content="Discussion about career and AI projects.",
+                metadata={"date": "2024-03-15", "title": "Career chat"},
+            )
+        ]
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface], config={"topics": ["career"]})
+
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(
+                episodes,
+                {
+                    "llm_config": {},
+                    "topics": ["career"],
+                    "search_surfaces": {
+                        "episode-search": {
+                            "name": "episode-search",
+                            "kind": "search_surface",
+                            "db_path": str(tmp_path / "missing.db"),
+                            "modes": ["fulltext"],
+                            "sources": ["episodes"],
+                        }
+                    },
+                },
+            )
 
 
 class TestCoreSynthesisTransform:

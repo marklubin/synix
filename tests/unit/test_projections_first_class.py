@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, FlatFile, Pipeline, SearchSurface, Source
+from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source
 from synix import SearchIndex as SearchIndexLayer
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
@@ -639,13 +639,13 @@ class TestProjectionStats:
 
 
 # ---------------------------------------------------------------------------
-# 5. Topical Rollup Defensive Fallback
+# 5. Topical Rollup Surface Requirements
 # ---------------------------------------------------------------------------
 
 
-class TestTopicalRollupDefensiveFallback:
+class TestTopicalRollupSurfaceRequirements:
     def test_topical_rollup_missing_declared_surface(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when a declared search surface path is missing."""
+        """TopicalRollup fails when a declared search surface path is missing."""
         # First, run parse + episodes to get episode artifacts
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
@@ -669,12 +669,11 @@ class TestTopicalRollupDefensiveFallback:
                 }
             },
         }
-        results = transform.execute(episodes, config)
-        assert len(results) > 0
-        assert results[0].artifact_type == "rollup"
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(episodes, config)
 
     def test_topical_rollup_invalid_declared_surface(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when the declared search surface lacks an FTS table."""
+        """TopicalRollup fails when the declared search surface lacks an FTS table."""
         # Run a build to get episodes
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
@@ -705,9 +704,8 @@ class TestTopicalRollupDefensiveFallback:
                 }
             },
         }
-        results = transform.execute(episodes, config)
-        assert len(results) > 0
-        assert results[0].artifact_type == "rollup"
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(episodes, config)
 
 
 # ---------------------------------------------------------------------------

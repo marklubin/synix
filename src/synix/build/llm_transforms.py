@@ -9,18 +9,17 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import sqlite3
 import sys
 from collections import defaultdict
 
 from synix.build.llm_client import LLMClient, LLMResponse
 from synix.core.config import LLMConfig
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 
 logger = logging.getLogger(__name__)
 
 
-def _make_llm_client(config: dict) -> LLMClient:
+def _make_llm_client(config: dict | TransformContext) -> LLMClient:
     """Create an LLMClient from the transform config dict.
 
     Handles backward compatibility: config dicts that don't include
@@ -32,14 +31,14 @@ def _make_llm_client(config: dict) -> LLMClient:
     return maybe_wrap_client(LLMClient(llm_config))
 
 
-def _get_llm_client(config: dict) -> LLMClient:
+def _get_llm_client(config: dict | TransformContext) -> LLMClient:
     """Get LLM client — use shared client from runner if available."""
     return config.get("_shared_llm_client") or _make_llm_client(config)
 
 
 def _logged_complete(
     client: LLMClient,
-    config: dict,
+    config: dict | TransformContext,
     messages: list[dict],
     artifact_desc: str,
     max_tokens: int | None = None,
@@ -77,61 +76,17 @@ def _logged_complete(
 
     return response
 
-
-def _select_search_surface_handle(transform: Transform, config: dict) -> dict | None:
-    """Select the declared search surface handle for a transform, if any."""
-    direct = config.get("search_surface")
-    surfaces = config.get("search_surfaces") or {}
-
-    for layer in getattr(transform, "uses", []):
-        handle = surfaces.get(getattr(layer, "name", ""))
-        if handle:
-            return handle
-
-    if direct:
-        return direct
-    if len(surfaces) == 1:
-        return next(iter(surfaces.values()))
-    return None
-
-
-def _open_search_surface_index(transform: Transform, config: dict):
-    """Open the declared search surface for keyword lookup, if available."""
-    handle = _select_search_surface_handle(transform, config)
-    if not handle:
-        return None
-
-    from pathlib import Path
-
-    from synix.search.indexer import SearchIndex as SearchIdx
-
-    db_path = Path(handle.get("db_path", ""))
-    if not db_path.exists():
-        return None
-
-    idx = None
-    try:
-        idx = SearchIdx(db_path)
-        if idx.has_table("search_index"):
-            return idx
-    except sqlite3.Error:
-        logger.warning("Declared search surface %s could not be opened from %s", handle.get("name"), db_path)
-    if idx is not None:
-        idx.close()
-        return None
-    return None
-
-
 class EpisodeSummary(Transform):
     """One transcript -> one episode summary."""
 
     prompt_name = "episode_summary"
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
         template = self.load_prompt("episode_summary")
         prompt_id = self.get_prompt_id("episode_summary")
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
 
         results: list[Artifact] = []
         for transcript in inputs:
@@ -140,7 +95,7 @@ class EpisodeSummary(Transform):
 
             response = _logged_complete(
                 client,
-                config,
+                ctx,
                 messages=[{"role": "user", "content": prompt}],
                 artifact_desc=f"episode ep-{conv_id}",
             )
@@ -174,8 +129,9 @@ class MonthlyRollup(Transform):
 
     prompt_name = "monthly_rollup"
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """Split episodes into per-month work units."""
+        ctx = self.get_context(ctx)
         months: dict[str, list[Artifact]] = defaultdict(list)
         for ep in inputs:
             month = ep.metadata.get("date", "")[:7]  # YYYY-MM
@@ -193,20 +149,20 @@ class MonthlyRollup(Transform):
     def estimate_output_count(self, input_count: int) -> int:
         return max(input_count // 3, 1)  # rough: ~3 episodes per month
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        month = config.get("_month_key")
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        month = ctx.get("_month_key")
         if month is None:
             # Called directly without split — process all groups sequentially
             results: list[Artifact] = []
-            for unit_inputs, config_extras in self.split(inputs, config):
-                merged = {**config, **config_extras}
-                results.extend(self.execute(unit_inputs, merged))
+            for unit_inputs, config_extras in self.split(inputs, ctx):
+                results.extend(self.execute(unit_inputs, ctx.with_updates(config_extras)))
             return results
 
         template = self.load_prompt("monthly_rollup")
         prompt_id = self.get_prompt_id("monthly_rollup")
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
 
         if month == "undated":
             year, mo = "unknown", "undated"
@@ -221,7 +177,7 @@ class MonthlyRollup(Transform):
         prompt = template.replace("{month}", mo).replace("{year}", year).replace("{episodes}", episodes_text)
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc=f"monthly rollup {month}",
         )
@@ -248,19 +204,20 @@ class TopicalRollup(Transform):
         topics = sorted(config.get("topics", []))
         return hashlib.sha256(",".join(topics).encode()).hexdigest()[:8]
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """Split into per-topic work units.
 
         Queries a declared search surface in the main thread (thread-safe) to
         find relevant episodes per topic. Only the LLM calls are parallelized.
         """
-        topics = config.get("topics", [])
-        index = _open_search_surface_index(self, config)
+        ctx = self.get_context(ctx)
+        topics = ctx.config.get("topics", [])
+        search = self.get_search_surface(ctx, required=bool(self.uses))
 
         units: list[tuple[list[Artifact], dict]] = []
         for topic in topics:
-            if index is not None:
-                search_results = index.query(
+            if search is not None:
+                search_results = search.query(
                     topic.replace("-", " "),
                     layers=["episodes"],
                 )
@@ -272,9 +229,6 @@ class TopicalRollup(Transform):
                 relevant = inputs
             units.append((relevant, {"_topic": topic}))
 
-        if index is not None:
-            index.close()
-
         return units
 
     def estimate_output_count(self, input_count: int) -> int:
@@ -282,20 +236,20 @@ class TopicalRollup(Transform):
         topics = self.config.get("topics", [])
         return len(topics) if topics else input_count
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        topic = config.get("_topic")
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        topic = ctx.get("_topic")
         if topic is None:
             # Called directly without split — process all topics sequentially
             results: list[Artifact] = []
-            for unit_inputs, config_extras in self.split(inputs, config):
-                merged = {**config, **config_extras}
-                results.extend(self.execute(unit_inputs, merged))
+            for unit_inputs, config_extras in self.split(inputs, ctx):
+                results.extend(self.execute(unit_inputs, ctx.with_updates(config_extras)))
             return results
 
         template = self.load_prompt("topical_rollup")
         prompt_id = self.get_prompt_id("topical_rollup")
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
 
         # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda ep: ep.artifact_id)
@@ -307,7 +261,7 @@ class TopicalRollup(Transform):
         slug = topic.lower().replace(" ", "-")
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc=f"topical rollup topic-{slug}",
         )
@@ -329,8 +283,9 @@ class CoreSynthesis(Transform):
 
     prompt_name = "core_memory"
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """N:1 — all inputs in a single unit (no parallelism)."""
+        ctx = self.get_context(ctx)
         return [(inputs, {})]
 
     def estimate_output_count(self, input_count: int) -> int:
@@ -341,12 +296,13 @@ class CoreSynthesis(Transform):
         budget = config.get("context_budget", 10000)
         return hashlib.sha256(str(budget).encode()).hexdigest()[:8]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
         template = self.load_prompt("core_memory")
         prompt_id = self.get_prompt_id("core_memory")
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
-        context_budget = config.get("context_budget", 10000)
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
+        context_budget = ctx.get("context_budget", 10000)
 
         # Derive max_tokens from context_budget; fall back to model_config
         max_tokens = context_budget if context_budget else model_config.get("max_tokens", 2048)
@@ -360,7 +316,7 @@ class CoreSynthesis(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc="core memory synthesis",
             max_tokens=max_tokens,

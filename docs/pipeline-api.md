@@ -270,17 +270,28 @@ for topic in ["work", "health", "projects", "relationships"]:
 When you need logic beyond prompt templating — filtering inputs, conditional branching, multi-step LLM chains — extend `Transform` directly:
 
 ```python
-from synix import Transform
+from synix import SearchSurface, Transform, TransformContext
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact
 
+episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+
 class CompetitiveIntel(Transform):
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
+        search = ctx.search("episode-search")
+        related = search.query("pricing", layers=["episodes"], limit=5) if search is not None else []
         # Your custom logic here — filter, branch, chain multiple LLM calls
         response = _logged_complete(
-            client, config,
-            messages=[{"role": "user", "content": f"Analyze:\n{inputs[0].content}"}],
+            client, ctx,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Analyze:\n{inputs[0].content}\n\n"
+                    f"Related episode hits: {[hit.label for hit in related]}"
+                ),
+            }],
             artifact_desc="competitive-intel",
         )
         return [Artifact(
@@ -289,10 +300,10 @@ class CompetitiveIntel(Transform):
             content=response.content,
             input_ids=[a.artifact_id for a in inputs],
             prompt_id="competitive_intel_v1",
-            model_config=config.get("llm_config"),
+            model_config=ctx.llm_config,
         )]
 
-    def split(self, inputs: list[Artifact], config: dict):
+    def split(self, inputs: list[Artifact], ctx: TransformContext):
         # Optional: decompose into parallel work units (default is 1:1)
         return [(inputs, {})]
 ```
@@ -300,9 +311,15 @@ class CompetitiveIntel(Transform):
 Use it like any transform:
 
 ```python
-intel = CompetitiveIntel("competitive_intel", depends_on=[competitor_docs, product_specs])
+intel = CompetitiveIntel(
+    "competitive_intel",
+    depends_on=[competitor_docs, product_specs],
+    uses=[episode_search],
+)
 pipeline.add(intel)
 ```
+
+Use `ctx.search(...)` or `self.get_search_surface(ctx, required=True)` for build-time retrieval. `TransformContext` stays mapping-compatible during migration, but the public interface is the typed context and search handle rather than `search_db_path`.
 
 ## Validators and Fixers (Experimental)
 
