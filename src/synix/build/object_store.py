@@ -6,12 +6,14 @@ import codecs
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
+_OID_RE = re.compile(r"^[0-9a-f]{64}$")
 
 _REQUIRED_FIELDS: dict[str, set[str]] = {
     "artifact": {
@@ -170,6 +172,21 @@ def _validate_object_payload(payload: dict[str, Any], *, allow_older_schema: boo
             )
             raise ValueError(msg)
 
+    if object_type == "manifest":
+        artifacts = payload["artifacts"]
+        for idx, entry in enumerate(artifacts):
+            if not isinstance(entry, dict):
+                msg = f"manifest artifacts[{idx}] must be an object, got {type(entry)}"
+                raise ValueError(msg)
+            label = entry.get("label")
+            oid = entry.get("oid")
+            if not isinstance(label, str) or not label:
+                msg = f"manifest artifacts[{idx}] must include non-empty string label"
+                raise ValueError(msg)
+            if not isinstance(oid, str) or not _OID_RE.fullmatch(oid):
+                msg = f"manifest artifacts[{idx}] must include valid oid"
+                raise ValueError(msg)
+
 
 class ObjectStore:
     """Content-addressed storage rooted at .synix/objects."""
@@ -277,7 +294,12 @@ class ObjectStore:
 
     def get_bytes(self, oid: str) -> bytes:
         """Load raw bytes by oid."""
-        return self._path_for_oid(oid).read_bytes()
+        path = self._path_for_oid(oid)
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            msg = f"failed to read object bytes for oid {oid} at {path}: {exc}"
+            raise OSError(msg) from exc
 
     def put_json(self, payload: dict[str, Any]) -> str:
         """Store canonical JSON and return the content-addressed oid."""
@@ -293,7 +315,17 @@ class ObjectStore:
 
     def get_json(self, oid: str) -> dict[str, Any]:
         """Load a structured JSON object by oid."""
-        payload = json.loads(self._path_for_oid(oid).read_text(encoding="utf-8"))
+        path = self._path_for_oid(oid)
+        try:
+            raw_text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            msg = f"failed to read object json for oid {oid} at {path}: {exc}"
+            raise OSError(msg) from exc
+        try:
+            payload = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            msg = f"object {oid} at {path} is not valid JSON: {exc}"
+            raise ValueError(msg) from exc
         if not isinstance(payload, dict):
             msg = f"object {oid} is not a JSON object"
             raise ValueError(msg)

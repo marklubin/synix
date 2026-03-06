@@ -81,7 +81,14 @@ def _normalize_fingerprint_value(value: Any) -> Any:
             return isoformat()
         except TypeError:
             pass
-    return repr(value)
+    state = getattr(value, "__dict__", None)
+    object_type = f"{type(value).__module__}.{type(value).__qualname__}"
+    if isinstance(state, dict) and state:
+        return {
+            "object_type": object_type,
+            "state": _normalize_fingerprint_value(state),
+        }
+    return {"object_type": object_type}
 
 
 def _pipeline_fingerprint(pipeline: Pipeline) -> str:
