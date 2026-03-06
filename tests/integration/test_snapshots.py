@@ -12,8 +12,9 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
-from synix.build.snapshots import _pipeline_fingerprint, list_runs
+from synix.build.snapshots import _pipeline_fingerprint, commit_build_snapshot, list_runs, start_build_transaction
 from synix.build.validators import RequiredField
+from synix.core.models import Artifact
 from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 
@@ -40,6 +41,62 @@ def _build_pipeline(build_dir: Path, source_dir: Path, *, synix_dir: Path | None
 
 
 class TestSnapshots:
+    def test_commit_uses_transaction_state_not_mutable_build_files(self, tmp_path):
+        """Snapshot commit should not reread manifest/provenance from the mutable build directory."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "transaction-only",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000000Z")
+        txn.record_artifact(
+            Artifact(label="ep-1", artifact_type="episode", content="Captured before build-dir mutation."),
+            layer_name="transcripts",
+            layer_level=0,
+            parent_labels=[],
+        )
+
+        build_dir.mkdir(parents=True, exist_ok=True)
+        (build_dir / "manifest.json").write_text("{not valid json", encoding="utf-8")
+        (build_dir / "provenance.json").write_text("{not valid json", encoding="utf-8")
+
+        snapshot_info = commit_build_snapshot(txn)
+        object_store = ObjectStore(tmp_path / ".synix")
+        manifest = object_store.get_json(snapshot_info["manifest_oid"])
+
+        assert manifest["artifacts"] == {"ep-1": txn.artifact_oids["ep-1"]}
+        stored_artifact = object_store.get_json(manifest["artifacts"]["ep-1"])
+        assert stored_artifact["label"] == "ep-1"
+
+    def test_commit_rejects_when_head_advances_during_build(self, tmp_path):
+        """Snapshot commit should fail closed if another writer advances HEAD first."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "concurrent-build",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000001Z")
+        txn.record_artifact(
+            Artifact(label="ep-1", artifact_type="episode", content="Concurrent head test."),
+            layer_name="transcripts",
+            layer_level=0,
+            parent_labels=[],
+        )
+
+        ref_store = RefStore(tmp_path / ".synix")
+        ref_store.write_ref(txn.head_ref, "1" * 64)
+
+        with pytest.raises(RuntimeError, match="HEAD advanced during build"):
+            commit_build_snapshot(txn)
+
     def test_pipeline_fingerprint_ignores_machine_local_paths_and_secrets(self, tmp_path):
         """Fingerprint should reflect logical build config, not local directories or API keys."""
         pipeline_a = Pipeline(

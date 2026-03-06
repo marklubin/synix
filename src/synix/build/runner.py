@@ -16,7 +16,7 @@ from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
-from synix.build.snapshots import commit_build_snapshot
+from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
     Artifact,
@@ -109,6 +109,7 @@ def run(
         build_dir=build_dir,
         progress=progress,
     )
+    snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
 
     # Resolve build order
     build_order = resolve_build_order(pipeline)
@@ -140,6 +141,13 @@ def run(
                 artifact.metadata["layer_level"] = layer._level
                 store.save_artifact(artifact, layer.name, layer._level)
                 provenance.record(artifact.label, parent_labels=[], prompt_id=None, model_config=None)
+                _record_snapshot_artifact(
+                    snapshot_txn,
+                    artifact,
+                    layer_name=layer.name,
+                    layer_level=layer._level,
+                    parent_labels=[],
+                )
                 stats.built += 1
                 slogger.artifact_built(layer.name, artifact.label)
 
@@ -162,6 +170,13 @@ def run(
                     art.metadata["layer_name"] = layer.name
                     art.metadata["layer_level"] = layer._level
                     layer_built.append(art)
+                    _record_snapshot_artifact(
+                        snapshot_txn,
+                        art,
+                        layer_name=layer.name,
+                        layer_level=layer._level,
+                        parent_labels=provenance.get_parents(art.label),
+                    )
                     stats.cached += 1
                     slogger.artifact_cached(layer.name, art.label)
             else:
@@ -194,6 +209,13 @@ def run(
                             prompt_id=artifact.prompt_id,
                             model_config=artifact.model_config,
                         )
+                        _record_snapshot_artifact(
+                            snapshot_txn,
+                            artifact,
+                            layer_name=_layer.name,
+                            layer_level=_layer._level,
+                            parent_labels=parent_labels,
+                        )
                         layer_built.append(artifact)
                         stats.built += 1
                         slogger.artifact_built(_layer.name, artifact.label)
@@ -203,8 +225,22 @@ def run(
                             cached.metadata["layer_name"] = _layer.name
                             cached.metadata["layer_level"] = _layer._level
                             layer_built.append(cached)
+                            _record_snapshot_artifact(
+                                snapshot_txn,
+                                cached,
+                                layer_name=_layer.name,
+                                layer_level=_layer._level,
+                                parent_labels=provenance.get_parents(cached.label),
+                            )
                         else:
                             layer_built.append(artifact)
+                            _record_snapshot_artifact(
+                                snapshot_txn,
+                                artifact,
+                                layer_name=_layer.name,
+                                layer_level=_layer._level,
+                                parent_labels=parent_labels,
+                            )
                         stats.cached += 1
                         slogger.artifact_cached(_layer.name, artifact.label)
 
@@ -228,6 +264,13 @@ def run(
                         cached_art.metadata["layer_name"] = layer.name
                         cached_art.metadata["layer_level"] = layer._level
                         layer_built.append(cached_art)
+                        _record_snapshot_artifact(
+                            snapshot_txn,
+                            cached_art,
+                            layer_name=layer.name,
+                            layer_level=layer._level,
+                            parent_labels=provenance.get_parents(cached_art.label),
+                        )
                         stats.cached += 1
                         slogger.artifact_cached(layer.name, cached_art.label)
 
@@ -271,7 +314,14 @@ def run(
         _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
+    result.projection_stats = _materialize_all_projections(
+        pipeline,
+        layer_artifacts,
+        store,
+        build_dir,
+        logger=slogger,
+        snapshot_txn=snapshot_txn,
+    )
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
@@ -282,7 +332,7 @@ def run(
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
     if result.validation is None or result.validation.passed:
-        snapshot_info = commit_build_snapshot(pipeline, build_dir, run_id=slogger.run_log.run_id)
+        snapshot_info = commit_build_snapshot(snapshot_txn)
         result.snapshot_oid = snapshot_info["snapshot_oid"]
         result.manifest_oid = snapshot_info["manifest_oid"]
         result.head_ref = snapshot_info["head_ref"]
@@ -301,6 +351,23 @@ def _build_source_config(pipeline: Pipeline, source: Source, src_dir: str) -> di
     if source.dir:
         config["source_dir"] = source.dir
     return config
+
+
+def _record_snapshot_artifact(
+    snapshot_txn: BuildTransaction,
+    artifact: Artifact,
+    *,
+    layer_name: str,
+    layer_level: int,
+    parent_labels: list[str],
+) -> None:
+    """Record the canonical artifact state used by this run into the snapshot transaction."""
+    snapshot_txn.record_artifact(
+        artifact,
+        layer_name=layer_name,
+        layer_level=layer_level,
+        parent_labels=parent_labels,
+    )
 
 
 def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, build_dir: Path) -> dict:
@@ -539,6 +606,7 @@ def _materialize_all_projections(
     store: ArtifactStore,
     build_dir: Path,
     logger: SynixLogger | None = None,
+    snapshot_txn: BuildTransaction | None = None,
 ) -> list[ProjectionStats]:
     """Materialize all projections after the full build (with caching).
 
@@ -607,6 +675,8 @@ def _materialize_all_projections(
             "source_layers": source_layer_names,
             "artifact_count": len(all_artifacts),
         }
+        if snapshot_txn is not None:
+            snapshot_txn.record_projection(proj)
 
     _save_projection_cache(build_dir, cache)
     return stats

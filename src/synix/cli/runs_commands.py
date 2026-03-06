@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import click
 from rich import box
 from rich.table import Table
 
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.snapshots import list_runs
 from synix.cli.main import console
 
@@ -23,12 +23,12 @@ def runs_group():
 @click.option("--synix-dir", default=None, help="Explicit .synix directory")
 def list_runs_command(build_dir: str, synix_dir: str | None):
     """List recorded run refs and snapshot ids."""
-    build_path = Path(build_dir)
-    if not build_path.exists():
-        console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
+    resolved_synix_dir = synix_dir_for_build_dir(build_dir, configured_synix_dir=synix_dir)
+    if not resolved_synix_dir.exists():
+        console.print("[red]No snapshot store found.[/red] Run [bold]synix build[/bold] first.")
         raise SystemExit(1)
 
-    runs = list_runs(build_dir, synix_dir=synix_dir)
+    runs = list_runs(build_dir, synix_dir=resolved_synix_dir)
     if not runs:
         console.print("[dim]No run snapshots found.[/dim]")
         return

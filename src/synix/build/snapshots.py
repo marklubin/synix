@@ -5,15 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
-from synix.build.provenance import ProvenanceTracker
 from synix.build.refs import DEFAULT_HEAD_REF, RefStore, synix_dir_for_build_dir
-from synix.core.models import FlatFile, Pipeline, SearchIndex
+from synix.core.models import Artifact, FlatFile, Pipeline, SearchIndex
 
 
 def _object(object_type: str, **fields: Any) -> dict[str, Any]:
@@ -95,6 +94,138 @@ def _store_blob_file(object_store: ObjectStore, path: str | Path) -> str:
     )
 
 
+@dataclass
+class BuildTransaction:
+    """Canonical build state accumulated during a single pipeline run.
+
+    Artifacts and projection state are captured as they are produced or reused
+    during the build so final snapshot commit does not need to scrape the
+    mutable compatibility release surface under ``build/``.
+    """
+
+    pipeline: Pipeline
+    build_dir: Path
+    synix_dir: Path
+    run_id: str
+    object_store: ObjectStore
+    head_ref: str
+    parent_snapshot_oid: str | None
+    artifact_oids: dict[str, str] = field(default_factory=dict)
+    layer_artifact_oids: dict[str, list[str]] = field(default_factory=dict)
+    projection_oids: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def start(cls, pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:
+        build_path = Path(build_dir).resolve()
+        synix_dir = synix_dir_for_build_dir(build_path, configured_synix_dir=pipeline.synix_dir)
+        synix_dir.mkdir(parents=True, exist_ok=True)
+
+        ref_store = RefStore(synix_dir)
+        head_ref = ref_store.ensure_head(DEFAULT_HEAD_REF)
+
+        return cls(
+            pipeline=pipeline,
+            build_dir=build_path,
+            synix_dir=synix_dir,
+            run_id=run_id,
+            object_store=ObjectStore(synix_dir),
+            head_ref=head_ref,
+            parent_snapshot_oid=ref_store.read_ref("HEAD"),
+        )
+
+    def record_artifact(
+        self,
+        artifact: Artifact,
+        *,
+        layer_name: str,
+        layer_level: int,
+        parent_labels: list[str],
+    ) -> str:
+        artifact.metadata.setdefault("layer_name", layer_name)
+        artifact.metadata.setdefault("layer_level", layer_level)
+        content_oid = _store_blob_text(self.object_store, artifact.content)
+        artifact_payload = _object(
+            "artifact",
+            label=artifact.label,
+            artifact_type=artifact.artifact_type,
+            artifact_id=artifact.artifact_id,
+            content_oid=content_oid,
+            input_ids=list(artifact.input_ids),
+            prompt_id=artifact.prompt_id,
+            model_config=artifact.model_config,
+            metadata=artifact.metadata,
+            created_at=artifact.created_at.isoformat(),
+            parent_labels=parent_labels,
+        )
+        artifact_oid = self.object_store.put_json(artifact_payload)
+
+        previous_oid = self.artifact_oids.get(artifact.label)
+        if previous_oid is not None and previous_oid != artifact_oid:
+            layer_oids = self.layer_artifact_oids.get(layer_name, [])
+            if previous_oid in layer_oids:
+                layer_oids.remove(previous_oid)
+
+        self.artifact_oids[artifact.label] = artifact_oid
+        layer_oids = self.layer_artifact_oids.setdefault(layer_name, [])
+        if artifact_oid not in layer_oids:
+            layer_oids.append(artifact_oid)
+
+        return artifact_oid
+
+    def record_projection(self, projection: Any) -> str | None:
+        if isinstance(projection, SearchIndex):
+            projection_path = self.build_dir / "search.db"
+            if not projection_path.exists():
+                return None
+
+            state_oid = _store_blob_file(self.object_store, projection_path)
+            projection_payload = _object(
+                "projection",
+                name=projection.name,
+                projection_type="search_index",
+                input_oids=_projection_input_oids(projection.sources, self.layer_artifact_oids),
+                build_state_oid=state_oid,
+                adapter="search_index",
+                release_mode="full",
+                metadata={"db_filename": "search.db"},
+            )
+        elif isinstance(projection, FlatFile):
+            projection_path = Path(projection.output_path).resolve()
+            if not projection_path.exists():
+                return None
+            try:
+                relative_output_path = projection_path.relative_to(self.build_dir)
+            except ValueError as exc:
+                msg = (
+                    f"FlatFile projection {projection.name!r} must write inside the build directory "
+                    f"to be snapshotted: {projection.output_path}"
+                )
+                raise ValueError(msg) from exc
+
+            state_oid = _store_blob_file(self.object_store, projection_path)
+            projection_payload = _object(
+                "projection",
+                name=projection.name,
+                projection_type="flat_file",
+                input_oids=_projection_input_oids(projection.sources, self.layer_artifact_oids),
+                build_state_oid=state_oid,
+                adapter="flat_file",
+                release_mode="copy",
+                metadata={"output_path": relative_output_path.as_posix()},
+            )
+        else:
+            return None
+
+        projection_oid = self.object_store.put_json(projection_payload)
+        self.projection_oids[projection.name] = projection_oid
+        return projection_oid
+
+
+def start_build_transaction(pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:
+    """Create a build transaction that accumulates canonical snapshot state."""
+    return BuildTransaction.start(pipeline, build_dir, run_id)
+
+
 def _projection_input_oids(
     source_layers: list[Any],
     layer_artifact_oids: dict[str, list[str]],
@@ -125,118 +256,54 @@ def _snapshot_lock(synix_dir: Path):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def commit_build_snapshot(pipeline: Pipeline, build_dir: str | Path, run_id: str) -> dict[str, str]:
-    """Create a snapshot from the current build outputs and advance refs."""
-    build_path = Path(build_dir).resolve()
-    synix_dir = synix_dir_for_build_dir(build_path, configured_synix_dir=pipeline.synix_dir)
+def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
+    """Commit a build transaction as an immutable snapshot and advance refs."""
+    synix_dir = transaction.synix_dir
     synix_dir.mkdir(parents=True, exist_ok=True)
 
     with _snapshot_lock(synix_dir):
         ref_store = RefStore(synix_dir)
-        object_store = ObjectStore(synix_dir)
-        store = ArtifactStore(build_path)
-        provenance = ProvenanceTracker(build_path)
-
-        head_ref = ref_store.ensure_head(DEFAULT_HEAD_REF)
-        parent_snapshot_oid = ref_store.read_ref("HEAD")
-
-        artifact_oids: dict[str, str] = {}
-        layer_artifact_oids: dict[str, list[str]] = {}
-        for label, entry in sorted(store.iter_entries().items()):
-            artifact = store.load_artifact(label)
-            if artifact is None:
-                continue
-
-            content_oid = _store_blob_text(object_store, artifact.content)
-            artifact_payload = _object(
-                "artifact",
-                label=artifact.label,
-                artifact_type=artifact.artifact_type,
-                artifact_id=artifact.artifact_id,
-                content_oid=content_oid,
-                input_ids=list(artifact.input_ids),
-                prompt_id=artifact.prompt_id,
-                model_config=artifact.model_config,
-                metadata=artifact.metadata,
-                created_at=artifact.created_at.isoformat(),
-                parent_labels=provenance.get_parents(artifact.label),
+        current_head_ref = ref_store.ensure_head(DEFAULT_HEAD_REF)
+        if current_head_ref != transaction.head_ref:
+            msg = (
+                "HEAD target changed during build "
+                f"({transaction.head_ref!r} -> {current_head_ref!r}); rerun against the latest ref state"
             )
-            artifact_oid = object_store.put_json(artifact_payload)
-            artifact_oids[label] = artifact_oid
-            layer_artifact_oids.setdefault(entry["layer"], []).append(artifact_oid)
+            raise RuntimeError(msg)
 
-        projection_oids: dict[str, str] = {}
-        for projection in pipeline.projections:
-            if isinstance(projection, SearchIndex):
-                projection_path = build_path / "search.db"
-                if not projection_path.exists():
-                    continue
-                state_oid = _store_blob_file(object_store, projection_path)
-                projection_payload = _object(
-                    "projection",
-                    name=projection.name,
-                    projection_type="search_index",
-                    input_oids=_projection_input_oids(projection.sources, layer_artifact_oids),
-                    build_state_oid=state_oid,
-                    adapter="search_index",
-                    release_mode="full",
-                    metadata={"db_filename": "search.db"},
-                )
-                projection_oids[projection.name] = object_store.put_json(projection_payload)
-            elif isinstance(projection, FlatFile):
-                projection_path = Path(projection.output_path).resolve()
-                if not projection_path.exists():
-                    continue
-                try:
-                    relative_output_path = projection_path.relative_to(build_path)
-                except ValueError as exc:
-                    msg = (
-                        f"FlatFile projection {projection.name!r} must write inside the build directory "
-                        f"to be snapshotted: {projection.output_path}"
-                    )
-                    raise ValueError(msg) from exc
-
-                state_oid = _store_blob_file(object_store, projection_path)
-                projection_payload = _object(
-                    "projection",
-                    name=projection.name,
-                    projection_type="flat_file",
-                    input_oids=_projection_input_oids(projection.sources, layer_artifact_oids),
-                    build_state_oid=state_oid,
-                    adapter="flat_file",
-                    release_mode="copy",
-                    metadata={"output_path": relative_output_path.as_posix()},
-                )
-                projection_oids[projection.name] = object_store.put_json(projection_payload)
+        current_head_oid = ref_store.read_ref("HEAD")
+        if current_head_oid != transaction.parent_snapshot_oid:
+            msg = "HEAD advanced during build; rerun against the latest snapshot"
+            raise RuntimeError(msg)
 
         manifest_payload = _object(
             "manifest",
-            pipeline_name=pipeline.name,
-            pipeline_fingerprint=_pipeline_fingerprint(pipeline),
-            artifacts=artifact_oids,
-            projections=projection_oids,
+            pipeline_name=transaction.pipeline.name,
+            pipeline_fingerprint=_pipeline_fingerprint(transaction.pipeline),
+            artifacts=transaction.artifact_oids,
+            projections=transaction.projection_oids,
         )
-        manifest_oid = object_store.put_json(manifest_payload)
+        manifest_oid = transaction.object_store.put_json(manifest_payload)
 
         snapshot_payload = _object(
             "snapshot",
             manifest_oid=manifest_oid,
-            parent_snapshot_oids=[parent_snapshot_oid] if parent_snapshot_oid else [],
+            parent_snapshot_oids=[transaction.parent_snapshot_oid] if transaction.parent_snapshot_oid else [],
             created_at=datetime.now(UTC).isoformat(),
-            pipeline_name=pipeline.name,
-            run_id=run_id,
+            pipeline_name=transaction.pipeline.name,
+            run_id=transaction.run_id,
         )
-        snapshot_oid = object_store.put_json(snapshot_payload)
+        snapshot_oid = transaction.object_store.put_json(snapshot_payload)
 
-        run_ref = f"refs/runs/{run_id}"
+        run_ref = f"refs/runs/{transaction.run_id}"
         # Write the immutable run ref first, then advance HEAD to the new tip.
         ref_store.write_ref(run_ref, snapshot_oid)
-        ref_store.write_ref(head_ref, snapshot_oid)
+        ref_store.write_ref(transaction.head_ref, snapshot_oid)
 
         return {
             "snapshot_oid": snapshot_oid,
             "manifest_oid": manifest_oid,
-            "head_ref": head_ref,
+            "head_ref": transaction.head_ref,
             "run_ref": run_ref,
             "synix_dir": str(synix_dir),
         }

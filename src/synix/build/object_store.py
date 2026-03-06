@@ -209,42 +209,52 @@ class ObjectStore:
         digest = hashlib.sha256()
         size_bytes = 0
         encoder = codecs.getincrementalencoder(encoding)()
-
-        fd, tmp = tempfile.mkstemp(dir=self.objects_dir, suffix=".tmp")
         try:
-            with os.fdopen(fd, "wb") as handle:
-                for start in range(0, len(text), 64 * 1024):
-                    chunk = text[start : start + 64 * 1024]
-                    encoded = encoder.encode(chunk)
-                    if not encoded:
-                        continue
-                    size_bytes += len(encoded)
-                    digest.update(encoded)
-                    handle.write(encoded)
+            for start in range(0, len(text), 64 * 1024):
+                chunk = text[start : start + 64 * 1024]
+                encoded = encoder.encode(chunk)
+                if not encoded:
+                    continue
+                size_bytes += len(encoded)
+                digest.update(encoded)
 
-                final_bytes = encoder.encode("", final=True)
-                if final_bytes:
-                    size_bytes += len(final_bytes)
-                    digest.update(final_bytes)
-                    handle.write(final_bytes)
-
-                handle.flush()
-                os.fsync(handle.fileno())
+            final_bytes = encoder.encode("", final=True)
+            if final_bytes:
+                size_bytes += len(final_bytes)
+                digest.update(final_bytes)
 
             oid = digest.hexdigest()
             path = self._path_for_oid(oid)
             if path.exists():
-                os.unlink(tmp)
                 return oid, size_bytes
 
             path.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(tmp, str(path))
+            fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+            try:
+                encoder = codecs.getincrementalencoder(encoding)()
+                with os.fdopen(fd, "wb") as handle:
+                    for start in range(0, len(text), 64 * 1024):
+                        chunk = text[start : start + 64 * 1024]
+                        encoded = encoder.encode(chunk)
+                        if encoded:
+                            handle.write(encoded)
+
+                    final_bytes = encoder.encode("", final=True)
+                    if final_bytes:
+                        handle.write(final_bytes)
+
+                    handle.flush()
+                    os.fsync(handle.fileno())
+
+                os.replace(tmp, str(path))
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
             return oid, size_bytes
         except BaseException:
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
             raise
 
     def get_bytes(self, oid: str) -> bytes:

@@ -54,7 +54,7 @@ uvx synix runs list               # immutable build snapshots for this project
 uvx synix validate                # run declared validators (experimental)
 ```
 
-Successful builds also record immutable snapshot metadata under `.synix/`. `uvx synix clean` only removes the mutable `build/` directory; it does not delete snapshot history.
+Successful builds record canonical immutable snapshot state under `.synix/`. The local `build/` directory still exists as the default compatibility materialization surface for current commands and demos, but it is no longer the source of truth for build history. `uvx synix clean` only removes that mutable local surface; it does not delete snapshot history.
 
 > **Note:** The `.synix` on-disk snapshot format is new in `v0.15.x` and may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
 
