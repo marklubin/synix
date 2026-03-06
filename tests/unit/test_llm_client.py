@@ -661,7 +661,7 @@ class TestLLMClientBackwardCompat:
 
     def test_transforms_still_work_with_mock_llm(self, mock_llm, sample_artifacts):
         """Existing mock_llm fixture still works — transforms produce correct output."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         transform = EpisodeSummary("test-episodes")
         transcripts = [a for a in sample_artifacts if a.artifact_type == "transcript"]
@@ -676,7 +676,7 @@ class TestLLMClientBackwardCompat:
 
     def test_pipeline_llm_config_without_provider(self, mock_llm, sample_artifacts):
         """Pipeline configs that omit 'provider' default to anthropic and work."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         # Old-style config: no 'provider' key
         old_config = {

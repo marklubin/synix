@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from synix import Artifact, Pipeline, Source
+from synix import Artifact, Pipeline, SearchSurface, Source
 from synix.artifacts.store import ArtifactStore
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint, compute_digest
 from synix.pipeline.dag import needs_rebuild, resolve_build_order
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 
 class TestResolveBuildOrder:
@@ -64,6 +64,22 @@ class TestResolveBuildOrder:
 
         with pytest.raises(ValueError, match="[Cc]ircular"):
             resolve_build_order(pipeline)
+
+    def test_pipeline_registers_search_surfaces_outside_build_dag(self):
+        """Search surfaces are tracked separately from build DAG layers."""
+        pipeline = Pipeline("test")
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        topics = TopicalRollup("topics", depends_on=[episodes], uses=[episode_search])
+        pipeline.add(transcripts, episodes, episode_search, topics)
+
+        assert [layer.name for layer in pipeline.layers] == ["transcripts", "episodes", "topics"]
+        assert [surface.name for surface in pipeline.surfaces] == ["episode-search"]
+        assert pipeline.projections == []
+
+        order = resolve_build_order(pipeline)
+        assert [layer.name for layer in order] == ["transcripts", "episodes", "topics"]
 
 
 class TestNeedsRebuild:

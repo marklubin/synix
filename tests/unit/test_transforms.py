@@ -276,8 +276,8 @@ class TestTopicalRollupTransform:
         topic_labels = {r.label for r in results}
         assert topic_labels == {"topic-career", "topic-health", "topic-ai-projects"}
 
-    def test_topical_rollup_uses_all_episodes_without_search(self, mock_llm):
-        """Without search_db_path, all episodes used for each topic."""
+    def test_topical_rollup_uses_all_episodes_without_declared_surface(self, mock_llm):
+        """Without a declared search surface, all episodes are used for each topic."""
         episodes = [
             Artifact(
                 label=f"ep-{i}",

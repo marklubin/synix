@@ -247,7 +247,7 @@ class TestTransformFingerprint:
 
     def test_compute_fingerprint_includes_source(self):
         """Transform fingerprint includes source code hash."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         transform = EpisodeSummary("test-episodes")
         fp = transform.compute_fingerprint({"llm_config": {"model": "test"}})
@@ -258,7 +258,7 @@ class TestTransformFingerprint:
 
     def test_different_prompt_different_fingerprint(self):
         """Different prompt template changes the fingerprint."""
-        from synix.transforms import EpisodeSummary, MonthlyRollup
+        from synix.ext import EpisodeSummary, MonthlyRollup
 
         ep_transform = EpisodeSummary("test-episodes")
         mr_transform = MonthlyRollup("test-monthly")
@@ -270,7 +270,7 @@ class TestTransformFingerprint:
 
     def test_different_model_different_fingerprint(self):
         """Changing model config changes the fingerprint."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         transform = EpisodeSummary("test-episodes")
         fp1 = transform.compute_fingerprint({"llm_config": {"model": "a"}})
@@ -279,7 +279,7 @@ class TestTransformFingerprint:
 
     def test_same_config_same_fingerprint(self):
         """Identical config produces identical fingerprint (deterministic)."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         transform = EpisodeSummary("test-episodes")
         config = {"llm_config": {"model": "test", "temperature": 0.3}}

@@ -9,6 +9,7 @@ from synix.core.models import (  # noqa: F401
     Pipeline,
     ProvenanceRecord,
     SearchIndex,
+    SearchSurface,
     Source,
     Transform,
 )

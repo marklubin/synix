@@ -39,6 +39,7 @@ class MapSynthesis(Transform):
         name: str,
         *,
         depends_on: list | None = None,
+        uses: list | None = None,
         prompt: str,
         label_fn: Callable | None = None,
         metadata_fn: Callable | None = None,
@@ -46,7 +47,7 @@ class MapSynthesis(Transform):
         config: dict | None = None,
         batch: bool | None = None,
     ):
-        super().__init__(name, depends_on=depends_on, config=config, batch=batch)
+        super().__init__(name, depends_on=depends_on, uses=uses, config=config, batch=batch)
         self.prompt = prompt
         self.label_fn = label_fn
         self.metadata_fn = metadata_fn

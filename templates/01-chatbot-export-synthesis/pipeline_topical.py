@@ -8,8 +8,8 @@
 #   cd templates/01-chatbot-export-synthesis
 #   uvx synix build pipeline_topical.py
 
-from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.transforms import CoreSynthesis, EpisodeSummary, TopicalRollup
+from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
+from synix.ext import CoreSynthesis, EpisodeSummary, TopicalRollup
 
 pipeline = Pipeline("personal-memory-topical")
 
@@ -31,11 +31,20 @@ transcripts = Source("transcripts")
 # Level 1: Same episode summaries (CACHED from first run)
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 
+# Build-time search surface used by the topical rollup
+episode_search = SearchSurface(
+    "episode-search",
+    sources=[episodes],
+    modes=["fulltext"],
+)
+
 # Level 2: CHANGED — Topic-based rollups instead of monthly
-# LLM clusters episodes by topic, then synthesizes each cluster
+# LLM clusters episodes by topic, then synthesizes each cluster using
+# the declared episode search surface instead of the global search.db path.
 topics = TopicalRollup(
     "topics",
     depends_on=[episodes],
+    uses=[episode_search],
     config={
         "topics": [
             "programming-and-tools",
@@ -53,7 +62,7 @@ topics = TopicalRollup(
 #   config={"llm_config": {"model": "claude-opus-4-6", "max_tokens": 4096}}
 core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-pipeline.add(transcripts, episodes, topics, core)
+pipeline.add(transcripts, episodes, episode_search, topics, core)
 
 # --- Projections ---
 

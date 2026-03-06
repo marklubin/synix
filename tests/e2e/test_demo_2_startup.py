@@ -48,7 +48,7 @@ def financial_pipeline_file(workspace):
     path = workspace["root"] / "pipeline_financial.py"
     path.write_text(f"""
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("demo2-financial")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -72,8 +72,8 @@ def financial_pipeline_v2_file(workspace):
     """Write a modified financial pipeline (prompt change at level 2)."""
     path = workspace["root"] / "pipeline_financial_v2.py"
     path.write_text(f"""
-from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, TopicalRollup, CoreSynthesis
+from synix import Pipeline, Source, SearchIndex, SearchSurface, FlatFile
+from synix.ext import EpisodeSummary, TopicalRollup, CoreSynthesis
 
 pipeline = Pipeline("demo2-financial-v2")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -82,12 +82,13 @@ pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3,
 
 transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-topics = TopicalRollup("topics", depends_on=[episodes], config={{
+episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+topics = TopicalRollup("topics", depends_on=[episodes], uses=[episode_search], config={{
     "topics": ["investment-strategy", "risk-management", "retirement-planning", "debt-reduction"],
 }})
 core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-pipeline.add(transcripts, episodes, topics, core)
+pipeline.add(transcripts, episodes, episode_search, topics, core)
 pipeline.add(SearchIndex("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
 pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)

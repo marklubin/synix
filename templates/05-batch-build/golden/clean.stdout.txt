@@ -1,1 +1,1 @@
-Nothing to clean — build directory does not exist.
+Cleaned: build

@@ -11,7 +11,7 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
 from synix.core.config import LLMConfig, redact_api_key
-from synix.core.models import Artifact, FlatFile, Layer, Pipeline, SearchIndex, Source, Transform
+from synix.core.models import Artifact, FlatFile, Layer, Pipeline, SearchIndex, SearchSurface, Source, Transform
 
 # Default token estimates per LLM call
 DEFAULT_INPUT_TOKENS_PER_CALL = 2000
@@ -61,6 +61,7 @@ class BuildPlan:
 
     pipeline_name: str
     steps: list[StepPlan] = field(default_factory=list)
+    surfaces: list[ProjectionPlan] = field(default_factory=list)
     projections: list[ProjectionPlan] = field(default_factory=list)
     total_estimated_llm_calls: int = 0
     total_estimated_tokens: int = 0
@@ -131,6 +132,11 @@ def plan_build(
         else:
             plan.total_rebuild += 1
 
+    # Plan build-time search surfaces
+    for surface in pipeline.surfaces:
+        surface_plan = _plan_projection(surface, pipeline, layer_artifacts, store)
+        plan.surfaces.append(surface_plan)
+
     # Plan projections
     for proj in pipeline.projections:
         proj_plan = _plan_projection(proj, pipeline, layer_artifacts, store)
@@ -181,7 +187,18 @@ def _plan_layer(
         if layer_llm:
             transform_config["llm_config"].update(layer_llm)
 
-    transform_config["search_db_path"] = str(Path(pipeline.build_dir) / "search.db")
+    search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
+    if search_uses:
+        handles = _search_surface_handles(Path(pipeline.build_dir), search_uses)
+        transform_config["search_surfaces"] = handles
+        if len(search_uses) == 1:
+            default_handle = handles[search_uses[0].name]
+            transform_config["search_surface"] = default_handle
+            transform_config["search_db_path"] = default_handle["db_path"]
+    elif any(isinstance(proj, SearchIndex) for proj in pipeline.projections):
+        # Legacy compatibility path for transforms that still rely on the
+        # global search projection convention.
+        transform_config["search_db_path"] = str(Path(pipeline.build_dir) / "search.db")
 
     # Compute transform fingerprint
     transform_fp = layer.compute_fingerprint(transform_config)
@@ -269,6 +286,25 @@ def _compute_source_info(source_dir: str) -> str | None:
         depth_label = f", {max_depth} deep" if max_depth > 1 else ", nested"
 
     return f"{source_dir} ({', '.join(parts)} {file_word}{depth_label})"
+
+
+def _surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
+    """Return the local compatibility path for a search surface."""
+    return build_dir / "surfaces" / f"{surface.name}.db"
+
+
+def _search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, dict]:
+    """Build lightweight search-surface handles for transform config injection."""
+    return {
+        surface.name: {
+            "name": surface.name,
+            "kind": "search_surface",
+            "db_path": str(_surface_local_path(build_dir, surface)),
+            "modes": list(surface.modes),
+            "sources": [source.name for source in surface.sources],
+        }
+        for surface in surfaces
+    }
 
 
 def _plan_source_layer(
@@ -635,7 +671,7 @@ def _plan_projection(
     build_dir = Path(pipeline.build_dir)
 
     # Extract embedding config for display
-    embedding_config = proj.embedding_config if isinstance(proj, SearchIndex) else None
+    embedding_config = proj.embedding_config if isinstance(proj, (SearchIndex, SearchSurface)) else None
 
     # Count total artifacts that would feed this projection
     all_artifacts: list[Artifact] = []
@@ -650,6 +686,8 @@ def _plan_projection(
     # Determine projection type
     if isinstance(proj, SearchIndex):
         proj_type = "search_index"
+    elif isinstance(proj, SearchSurface):
+        proj_type = "search_surface"
     elif isinstance(proj, FlatFile):
         proj_type = "flat_file"
     else:
@@ -681,7 +719,7 @@ def _plan_projection(
     if "content_hash" in cached_entry:
         # New split-hash format
         content_hash = _compute_content_only_hash(all_artifacts)
-        emb_hash = _compute_embedding_config_hash(proj) if isinstance(proj, SearchIndex) else None
+        emb_hash = _compute_embedding_config_hash(proj) if isinstance(proj, (SearchIndex, SearchSurface)) else None
 
         content_cached = (
             cached_entry.get("content_hash") == content_hash and cached_entry.get("artifact_count") == artifact_count

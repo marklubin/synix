@@ -347,7 +347,7 @@ class TestRunLogWithRunner:
         import shutil
 
         from synix import FlatFile, Pipeline, SearchIndex, Source
-        from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+        from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
         fixtures_dir = Path(__file__).parent.parent / "synix" / "fixtures"
         source_dir = tmp_path / "src_exports"

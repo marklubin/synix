@@ -1,4 +1,9 @@
-"""LLM-powered transforms — episode summary, rollups, core synthesis."""
+"""LLM-powered bundled transforms and shared LLM helpers.
+
+The concrete memory-oriented transforms defined here are exposed publicly via
+``synix.ext``. The helper functions remain here because both the bundled
+transforms and the generic synthesis transforms reuse them.
+"""
 
 from __future__ import annotations
 
@@ -67,6 +72,52 @@ def _logged_complete(
         )
 
     return response
+
+
+def _select_search_surface_handle(transform: Transform, config: dict) -> dict | None:
+    """Select the declared search surface handle for a transform, if any."""
+    direct = config.get("search_surface")
+    surfaces = config.get("search_surfaces") or {}
+
+    for layer in getattr(transform, "uses", []):
+        handle = surfaces.get(getattr(layer, "name", ""))
+        if handle:
+            return handle
+
+    if direct:
+        return direct
+    if len(surfaces) == 1:
+        return next(iter(surfaces.values()))
+    return None
+
+
+def _open_search_surface_index(transform: Transform, config: dict):
+    """Open the declared search surface for keyword lookup, if available."""
+    handle = _select_search_surface_handle(transform, config)
+    if not handle:
+        return None
+
+    from pathlib import Path
+
+    from synix.search.indexer import SearchIndex as SearchIdx
+
+    db_path = Path(handle.get("db_path", ""))
+    if not db_path.exists():
+        return None
+
+    try:
+        idx = SearchIdx(db_path)
+        row = (
+            idx._get_conn()
+            .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
+            .fetchone()
+        )
+        if row is not None:
+            return idx
+        idx.close()
+    except Exception:
+        return None
+    return None
 
 
 class EpisodeSummary(Transform):
@@ -198,32 +249,11 @@ class TopicalRollup(Transform):
     def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         """Split into per-topic work units.
 
-        Queries the search index in the main thread (thread-safe) to find
-        relevant episodes per topic. Only the LLM calls are parallelized.
+        Queries a declared search surface in the main thread (thread-safe) to
+        find relevant episodes per topic. Only the LLM calls are parallelized.
         """
         topics = config.get("topics", [])
-
-        # Optionally query a search index for relevant episodes per topic
-        search_db_path = config.get("search_db_path")
-        index = None
-        if search_db_path:
-            from pathlib import Path
-
-            from synix.search.indexer import SearchIndex as SearchIdx
-
-            db_path = Path(search_db_path)
-            if db_path.exists():
-                try:
-                    idx = SearchIdx(db_path)
-                    row = (
-                        idx._get_conn()
-                        .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
-                        .fetchone()
-                    )
-                    if row is not None:
-                        index = idx
-                except Exception:
-                    index = None
+        index = _open_search_surface_index(self, config)
 
         units: list[tuple[list[Artifact], dict]] = []
         for topic in topics:
@@ -345,3 +375,26 @@ class CoreSynthesis(Transform):
                 metadata={"context_budget": context_budget, "input_count": len(inputs)},
             )
         ]
+
+
+# Canonical explicit names for bundled transforms. Keep the short aliases for
+# backward compatibility, but expose the ``*Transform`` names so the public
+# surface can distinguish generic platform transforms from bundled
+# memory-oriented ones.
+EpisodeSummaryTransform = EpisodeSummary
+MonthlyRollupTransform = MonthlyRollup
+TopicalRollupTransform = TopicalRollup
+CoreSynthesisTransform = CoreSynthesis
+
+__all__ = [
+    "_get_llm_client",
+    "_logged_complete",
+    "EpisodeSummary",
+    "EpisodeSummaryTransform",
+    "MonthlyRollup",
+    "MonthlyRollupTransform",
+    "TopicalRollup",
+    "TopicalRollupTransform",
+    "CoreSynthesis",
+    "CoreSynthesisTransform",
+]

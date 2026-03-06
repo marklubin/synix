@@ -82,6 +82,7 @@ def _show_pipeline_info() -> None:
 
     table.add_row("Pipeline", pipeline.name)
     table.add_row("Layers", str(len(pipeline.layers)))
+    table.add_row("Surfaces", str(len(pipeline.surfaces)))
 
     # Layer names with levels
     layer_parts = []
@@ -166,6 +167,13 @@ def _show_build_status() -> None:
             table.add_row("Search Index", "exists (could not read)")
     else:
         table.add_row("Search Index", "[dim]not built[/dim]")
+
+    surfaces_dir = build_path / "surfaces"
+    surface_dbs = sorted(surfaces_dir.glob("*.db")) if surfaces_dir.exists() else []
+    if surface_dbs:
+        table.add_row("Search Surfaces", f"{len(surface_dbs)} built")
+    else:
+        table.add_row("Search Surfaces", "[dim]not built[/dim]")
 
     console.print(table)
 

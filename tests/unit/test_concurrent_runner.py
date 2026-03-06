@@ -82,7 +82,7 @@ def _make_transcript(tid: str, content: str = "", date: str = "2024-01-15") -> A
 
 def _make_pipeline_with_episodes(build_dir: str, source_dir: str) -> Pipeline:
     """Create a minimal pipeline with transcripts -> episodes."""
-    from synix.transforms import EpisodeSummary
+    from synix.ext import EpisodeSummary
 
     p = Pipeline("test-concurrent")
     p.build_dir = build_dir
@@ -248,7 +248,7 @@ class TestConcurrentBuildSameResults:
         for i in range(4):
             (source_dir / f"conv_{i}.txt").write_text(f"user: Question {i}\nassistant: Answer {i}\n")
 
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         # --- Sequential build (concurrency=1) ---
         build_dir_seq = tmp_path / "build_seq"
@@ -361,7 +361,7 @@ class TestConcurrentBuildDefaultSequential:
 
     def test_concurrency_1_no_thread_pool(self, tmp_path, mock_llm):
         """With concurrency=1, transforms run in the main thread (no ThreadPoolExecutor)."""
-        from synix.transforms import EpisodeSummary
+        from synix.ext import EpisodeSummary
 
         source_dir = tmp_path / "exports"
         source_dir.mkdir()
@@ -435,7 +435,7 @@ class TestConcurrentErrorsDontCrash:
 
     def test_sequential_layers_unaffected_by_concurrency(self, tmp_path, mock_llm):
         """Monthly/core layers still produce correct results with -j4 (split determines parallelism)."""
-        from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+        from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
         source_dir = tmp_path / "exports"
         source_dir.mkdir()

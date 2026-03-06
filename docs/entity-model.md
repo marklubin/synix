@@ -173,14 +173,17 @@ Provenance drill-down: Given a search result's `label`, walk `provenance.json` r
 
 ## Architecture North Star (post-demo, do NOT build)
 
+> Note: This forward-looking section predates the current search-surface design work.
+> The active direction is in [docs/search-surface-rfc.md](docs/search-surface-rfc.md): searchable capability declarations plus explicit release targets, not projections as recursive live DAG inputs.
+
 **Projections as build infrastructure.** The same search index that serves user queries can also serve downstream transforms. A topical rollup queries the episode search index for relevant episodes. At scale, this is essential.
 
-**The full vision:** Layers can depend on projections. Projections can compose. The build DAG includes both artifacts and projections as nodes.
+**The full vision:** Transforms can declare explicit use of searchable capabilities during the build. Search surfaces and release targets are first-class pipeline concepts, but disposable local realizations are not recursive artifact dependencies in the DAG.
 
 **For this weekend:** The runner builds layers in order. By the time topical rollup runs, the episode search index already exists. The transform just queries it. No new DAG concepts needed.
 
 **Future work:**
-- Projections as first-class DAG nodes
-- Composable projections (merge multiple search indexes)
-- Intermediate projections as build acceleration
+- Search surfaces as first-class build capabilities
+- Explicit build-time query access for downstream transforms
+- Release targets over canonical surface state
 - Proprietary clustering for auto-topic discovery

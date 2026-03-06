@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from synix import Artifact, Pipeline, SearchIndex, Source
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 FIXTURES_DIR = Path(__file__).parent / "synix" / "fixtures"
 

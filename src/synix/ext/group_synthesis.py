@@ -45,6 +45,7 @@ class GroupSynthesis(Transform):
         name: str,
         *,
         depends_on: list | None = None,
+        uses: list | None = None,
         group_by: str | Callable,
         prompt: str,
         label_prefix: str | None = None,
@@ -55,7 +56,7 @@ class GroupSynthesis(Transform):
         config: dict | None = None,
         batch: bool | None = None,
     ):
-        super().__init__(name, depends_on=depends_on, config=config, batch=batch)
+        super().__init__(name, depends_on=depends_on, uses=uses, config=config, batch=batch)
         self.group_by = group_by
         self.prompt = prompt
         self.label_prefix = label_prefix

@@ -7,6 +7,7 @@ Synthesize ChatGPT and Claude conversation exports into hierarchical memory with
 - Hierarchical memory synthesis: transcripts -> episodes -> rollups -> core memory
 - Two rollup strategies: monthly (`pipeline_monthly.py`) vs topical (`pipeline_topical.py`)
 - Incremental rebuild: swap pipelines and only upper layers rebuild (transcripts + episodes stay cached)
+- Declared build-time search surfaces for topic rollups (`SearchSurface` + `uses=[...]`)
 - Full provenance tracking through every layer
 
 ## Sample Data
@@ -41,7 +42,7 @@ uvx synix build pipeline_topical.py
 ## Pipelines
 
 - **`pipeline_monthly.py`** — Groups episodes by calendar month for rollups
-- **`pipeline_topical.py`** — Groups episodes by topic (career, technical projects, etc.) for rollups
+- **`pipeline_topical.py`** — Groups episodes by topic using a declared `episode-search` surface for build-time retrieval
 
 Run monthly first, then topical to see incremental rebuild in action.
 

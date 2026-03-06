@@ -43,6 +43,7 @@ class FoldSynthesis(Transform):
         name: str,
         *,
         depends_on: list | None = None,
+        uses: list | None = None,
         prompt: str,
         initial: str = "",
         sort_by: str | Callable | None = None,
@@ -52,7 +53,7 @@ class FoldSynthesis(Transform):
         config: dict | None = None,
     ):
         # FoldSynthesis is inherently sequential, never batch
-        super().__init__(name, depends_on=depends_on, config=config, batch=False)
+        super().__init__(name, depends_on=depends_on, uses=uses, config=config, batch=False)
         self.prompt = prompt
         self.initial = initial
         self.sort_by = sort_by

@@ -12,7 +12,7 @@ from synix.artifacts.provenance import ProvenanceTracker
 from synix.artifacts.store import ArtifactStore
 from synix.build.runner import run
 from synix.search.index import SearchIndex as SearchIdx
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 

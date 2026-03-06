@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, FlatFile, Pipeline, Source
+from synix import Artifact, FlatFile, Pipeline, SearchSurface, Source
 from synix import SearchIndex as SearchIndexLayer
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
@@ -23,7 +23,7 @@ from synix.build.runner import (
     run,
 )
 from synix.search.indexer import SearchIndex
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -94,6 +94,28 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
 
     p.add(transcripts, episodes, topics, core)
     p.add(SearchIndexLayer("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
+    return p
+
+
+def _surface_topical_pipeline(build_dir: Path) -> Pipeline:
+    """Pipeline with a named search surface used by topical rollups."""
+    p = Pipeline("surface-topical-pipeline")
+    p.build_dir = str(build_dir)
+    p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+    topics = TopicalRollup(
+        "topics",
+        depends_on=[episodes],
+        uses=[episode_search],
+        config={"topics": ["programming", "machine-learning"]},
+    )
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+    p.add(transcripts, episodes, episode_search, topics, core)
     p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
@@ -504,6 +526,24 @@ class TestProjectionPlan:
             assert "artifact_count" in proj_dict
             assert "reason" in proj_dict
 
+    def test_plan_includes_search_surfaces(self, source_dir, build_dir, mock_llm):
+        """plan_build() exposes build-time search surfaces separately."""
+        plan = plan_build(_surface_topical_pipeline(build_dir), source_dir=str(source_dir))
+
+        assert len(plan.surfaces) == 1
+        assert plan.surfaces[0].name == "episode-search"
+        assert plan.surfaces[0].projection_type == "search_surface"
+        assert plan.surfaces[0].status == "new"
+
+    def test_plan_search_surfaces_cached_after_build(self, source_dir, build_dir, mock_llm):
+        """After running, plan_build() reports search surfaces as cached."""
+        pipeline = _surface_topical_pipeline(build_dir)
+        run(pipeline, source_dir=str(source_dir))
+        plan = plan_build(pipeline, source_dir=str(source_dir))
+
+        assert len(plan.surfaces) == 1
+        assert plan.surfaces[0].status == "cached"
+
 
 # ---------------------------------------------------------------------------
 # 4. Projection Stats
@@ -538,28 +578,37 @@ class TestProjectionStats:
 
 
 class TestTopicalRollupDefensiveFallback:
-    def test_topical_rollup_no_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when search_db_path doesn't exist."""
+    def test_topical_rollup_missing_declared_surface(self, source_dir, build_dir, mock_llm):
+        """TopicalRollup succeeds when a declared search surface path is missing."""
         # First, run parse + episodes to get episode artifacts
         monthly = _monthly_pipeline(build_dir)
-        result = run(monthly, source_dir=str(source_dir))
+        run(monthly, source_dir=str(source_dir))
 
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
-        transform = TopicalRollup("test-topics")
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],
-            "search_db_path": str(build_dir / "nonexistent.db"),
+            "search_surfaces": {
+                "episode-search": {
+                    "name": "episode-search",
+                    "kind": "search_surface",
+                    "db_path": str(build_dir / "nonexistent.db"),
+                    "modes": ["fulltext"],
+                    "sources": ["episodes"],
+                }
+            },
         }
         results = transform.execute(episodes, config)
         assert len(results) > 0
         assert results[0].artifact_type == "rollup"
 
-    def test_topical_rollup_empty_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when search db has no FTS5 table."""
+    def test_topical_rollup_invalid_declared_surface(self, source_dir, build_dir, mock_llm):
+        """TopicalRollup succeeds when the declared search surface lacks an FTS table."""
         # Run a build to get episodes
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
@@ -575,11 +624,20 @@ class TestTopicalRollupDefensiveFallback:
         conn.commit()
         conn.close()
 
-        transform = TopicalRollup("test-topics")
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],
-            "search_db_path": str(empty_db),
+            "search_surfaces": {
+                "episode-search": {
+                    "name": "episode-search",
+                    "kind": "search_surface",
+                    "db_path": str(empty_db),
+                    "modes": ["fulltext"],
+                    "sources": ["episodes"],
+                }
+            },
         }
         results = transform.execute(episodes, config)
         assert len(results) > 0

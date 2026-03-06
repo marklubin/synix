@@ -97,9 +97,9 @@ metadata = {
 
 And artifact labels must follow the `t-{source}-{id}` convention.
 
-### Transforms (ext library)
+### Transforms (platform library)
 
-**Current pattern.** `synix.ext` provides `MapSynthesis`, `GroupSynthesis`, `ReduceSynthesis`, `FoldSynthesis` — all subclasses of `Transform` with configurable prompts and label functions.
+**Current pattern.** `synix.transforms` provides `MapSynthesis`, `GroupSynthesis`, `ReduceSynthesis`, `FoldSynthesis` — all subclasses of `Transform` with configurable prompts and label functions.
 
 **Target pattern.** Continue this approach. New ext transforms follow the existing conventions:
 
@@ -109,7 +109,7 @@ And artifact labels must follow the `t-{source}-{id}` convention.
 - Override `split()` when parallelism strategy differs from 1:1
 - Use `_get_llm_client(config)` and `_logged_complete()` for LLM calls
 
-**What's new:** A `TransformConstruct` metadata mixin (see [Shared Metadata](#shared-metadata)) and conformance tests that auto-discover all ext transforms.
+**What's new:** A `TransformConstruct` metadata mixin (see [Shared Metadata](#shared-metadata)) and conformance tests that auto-discover all generic platform transforms.
 
 ### Projection Targets
 
@@ -383,7 +383,7 @@ The `adapter_sample_file` fixture resolves extension to the right sample file. N
 
 1. **Adapter conformance suite** — parametrized tests over `_ADAPTERS` registry. Write sample data fixtures for existing adapters (chatgpt, claude, text). Verify all 3 existing adapters pass.
 
-2. **Transform conformance suite** — parametrized tests over `synix.ext` transforms. Mock LLM. Verify MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis pass.
+2. **Transform conformance suite** — parametrized tests over `synix.transforms` generic transforms. Mock LLM. Verify MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis pass.
 
 3. **Validator conformance suite** — parametrized tests over built-in validators. Verify PII, SemanticConflict, RequiredField, MutualExclusion, Citation pass.
 

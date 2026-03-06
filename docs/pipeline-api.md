@@ -5,7 +5,7 @@ Pipelines are defined in Python. Layers are real objects — `Source` for inputs
 ```python
 # pipeline.py
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("personal-memory")
 pipeline.source_dir = "./sources"
@@ -33,15 +33,15 @@ pipeline.add(
 )
 ```
 
-## Configurable Transforms (`synix.ext`)
+## Generic Transforms (`synix.transforms`)
 
-Most LLM pipeline steps follow one of four patterns. The `synix.ext` module provides configurable transforms for each — just pass a prompt string and parameters instead of writing a custom class.
+Most LLM pipeline steps follow one of four generic patterns. The `synix.transforms` module provides those platform transforms directly — just pass a prompt string and parameters instead of writing a custom class.
 
 ```python
-from synix.ext import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
 ```
 
-All ext transforms share these behaviors:
+All generic transforms share these behaviors:
 - **Prompt templates** with placeholders — changing the prompt automatically invalidates the cache
 - **Deterministic ordering** — multi-input transforms sort by `artifact_id` before building prompts
 - **LLM calls** via the standard pipeline `llm_config`
@@ -186,9 +186,9 @@ FoldSynthesis always runs synchronously (never batched) because each step depend
 | Combines all inputs into one output | `ReduceSynthesis` |
 | Needs to accumulate through inputs in order | `FoldSynthesis` |
 
-## Built-in Transforms
+## Bundled Ext Transforms (`synix.ext`)
 
-Pre-built transforms for agent memory pipelines. Import from `synix.transforms`:
+Synix also ships a small set of opinionated memory-oriented transforms in `synix.ext`:
 
 | Class | Pattern | Description |
 |-------|---------|-------------|
@@ -196,6 +196,15 @@ Pre-built transforms for agent memory pipelines. Import from `synix.transforms`:
 | `MonthlyRollup` | N:M | Group episodes by calendar month, synthesize each |
 | `TopicalRollup` | N:M | Group episodes by user-declared topics. Requires `config={"topics": [...]}` |
 | `CoreSynthesis` | N:1 | All rollups → single core memory document. Respects `context_budget` |
+
+These are bundled convenience transforms rather than the generic platform primitives.
+
+## Other Platform Transforms
+
+Import from `synix.transforms`:
+
+| Class | Pattern | Description |
+|-------|---------|-------------|
 | `Merge` | N:M | Group artifacts by content similarity (Jaccard), merge above threshold |
 
 ## Sources
@@ -211,10 +220,13 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 
 ## Projections
 
+`SearchSurface` is the build-time searchable capability declaration. `SearchIndex` and `FlatFile` remain the user-facing compatibility outputs today.
+
 Import from `synix`:
 
 | Class | Output | Description |
 |-------|--------|-------------|
+| `SearchSurface` | `build/surfaces/<name>.db` | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build |
 | `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
@@ -223,15 +235,22 @@ Import from `synix`:
 Swap the rollup strategy — transcripts and episodes stay cached:
 
 ```python
-from synix.transforms import TopicalRollup
+from synix import SearchSurface
+from synix.ext import TopicalRollup
 
+episode_search = SearchSurface(
+    "episode-search",
+    sources=[episodes],
+    modes=["fulltext"],
+)
 topics = TopicalRollup(
     "topics",
     depends_on=[episodes],
+    uses=[episode_search],
     config={"topics": ["career", "technical-projects", "san-francisco"]},
 )
 core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
-pipeline.add(transcripts, episodes, topics, core)
+pipeline.add(transcripts, episodes, episode_search, topics, core)
 ```
 
 ## Dynamic Layer Generation

@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
 from synix.cli import main
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -55,6 +55,29 @@ def pipeline_obj(build_dir, source_dir):
     p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
     p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
 
+    return p
+
+
+def _surface_topical_pipeline(build_dir: Path, source_dir: Path) -> Pipeline:
+    """Pipeline with a named search surface used by topical rollups."""
+    p = Pipeline("surface-topical-pipeline")
+    p.source_dir = str(source_dir)
+    p.build_dir = str(build_dir)
+    p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+    topics = TopicalRollup(
+        "topics",
+        depends_on=[episodes],
+        uses=[episode_search],
+        config={"topics": ["programming", "machine-learning"]},
+    )
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+    p.add(transcripts, episodes, episode_search, topics, core)
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
 
@@ -189,6 +212,21 @@ class TestPlanBuildFullyCached:
 
         for step in plan.steps:
             assert step.reason == "all cached"
+
+    def test_named_search_surface_keeps_topical_plan_cached(self, build_dir, source_dir, mock_llm):
+        """Planner matches runtime when a transform uses a named search surface."""
+        from synix.build.runner import run
+
+        pipeline = _surface_topical_pipeline(build_dir, source_dir)
+        run(pipeline, source_dir=str(source_dir))
+
+        plan = plan_build(pipeline)
+        topics_step = next(step for step in plan.steps if step.name == "topics")
+
+        assert topics_step.status == "cached"
+        assert topics_step.reason == "all cached"
+        assert topics_step.fingerprint is not None
+        assert "uses" in topics_step.fingerprint["components"]
 
 
 class TestPlanBuildPartialRebuild:
@@ -470,7 +508,7 @@ class TestPlanCLI:
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-json")
 pipeline.source_dir = {str(source_dir)!r}
@@ -492,7 +530,9 @@ pipeline.add(transcripts, episodes, monthly, core)
         parsed = json.loads(result.output)
         assert "pipeline_name" in parsed
         assert "steps" in parsed
+        assert "surfaces" in parsed
         assert isinstance(parsed["steps"], list)
+        assert isinstance(parsed["surfaces"], list)
         assert len(parsed["steps"]) == 4
         assert "total_estimated_llm_calls" in parsed
         assert "total_estimated_cost" in parsed
@@ -502,7 +542,7 @@ pipeline.add(transcripts, episodes, monthly, core)
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-rich")
 pipeline.source_dir = {str(source_dir)!r}
@@ -519,13 +559,47 @@ pipeline.add(transcripts, episodes)
         assert "Estimated:" in result.output
         assert "Estimated:" in result.output
 
+    def test_plan_rich_output_shows_search_surfaces(self, runner, source_dir, tmp_path):
+        """synix plan shows build-time search surfaces separately from projections."""
+        pipeline_file = tmp_path / "test_surface_pipeline.py"
+        build_dir = tmp_path / "build"
+        pipeline_file.write_text(f"""\
+from synix import FlatFile, Pipeline, SearchSurface, Source
+from synix.ext import CoreSynthesis, EpisodeSummary, TopicalRollup
+
+pipeline = Pipeline("test-surface-rich")
+pipeline.source_dir = {str(source_dir)!r}
+pipeline.build_dir = {str(build_dir)!r}
+pipeline.llm_config = {{"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}}
+
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+topics = TopicalRollup(
+    "topics",
+    depends_on=[episodes],
+    uses=[episode_search],
+    config={{"topics": ["programming", "machine-learning"]}},
+)
+core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+pipeline.add(transcripts, episodes, episode_search, topics, core)
+pipeline.add(FlatFile("context-doc", sources=[core], output_path={str(build_dir / "context.md")!r}))
+""")
+
+        result = runner.invoke(main, ["plan", str(pipeline_file)])
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "episode-search" in result.output
+        assert "search_surface" in result.output
+        assert "Surfaces:" in result.output
+
     def test_plan_save_flag(self, runner, source_dir, tmp_path):
         """synix plan --save creates a build-plan artifact."""
         build_dir = tmp_path / "build"
         pipeline_file = tmp_path / "test_pipeline.py"
         pipeline_file.write_text(f"""\
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-save")
 pipeline.source_dir = {str(source_dir)!r}

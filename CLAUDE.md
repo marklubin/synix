@@ -33,7 +33,7 @@ src/synix/
 │   ├── artifacts.py       # Artifact storage — save/load/query (filesystem-backed)
 │   ├── provenance.py      # Provenance tracking — record and query lineage chains
 │   ├── fingerprint.py     # Build fingerprints — synix:transform:v2 scheme
-│   ├── llm_transforms.py  # Built-in LLM transforms (EpisodeSummary, MonthlyRollup, etc.)
+│   ├── llm_transforms.py  # Bundled memory transforms + shared LLM helper functions
 │   ├── parse_transform.py # Source parser — ChatGPT/Claude JSON → transcript artifacts
 │   ├── merge_transform.py # Merge transform — Jaccard similarity grouping
 │   ├── transforms.py      # Transform base + registry (string dispatch fallback)
@@ -42,8 +42,14 @@ src/synix/
 │   ├── projections.py     # Projection dispatch
 │   └── cassette.py        # Record/replay for LLM + embedding calls
 ├── transforms/
-│   ├── __init__.py        # Re-export: EpisodeSummary, MonthlyRollup, TopicalRollup, CoreSynthesis, Merge
+│   ├── __init__.py        # Re-export: MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Merge
 │   └── base.py            # BaseTransform (legacy compat)
+├── ext/
+│   ├── __init__.py        # Re-export: bundled memory transforms + migration compatibility exports
+│   ├── map_synthesis.py   # Generic 1:1 synthesis transform implementation
+│   ├── group_synthesis.py # Generic N:M grouping synthesis transform implementation
+│   ├── reduce_synthesis.py# Generic N:1 synthesis transform implementation
+│   └── fold_synthesis.py  # Generic sequential fold synthesis transform implementation
 ├── validators/
 │   └── __init__.py        # Re-export: MutualExclusion, RequiredField, PII, SemanticConflict, Citation
 ├── fixers/

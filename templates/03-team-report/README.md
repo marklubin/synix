@@ -4,7 +4,7 @@ Multi-layer team analysis pipeline: parse bios and a project brief, infer work s
 
 ## What This Demonstrates
 
-- **`synix.ext` configurable transforms** — no custom Transform subclasses needed
+- **`synix.transforms` generic transforms** — no custom Transform subclasses needed
 - `MapSynthesis` (1:1): bio → work style profile
 - `ReduceSynthesis` (N:1): work styles → team dynamics analysis
 - `FoldSynthesis` (sequential N:1): team dynamics + project brief → staffing report
@@ -63,7 +63,7 @@ Edit `sources/brief/project_brief.md` with your own project description. The pip
 
 ### Customize the pipeline
 
-Open `pipeline.py` to see how layers and ext transforms are wired. Key things to try:
+Open `pipeline.py` to see how layers and generic platform transforms are wired. Key things to try:
 
 - Change the prompts in `MapSynthesis`, `ReduceSynthesis`, or `FoldSynthesis`
 - Add a new layer (e.g., `skills_matrix` that cross-references bios against the project brief)
@@ -72,7 +72,7 @@ Open `pipeline.py` to see how layers and ext transforms are wired. Key things to
 
 ## Custom Transforms
 
-The ext transforms cover common patterns, but you can always write a custom `Transform` subclass for full control. Here's the equivalent of `MapSynthesis` as a custom class:
+The generic transforms cover common patterns, but you can always write a custom `Transform` subclass for full control. Here's the equivalent of `MapSynthesis` as a custom class:
 
 ```python
 from synix import Transform

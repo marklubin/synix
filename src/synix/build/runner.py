@@ -25,6 +25,7 @@ from synix.core.models import (
     Layer,
     Pipeline,
     SearchIndex,
+    SearchSurface,
     Source,
     Transform,
 )
@@ -317,11 +318,14 @@ def run(
         result.skipped += stats.skipped
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
+        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+
         # Materialize intermediate projections for this layer
         _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
     result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
+    _refresh_surface_cache(pipeline, layer_artifacts, build_dir)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
@@ -428,9 +432,72 @@ def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, 
         if layer_llm:
             transform_config["llm_config"].update(layer_llm)
 
-    # For topical rollup, pass the search index path
-    transform_config["search_db_path"] = str(build_dir / "search.db")
+    search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
+    if search_uses:
+        handles = _search_surface_handles(build_dir, search_uses)
+        transform_config["search_surfaces"] = handles
+        if len(search_uses) == 1:
+            # Keep the single-surface handle easy to consume for bundled
+            # transforms while retaining search_db_path as a migration shim.
+            default_handle = handles[search_uses[0].name]
+            transform_config["search_surface"] = default_handle
+            transform_config["search_db_path"] = default_handle["db_path"]
+    elif any(isinstance(proj, SearchIndex) for proj in pipeline.projections):
+        # Legacy compatibility path for transforms that still rely on the
+        # global search projection convention.
+        transform_config["search_db_path"] = str(build_dir / "search.db")
     return transform_config
+
+
+def _surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
+    """Return the local compatibility path for a search surface."""
+    return build_dir / "surfaces" / f"{surface.name}.db"
+
+
+def _search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, dict]:
+    """Build lightweight search-surface handles for transform config injection."""
+    return {
+        surface.name: {
+            "name": surface.name,
+            "kind": "search_surface",
+            "db_path": str(_surface_local_path(build_dir, surface)),
+            "modes": list(surface.modes),
+            "sources": [source.name for source in surface.sources],
+        }
+        for surface in surfaces
+    }
+
+
+def _materialize_layer_search_surfaces(
+    pipeline: Pipeline,
+    layer_name: str,
+    layer_artifacts: dict[str, list[Artifact]],
+    store: ArtifactStore,
+    build_dir: Path,
+    logger: SynixLogger | None = None,
+) -> None:
+    """Materialize search surfaces that source from this layer.
+
+    Search surfaces are build-time capabilities, so they are progressively
+    materialized as their source layers become available.
+    """
+    for surface in pipeline.surfaces:
+        source_layer_names = [s.name for s in surface.sources]
+        if layer_name not in source_layer_names:
+            continue
+
+        available_names = [ln for ln in source_layer_names if ln in layer_artifacts]
+        if not available_names:
+            continue
+
+        _materialize_projection(
+            surface,
+            layer_artifacts,
+            build_dir,
+            source_layer_override=available_names,
+            logger=logger,
+            triggered_by=layer_name,
+        )
 
 
 def _gather_inputs(
@@ -750,9 +817,33 @@ def _materialize_all_projections(
     return stats
 
 
+def _refresh_surface_cache(
+    pipeline: Pipeline,
+    layer_artifacts: dict[str, list[Artifact]],
+    build_dir: Path,
+) -> None:
+    """Persist final cache metadata for build-time search surfaces."""
+    cache = _load_projection_cache(build_dir)
+
+    for surface in pipeline.surfaces:
+        all_artifacts: list[Artifact] = []
+        source_layer_names = [s.name for s in surface.sources]
+        for layer_name in source_layer_names:
+            all_artifacts.extend(layer_artifacts.get(layer_name, []))
+
+        cache[surface.name] = {
+            "content_hash": _compute_content_only_hash(all_artifacts),
+            "embedding_hash": _compute_embedding_config_hash(surface),
+            "source_layers": source_layer_names,
+            "artifact_count": len(all_artifacts),
+        }
+
+    _save_projection_cache(build_dir, cache)
+
+
 def _get_projection_config(proj: Layer) -> dict:
     """Extract projection config from a SearchIndex or FlatFile layer."""
-    if isinstance(proj, SearchIndex):
+    if isinstance(proj, (SearchIndex, SearchSurface)):
         return {
             "search": proj.search,
             "embedding_config": proj.embedding_config,
@@ -796,6 +887,8 @@ def _materialize_projection(
 
     if isinstance(proj, SearchIndex):
         proj_type = "search_index"
+    elif isinstance(proj, SearchSurface):
+        proj_type = "search_surface"
     elif isinstance(proj, FlatFile):
         proj_type = "flat_file"
     else:
@@ -804,10 +897,11 @@ def _materialize_projection(
     if logger:
         logger.projection_start(proj.name, proj_type, triggered_by=triggered_by)
 
-    if isinstance(proj, SearchIndex):
+    if isinstance(proj, (SearchIndex, SearchSurface)):
         # Use projection registry to avoid direct search import
         try:
-            projection = get_projection("search_index", build_dir)
+            db_path = build_dir / "search.db" if isinstance(proj, SearchIndex) else _surface_local_path(build_dir, proj)
+            projection = get_projection("search_index", build_dir, db_path)
         except ValueError as exc:
             logger.warning("Projection %r unavailable: %s", proj.name, exc)
             return True
@@ -850,7 +944,7 @@ def _compute_content_only_hash(artifacts: list[Artifact]) -> str:
 
 def _compute_embedding_config_hash(proj) -> str | None:
     """Compute a hash over embedding identity fields only."""
-    if not isinstance(proj, SearchIndex):
+    if not isinstance(proj, (SearchIndex, SearchSurface)):
         return None
     if not proj.embedding_config:
         return None

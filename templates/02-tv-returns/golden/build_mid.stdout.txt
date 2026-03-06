@@ -3,6 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 4                                                                                                            │
+│ Surfaces: 0                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>

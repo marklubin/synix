@@ -8,7 +8,7 @@ import pytest
 
 from synix import Pipeline, Source
 from synix.build.pipeline import load_pipeline, validate_pipeline
-from synix.transforms import CoreSynthesis, EpisodeSummary
+from synix.ext import CoreSynthesis, EpisodeSummary
 
 
 class TestPipelineConfig:
@@ -18,7 +18,7 @@ class TestPipelineConfig:
         pipeline_file.write_text(
             textwrap.dedent("""\
             from synix import Pipeline, Source
-            from synix.transforms import EpisodeSummary
+            from synix.ext import EpisodeSummary
 
             pipeline = Pipeline("test")
             transcripts = Source("transcripts")

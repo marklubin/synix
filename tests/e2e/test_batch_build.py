@@ -42,7 +42,7 @@ def openai_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-batch")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -63,7 +63,7 @@ def anthropic_only_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-anthropic")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -84,7 +84,7 @@ def mixed_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-mixed")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -109,7 +109,7 @@ def force_sync_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-force-sync")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -340,7 +340,7 @@ class TestErrorHandling:
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("bad")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -479,7 +479,7 @@ class TestFingerprintMismatch:
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v1")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -509,7 +509,7 @@ pipeline.add(transcripts, episodes)
         # Change pipeline (add a layer)
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary, MonthlyRollup
+from synix.ext import EpisodeSummary, MonthlyRollup
 
 pipeline = Pipeline("v2")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -534,7 +534,7 @@ pipeline.add(transcripts, episodes, monthly)
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v1")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -564,7 +564,7 @@ pipeline.add(transcripts, episodes)
         # Change pipeline name (changes hash)
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v2-changed")
 pipeline.source_dir = "{workspace["source_dir"]}"

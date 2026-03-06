@@ -1,7 +1,7 @@
 """Toy pipeline for mesh E2E tests — Source -> Episodes -> Core + FlatFile."""
 
 from synix import FlatFile, Pipeline, Source
-from synix.transforms import CoreSynthesis, EpisodeSummary
+from synix.ext import CoreSynthesis, EpisodeSummary
 
 source = Source("notes")
 episodes = EpisodeSummary("episodes", depends_on=[source])

@@ -4,7 +4,8 @@ Layer hierarchy:
     Layer (abstract base — name, depends_on)
     ├── Source          → reads source files (root nodes, no depends_on)
     ├── Transform       → processes inputs via split()/execute()
-    │   ├── EpisodeSummary, MonthlyRollup, TopicalRollup, CoreSynthesis, Merge (built-in)
+    │   ├── MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Merge
+    │   ├── bundled memory transforms under synix.ext
     │   └── (user-defined subclasses)
     ├── SearchIndex     → materializes artifacts into FTS5 + embeddings
     └── FlatFile        → renders artifacts into a markdown file
@@ -125,11 +126,13 @@ class Transform(Layer):
         name: str,
         *,
         depends_on: list[Layer] | None = None,
+        uses: list[Layer] | None = None,
         config: dict | None = None,
         context_budget: int | None = None,
         batch: bool | None = None,
     ):
         super().__init__(name, depends_on=depends_on, config=config)
+        self.uses: list[Layer] = uses or []
         self.context_budget = context_budget
         self.batch = batch
 
@@ -227,6 +230,9 @@ class Transform(Layer):
         if llm_config:
             components["model"] = fingerprint_value(llm_config)
 
+        if self.uses:
+            components["uses"] = fingerprint_value(sorted(layer.name for layer in self.uses))
+
         return Fingerprint(
             scheme="synix:transform:v2",
             digest=compute_digest(components),
@@ -234,8 +240,27 @@ class Transform(Layer):
         )
 
 
-class SearchIndex(Layer):
-    """Projection — materializes artifacts into a searchable index."""
+class SearchSurface(Layer):
+    """Named searchable build-time capability over a set of source layers."""
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        sources: list[Layer],
+        modes: list[str] | None = None,
+        embedding_config: dict | None = None,
+        config: dict | None = None,
+    ):
+        super().__init__(name, depends_on=list(sources), config=config or {})
+        self.sources = sources
+        self.modes = modes or ["fulltext"]
+        self.search = self.modes  # compatibility alias while SearchIndex still exists
+        self.embedding_config = embedding_config or {}
+
+
+class SearchIndex(SearchSurface):
+    """Projection compatibility layer — materializes artifacts into a searchable index."""
 
     def __init__(
         self,
@@ -246,11 +271,14 @@ class SearchIndex(Layer):
         embedding_config: dict | None = None,
         config: dict | None = None,
     ):
-        # SearchIndex depends on its source layers
-        super().__init__(name, depends_on=list(sources), config=config or {})
-        self.sources = sources
-        self.search = search or ["fulltext"]
-        self.embedding_config = embedding_config or {}
+        super().__init__(
+            name,
+            sources=sources,
+            modes=search,
+            embedding_config=embedding_config,
+            config=config,
+        )
+        self.search = self.modes
 
 
 class FlatFile(Layer):
@@ -294,6 +322,7 @@ class Pipeline:
         self.llm_config: dict = llm_config or {}
         self.concurrency = concurrency
         self.layers: list[Layer] = []  # Source + Transform
+        self.surfaces: list[Layer] = []  # SearchSurface
         self.projections: list[Layer] = []  # SearchIndex + FlatFile
         self.validators: list = []  # untyped to avoid circular import with validators.py
         self.fixers: list = []  # untyped to avoid circular import with fixers.py
@@ -302,11 +331,14 @@ class Pipeline:
         """Add layers to the pipeline.
 
         Source and Transform go into the build DAG.
+        SearchSurface goes into build-time search surfaces.
         SearchIndex and FlatFile go into projections (separate lifecycle).
         """
         for layer in layers:
             if isinstance(layer, (SearchIndex, FlatFile)):
                 self.projections.append(layer)
+            elif isinstance(layer, SearchSurface):
+                self.surfaces.append(layer)
             else:
                 self.layers.append(layer)
 

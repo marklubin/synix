@@ -1,6 +1,7 @@
-"""E2E tests for synix.ext configurable transforms.
+"""E2E tests for generic platform transforms.
 
-Exercises ext transforms through the full pipeline runner with mocked LLM.
+Exercises the generic synthesis transforms through the full pipeline runner
+with mocked LLM.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ def ext_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, SearchIndex, Source
-from synix.ext import MapSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, ReduceSynthesis, FoldSynthesis
 
 pipeline = Pipeline("ext-test")
 pipeline.source_dir = "{workspace["bios_dir"]}"
@@ -180,7 +181,7 @@ class TestGroupSynthesisE2E:
 
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.ext import GroupSynthesis
+from synix.transforms import GroupSynthesis
 from synix.core.models import Artifact, Transform
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 
