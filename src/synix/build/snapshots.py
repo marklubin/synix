@@ -12,7 +12,7 @@ from typing import Any
 
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
 from synix.build.refs import DEFAULT_HEAD_REF, RefStore, synix_dir_for_build_dir
-from synix.core.models import Artifact, FlatFile, Pipeline, SearchIndex
+from synix.core.models import Artifact, Pipeline
 
 
 def _object(object_type: str, **fields: Any) -> dict[str, Any]:
@@ -30,8 +30,32 @@ def _sanitize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
         lower = key.lower()
         if any(token in lower for token in ("key", "token", "secret", "password")):
             continue
-        redacted[key] = value
+        redacted[key] = _normalize_fingerprint_value(value)
     return redacted
+
+
+def _normalize_fingerprint_value(value: Any) -> Any:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_fingerprint_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, list | tuple | set):
+        return [_normalize_fingerprint_value(item) for item in value]
+    if callable(value):
+        qualname = getattr(value, "__qualname__", getattr(value, "__name__", type(value).__name__))
+        return f"{getattr(value, '__module__', 'builtins')}.{qualname}"
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        try:
+            return isoformat()
+        except TypeError:
+            pass
+    return repr(value)
 
 
 def _pipeline_fingerprint(pipeline: Pipeline) -> str:
@@ -43,7 +67,7 @@ def _pipeline_fingerprint(pipeline: Pipeline) -> str:
                 "name": layer.name,
                 "class": type(layer).__name__,
                 "depends_on": [dep.name for dep in layer.depends_on],
-                "config": layer.config,
+                "config": _normalize_fingerprint_value(layer.config),
             }
             for layer in pipeline.layers
         ],
@@ -52,7 +76,7 @@ def _pipeline_fingerprint(pipeline: Pipeline) -> str:
                 "name": proj.name,
                 "class": type(proj).__name__,
                 "sources": [src.name for src in proj.sources],
-                "config": proj.config,
+                "config": _normalize_fingerprint_value(proj.config),
             }
             for proj in pipeline.projections
         ],
@@ -83,24 +107,18 @@ def _store_blob_text(object_store: ObjectStore, text: str) -> str:
     )
 
 
-def _store_blob_file(object_store: ObjectStore, path: str | Path) -> str:
-    content_oid, size_bytes = object_store.put_file(path)
-    return object_store.put_json(
-        _object(
-            "blob",
-            content_oid=content_oid,
-            size_bytes=size_bytes,
-        )
-    )
-
-
 @dataclass
 class BuildTransaction:
     """Canonical build state accumulated during a single pipeline run.
 
-    Artifacts and projection state are captured as they are produced or reused
-    during the build so final snapshot commit does not need to scrape the
-    mutable compatibility release surface under ``build/``.
+    Artifact state is captured as it is produced or reused during the build so
+    final snapshot commit does not need to scrape the mutable compatibility
+    release surface under ``build/``.
+
+    Projection state capture is intentionally deferred to the explicit
+    build/release adapter slice. Projections still materialize into ``build/``
+    today as compatibility outputs, but they are not yet part of the canonical
+    snapshot closure.
     """
 
     pipeline: Pipeline
@@ -172,68 +190,10 @@ class BuildTransaction:
 
         return artifact_oid
 
-    def record_projection(self, projection: Any) -> str | None:
-        if isinstance(projection, SearchIndex):
-            projection_path = self.build_dir / "search.db"
-            if not projection_path.exists():
-                return None
-
-            state_oid = _store_blob_file(self.object_store, projection_path)
-            projection_payload = _object(
-                "projection",
-                name=projection.name,
-                projection_type="search_index",
-                input_oids=_projection_input_oids(projection.sources, self.layer_artifact_oids),
-                build_state_oid=state_oid,
-                adapter="search_index",
-                release_mode="full",
-                metadata={"db_filename": "search.db"},
-            )
-        elif isinstance(projection, FlatFile):
-            projection_path = Path(projection.output_path).resolve()
-            if not projection_path.exists():
-                return None
-            try:
-                relative_output_path = projection_path.relative_to(self.build_dir)
-            except ValueError as exc:
-                msg = (
-                    f"FlatFile projection {projection.name!r} must write inside the build directory "
-                    f"to be snapshotted: {projection.output_path}"
-                )
-                raise ValueError(msg) from exc
-
-            state_oid = _store_blob_file(self.object_store, projection_path)
-            projection_payload = _object(
-                "projection",
-                name=projection.name,
-                projection_type="flat_file",
-                input_oids=_projection_input_oids(projection.sources, self.layer_artifact_oids),
-                build_state_oid=state_oid,
-                adapter="flat_file",
-                release_mode="copy",
-                metadata={"output_path": relative_output_path.as_posix()},
-            )
-        else:
-            return None
-
-        projection_oid = self.object_store.put_json(projection_payload)
-        self.projection_oids[projection.name] = projection_oid
-        return projection_oid
-
 
 def start_build_transaction(pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:
     """Create a build transaction that accumulates canonical snapshot state."""
     return BuildTransaction.start(pipeline, build_dir, run_id)
-
-
-def _projection_input_oids(
-    source_layers: list[Any],
-    layer_artifact_oids: dict[str, list[str]],
-) -> list[str]:
-    input_oids: list[str] = []
-    for source in source_layers:
-        input_oids.extend(layer_artifact_oids.get(source.name, []))
-    return input_oids
 
 
 @contextmanager
@@ -245,15 +205,29 @@ def _snapshot_lock(synix_dir: Path):
         import fcntl
     except ImportError:
         fcntl = None
+    try:
+        import msvcrt
+    except ImportError:
+        msvcrt = None
 
-    with lock_path.open("a+", encoding="utf-8") as handle:
+    with lock_path.open("a+b") as handle:
         if fcntl is not None:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            handle.seek(0)
+            if handle.read(1) == b"":
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
         try:
             yield
         finally:
             if fcntl is not None:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:

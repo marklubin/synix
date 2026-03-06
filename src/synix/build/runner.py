@@ -314,14 +314,7 @@ def run(
         _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(
-        pipeline,
-        layer_artifacts,
-        store,
-        build_dir,
-        logger=slogger,
-        snapshot_txn=snapshot_txn,
-    )
+    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
@@ -606,7 +599,6 @@ def _materialize_all_projections(
     store: ArtifactStore,
     build_dir: Path,
     logger: SynixLogger | None = None,
-    snapshot_txn: BuildTransaction | None = None,
 ) -> list[ProjectionStats]:
     """Materialize all projections after the full build (with caching).
 
@@ -675,8 +667,6 @@ def _materialize_all_projections(
             "source_layers": source_layer_names,
             "artifact_count": len(all_artifacts),
         }
-        if snapshot_txn is not None:
-            snapshot_txn.record_projection(proj)
 
     _save_projection_cache(build_dir, cache)
     return stats

@@ -18,6 +18,15 @@ Synix should move from a mutable `build/` directory model to a git-like snapshot
 
 This design is the generic platform substrate for reproducibility, diffing, release promotion, rollback, and multi-variation deployment. It is required by LENS, but it is not benchmark-specific.
 
+The implementation should land in slices. The first mergeable slice is:
+
+- immutable artifact snapshots
+- refs and first-class `HEAD`
+- manifest and snapshot objects
+- compatibility local `build/` outputs retained for existing commands
+
+Projection build-state capture and `synix release` remain follow-on work. Until that lands, projections are still compatibility outputs under `build/`, not part of the canonical persisted snapshot closure.
+
 ## Motivation
 
 At `v0.15.0`, Synix still assumes a single mutable build root:

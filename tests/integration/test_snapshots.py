@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
@@ -159,14 +158,16 @@ class TestSnapshots:
         assert manifest["type"] == "manifest"
         assert manifest["pipeline_name"] == "snapshot-pipeline"
         assert len(manifest["artifacts"]) > 0
-        assert set(manifest["projections"]) == {"memory-index", "context-doc"}
+        assert manifest["projections"] == {}
+        assert (build_dir / "search.db").exists()
+        assert (build_dir / "context.md").exists()
 
         assert ref_store.read_head_target() == "refs/heads/main"
         assert ref_store.read_ref("HEAD") == result.snapshot_oid
         assert ref_store.read_ref(result.run_ref) == result.snapshot_oid
 
-    def test_projection_input_closure_uses_projection_sources(self, tmp_path, source_dir_with_fixtures, mock_llm):
-        """Projection input_oids should only include artifacts from the configured source layers."""
+    def test_snapshot_scope_is_artifacts_only_for_now(self, tmp_path, source_dir_with_fixtures, mock_llm):
+        """Canonical snapshots currently capture artifacts only; projections stay in the compatibility surface."""
         build_dir = tmp_path / "build"
         pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
 
@@ -175,17 +176,10 @@ class TestSnapshots:
 
         object_store = ObjectStore(tmp_path / ".synix")
         manifest = object_store.get_json(result.manifest_oid)
-        projection_oid = manifest["projections"]["memory-index"]
-        projection = object_store.get_json(projection_oid)
 
-        store = ArtifactStore(build_dir)
-        expected_count = (
-            len(store.list_artifacts("episodes"))
-            + len(store.list_artifacts("monthly"))
-            + len(store.list_artifacts("core"))
-        )
-
-        assert len(projection["input_oids"]) == expected_count
+        assert manifest["projections"] == {}
+        assert (build_dir / "search.db").exists()
+        assert (build_dir / "context.md").exists()
 
     def test_successive_builds_preserve_old_run_ref(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """Each successful build gets a new snapshot while older run refs remain resolvable."""
@@ -279,13 +273,29 @@ class TestSnapshots:
         assert result.manifest_oid is None
         assert list_runs(build_dir, synix_dir=synix_dir) == []
 
-    def test_flatfile_projection_must_live_under_build_dir(self, tmp_path, source_dir_with_fixtures, mock_llm):
-        """Snapshotting rejects flat-file projections that point outside the build root."""
+    def test_flatfile_projection_outside_build_dir_is_allowed_but_not_snapshotted(
+        self,
+        tmp_path,
+        source_dir_with_fixtures,
+        mock_llm,
+    ):
+        """Projection outputs can still target arbitrary paths until release adapters own projection state."""
         build_dir = tmp_path / "build"
         pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
+        outside_path = tmp_path / "outside.md"
         pipeline.projections = [
             proj for proj in pipeline.projections if not isinstance(proj, FlatFile)
-        ] + [FlatFile("external-doc", sources=[next(layer for layer in pipeline.layers if layer.name == "core")], output_path=str(tmp_path / "outside.md"))]
+        ] + [
+            FlatFile(
+                "external-doc",
+                sources=[next(layer for layer in pipeline.layers if layer.name == "core")],
+                output_path=str(outside_path),
+            )
+        ]
 
-        with pytest.raises(ValueError, match="must write inside the build directory"):
-            run(pipeline, source_dir=str(source_dir_with_fixtures))
+        result = run(pipeline, source_dir=str(source_dir_with_fixtures))
+        assert result.manifest_oid is not None
+        manifest = ObjectStore(tmp_path / ".synix").get_json(result.manifest_oid)
+
+        assert manifest["projections"] == {}
+        assert outside_path.exists()
