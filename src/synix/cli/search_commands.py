@@ -71,7 +71,7 @@ def search(
 
     db_path = Path(build_dir) / "search.db"
     if not db_path.exists():
-        console.print("[red]No search index found.[/red] Run [bold]synix build[/bold] first.")
+        console.print("[red]No local Synix search output found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
     # Combine --layers and --step: both specify layer names to filter

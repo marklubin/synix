@@ -15,7 +15,7 @@
 #   uvx synix batch-build plan pipeline.py
 #   uvx synix list
 
-from synix import Pipeline, SearchIndex, Source, Transform
+from synix import Pipeline, SearchSurface, Source, SynixSearch, Transform
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact
 
@@ -133,13 +133,15 @@ team_summary = TeamSummaryTransform(
     batch=False,
 )
 
-pipeline.add(bios, work_styles, team_summary)
+team_search = SearchSurface(
+    "team-search",
+    sources=[bios, work_styles, team_summary],
+    modes=["fulltext"],
+)
 
-# Projection — searchable index across all layers
+pipeline.add(bios, work_styles, team_summary, team_search)
+
+# SynixSearch — searchable local output across all layers
 pipeline.add(
-    SearchIndex(
-        "search",
-        sources=[bios, work_styles, team_summary],
-        search=["fulltext"],
-    )
+    SynixSearch("search", surface=team_search)
 )

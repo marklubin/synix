@@ -9,7 +9,7 @@
 #   Level 2: strategy          [deal_strategy] <- competitive_intel + deal_context + win_reports
 #   Level 3: call_prep         [deal_call_prep] <- strategy + deal_context
 #
-# Projection: search_index on competitive_intel, strategy, call_prep
+# Search: SynixSearch over a declared deal search surface
 # Validator: citation on strategy, call_prep
 # Fixer: citation_enrichment
 #
@@ -24,7 +24,7 @@ from transforms import (
     DealStrategyTransform,
 )
 
-from synix import Pipeline, SearchIndex, Source
+from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.fixers import CitationEnrichment
 from synix.validators import Citation
 
@@ -70,6 +70,20 @@ call_prep = DealCallPrepTransform(
     depends_on=[strategy, deal_context],
 )
 
+deal_search = SearchSurface(
+    "deal-search",
+    sources=[
+        competitor_docs,
+        product_specs,
+        deal_context,
+        win_reports,
+        competitive_intel,
+        strategy,
+        call_prep,
+    ],
+    modes=["fulltext"],
+)
+
 pipeline.add(
     competitor_docs,
     product_specs,
@@ -78,25 +92,14 @@ pipeline.add(
     competitive_intel,
     strategy,
     call_prep,
+    deal_search,
 )
 
 # -- Projection: full-text search on all layers (sources + transforms) --
 #    Fixer needs access to source docs to verify claims and add citations.
 
 pipeline.add(
-    SearchIndex(
-        "deal-search",
-        sources=[
-            competitor_docs,
-            product_specs,
-            deal_context,
-            win_reports,
-            competitive_intel,
-            strategy,
-            call_prep,
-        ],
-        search=["fulltext"],
-    )
+    SynixSearch("search", surface=deal_search)
 )
 
 # -- Validator: citation grounding check on strategy + call_prep -------

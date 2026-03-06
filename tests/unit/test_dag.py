@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synix import Artifact, Pipeline, SearchIndex, SearchSurface, Source
+from synix import Artifact, Pipeline, SearchIndex, SearchSurface, Source, SynixSearch
 from synix.artifacts.store import ArtifactStore
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint, compute_digest
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
@@ -93,6 +93,19 @@ class TestResolveBuildOrder:
 
         assert [surface.name for surface in pipeline.surfaces] == ["episode-search"]
         assert [projection.name for projection in pipeline.projections] == ["memory-index"]
+
+    def test_pipeline_keeps_synix_search_in_projections(self):
+        """SynixSearch remains a projection backed by a declared search surface."""
+        pipeline = Pipeline("test")
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=episode_search)
+
+        pipeline.add(transcripts, episodes, episode_search, search_output)
+
+        assert [surface.name for surface in pipeline.surfaces] == ["episode-search"]
+        assert [projection.name for projection in pipeline.projections] == ["search"]
 
 
 class TestNeedsRebuild:

@@ -3,34 +3,27 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 5                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ team_dynamics (level 2)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ final_report (level 3)  <BUILD_COUNTS>  <TIME>
+    └─ report-search  <MATERIALIZED>
     └─ search  <MATERIALIZED>
     └─ search  <MATERIALIZED>
-                         Build Summary
-╭───────────────┬──────────────┬───────┬────────┬─────────────╮
-│ Layer         │    Level     │ Built │ Cached │     Skipped │
-├───────────────┼──────────────┼───────┼────────┼─────────────┤
+                       Build Summary
+╭───────────────┬──────────────┬───────┬────────┬─────────╮
+│ Layer         │    Level     │ Built │ Cached │ Skipped │
+├───────────────┼──────────────┼───────┼────────┼─────────┤
 │ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ <MATERIALIZED> │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ search_index │       │        │ <MATERIALIZED> │
-╰───────────────┴──────────────┴───────┴────────┴─────────────╯
+│   → search    │ synix_search │       │        │ <MATERIALIZED> │
+╰───────────────┴──────────────┴───────┴────────┴─────────╯
 
 <BUILD_TOTAL>

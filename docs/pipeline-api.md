@@ -1,10 +1,10 @@
 # Pipeline API
 
-Pipelines are defined in Python. Layers are real objects — `Source` for inputs, transform classes for LLM steps, `SearchIndex` and `FlatFile` for outputs. Dependencies are expressed as object references, not strings.
+Pipelines are defined in Python. Layers are real objects — `Source` for inputs, transform classes for LLM steps, `SearchSurface` for build-time retrieval, and `SynixSearch` / `FlatFile` for outputs. Dependencies are expressed as object references, not strings.
 
 ```python
 # pipeline.py
-from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
 from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("personal-memory")
@@ -21,12 +21,17 @@ episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 monthly = MonthlyRollup("monthly", depends_on=[episodes])
 core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-pipeline.add(transcripts, episodes, monthly, core)
+memory_search = SearchSurface(
+    "memory-search",
+    sources=[episodes, monthly, core],
+    modes=["fulltext", "semantic"],
+    embedding_config={"provider": "fastembed", "model": "BAAI/bge-small-en-v1.5"},
+)
+
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
 
 pipeline.add(
-    SearchIndex("memory-index", sources=[episodes, monthly, core],
-                search=["fulltext", "semantic"],
-                embedding_config={"provider": "fastembed", "model": "BAAI/bge-small-en-v1.5"})
+    SynixSearch("search", surface=memory_search)
 )
 pipeline.add(
     FlatFile("context-doc", sources=[core], output_path="./build/context.md")
@@ -220,14 +225,15 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 
 ## Projections
 
-`SearchSurface` is the build-time searchable capability declaration. `SearchIndex` and `FlatFile` remain the user-facing compatibility outputs today.
+`SearchSurface` is the build-time searchable capability declaration. `SynixSearch` is the canonical local search output. `SearchIndex` remains compatibility sugar for older direct-layer pipelines.
 
 Import from `synix`:
 
 | Class | Output | Description |
 |-------|--------|-------------|
 | `SearchSurface` | local compatibility realization under `build/surfaces/` today | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
-| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. This is a projection output, not a build-time capability, so it does not satisfy `uses=[...]`. Optional embedding support for semantic/hybrid search |
+| `SynixSearch` | `build/search.db` by default | Default Synix search output over a declared `SearchSurface`. Keeps the current local SQLite-backed experience as a compatibility target without making the file/schema the public contract |
+| `SearchIndex` | `build/search.db` | Legacy compatibility projection over direct source layers. This does not satisfy `uses=[...]`; prefer `SearchSurface + SynixSearch` for new pipelines |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
 ## Config Change Demo

@@ -126,8 +126,8 @@ class TestNormalizeOutput:
         assert "<MATERIALIZED>" in result1
 
     def test_normalize_search_projection_status(self):
-        cached = "    └── → search  synix_search_index (sqlite)  cached  9 indexed"
-        fresh = "    └── → search  synix_search_index (sqlite)  new  14 indexed"
+        cached = "    └── → search  synix_search (sqlite)  cached  9 indexed"
+        fresh = "    └── → search  synix_search (sqlite)  new  14 indexed"
         result_cached = _normalize_output(cached, Path("/tmp/case"))
         result_fresh = _normalize_output(fresh, Path("/tmp/case"))
         assert result_cached == result_fresh
@@ -142,7 +142,7 @@ class TestNormalizeOutput:
         assert "<MATERIALIZED>  <N> indexed" in result_cached
 
     def test_normalize_standalone_built(self):
-        text = "│   → search    │ search_index │       │        │       built │"
+        text = "│   → search    │ synix_search │       │        │       built │"
         result = _normalize_output(text, Path("/tmp/case"))
         assert "<MATERIALIZED>" in result
         assert "built" not in result

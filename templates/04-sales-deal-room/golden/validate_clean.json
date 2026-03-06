@@ -7,74 +7,54 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: NovaSight is the only platform that combines implementation speed, custom ML cap",
-      "label": "strategy",
+      "message": "Ungrounded claim: Current Tableau maintenance burden: 2 FTEs",
+      "label": "call-prep",
       "field": "content",
       "metadata": {
-        "claim": "NovaSight is the only platform that combines implementation speed, custom ML capabilities, and enterprise-grade security in a single solution",
-        "suggestion": "Source comparing NovaSight's capabilities to competitors on these three dimensions",
+        "claim": "Current Tableau maintenance burden: 2 FTEs",
+        "suggestion": "MegaCorp internal resource allocation data or assessment document",
         "existing_citations": [
           "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://t-text-similar_deal_win",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp"
+          "synix://t-text-customer_requirements"
         ],
-        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
       },
       "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -86,11 +66,6 @@
           "field_value": null
         },
         {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -98,6 +73,11 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -151,74 +131,54 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: We can win on speed-to-value and TCO against DataFlow's 4-6 month implementation",
-      "label": "strategy",
+      "message": "Ungrounded claim: DataFlow has 150+ connectors",
+      "label": "call-prep",
       "field": "content",
       "metadata": {
-        "claim": "We can win on speed-to-value and TCO against DataFlow's 4-6 month implementation cycles and Acme's cloud-only limitations",
-        "suggestion": "Source documenting NovaSight's specific implementation speed and TCO metrics for comparison",
+        "claim": "DataFlow has 150+ connectors",
+        "suggestion": "DataFlow product documentation or competitive intelligence confirming connector count",
         "existing_citations": [
           "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://t-text-similar_deal_win",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp"
+          "synix://t-text-customer_requirements"
         ],
-        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
       },
       "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -230,11 +190,6 @@
           "field_value": null
         },
         {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -242,6 +197,11 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -295,74 +255,54 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: TechFlow's +30% expansion",
-      "label": "strategy",
+      "message": "Ungrounded claim: DataFlow has FedRAMP Moderate and ISO 27001",
+      "label": "call-prep",
       "field": "content",
       "metadata": {
-        "claim": "TechFlow's +30% expansion",
-        "suggestion": "Source document or case study showing TechFlow's post-implementation expansion percentage",
+        "claim": "DataFlow has FedRAMP Moderate and ISO 27001",
+        "suggestion": "DataFlow's compliance documentation or certification records",
         "existing_citations": [
           "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://t-text-similar_deal_win",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp"
+          "synix://t-text-customer_requirements"
         ],
-        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
       },
       "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -374,11 +314,6 @@
           "field_value": null
         },
         {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -386,6 +321,11 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -439,74 +379,54 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: NovaSight has 850+ customers globally",
-      "label": "strategy",
+      "message": "Ungrounded claim: NovaSight is the only mid-market analytics platform that supports custom ML mode",
+      "label": "call-prep",
       "field": "content",
       "metadata": {
-        "claim": "NovaSight has 850+ customers globally",
-        "suggestion": "Source document or company data on NovaSight's total customer count",
+        "claim": "NovaSight is the only mid-market analytics platform that supports custom ML model deployment",
+        "suggestion": "Market research or competitive analysis supporting this exclusive claim about NovaSight's unique positioning",
         "existing_citations": [
           "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://t-text-similar_deal_win",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp"
+          "synix://t-text-customer_requirements"
         ],
-        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
       },
       "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -518,11 +438,6 @@
           "field_value": null
         },
         {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -530,6 +445,11 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -583,74 +503,54 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: SOC2 Type II certified",
-      "label": "strategy",
+      "message": "Ungrounded claim: Okta SAML integration: native, tested, no post-upgrade breakage (unlike Tableau'",
+      "label": "call-prep",
       "field": "content",
       "metadata": {
-        "claim": "SOC2 Type II certified",
-        "suggestion": "Source document confirming NovaSight's SOC2 Type II certification status",
+        "claim": "Okta SAML integration: native, tested, no post-upgrade breakage (unlike Tableau's SSO fragility)",
+        "suggestion": "Source documenting Tableau's SSO fragility issues or comparison testing of NovaSight vs. Tableau SSO reliability",
         "existing_citations": [
           "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://t-text-similar_deal_win",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-budget_timeline",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
           "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
           "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
           "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-acme_analytics",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp",
-          "synix://intel-insight_corp"
+          "synix://t-text-customer_requirements"
         ],
-        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
       },
       "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -662,11 +562,6 @@
           "field_value": null
         },
         {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -674,6 +569,11 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -723,6 +623,254 @@
         }
       ],
       "violation_id": "ec9f39fa3038594e"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "error",
+      "message": "Ungrounded claim: We have built executive dashboards for Fortune 500 manufacturers.",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "We have built executive dashboards for Fortune 500 manufacturers.",
+        "suggestion": "Customer references or case studies from Fortune 500 manufacturing clients",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-customer_requirements"
+        ],
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "5c04f13be7f9e3d0"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "error",
+      "message": "Ungrounded claim: We have implemented Okta SAML integration for enterprise customers with strong s",
+      "label": "call-prep",
+      "field": "content",
+      "metadata": {
+        "claim": "We have implemented Okta SAML integration for enterprise customers with strong security outcomes.",
+        "suggestion": "Customer reference or case study documenting NovaSight's Okta SAML implementations",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-differentiators",
+          "synix://strategy",
+          "synix://strategy",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-customer_requirements"
+        ],
+        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
+      },
+      "provenance_trace": [
+        {
+          "label": "call-prep",
+          "layer": "call_prep",
+          "field_value": null
+        },
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "a48b871c0d11b483"
     },
     {
       "violation_type": "ungrounded_claim",
@@ -866,7 +1014,439 @@
           "field_value": null
         }
       ],
-      "violation_id": "5c04f13be7f9e3d0"
+      "violation_id": "18ccae787a43e394"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "error",
+      "message": "Ungrounded claim: NovaSight has 850+ customers globally",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "NovaSight has 850+ customers globally",
+        "suggestion": "Source document or company data on NovaSight's total customer count",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://t-text-similar_deal_win",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp"
+        ],
+        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "c540b85cc0d5d7cd"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "error",
+      "message": "Ungrounded claim: NovaSight is the only platform that combines implementation speed, custom ML cap",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "NovaSight is the only platform that combines implementation speed, custom ML capabilities, and enterprise-grade security in a single solution",
+        "suggestion": "Source comparing NovaSight's capabilities to competitors on these three dimensions",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://t-text-similar_deal_win",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp"
+        ],
+        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "b0eccd6af72fc650"
+    },
+    {
+      "violation_type": "ungrounded_claim",
+      "severity": "error",
+      "message": "Ungrounded claim: SOC2 Type II certified",
+      "label": "strategy",
+      "field": "content",
+      "metadata": {
+        "claim": "SOC2 Type II certified",
+        "suggestion": "Source document confirming NovaSight's SOC2 Type II certification status",
+        "existing_citations": [
+          "synix://t-text-customer_requirements",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://t-text-similar_deal_win",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp"
+        ],
+        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
+      },
+      "provenance_trace": [
+        {
+          "label": "strategy",
+          "layer": "strategy",
+          "field_value": null
+        },
+        {
+          "label": "t-text-stakeholder_map",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-customer_requirements",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "t-text-budget_timeline",
+          "layer": "deal_context",
+          "field_value": null
+        },
+        {
+          "label": "intel-insight_corp",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-acme_analytics",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "intel-dataflow_inc",
+          "layer": "competitive_intel",
+          "field_value": null
+        },
+        {
+          "label": "t-text-lost_deal_postmortem",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
+          "label": "t-text-differentiators",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-insight_corp",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-platform_overview",
+          "layer": "product_specs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-acme_analytics",
+          "layer": "competitor_docs",
+          "field_value": null
+        },
+        {
+          "label": "t-text-dataflow_inc",
+          "layer": "competitor_docs",
+          "field_value": null
+        }
+      ],
+      "violation_id": "cc77d9b4572ab112"
     },
     {
       "violation_type": "ungrounded_claim",
@@ -1010,679 +1590,79 @@
           "field_value": null
         }
       ],
-      "violation_id": "a48b871c0d11b483"
-    },
-    {
-      "violation_type": "ungrounded_claim",
-      "severity": "error",
-      "message": "Ungrounded claim: Okta SAML integration: native, tested, no post-upgrade breakage (unlike Tableau'",
-      "label": "call-prep",
-      "field": "content",
-      "metadata": {
-        "claim": "Okta SAML integration: native, tested, no post-upgrade breakage (unlike Tableau's SSO fragility)",
-        "suggestion": "Source documenting Tableau's SSO fragility issues or comparison testing of NovaSight vs. Tableau SSO reliability",
-        "existing_citations": [
-          "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
-        ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
-      },
-      "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
-        {
-          "label": "strategy",
-          "layer": "strategy",
-          "field_value": null
-        },
-        {
-          "label": "t-text-stakeholder_map",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-customer_requirements",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-budget_timeline",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "intel-insight_corp",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-acme_analytics",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-dataflow_inc",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "t-text-lost_deal_postmortem",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "t-text-differentiators",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-insight_corp",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-platform_overview",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-acme_analytics",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-dataflow_inc",
-          "layer": "competitor_docs",
-          "field_value": null
-        }
-      ],
-      "violation_id": "18ccae787a43e394"
-    },
-    {
-      "violation_type": "ungrounded_claim",
-      "severity": "error",
-      "message": "Ungrounded claim: We have implemented Okta SAML integration for enterprise customers with strong s",
-      "label": "call-prep",
-      "field": "content",
-      "metadata": {
-        "claim": "We have implemented Okta SAML integration for enterprise customers with strong security outcomes.",
-        "suggestion": "Customer reference or case study documenting NovaSight's Okta SAML implementations",
-        "existing_citations": [
-          "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
-        ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
-      },
-      "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
-        {
-          "label": "strategy",
-          "layer": "strategy",
-          "field_value": null
-        },
-        {
-          "label": "t-text-stakeholder_map",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-customer_requirements",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-budget_timeline",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "intel-insight_corp",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-acme_analytics",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-dataflow_inc",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "t-text-lost_deal_postmortem",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "t-text-differentiators",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-insight_corp",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-platform_overview",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-acme_analytics",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-dataflow_inc",
-          "layer": "competitor_docs",
-          "field_value": null
-        }
-      ],
-      "violation_id": "c540b85cc0d5d7cd"
-    },
-    {
-      "violation_type": "ungrounded_claim",
-      "severity": "error",
-      "message": "Ungrounded claim: NovaSight is the only mid-market analytics platform that supports custom ML mode",
-      "label": "call-prep",
-      "field": "content",
-      "metadata": {
-        "claim": "NovaSight is the only mid-market analytics platform that supports custom ML model deployment",
-        "suggestion": "Market research or competitive analysis supporting this exclusive claim about NovaSight's unique positioning",
-        "existing_citations": [
-          "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
-        ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
-      },
-      "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
-        {
-          "label": "strategy",
-          "layer": "strategy",
-          "field_value": null
-        },
-        {
-          "label": "t-text-stakeholder_map",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-customer_requirements",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-budget_timeline",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "intel-insight_corp",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-acme_analytics",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-dataflow_inc",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "t-text-lost_deal_postmortem",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "t-text-differentiators",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-insight_corp",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-platform_overview",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-acme_analytics",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-dataflow_inc",
-          "layer": "competitor_docs",
-          "field_value": null
-        }
-      ],
-      "violation_id": "b0eccd6af72fc650"
-    },
-    {
-      "violation_type": "ungrounded_claim",
-      "severity": "error",
-      "message": "Ungrounded claim: DataFlow has 150+ connectors",
-      "label": "call-prep",
-      "field": "content",
-      "metadata": {
-        "claim": "DataFlow has 150+ connectors",
-        "suggestion": "DataFlow product documentation or competitive intelligence confirming connector count",
-        "existing_citations": [
-          "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
-        ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
-      },
-      "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
-        {
-          "label": "strategy",
-          "layer": "strategy",
-          "field_value": null
-        },
-        {
-          "label": "t-text-stakeholder_map",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-customer_requirements",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-budget_timeline",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "intel-insight_corp",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-acme_analytics",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-dataflow_inc",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "t-text-lost_deal_postmortem",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "t-text-differentiators",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-insight_corp",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-platform_overview",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-acme_analytics",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-dataflow_inc",
-          "layer": "competitor_docs",
-          "field_value": null
-        }
-      ],
-      "violation_id": "cc77d9b4572ab112"
-    },
-    {
-      "violation_type": "ungrounded_claim",
-      "severity": "error",
-      "message": "Ungrounded claim: DataFlow has FedRAMP Moderate and ISO 27001",
-      "label": "call-prep",
-      "field": "content",
-      "metadata": {
-        "claim": "DataFlow has FedRAMP Moderate and ISO 27001",
-        "suggestion": "DataFlow's compliance documentation or certification records",
-        "existing_citations": [
-          "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
-        ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
-      },
-      "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
-        {
-          "label": "strategy",
-          "layer": "strategy",
-          "field_value": null
-        },
-        {
-          "label": "t-text-stakeholder_map",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-customer_requirements",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-budget_timeline",
-          "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "intel-insight_corp",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-acme_analytics",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "intel-dataflow_inc",
-          "layer": "competitive_intel",
-          "field_value": null
-        },
-        {
-          "label": "t-text-lost_deal_postmortem",
-          "layer": "win_reports",
-          "field_value": null
-        },
-        {
-          "label": "t-text-differentiators",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-insight_corp",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-platform_overview",
-          "layer": "product_specs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-acme_analytics",
-          "layer": "competitor_docs",
-          "field_value": null
-        },
-        {
-          "label": "t-text-dataflow_inc",
-          "layer": "competitor_docs",
-          "field_value": null
-        }
-      ],
       "violation_id": "d918dfee51e7a599"
     },
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: Current Tableau maintenance burden: 2 FTEs",
-      "label": "call-prep",
+      "message": "Ungrounded claim: TechFlow's +30% expansion",
+      "label": "strategy",
       "field": "content",
       "metadata": {
-        "claim": "Current Tableau maintenance burden: 2 FTEs",
-        "suggestion": "MegaCorp internal resource allocation data or assessment document",
+        "claim": "TechFlow's +30% expansion",
+        "suggestion": "Source document or case study showing TechFlow's post-implementation expansion percentage",
         "existing_citations": [
           "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
+          "synix://intel-acme_analytics",
+          "synix://t-text-similar_deal_win",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
           "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
           "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp"
         ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
+        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
       },
       "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -1694,6 +1674,11 @@
           "field_value": null
         },
         {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -1701,11 +1686,6 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
           "field_value": null
         },
         {
@@ -1759,54 +1739,74 @@
     {
       "violation_type": "ungrounded_claim",
       "severity": "error",
-      "message": "Ungrounded claim: We have built executive dashboards for Fortune 500 manufacturers.",
-      "label": "call-prep",
+      "message": "Ungrounded claim: We can win on speed-to-value and TCO against DataFlow's 4-6 month implementation",
+      "label": "strategy",
       "field": "content",
       "metadata": {
-        "claim": "We have built executive dashboards for Fortune 500 manufacturers.",
-        "suggestion": "Customer references or case studies from Fortune 500 manufacturing clients",
+        "claim": "We can win on speed-to-value and TCO against DataFlow's 4-6 month implementation cycles and Acme's cloud-only limitations",
+        "suggestion": "Source documenting NovaSight's specific implementation speed and TCO metrics for comparison",
         "existing_citations": [
           "synix://t-text-customer_requirements",
-          "synix://t-text-stakeholder_map",
           "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://strategy",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-customer_requirements",
-          "synix://t-text-differentiators",
-          "synix://strategy",
-          "synix://strategy",
+          "synix://intel-acme_analytics",
+          "synix://t-text-similar_deal_win",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
           "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://t-text-stakeholder_map",
-          "synix://intel-dataflow_inc",
-          "synix://intel-dataflow_inc",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
+          "synix://t-text-customer_requirements",
           "synix://t-text-budget_timeline",
-          "synix://t-text-customer_requirements",
-          "synix://intel-dataflow_inc",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-budget_timeline",
           "synix://t-text-stakeholder_map",
-          "synix://t-text-customer_requirements"
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-stakeholder_map",
+          "synix://t-text-budget_timeline",
+          "synix://t-text-stakeholder_map",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-dataflow_inc",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-acme_analytics",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp",
+          "synix://intel-insight_corp"
         ],
-        "artifact_id": "sha256:71df0913611619f3f869644ce5a6ae7243f2ccb13cc66ab21bf9f98a3f19e305"
+        "artifact_id": "sha256:269c14c1055df5920637b2afade3449ce6ff3339c7a73ed3a1903c1a14bc90a4"
       },
       "provenance_trace": [
-        {
-          "label": "call-prep",
-          "layer": "call_prep",
-          "field_value": null
-        },
         {
           "label": "strategy",
           "layer": "strategy",
@@ -1818,6 +1818,11 @@
           "field_value": null
         },
         {
+          "label": "t-text-similar_deal_win",
+          "layer": "win_reports",
+          "field_value": null
+        },
+        {
           "label": "t-text-customer_requirements",
           "layer": "deal_context",
           "field_value": null
@@ -1825,11 +1830,6 @@
         {
           "label": "t-text-budget_timeline",
           "layer": "deal_context",
-          "field_value": null
-        },
-        {
-          "label": "t-text-similar_deal_win",
-          "layer": "win_reports",
           "field_value": null
         },
         {

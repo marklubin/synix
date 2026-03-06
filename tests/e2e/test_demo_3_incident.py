@@ -48,7 +48,7 @@ def incident_pipeline_file(workspace):
     """Write an incident pipeline.py into the workspace."""
     path = workspace["root"] / "pipeline_incident.py"
     path.write_text(f"""
-from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix import Pipeline, SearchSurface, Source, SynixSearch, FlatFile
 from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("demo3-incident")
@@ -60,9 +60,10 @@ transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 monthly = MonthlyRollup("monthly", depends_on=[episodes])
 core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+memory_search = SearchSurface("memory-search", sources=[episodes, monthly, core], modes=["fulltext"])
 
-pipeline.add(transcripts, episodes, monthly, core)
-pipeline.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
 pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path
@@ -244,7 +245,7 @@ def merge_pipeline_file(workspace):
     """
     path = workspace["root"] / "pipeline_merge.py"
     path.write_text(f"""
-from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix import Pipeline, SearchSurface, Source, SynixSearch, FlatFile
 from synix.ext import EpisodeSummary, CoreSynthesis
 from synix.transforms import Merge
 
@@ -257,9 +258,10 @@ transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 merged = Merge("merged", depends_on=[episodes], config={{"similarity_threshold": 0.3}})
 core = CoreSynthesis("core", depends_on=[merged], context_budget=10000)
+memory_search = SearchSurface("memory-search", sources=[episodes, merged, core], modes=["fulltext"])
 
-pipeline.add(transcripts, episodes, merged, core)
-pipeline.add(SearchIndex("memory-index", sources=[episodes, merged, core], search=["fulltext"]))
+pipeline.add(transcripts, episodes, merged, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
 pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path
@@ -274,7 +276,7 @@ def merge_pipeline_fixed_file(workspace):
     """
     path = workspace["root"] / "pipeline_merge_fixed.py"
     path.write_text(f"""
-from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix import Pipeline, SearchSurface, Source, SynixSearch, FlatFile
 from synix.ext import EpisodeSummary, CoreSynthesis
 from synix.transforms import Merge
 
@@ -287,9 +289,10 @@ transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 merged = Merge("merged", depends_on=[episodes], config={{"similarity_threshold": 0.3, "constraints": ["NEVER merge records with different customer_id"]}})
 core = CoreSynthesis("core", depends_on=[merged], context_budget=10000)
+memory_search = SearchSurface("memory-search", sources=[episodes, merged, core], modes=["fulltext"])
 
-pipeline.add(transcripts, episodes, merged, core)
-pipeline.add(SearchIndex("memory-index", sources=[episodes, merged, core], search=["fulltext"]))
+pipeline.add(transcripts, episodes, merged, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
 pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path

@@ -67,7 +67,7 @@ A pipeline is a Python file. Layers are real objects with dependencies expressed
 
 ```python
 # pipeline.py
-from synix import Pipeline, Source, SearchIndex
+from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.transforms import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
@@ -100,11 +100,19 @@ report = ReduceSynthesis(
     artifact_type="report",
 )
 
-pipeline.add(bios, work_styles, report)
-pipeline.add(SearchIndex("search", sources=[work_styles, report], search=["fulltext"]))
+report_search = SearchSurface(
+    "report-search",
+    sources=[work_styles, report],
+    modes=["fulltext"],
+)
+
+pipeline.add(bios, work_styles, report, report_search)
+pipeline.add(SynixSearch("search", surface=report_search))
 ```
 
 This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
+
+`SearchSurface` is the build-time search capability. `SynixSearch` is the canonical local search output. `SearchIndex` still works as a compatibility API, but new pipelines should use surfaces plus `SynixSearch`.
 
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 

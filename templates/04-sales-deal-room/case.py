@@ -13,8 +13,8 @@ Flow:
     7. Copy staged intel update into sources
     8. Plan     — shows cascade: competitor_docs → intel → strategy → call_prep
     9. Build    — incremental cascade rebuild
-   10. Search   — query new competitive data
-   11. Validate — should pass on fresh LLM output
+    10. Search   — query new competitive data
+   11. Validate — surfaces the newly introduced citation gaps after rebuild
    12. Explain  — cache fingerprint breakdown
 
 This demonstrates:
@@ -22,6 +22,7 @@ This demonstrates:
   - Citation validator catches ungrounded claims in synthesized artifacts
   - Citation fixer adds proper citations or removes unsupported content
   - Full invalidation cascade when new competitive intel arrives
+  - Revalidation can surface fresh citation gaps after new inputs land
   - Incremental rebuild (only affected artifacts rebuild)
 """
 
@@ -98,7 +99,7 @@ case = {
     # Used for non-deterministic output that can't be normalized to stable placeholders.
     "output_masks": {
         # Fix output is highly LLM-dependent (violation count, proposed rewrites, etc.)
-        "fix": [r"."],  # skip entire output — content depends on LLM non-determinism
+        "fix": [r"^.*$"],  # skip entire output — content depends on LLM non-determinism
         # Validate stdout varies in violation details
         "validate_initial": [r"active violation"],
         "validate_clean": [r"active violation"],

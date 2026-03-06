@@ -308,7 +308,7 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_
     """Verify integrity of a completed build.
 
     Checks: build_exists, manifest_valid, artifacts_exist,
-    provenance_complete, search_index, content_hashes, no_orphans,
+    provenance_complete, synix_search, content_hashes, no_orphans,
     merge_integrity.
 
     Use --pipeline to also run domain-specific validators declared in the pipeline.

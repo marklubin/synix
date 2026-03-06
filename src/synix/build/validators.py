@@ -116,6 +116,7 @@ class ValidationResult:
         return not any(v.severity == "error" for v in self.violations)
 
     def to_dict(self) -> dict:
+        ordered_violations = sorted(self.violations, key=_violation_sort_key)
         return {
             "passed": self.passed,
             "validators_run": self.validators_run,
@@ -136,7 +137,7 @@ class ValidationResult:
                         for s in v.provenance_trace
                     ],
                 }
-                for v in self.violations
+                for v in ordered_violations
             ],
         }
 
@@ -195,6 +196,30 @@ def compute_violation_id(violation_type: str, label: str, claim_a: str = "", cla
     claims = sorted([claim_a.strip().lower(), claim_b.strip().lower()])
     raw = f"{violation_type}|{label}|{claims[0]}|{claims[1]}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _violation_sort_key(violation: Violation) -> tuple[str, str, str, str, str, str]:
+    """Stable ordering for violations across validation, fix, and serialization paths."""
+    metadata = violation.metadata or {}
+    claim = str(metadata.get("claim") or "")
+    paired_claims = sorted(
+        str(part)
+        for part in (
+            metadata.get("claim_a"),
+            metadata.get("claim_b"),
+        )
+        if part
+    )
+    claim_key = claim or " | ".join(paired_claims)
+    metadata_key = json.dumps(metadata, sort_keys=True, default=str)
+    return (
+        violation.label,
+        violation.violation_type,
+        violation.field,
+        claim_key,
+        violation.message,
+        metadata_key,
+    )
 
 
 def _store_llm_trace(store: ArtifactStore, label: str, prompt: str, response: str, trace_type: str) -> None:
@@ -940,6 +965,9 @@ class Citation(BaseValidator):
 
 def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
     """Gather artifacts matching the validator config's scope/layers filters."""
+    def _artifact_sort_key(artifact: Artifact) -> tuple[str, str]:
+        return (artifact.label, artifact.artifact_id)
+
     scope = config.get("scope")
     layers = config.get("layers")
     artifact_ids = config.get("artifact_ids")
@@ -957,7 +985,7 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
         # Gather artifacts from specified layers
         artifacts = []
         for layer_name in layers:
-            artifacts.extend(store.list_artifacts(layer_name))
+            artifacts.extend(sorted(store.list_artifacts(layer_name), key=_artifact_sort_key))
         return artifacts
 
     if scope:
@@ -968,7 +996,14 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
             if art is not None:
                 if art.label.startswith(scope + "-") or art.artifact_type == scope:
                     all_artifacts.append(art)
-        return all_artifacts
+        return sorted(
+            all_artifacts,
+            key=lambda artifact: (
+                str(artifact.metadata.get("layer_name", "")),
+                artifact.label,
+                artifact.artifact_id,
+            ),
+        )
 
     # No filter — return all artifacts
     all_artifacts = []
@@ -976,7 +1011,14 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
         art = store.load_artifact(aid)
         if art is not None:
             all_artifacts.append(art)
-    return all_artifacts
+    return sorted(
+        all_artifacts,
+        key=lambda artifact: (
+            str(artifact.metadata.get("layer_name", "")),
+            artifact.label,
+            artifact.artifact_id,
+        ),
+    )
 
 
 def run_validators(

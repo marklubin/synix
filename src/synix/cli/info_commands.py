@@ -154,7 +154,7 @@ def _show_build_status() -> None:
         last_dt = datetime.fromtimestamp(last_modified)
         table.add_row("Last Build", last_dt.strftime("%Y-%m-%d %H:%M:%S"))
 
-    # Search index status
+    # Local Synix search status
     search_db = build_path / "search.db"
     if search_db.exists():
         try:
@@ -162,11 +162,11 @@ def _show_build_status() -> None:
             cursor = conn.execute("SELECT COUNT(*) FROM search_index")
             count = cursor.fetchone()[0]
             conn.close()
-            table.add_row("Search Index", f"{count} entries")
+            table.add_row("Synix Search", f"{count} entries")
         except Exception:
-            table.add_row("Search Index", "exists (could not read)")
+            table.add_row("Synix Search", "exists (could not read)")
     else:
-        table.add_row("Search Index", "[dim]not built[/dim]")
+        table.add_row("Synix Search", "[dim]not built[/dim]")
 
     surfaces_dir = build_path / "surfaces"
     surface_dbs = sorted(surfaces_dir.glob("*.db")) if surfaces_dir.exists() else []

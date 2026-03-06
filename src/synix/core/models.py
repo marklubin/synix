@@ -8,6 +8,7 @@ Layer hierarchy:
     │   ├── bundled memory transforms under synix.ext
     │   └── (user-defined subclasses)
     ├── SearchSurface   → build-time searchable capability
+    ├── SynixSearch     → canonical Synix search output
     ├── SearchIndex     → projection compatibility output
     └── FlatFile        → renders artifacts into a markdown file
 """
@@ -295,6 +296,25 @@ class SearchSurface(Layer):
         }
 
 
+class SynixSearch(Layer):
+    """Canonical Synix-provided search output backed by a SearchSurface."""
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        surface: SearchSurface,
+        output_path: str | None = None,
+        config: dict | None = None,
+    ):
+        super().__init__(name, depends_on=[surface], config=config or {})
+        self.surface = surface
+        self.sources = list(surface.sources)
+        self.search = list(surface.modes)
+        self.embedding_config = dict(surface.embedding_config)
+        self.output_path = output_path
+
+
 class SearchIndex(Layer):
     """Projection compatibility layer for ``build/search.db``.
 
@@ -459,7 +479,7 @@ class Pipeline:
         self.concurrency = concurrency
         self.layers: list[Layer] = []  # Source + Transform
         self.surfaces: list[Layer] = []  # SearchSurface
-        self.projections: list[Layer] = []  # SearchIndex + FlatFile
+        self.projections: list[Layer] = []  # SynixSearch + SearchIndex + FlatFile
         self.validators: list = []  # untyped to avoid circular import with validators.py
         self.fixers: list = []  # untyped to avoid circular import with fixers.py
 
@@ -468,10 +488,10 @@ class Pipeline:
 
         Source and Transform go into the build DAG.
         SearchSurface goes into build-time search surfaces.
-        SearchIndex and FlatFile go into projections (separate lifecycle).
+        SynixSearch, SearchIndex, and FlatFile go into projections (separate lifecycle).
         """
         for layer in layers:
-            if isinstance(layer, (SearchIndex, FlatFile)):
+            if isinstance(layer, (SynixSearch, SearchIndex, FlatFile)):
                 self.projections.append(layer)
             elif isinstance(layer, SearchSurface):
                 self.surfaces.append(layer)

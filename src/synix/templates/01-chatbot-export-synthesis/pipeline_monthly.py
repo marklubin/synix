@@ -6,7 +6,7 @@
 #
 # Drop ChatGPT/Claude exports into ./sources/ before running.
 
-from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 pipeline = Pipeline("personal-memory")
@@ -37,21 +37,23 @@ monthly = MonthlyRollup("monthly", depends_on=[episodes])
 #   config={"llm_config": {"model": "claude-opus-4-6", "max_tokens": 4096}}
 core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
 
-pipeline.add(transcripts, episodes, monthly, core)
+memory_search = SearchSurface(
+    "memory-search",
+    sources=[episodes, monthly, core],
+    modes=["fulltext", "semantic"],
+    embedding_config={
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+    },
+)
+
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
 
 # --- Projections ---
 
-# Search index — hierarchical search with provenance
+# SynixSearch — default local search output over the declared memory surface
 pipeline.add(
-    SearchIndex(
-        "memory-index",
-        sources=[episodes, monthly, core],
-        search=["fulltext", "semantic"],
-        embedding_config={
-            "provider": "fastembed",
-            "model": "BAAI/bge-small-en-v1.5",
-        },
-    )
+    SynixSearch("search", surface=memory_search)
 )
 
 # Context document — ready-to-use agent system prompt

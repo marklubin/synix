@@ -80,17 +80,21 @@ def verify_build(build_dir: str | Path, checks: list[str] | None = None) -> Veri
         "manifest_valid": _check_manifest_valid,
         "artifacts_exist": _check_artifacts_exist,
         "provenance_complete": _check_provenance_complete,
-        "search_index": _check_search_index,
+        "synix_search": _check_synix_search,
         "content_hashes": _check_content_hashes,
         "no_orphans": _check_no_orphans,
         "merge_integrity": _check_merge_integrity,
+    }
+    aliases = {
+        "search_index": "synix_search",
     }
 
     checks_to_run = checks if checks else list(all_checks.keys())
 
     for check_name in checks_to_run:
-        if check_name in all_checks:
-            check_result = all_checks[check_name](build_path)
+        canonical_name = aliases.get(check_name, check_name)
+        if canonical_name in all_checks:
+            check_result = all_checks[canonical_name](build_path)
             result.checks.append(check_result)
         else:
             result.checks.append(
@@ -272,14 +276,14 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
     )
 
 
-def _check_search_index(build_path: Path) -> VerifyCheck:
-    """Check search index consistency."""
+def _check_synix_search(build_path: Path) -> VerifyCheck:
+    """Check local Synix search output consistency."""
     db_path = build_path / "search.db"
     if not db_path.exists():
         return VerifyCheck(
-            name="search_index",
+            name="synix_search",
             passed=True,
-            message="No search index (not required)",
+            message="No Synix search output (not required)",
         )
 
     try:
@@ -291,10 +295,10 @@ def _check_search_index(build_path: Path) -> VerifyCheck:
         if "search_index" not in table_names:
             conn.close()
             return VerifyCheck(
-                name="search_index",
+                name="synix_search",
                 passed=False,
                 message="search.db exists but search_index table missing",
-                fix_hint="Re-run synix build to rebuild the search index",
+                fix_hint="Re-run synix build to rebuild the Synix search output",
             )
 
         # Count rows
@@ -302,17 +306,22 @@ def _check_search_index(build_path: Path) -> VerifyCheck:
         conn.close()
 
         return VerifyCheck(
-            name="search_index",
+            name="synix_search",
             passed=True,
-            message=f"Search index has {count} entries",
+            message=f"Synix search has {count} entries",
         )
     except sqlite3.Error as e:
         return VerifyCheck(
-            name="search_index",
+            name="synix_search",
             passed=False,
-            message=f"Search index error: {e}",
+            message=f"Synix search error: {e}",
             fix_hint="Delete search.db and re-run synix build",
         )
+
+
+def _check_search_index(build_path: Path) -> VerifyCheck:
+    """Legacy alias for the Synix search verification check."""
+    return _check_synix_search(build_path)
 
 
 def _check_content_hashes(build_path: Path) -> VerifyCheck:

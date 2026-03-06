@@ -3,7 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 7                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Projections: 1                                                                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
@@ -36,7 +36,15 @@ sales-deal-room  claude-haiku-4-5-20251001 (anthropic)
 └── call_prep  transform:DealCallPrepTransform  <STATS>
     ├── ← strategy
     ├── ← deal_context
-    └── → deal-search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+    ├── ⇢ deal-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   ├── ← competitor_docs
+    │   ├── ← product_specs
+    │   ├── ← deal_context
+    │   ├── ← win_reports
+    │   ├── ← competitive_intel
+    │   ├── ← strategy
+    │   └── ← call_prep
+    └── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
         ├── ← competitor_docs
         ├── ← product_specs
         ├── ← deal_context

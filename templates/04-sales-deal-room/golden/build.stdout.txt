@@ -3,42 +3,31 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 7                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ competitor_docs (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ product_specs (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ deal_context (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ win_reports (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ competitive_intel (level 1)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ strategy (level 2)  <BUILD_COUNTS>  <TIME>
-    └─ deal-search  <MATERIALIZED>
   ✓ call_prep (level 3)  <BUILD_COUNTS>  <TIME>
     └─ deal-search  <MATERIALIZED>
-    └─ deal-search  <MATERIALIZED>
-                           Build Summary
-╭───────────────────┬──────────────┬───────┬────────┬─────────────╮
-│ Layer             │    Level     │ Built │ Cached │     Skipped │
-├───────────────────┼──────────────┼───────┼────────┼─────────────┤
+    └─ search  <MATERIALIZED>
+    └─ search  <MATERIALIZED>
+                         Build Summary
+╭───────────────────┬──────────────┬───────┬────────┬─────────╮
+│ Layer             │    Level     │ Built │ Cached │ Skipped │
+├───────────────────┼──────────────┼───────┼────────┼─────────┤
 │ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ win_reports       │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
 │ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → deal-search   │ search_index │       │        │ <MATERIALIZED> │
-╰───────────────────┴──────────────┴───────┴────────┴─────────────╯
+│   → search        │ synix_search │       │        │ <MATERIALIZED> │
+╰───────────────────┴──────────────┴───────┴────────┴─────────╯
 
 <BUILD_TOTAL>

@@ -3,7 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 4                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Projections: 2                                                                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
@@ -26,7 +26,12 @@ personal-memory  claude-haiku-4-5-20251001 (anthropic)
 │   └── ← episodes
 └── core  transform:CoreSynthesis  <STATS>
     ├── ← monthly
-    ├── → memory-index  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+    ├── ⇢ memory-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   ├── ← episodes
+    │   ├── ← monthly
+    │   ├── ← core
+    │   └── embeddings  bge-small-en-v1.5  d  (fastembed)
+    ├── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
     │   ├── ← episodes
     │   ├── ← monthly
     │   ├── ← core
