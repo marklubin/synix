@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -119,6 +120,16 @@ class RunSummary:
     cached: int = 0
 
 
+def _generate_run_id() -> str:
+    """Create a time-prefixed, collision-resistant run id.
+
+    The UTC timestamp prefix keeps runs roughly sortable for humans, while the
+    random suffix avoids ref/log collisions across concurrent processes.
+    """
+    prefix = datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    return f"{prefix}-{secrets.token_hex(4)}"
+
+
 class SynixLogger:
     """Structured logger for Synix pipeline runs.
 
@@ -136,7 +147,7 @@ class SynixLogger:
         self.build_dir = build_dir
         self.progress = progress
         self.run_log = RunLog(
-            run_id=datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ"),
+            run_id=_generate_run_id(),
         )
         self._lock = Lock()
         self._log_file = None

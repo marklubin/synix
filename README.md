@@ -50,8 +50,16 @@ Browse, search, and validate:
 uvx synix list                    # all artifacts, grouped by layer
 uvx synix show final-report       # render an artifact
 uvx synix search "hiking"         # full-text search
+uvx synix runs list               # immutable artifact snapshots for this project
+uvx synix runs list --json        # machine-readable snapshot history (schema_version + runs[])
 uvx synix validate                # run declared validators (experimental)
 ```
+
+Successful builds record canonical immutable artifact snapshots under `.synix/`. The local `build/` directory still exists as the default compatibility materialization surface for current commands and demos, but it is no longer the source of truth for build history. Projection release state remains in that local surface until the explicit `release`/adapter slice lands. `uvx synix clean` only removes the mutable local surface; it does not delete snapshot history.
+
+> **Note:** The `.synix` on-disk snapshot format is new in `v0.15.x` and may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
+
+> **Note:** Run refs currently use opaque, time-prefixed ids (for example `refs/runs/20260306T082007123456Z-1f2e3d4c`) and remain experimental before `v1.0`. Prefer `uvx synix runs list --json` over scraping the table output; the JSON shape is versioned as `{ "schema_version": 1, "runs": [...] }`.
 
 ## Defining a Pipeline
 
@@ -141,6 +149,7 @@ Pre-built transforms for common agent memory patterns. Import from `synix.transf
 | `uvx synix build` | Run the pipeline. Only rebuilds what changed |
 | `uvx synix plan` | Dry-run — show what would build without running transforms |
 | `uvx synix plan --explain-cache` | Plan with inline cache decision reasons |
+| `uvx synix runs list` | List immutable build snapshots recorded under `.synix` |
 | `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
 | `uvx synix show <id>` | Display an artifact. Resolves by label or ID prefix. `--raw` for JSON |
 | `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic |

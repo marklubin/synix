@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from synix.core.logging import (
     StepLog,
     SynixLogger,
     Verbosity,
+    _generate_run_id,
 )
 
 
@@ -161,6 +163,13 @@ class TestRunLog:
 
 
 class TestSynixLogger:
+    def test_generate_run_id_is_collision_resistant(self):
+        """Generated run ids stay time-prefixed but include a random suffix."""
+        run_ids = {_generate_run_id() for _ in range(32)}
+
+        assert len(run_ids) == 32
+        assert all(re.fullmatch(r"\d{8}T\d{6}\d{6}Z-[0-9a-f]{8}", run_id) for run_id in run_ids)
+
     def test_logger_creation_no_build_dir(self):
         """Logger works without a build_dir (no file logging)."""
         logger = SynixLogger(verbosity=Verbosity.DEFAULT)

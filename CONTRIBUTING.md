@@ -19,7 +19,13 @@ Thanks for your interest in contributing.
 1. Create a feature branch.
 2. Make focused changes.
 3. Add or update tests.
-4. Run checks before opening a PR:
+4. Before every commit, run the full test suite and demo smoke checks:
+   ```bash
+   uv run pytest tests/ -v
+   uv run synix demo run templates/01-chatbot-export-synthesis
+   uv run synix demo run templates/05-batch-build
+   ```
+5. Run the full release checks before opening a PR:
    ```bash
    uv run release
    ```

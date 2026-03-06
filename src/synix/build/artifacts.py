@@ -66,8 +66,12 @@ class ArtifactStore:
 
     def save_artifact(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Save an artifact to the build directory."""
+        if not isinstance(artifact.content, str):
+            msg = f"artifact {artifact.label!r} content must be a string, got {type(artifact.content).__name__}"
+            raise TypeError(msg)
+
         # Ensure artifact ID (content hash) is computed
-        if not artifact.artifact_id and artifact.content:
+        if not artifact.artifact_id:
             artifact.artifact_id = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
 
         # Create layer directory
@@ -138,6 +142,10 @@ class ArtifactStore:
         if entry is None:
             return None
         return entry["artifact_id"]
+
+    def iter_entries(self) -> dict[str, dict]:
+        """Return a shallow copy of the manifest entries keyed by label."""
+        return dict(self._manifest)
 
     def resolve_prefix(self, prefix: str) -> str | None:
         """Resolve a prefix to a full label (git-like semantics).

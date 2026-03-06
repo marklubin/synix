@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from synix.build.dag import compute_levels, resolve_build_order
+from synix.build.refs import synix_dir_for_build_dir
 from synix.core.models import Pipeline, Source
 
 
@@ -41,6 +42,11 @@ def load_pipeline(path: str) -> Pipeline:
         raise ValueError(f"Pipeline module {path} must define a 'pipeline' variable")
     if not isinstance(pipeline, Pipeline):
         raise TypeError(f"'pipeline' variable must be a Pipeline instance, got {type(pipeline)}")
+    if pipeline.synix_dir is None:
+        build_dir = Path(pipeline.build_dir)
+        if not build_dir.is_absolute():
+            build_dir = (filepath.parent / build_dir).resolve()
+        pipeline.synix_dir = str(synix_dir_for_build_dir(build_dir))
 
     validate_pipeline(pipeline)
     return pipeline

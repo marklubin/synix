@@ -34,7 +34,7 @@ class Artifact:
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        if not self.artifact_id and self.content:
+        if not self.artifact_id and isinstance(self.content, str):
             self.artifact_id = f"sha256:{hashlib.sha256(self.content.encode()).hexdigest()}"
 
 
@@ -283,12 +283,14 @@ class Pipeline:
         *,
         source_dir: str = "./sources",
         build_dir: str = "./build",
+        synix_dir: str | None = None,
         llm_config: dict | None = None,
         concurrency: int = 5,
     ):
         self.name = name
         self.source_dir = source_dir
         self.build_dir = build_dir
+        self.synix_dir = synix_dir
         self.llm_config: dict = llm_config or {}
         self.concurrency = concurrency
         self.layers: list[Layer] = []  # Source + Transform
