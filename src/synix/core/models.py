@@ -385,10 +385,14 @@ class TransformContext(MutableMapping[str, Any]):
         """Return a shallow dict copy of the underlying data."""
         return dict(self._data)
 
+    def copy(self) -> dict[str, Any]:
+        """Return a shallow dict copy for legacy ``config.copy()`` callers."""
+        return dict(self._data)
+
     @property
     def config(self) -> dict[str, Any]:
         """User-facing transform config without runtime-injected capabilities."""
-        return {k: v for k, v in self._data.items() if k not in self._RUNTIME_ONLY_KEYS}
+        return {k: v for k, v in self._data.items() if not self._is_runtime_only_key(k)}
 
     @property
     def llm_config(self) -> dict[str, Any]:
@@ -421,6 +425,11 @@ class TransformContext(MutableMapping[str, Any]):
 
     def __len__(self) -> int:
         return len(self._data)
+
+    @classmethod
+    def _is_runtime_only_key(cls, key: str) -> bool:
+        """Return True when ``key`` is injected by the runner rather than user config."""
+        return key.startswith("_") or key in cls._RUNTIME_ONLY_KEYS
 
 
 # ---------------------------------------------------------------------------

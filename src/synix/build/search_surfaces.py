@@ -58,7 +58,7 @@ def search_surface_ready(surface: SearchSurface, available_layer_names: set[str]
 def validate_search_surface_uses(pipeline: Pipeline) -> None:
     """Validate build-time search surface usage after levels are computed."""
     registered_surfaces = {
-        layer
+        layer.name: layer
         for layer in [*pipeline.surfaces, *pipeline.projections]
         if isinstance(layer, SearchSurface)
     }
@@ -74,16 +74,23 @@ def validate_search_surface_uses(pipeline: Pipeline) -> None:
                     "only SearchSurface-compatible capabilities are supported in uses=[...]."
                 )
 
-            if used not in registered_surfaces:
+            registered = registered_surfaces.get(used.name)
+            if registered is None:
                 raise ValueError(
                     f"Transform '{layer.name}' uses search surface '{used.name}' but that surface "
                     "was not added to the pipeline."
                 )
 
-            blocking_sources = sorted(source.name for source in used.sources if source._level >= layer._level)
+            if registered.usage_signature() != used.usage_signature():
+                raise ValueError(
+                    f"Transform '{layer.name}' uses search surface '{used.name}' with a declaration "
+                    "that does not match the surface added to the pipeline."
+                )
+
+            blocking_sources = sorted(source.name for source in registered.sources if source._level >= layer._level)
             if blocking_sources:
                 names = ", ".join(blocking_sources)
                 raise ValueError(
-                    f"Transform '{layer.name}' uses search surface '{used.name}' before all of its "
+                    f"Transform '{layer.name}' uses search surface '{registered.name}' before all of its "
                     f"source layers are built: {names}."
                 )

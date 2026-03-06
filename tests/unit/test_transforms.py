@@ -6,13 +6,17 @@ import pytest
 
 from synix import (
     Artifact,
+    Pipeline,
     SearchSurface,
     SearchSurfaceUnavailableError,
+    Source,
+    Transform,
     TransformContext,
 )
 from synix import (
     SearchSurfaceHandle as PublicSearchSurfaceHandle,
 )
+from synix.build.artifacts import ArtifactStore
 from synix.build.llm_transforms import (
     CoreSynthesis,
     EpisodeSummary,
@@ -20,6 +24,8 @@ from synix.build.llm_transforms import (
     TopicalRollup,
 )
 from synix.build.parse_transform import ParseTransform
+from synix.build.plan import plan_build
+from synix.build.runner import run
 from synix.search.indexer import SearchIndex
 
 
@@ -156,6 +162,101 @@ class TestParseTransformSourcePath:
         assert len(artifacts) >= 1
         for art in artifacts:
             assert art.metadata["source_path"] == "export.json"
+
+
+class TestLegacyCustomTransformCompatibility:
+    """Legacy custom transforms keep working with the typed runtime context."""
+
+    def test_transform_context_config_filters_runtime_keys(self):
+        """User config excludes injected runtime-only and underscore-prefixed keys."""
+        ctx = TransformContext(
+            {
+                "topics": ["career"],
+                "llm_config": {"model": "test"},
+                "_logger": object(),
+                "_future_runtime_key": "hidden",
+                "search_db_path": "/tmp/search.db",
+            }
+        )
+
+        assert ctx.config == {"topics": ["career"]}
+
+    def test_runner_supports_legacy_config_copy_and_mutation(self, tmp_path):
+        """Runner passes a mapping-compatible context to old config-style transforms."""
+
+        class LegacyConfigTransform(Transform):
+            def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                copied = config.copy()
+                copied["copied"] = True
+                config["_legacy_seen"] = True
+                assert copied["prefix"] == "legacy"
+                assert config.get("_legacy_seen") is True
+                return [
+                    Artifact(
+                        label=f"{config['prefix']}-{inp.label}",
+                        artifact_type="legacy_summary",
+                        content=f"{inp.content}\nlegacy={copied['copied']}",
+                        input_ids=[inp.artifact_id],
+                    )
+                    for inp in inputs
+                ]
+
+        source_dir = tmp_path / "sources"
+        build_dir = tmp_path / "build"
+        source_dir.mkdir()
+        (source_dir / "alpha.md").write_text("Alpha content\n")
+
+        pipeline = Pipeline("legacy-config-runner")
+        pipeline.source_dir = str(source_dir)
+        pipeline.build_dir = str(build_dir)
+        transcripts = Source("transcripts")
+        legacy = LegacyConfigTransform("legacy", depends_on=[transcripts], config={"prefix": "legacy"})
+        pipeline.add(transcripts, legacy)
+
+        result = run(pipeline)
+
+        assert result.built == 2
+        artifacts = ArtifactStore(build_dir).list_artifacts("legacy")
+        assert len(artifacts) == 1
+        assert "legacy=True" in artifacts[0].content
+
+    def test_plan_supports_legacy_config_style_split(self, tmp_path):
+        """Planner still supports custom split() implementations written against config dicts."""
+
+        class LegacySplitTransform(Transform):
+            def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+                preview = config.copy()
+                fanout = preview.get("fanout", 1)
+                return [([inp], {"_slot": str(i)}) for i, inp in enumerate(inputs[:fanout])]
+
+            def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                return [
+                    Artifact(
+                        label=f"slot-{config.get('_slot', '0')}-{inputs[0].label}",
+                        artifact_type="legacy_slot",
+                        content=inputs[0].content,
+                        input_ids=[inputs[0].artifact_id],
+                    )
+                ]
+
+        source_dir = tmp_path / "sources"
+        build_dir = tmp_path / "build"
+        source_dir.mkdir()
+        (source_dir / "alpha.md").write_text("Alpha content\n")
+        (source_dir / "beta.md").write_text("Beta content\n")
+
+        pipeline = Pipeline("legacy-config-plan")
+        pipeline.source_dir = str(source_dir)
+        pipeline.build_dir = str(build_dir)
+        transcripts = Source("transcripts")
+        legacy = LegacySplitTransform("legacy", depends_on=[transcripts], config={"fanout": 2})
+        pipeline.add(transcripts, legacy)
+
+        plan = plan_build(pipeline)
+        legacy_step = next(step for step in plan.steps if step.name == "legacy")
+
+        assert legacy_step.parallel_units == 2
+        assert legacy_step.status == "new"
 
 
 class TestEpisodeSummaryTransform:

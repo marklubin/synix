@@ -226,7 +226,7 @@ Import from `synix`:
 
 | Class | Output | Description |
 |-------|--------|-------------|
-| `SearchSurface` | `build/surfaces/<name>.db` | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build |
+| `SearchSurface` | local compatibility realization under `build/surfaces/` today | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
 | `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
@@ -319,7 +319,7 @@ intel = CompetitiveIntel(
 pipeline.add(intel)
 ```
 
-Use `ctx.search(...)` or `self.get_search_surface(ctx, required=True)` for build-time retrieval. `TransformContext` stays mapping-compatible during migration, but the public interface is the typed context and search handle rather than `search_db_path`.
+Use `ctx.search(...)` or `self.get_search_surface(ctx, required=True)` for build-time retrieval. `TransformContext` stays mapping-compatible during migration so legacy custom transforms keep running, but the public interface is the typed context and search handle rather than `search_db_path` or a hard-coded SQLite path.
 
 ## Validators and Fixers (Experimental)
 
