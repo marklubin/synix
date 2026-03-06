@@ -170,13 +170,14 @@ release_receipt
 
 ### Blob Object
 
-Raw bytes or textual content.
+Raw bytes addressed by content hash, wrapped in a lightweight metadata object.
 
 ```json
 {
   "type": "blob",
-  "encoding": "utf-8",
-  "bytes": "..."
+  "schema_version": 1,
+  "content_oid": "oid_bytes_1",
+  "size_bytes": 1234
 }
 ```
 
@@ -185,15 +186,18 @@ Raw bytes or textual content.
 ```json
 {
   "type": "artifact",
+  "schema_version": 1,
   "label": "ep-conv-001",
   "artifact_type": "episode",
   "artifact_id": "sha256:...",
   "content_oid": "oid_blob_1",
-  "input_artifact_oids": ["oid_art_0"],
+  "input_ids": ["sha256:..."],
   "prompt_id": "episode_summary_v1",
   "model_config": {
     "model": "claude-sonnet-4-20250514"
   },
+  "created_at": "2026-03-06T08:20:07Z",
+  "parent_labels": ["tx-conv-001"],
   "metadata": {
     "source_conversation_id": "conv-001"
   }
@@ -207,6 +211,7 @@ Projection objects are build targets.
 ```json
 {
   "type": "projection",
+  "schema_version": 1,
   "name": "memory-index",
   "projection_type": "search_index",
   "input_oids": ["oid_art_1", "oid_art_2"],
@@ -222,6 +227,7 @@ Future incremental example:
 ```json
 {
   "type": "projection",
+  "schema_version": 1,
   "name": "customer-db",
   "projection_type": "postgres",
   "input_oids": ["oid_art_10", "oid_art_11"],
@@ -241,6 +247,7 @@ The manifest is the exact closure over artifacts and projections for one build s
 ```json
 {
   "type": "manifest",
+  "schema_version": 1,
   "pipeline_name": "monthly-memory",
   "pipeline_fingerprint": "sha256:...",
   "artifacts": {
@@ -260,6 +267,7 @@ The manifest is the exact closure over artifacts and projections for one build s
 ```json
 {
   "type": "snapshot",
+  "schema_version": 1,
   "manifest_oid": "oid_manifest_1",
   "parent_snapshot_oids": ["oid_snapshot_prev"],
   "created_at": "2026-03-06T12:30:11Z",
@@ -272,6 +280,7 @@ The manifest is the exact closure over artifacts and projections for one build s
 ```json
 {
   "type": "release_receipt",
+  "schema_version": 1,
   "ref": "HEAD",
   "resolved_snapshot_oid": "oid_snapshot_1",
   "manifest_oid": "oid_manifest_1",

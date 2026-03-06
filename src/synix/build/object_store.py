@@ -94,6 +94,18 @@ _FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
     },
 }
 
+_OPTIONAL_FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
+    "artifact": {
+        "prompt_id": (str, type(None)),
+        "model_config": (dict, type(None)),
+        "created_at": str,
+        "parent_labels": list,
+    },
+    "snapshot": {
+        "run_id": str,
+    },
+}
+
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -141,6 +153,17 @@ def _validate_object_payload(payload: dict[str, Any]) -> None:
 
     for field_name, expected_type in _FIELD_TYPES.get(object_type, {}).items():
         value = payload.get(field_name)
+        if not isinstance(value, expected_type):
+            msg = (
+                f"object payload for type {object_type!r} field {field_name!r} "
+                f"must be of type {expected_type}, got {type(value)}"
+            )
+            raise ValueError(msg)
+
+    for field_name, expected_type in _OPTIONAL_FIELD_TYPES.get(object_type, {}).items():
+        if field_name not in payload:
+            continue
+        value = payload[field_name]
         if not isinstance(value, expected_type):
             msg = (
                 f"object payload for type {object_type!r} field {field_name!r} "
@@ -209,53 +232,50 @@ class ObjectStore:
         digest = hashlib.sha256()
         size_bytes = 0
         encoder = codecs.getincrementalencoder(encoding)()
-        try:
-            for start in range(0, len(text), 64 * 1024):
-                chunk = text[start : start + 64 * 1024]
-                encoded = encoder.encode(chunk)
-                if not encoded:
-                    continue
-                size_bytes += len(encoded)
-                digest.update(encoded)
+        for start in range(0, len(text), 64 * 1024):
+            chunk = text[start : start + 64 * 1024]
+            encoded = encoder.encode(chunk)
+            if not encoded:
+                continue
+            size_bytes += len(encoded)
+            digest.update(encoded)
 
-            final_bytes = encoder.encode("", final=True)
-            if final_bytes:
-                size_bytes += len(final_bytes)
-                digest.update(final_bytes)
+        final_bytes = encoder.encode("", final=True)
+        if final_bytes:
+            size_bytes += len(final_bytes)
+            digest.update(final_bytes)
 
-            oid = digest.hexdigest()
-            path = self._path_for_oid(oid)
-            if path.exists():
-                return oid, size_bytes
-
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-            try:
-                encoder = codecs.getincrementalencoder(encoding)()
-                with os.fdopen(fd, "wb") as handle:
-                    for start in range(0, len(text), 64 * 1024):
-                        chunk = text[start : start + 64 * 1024]
-                        encoded = encoder.encode(chunk)
-                        if encoded:
-                            handle.write(encoded)
-
-                    final_bytes = encoder.encode("", final=True)
-                    if final_bytes:
-                        handle.write(final_bytes)
-
-                    handle.flush()
-                    os.fsync(handle.fileno())
-
-                os.replace(tmp, str(path))
-            except BaseException:
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
+        oid = digest.hexdigest()
+        path = self._path_for_oid(oid)
+        if path.exists():
             return oid, size_bytes
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            encoder = codecs.getincrementalencoder(encoding)()
+            with os.fdopen(fd, "wb") as handle:
+                for start in range(0, len(text), 64 * 1024):
+                    chunk = text[start : start + 64 * 1024]
+                    encoded = encoder.encode(chunk)
+                    if encoded:
+                        handle.write(encoded)
+
+                final_bytes = encoder.encode("", final=True)
+                if final_bytes:
+                    handle.write(final_bytes)
+
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            os.replace(tmp, str(path))
         except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
             raise
+        return oid, size_bytes
 
     def get_bytes(self, oid: str) -> bytes:
         """Load raw bytes by oid."""

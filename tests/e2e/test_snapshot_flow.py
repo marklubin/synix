@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -108,6 +109,11 @@ class TestSnapshotFlow:
         assert runs_list.exit_code == 0, runs_list.output
         assert "Run Snapshots" in runs_list.output
         assert runs_list.output.count("snapshot-cli") == 2
+
+        runs_json = runner.invoke(main, ["runs", "list", "--build-dir", build_dir, "--json"])
+        assert runs_json.exit_code == 0, runs_json.output
+        payload = json.loads(runs_json.output)
+        assert {run_info["ref"] for run_info in payload} == {first_run_ref, second_run_ref}
 
         recorded_runs = list_runs(build_dir)
         assert {run_info["ref"] for run_info in recorded_runs} == {first_run_ref, second_run_ref}

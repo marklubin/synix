@@ -96,6 +96,32 @@ class TestSnapshots:
         with pytest.raises(RuntimeError, match="HEAD advanced during build"):
             commit_build_snapshot(txn)
 
+    def test_commit_rejects_artifact_id_content_mismatch(self, tmp_path):
+        """Snapshot commit should not make corrupted cached artifacts canonical."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "artifact-integrity",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000002Z")
+
+        with pytest.raises(ValueError, match="does not match its content hash"):
+            txn.record_artifact(
+                Artifact(
+                    label="ep-1",
+                    artifact_type="episode",
+                    content="Actual content.",
+                    artifact_id="sha256:" + "0" * 64,
+                ),
+                layer_name="transcripts",
+                layer_level=0,
+                parent_labels=[],
+            )
+
     def test_pipeline_fingerprint_ignores_machine_local_paths_and_secrets(self, tmp_path):
         """Fingerprint should reflect logical build config, not local directories or API keys."""
         pipeline_a = Pipeline(

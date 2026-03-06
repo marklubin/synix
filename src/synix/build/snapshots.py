@@ -35,7 +35,7 @@ def _sanitize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_fingerprint_value(value: Any) -> Any:
-    if value is None or isinstance(value, str | int | float | bool):
+    if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, Path):
         return str(value)
@@ -44,7 +44,7 @@ def _normalize_fingerprint_value(value: Any) -> Any:
             str(key): _normalize_fingerprint_value(item)
             for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
         }
-    if isinstance(value, list | tuple | set):
+    if isinstance(value, (list, tuple, set)):
         return [_normalize_fingerprint_value(item) for item in value]
     if callable(value):
         qualname = getattr(value, "__qualname__", getattr(value, "__name__", type(value).__name__))
@@ -161,6 +161,15 @@ class BuildTransaction:
     ) -> str:
         artifact.metadata.setdefault("layer_name", layer_name)
         artifact.metadata.setdefault("layer_level", layer_level)
+        if artifact.content:
+            content_hash = f"sha256:{hashlib.sha256(artifact.content.encode('utf-8')).hexdigest()}"
+            if artifact.artifact_id and artifact.artifact_id != content_hash:
+                msg = (
+                    f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
+                    f"that does not match its content hash {content_hash!r}"
+                )
+                raise ValueError(msg)
+            artifact.artifact_id = content_hash
         content_oid = _store_blob_text(self.object_store, artifact.content)
         artifact_payload = _object(
             "artifact",

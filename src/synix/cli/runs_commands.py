@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 import click
@@ -21,7 +22,8 @@ def runs_group():
 @runs_group.command("list")
 @click.option("--build-dir", default="./build", help="Build directory")
 @click.option("--synix-dir", default=None, help="Explicit .synix directory")
-def list_runs_command(build_dir: str, synix_dir: str | None):
+@click.option("--json", "json_output", is_flag=True, help="Emit machine-readable JSON instead of a table")
+def list_runs_command(build_dir: str, synix_dir: str | None, json_output: bool):
     """List recorded run refs and snapshot ids."""
     resolved_synix_dir = synix_dir_for_build_dir(build_dir, configured_synix_dir=synix_dir)
     if not resolved_synix_dir.exists():
@@ -29,6 +31,9 @@ def list_runs_command(build_dir: str, synix_dir: str | None):
         raise SystemExit(1)
 
     runs = list_runs(build_dir, synix_dir=resolved_synix_dir)
+    if json_output:
+        console.print_json(json.dumps(runs))
+        return
     if not runs:
         console.print("[dim]No run snapshots found.[/dim]")
         return
