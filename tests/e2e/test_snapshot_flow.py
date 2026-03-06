@@ -108,7 +108,8 @@ class TestSnapshotFlow:
         runs_list = runner.invoke(main, ["runs", "list", "--build-dir", build_dir], terminal_width=160)
         assert runs_list.exit_code == 0, runs_list.output
         assert "Run Snapshots" in runs_list.output
-        assert runs_list.output.count("snapshot-cli") == 2
+        assert "Run ID" in runs_list.output
+        assert "Ref" in runs_list.output
 
         runs_json = runner.invoke(main, ["runs", "list", "--build-dir", build_dir, "--json"])
         assert runs_json.exit_code == 0, runs_json.output

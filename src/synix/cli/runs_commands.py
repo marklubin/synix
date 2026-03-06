@@ -48,10 +48,11 @@ def list_runs_command(build_dir: str, synix_dir: str | None, json_output: bool):
         return
 
     table = Table(title="Run Snapshots", box=box.ROUNDED)
-    table.add_column("Run Ref", style="bold")
+    table.add_column("Run ID", style="bold")
     table.add_column("Snapshot", no_wrap=True)
     table.add_column("Created", no_wrap=True)
     table.add_column("Pipeline")
+    table.add_column("Ref")
 
     for run in runs:
         created_at = run["created_at"]
@@ -60,7 +61,7 @@ def list_runs_command(build_dir: str, synix_dir: str | None, json_output: bool):
                 created_at = datetime.fromisoformat(created_at).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 pass
-        table.add_row(run["ref"], run["snapshot_oid"][:12], created_at, run["pipeline_name"])
+        table.add_row(run["run_id"], run["snapshot_oid"][:12], created_at, run["pipeline_name"], run["ref"])
 
     console.print()
     console.print(table)
