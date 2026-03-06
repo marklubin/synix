@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.build.object_store import ObjectStore
+from synix.build.object_store import SCHEMA_VERSION, ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
 from synix.build.snapshots import _pipeline_fingerprint, commit_build_snapshot, list_runs, start_build_transaction
@@ -122,6 +122,59 @@ class TestSnapshots:
                 parent_labels=[],
             )
 
+    def test_runs_list_recovers_pending_ref_updates(self, tmp_path):
+        """Interrupted ref updates should be replayed before run history is listed."""
+        build_dir = tmp_path / "build"
+        synix_dir = tmp_path / ".synix"
+        object_store = ObjectStore(synix_dir)
+
+        manifest_oid = object_store.put_json(
+            {
+                "type": "manifest",
+                "schema_version": SCHEMA_VERSION,
+                "pipeline_name": "recovery-test",
+                "pipeline_fingerprint": "sha256:test",
+                "artifacts": {},
+                "projections": {},
+            }
+        )
+        snapshot_oid = object_store.put_json(
+            {
+                "type": "snapshot",
+                "schema_version": SCHEMA_VERSION,
+                "manifest_oid": manifest_oid,
+                "parent_snapshot_oids": [],
+                "created_at": "2026-03-06T08:20:07Z",
+                "pipeline_name": "recovery-test",
+                "run_id": "20260306T082007123456Z",
+            }
+        )
+
+        journal_dir = synix_dir / "ref_journal"
+        journal_dir.mkdir(parents=True, exist_ok=True)
+        (journal_dir / "pending.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "type": "ref_update",
+                    "updates": {
+                        "refs/runs/20260306T082007123456Z": snapshot_oid,
+                        "refs/heads/main": snapshot_oid,
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        runs = list_runs(build_dir, synix_dir=synix_dir)
+        ref_store = RefStore(synix_dir)
+
+        assert ref_store.read_ref("refs/heads/main") == snapshot_oid
+        assert ref_store.read_ref("refs/runs/20260306T082007123456Z") == snapshot_oid
+        assert [run_info["ref"] for run_info in runs] == ["refs/runs/20260306T082007123456Z"]
+        assert not any(journal_dir.iterdir())
+
     def test_pipeline_fingerprint_ignores_machine_local_paths_and_secrets(self, tmp_path):
         """Fingerprint should reflect logical build config, not local directories or API keys."""
         pipeline_a = Pipeline(
@@ -227,6 +280,7 @@ class TestSnapshots:
 
         assert first_snapshot["manifest_oid"] == first.manifest_oid
         assert second_snapshot["manifest_oid"] == second.manifest_oid
+        assert first.manifest_oid == second.manifest_oid
         assert second_snapshot["parent_snapshot_oids"] == [first.snapshot_oid]
         assert ref_store.read_ref("HEAD") == second.snapshot_oid
         assert ref_store.read_ref(first.run_ref) == first.snapshot_oid

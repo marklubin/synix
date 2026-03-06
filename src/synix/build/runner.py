@@ -175,7 +175,7 @@ def run(
                         art,
                         layer_name=layer.name,
                         layer_level=layer._level,
-                        parent_labels=provenance.get_parents(art.label),
+                        parent_labels=_snapshot_parent_labels(art, inputs, provenance),
                     )
                     stats.cached += 1
                     slogger.artifact_cached(layer.name, art.label)
@@ -185,8 +185,14 @@ def run(
                 transform_config["_layer_name"] = layer.name
 
                 def _save_artifact(
-                    artifact: Artifact, *, _layer=layer, _transform_fp=transform_fp, _inputs=inputs
+                    artifact: Artifact,
+                    *,
+                    parent_inputs: list[Artifact] | None = None,
+                    _layer=layer,
+                    _transform_fp=transform_fp,
+                    _inputs=inputs,
                 ) -> None:
+                    effective_inputs = parent_inputs if parent_inputs is not None else _inputs
                     # Compute per-artifact build fingerprint
                     build_fp = compute_build_fingerprint(_transform_fp, artifact.input_ids)
 
@@ -202,7 +208,7 @@ def run(
                         artifact.metadata["build_fingerprint"] = build_fp.to_dict()
                         artifact.metadata["transform_fingerprint"] = _transform_fp.to_dict()
                         store.save_artifact(artifact, _layer.name, _layer._level)
-                        parent_labels = _get_parent_labels(artifact, _inputs)
+                        parent_labels = _snapshot_parent_labels(artifact, effective_inputs, provenance)
                         provenance.record(
                             artifact.label,
                             parent_labels=parent_labels,
@@ -230,7 +236,7 @@ def run(
                                 cached,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=provenance.get_parents(cached.label),
+                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, provenance),
                             )
                         else:
                             layer_built.append(artifact)
@@ -239,14 +245,14 @@ def run(
                                 artifact,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=parent_labels,
+                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, provenance),
                             )
                         stats.cached += 1
                         slogger.artifact_cached(_layer.name, artifact.label)
 
-                def _on_batch_complete(artifacts: list[Artifact]) -> None:
+                def _on_batch_complete(artifacts: list[Artifact], unit_inputs: list[Artifact]) -> None:
                     for artifact in artifacts:
-                        _save_artifact(artifact)
+                        _save_artifact(artifact, parent_inputs=unit_inputs)
 
                 # Build lookup of cached artifacts by sorted input_ids for per-unit cache checks
                 existing_artifacts = store.list_artifacts(layer.name)
@@ -259,7 +265,7 @@ def run(
                             key = tuple(sorted(art.input_ids))
                             cached_by_inputs.setdefault(key, []).append(art)
 
-                def _on_cached(cached_arts: list[Artifact]) -> None:
+                def _on_cached(cached_arts: list[Artifact], unit_inputs: list[Artifact]) -> None:
                     for cached_art in cached_arts:
                         cached_art.metadata["layer_name"] = layer.name
                         cached_art.metadata["layer_level"] = layer._level
@@ -269,7 +275,7 @@ def run(
                             cached_art,
                             layer_name=layer.name,
                             layer_level=layer._level,
-                            parent_labels=provenance.get_parents(cached_art.label),
+                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, provenance),
                         )
                         stats.cached += 1
                         slogger.artifact_cached(layer.name, cached_art.label)
@@ -279,11 +285,11 @@ def run(
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
-                    _execute_transform_concurrent(
-                        layer,
-                        units,
-                        transform_config,
-                        concurrency,
+                            _execute_transform_concurrent(
+                                layer,
+                                units,
+                                transform_config,
+                                concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,
@@ -294,12 +300,12 @@ def run(
                         unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
                         cached_arts = cached_by_inputs.get(unit_input_ids)
                         if cached_arts:
-                            _on_cached(cached_arts)
+                            _on_cached(cached_arts, unit_inputs)
                             continue
                         merged_config = {**transform_config, **config_extras}
                         new_artifacts = layer.execute(unit_inputs, merged_config)
                         for artifact in new_artifacts:
-                            _save_artifact(artifact)
+                            _save_artifact(artifact, parent_inputs=unit_inputs)
 
             layer_artifacts[layer.name] = layer_built
 
@@ -361,6 +367,21 @@ def _record_snapshot_artifact(
         layer_level=layer_level,
         parent_labels=parent_labels,
     )
+
+
+def _snapshot_parent_labels(
+    artifact: Artifact,
+    inputs: list[Artifact],
+    provenance: ProvenanceTracker,
+) -> list[str]:
+    """Prefer current build inputs for lineage, falling back to stored provenance for cached reuse."""
+    derived = _get_parent_labels(artifact, inputs)
+    if derived:
+        return derived
+    stored = provenance.get_parents(artifact.label)
+    if stored:
+        return stored
+    return [inp.label for inp in inputs]
 
 
 def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, build_dir: Path) -> dict:
@@ -435,15 +456,18 @@ def _layer_fully_cached(
 
 def _get_parent_labels(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
     """Determine parent labels based on input IDs (hashes)."""
-    hash_to_label: dict[str, str] = {}
+    hash_to_labels: dict[str, list[str]] = {}
     for inp in inputs:
         if inp.artifact_id:
-            hash_to_label[inp.artifact_id] = inp.label
+            hash_to_labels.setdefault(inp.artifact_id, []).append(inp.label)
 
     parents = []
     for h in artifact.input_ids:
-        if h in hash_to_label:
-            parents.append(hash_to_label[h])
+        labels = hash_to_labels.get(h, [])
+        if len(labels) == 1:
+            parents.append(labels[0])
+        elif len(labels) > 1:
+            return []
 
     if not parents and inputs:
         parents = [inp.label for inp in inputs]
@@ -478,7 +502,7 @@ def _execute_transform_concurrent(
             cached_arts = cached_by_inputs.get(unit_input_ids)
             if cached_arts:
                 if on_cached:
-                    on_cached(cached_arts)
+                    on_cached(cached_arts, unit_inputs)
                 continue
         units_to_run.append((i, unit_inputs, config_extras))
 
@@ -531,7 +555,8 @@ def _execute_transform_concurrent(
                 _, artifacts = future.result()
                 results[idx] = artifacts
                 if on_complete:
-                    on_complete(artifacts)
+                    _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
+                    on_complete(artifacts, unit_inputs)
             except Exception as exc:
                 results[idx] = exc
                 if first_error is None:

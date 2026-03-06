@@ -196,7 +196,6 @@ Raw bytes addressed by content hash, wrapped in a lightweight metadata object.
   "model_config": {
     "model": "claude-sonnet-4-20250514"
   },
-  "created_at": "2026-03-06T08:20:07Z",
   "parent_labels": ["tx-conv-001"],
   "metadata": {
     "source_conversation_id": "conv-001"

@@ -12,6 +12,7 @@ from typing import Any
 
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
 from synix.build.refs import DEFAULT_HEAD_REF, RefStore, synix_dir_for_build_dir
+from synix.core.errors import atomic_write
 from synix.core.models import Artifact, Pipeline
 
 
@@ -181,7 +182,6 @@ class BuildTransaction:
             prompt_id=artifact.prompt_id,
             model_config=artifact.model_config,
             metadata=artifact.metadata,
-            created_at=artifact.created_at.isoformat(),
             parent_labels=parent_labels,
         )
         artifact_oid = self.object_store.put_json(artifact_payload)
@@ -203,6 +203,44 @@ class BuildTransaction:
 def start_build_transaction(pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:
     """Create a build transaction that accumulates canonical snapshot state."""
     return BuildTransaction.start(pipeline, build_dir, run_id)
+
+
+def _write_ref_update_journal(synix_dir: Path, journal_id: str, updates: dict[str, str]) -> Path:
+    journal_dir = synix_dir / "ref_journal"
+    journal_dir.mkdir(parents=True, exist_ok=True)
+    journal_path = journal_dir / f"{journal_id}.json"
+    atomic_write(
+        journal_path,
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "type": "ref_update",
+                "updates": updates,
+            },
+            sort_keys=True,
+            indent=2,
+        ),
+    )
+    return journal_path
+
+
+def recover_pending_ref_updates(synix_dir: str | Path, *, ref_store: RefStore | None = None) -> None:
+    """Apply any pending ref update journals left behind by interrupted commits."""
+    resolved_synix_dir = Path(synix_dir)
+    journal_dir = resolved_synix_dir / "ref_journal"
+    if not journal_dir.exists():
+        return
+
+    store = ref_store or RefStore(resolved_synix_dir)
+    for journal_path in sorted(journal_dir.glob("*.json")):
+        payload = json.loads(journal_path.read_text(encoding="utf-8"))
+        updates = payload.get("updates")
+        if not isinstance(updates, dict):
+            msg = f"ref update journal {journal_path} is missing an 'updates' mapping"
+            raise ValueError(msg)
+        for ref_name, oid in updates.items():
+            store.write_ref(ref_name, oid)
+        journal_path.unlink()
 
 
 @contextmanager
@@ -246,6 +284,7 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
 
     with _snapshot_lock(synix_dir):
         ref_store = RefStore(synix_dir)
+        recover_pending_ref_updates(synix_dir, ref_store=ref_store)
         current_head_ref = ref_store.ensure_head(DEFAULT_HEAD_REF)
         if current_head_ref != transaction.head_ref:
             msg = (
@@ -279,9 +318,19 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
         snapshot_oid = transaction.object_store.put_json(snapshot_payload)
 
         run_ref = f"refs/runs/{transaction.run_id}"
-        # Write the immutable run ref first, then advance HEAD to the new tip.
-        ref_store.write_ref(run_ref, snapshot_oid)
-        ref_store.write_ref(transaction.head_ref, snapshot_oid)
+        pending_updates = {
+            run_ref: snapshot_oid,
+            transaction.head_ref: snapshot_oid,
+        }
+        journal_path = _write_ref_update_journal(synix_dir, transaction.run_id, pending_updates)
+        refs_applied = False
+        try:
+            for ref_name, oid in pending_updates.items():
+                ref_store.write_ref(ref_name, oid)
+            refs_applied = True
+        finally:
+            if refs_applied and journal_path.exists():
+                journal_path.unlink()
 
         return {
             "snapshot_oid": snapshot_oid,
@@ -301,6 +350,7 @@ def list_runs(build_dir: str | Path, *, synix_dir: str | Path | None = None) -> 
 
     object_store = ObjectStore(resolved_synix_dir)
     ref_store = RefStore(resolved_synix_dir)
+    recover_pending_ref_updates(resolved_synix_dir, ref_store=ref_store)
     runs: list[dict[str, str]] = []
     for ref_name, oid in ref_store.iter_refs("refs/runs"):
         snapshot = object_store.get_json(oid)
