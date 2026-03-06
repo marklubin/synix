@@ -7,8 +7,8 @@ import logging
 import pytest
 
 from synix import Artifact
-from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
 from synix.ext._render import render_template
+from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
 
 # ---------------------------------------------------------------------------
 # Helpers

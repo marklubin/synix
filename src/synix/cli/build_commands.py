@@ -81,14 +81,19 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
 
 def _surface_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]]]:
     """Compute layer_name → [(surface_name, surface_type, trigger_type)] mapping."""
+    from synix.build.dag import resolve_build_order
+
+    build_order = resolve_build_order(pipeline)
+    layer_order = {layer.name: i for i, layer in enumerate(build_order)}
     triggers: dict[str, list[tuple[str, str, str]]] = {}
 
     for surface in pipeline.surfaces:
         source_layer_names = [s.name for s in surface.sources]
         if not isinstance(surface, SearchSurface):
             continue
-        for layer_name in source_layer_names:
-            triggers.setdefault(layer_name, []).append((surface.name, "search_surface", "progressive"))
+        if source_layer_names:
+            last = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0))
+            triggers.setdefault(last, []).append((surface.name, "search_surface", "complete"))
 
     return triggers
 

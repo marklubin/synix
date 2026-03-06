@@ -20,10 +20,11 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
 from synix.build.runner import (
     _materialize_layer_projections,
+    _materialize_layer_search_surfaces,
     run,
 )
-from synix.search.indexer import SearchIndex
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.search.indexer import SearchIndex
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -280,6 +281,47 @@ class TestLayerProjectionChain:
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly", "core"}
+
+    def test_search_surface_waits_for_all_source_layers(
+        self,
+        build_dir,
+        episode_artifacts,
+        monthly_artifacts,
+    ):
+        """Search surfaces materialize only once their full source set is available."""
+        build_dir.mkdir(parents=True, exist_ok=True)
+        store = ArtifactStore(build_dir)
+
+        episodes = Source("episodes")
+        monthly = Source("monthly")
+        surface = SearchSurface("episode-monthly-search", sources=[episodes, monthly], modes=["fulltext"])
+
+        pipeline = Pipeline("surface-pipeline")
+        pipeline.build_dir = str(build_dir)
+        pipeline.add(episodes, monthly, surface)
+
+        layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
+        db_path = build_dir / "surfaces" / "episode-monthly-search.db"
+
+        _materialize_layer_search_surfaces(
+            pipeline,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert not db_path.exists(), "surface DB should not exist until all source layers are available"
+
+        layer_artifacts["monthly"] = monthly_artifacts
+        _materialize_layer_search_surfaces(
+            pipeline,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert db_path.exists(), "surface DB should exist once all source layers are available"
+        assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
     def test_flat_file_waits_for_all_sources(
         self,
@@ -543,6 +585,30 @@ class TestProjectionPlan:
 
         assert len(plan.surfaces) == 1
         assert plan.surfaces[0].status == "cached"
+
+    def test_plan_rejects_surface_that_depends_on_future_layers(self, source_dir, build_dir, mock_llm):
+        """A transform cannot use a search surface whose sources are not all upstream."""
+        pipeline = Pipeline("invalid-surface-order")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        future_surface = SearchSurface("future-surface", sources=[episodes, monthly], modes=["fulltext"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[future_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, monthly, future_surface, topics)
+
+        with pytest.raises(ValueError, match="before all of its source layers are built"):
+            plan_build(pipeline, source_dir=str(source_dir))
+        with pytest.raises(ValueError, match="before all of its source layers are built"):
+            run(pipeline, source_dir=str(source_dir))
 
 
 # ---------------------------------------------------------------------------

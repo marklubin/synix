@@ -31,6 +31,15 @@ class SearchIndex:
             self._conn.row_factory = sqlite3.Row
         return self._conn
 
+    def has_table(self, name: str) -> bool:
+        """Return True when the underlying SQLite database contains ``name``."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+        return row is not None
+
     def create(self) -> None:
         """Create the FTS5 search index table and citation edges table."""
         conn = self._get_conn()

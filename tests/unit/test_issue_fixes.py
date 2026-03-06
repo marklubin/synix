@@ -24,8 +24,8 @@ from synix.build.plan import plan_build
 from synix.build.runner import _execute_transform_concurrent, run
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Transform
-from synix.search.embeddings import EmbeddingProvider, OpenAIBackend, _is_payload_too_large
 from synix.ext import EpisodeSummary
+from synix.search.embeddings import EmbeddingProvider, OpenAIBackend, _is_payload_too_large
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 

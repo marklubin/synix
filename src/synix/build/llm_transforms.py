@@ -8,12 +8,16 @@ transforms and the generic synthesis transforms reuse them.
 from __future__ import annotations
 
 import hashlib
+import logging
+import sqlite3
 import sys
 from collections import defaultdict
 
 from synix.build.llm_client import LLMClient, LLMResponse
 from synix.core.config import LLMConfig
 from synix.core.models import Artifact, Transform
+
+logger = logging.getLogger(__name__)
 
 
 def _make_llm_client(config: dict) -> LLMClient:
@@ -105,17 +109,15 @@ def _open_search_surface_index(transform: Transform, config: dict):
     if not db_path.exists():
         return None
 
+    idx = None
     try:
         idx = SearchIdx(db_path)
-        row = (
-            idx._get_conn()
-            .execute("SELECT name FROM sqlite_master WHERE type='table' AND name='search_index'")
-            .fetchone()
-        )
-        if row is not None:
+        if idx.has_table("search_index"):
             return idx
+    except sqlite3.Error:
+        logger.warning("Declared search surface %s could not be opened from %s", handle.get("name"), db_path)
+    if idx is not None:
         idx.close()
-    except Exception:
         return None
     return None
 

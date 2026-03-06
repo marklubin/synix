@@ -9,8 +9,8 @@ import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
 from synix.build.runner import run
-from synix.search.index import SearchIndex as SearchIdx
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.search.index import SearchIndex as SearchIdx
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 

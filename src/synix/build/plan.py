@@ -10,6 +10,7 @@ from pathlib import Path
 from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
+from synix.build.search_surfaces import search_surface_handles, validate_search_surface_uses
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import Artifact, FlatFile, Layer, Pipeline, SearchIndex, SearchSurface, Source, Transform
 
@@ -94,6 +95,7 @@ def plan_build(
 
     # Compute levels from DAG structure
     compute_levels(pipeline.layers)
+    validate_search_surface_uses(pipeline)
 
     store = ArtifactStore(build_dir) if build_dir.exists() else None
 
@@ -189,7 +191,7 @@ def _plan_layer(
 
     search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
     if search_uses:
-        handles = _search_surface_handles(Path(pipeline.build_dir), search_uses)
+        handles = search_surface_handles(Path(pipeline.build_dir), search_uses)
         transform_config["search_surfaces"] = handles
         if len(search_uses) == 1:
             default_handle = handles[search_uses[0].name]
@@ -286,25 +288,6 @@ def _compute_source_info(source_dir: str) -> str | None:
         depth_label = f", {max_depth} deep" if max_depth > 1 else ", nested"
 
     return f"{source_dir} ({', '.join(parts)} {file_word}{depth_label})"
-
-
-def _surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
-    """Return the local compatibility path for a search surface."""
-    return build_dir / "surfaces" / f"{surface.name}.db"
-
-
-def _search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, dict]:
-    """Build lightweight search-surface handles for transform config injection."""
-    return {
-        surface.name: {
-            "name": surface.name,
-            "kind": "search_surface",
-            "db_path": str(_surface_local_path(build_dir, surface)),
-            "modes": list(surface.modes),
-            "sources": [source.name for source in surface.sources],
-        }
-        for surface in surfaces
-    }
 
 
 def _plan_source_layer(

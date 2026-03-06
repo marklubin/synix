@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -231,7 +232,13 @@ class Transform(Layer):
             components["model"] = fingerprint_value(llm_config)
 
         if self.uses:
-            components["uses"] = fingerprint_value(sorted(layer.name for layer in self.uses))
+            use_signatures = []
+            for layer in self.uses:
+                if hasattr(layer, "usage_signature"):
+                    use_signatures.append(json.dumps(layer.usage_signature(), sort_keys=True, default=str))
+                else:
+                    use_signatures.append(f"{type(layer).__module__}.{type(layer).__qualname__}:{layer.name}")
+            components["uses"] = fingerprint_value(use_signatures)
 
         return Fingerprint(
             scheme="synix:transform:v2",
@@ -257,6 +264,17 @@ class SearchSurface(Layer):
         self.modes = modes or ["fulltext"]
         self.search = self.modes  # compatibility alias while SearchIndex still exists
         self.embedding_config = embedding_config or {}
+
+    def usage_signature(self) -> dict:
+        """Stable identity for transforms that declare uses=[this surface]."""
+        return {
+            "type": f"{type(self).__module__}.{type(self).__qualname__}",
+            "name": self.name,
+            "sources": [source.name for source in self.sources],
+            "modes": list(self.modes),
+            "embedding_config": dict(self.embedding_config),
+            "config": dict(self.config),
+        }
 
 
 class SearchIndex(SearchSurface):

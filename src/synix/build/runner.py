@@ -17,6 +17,12 @@ from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
+from synix.build.search_surfaces import (
+    search_surface_handles,
+    search_surface_ready,
+    surface_local_path,
+    validate_search_surface_uses,
+)
 from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
@@ -104,6 +110,7 @@ def run(
 
     # Compute levels from DAG structure
     compute_levels(pipeline.layers)
+    validate_search_surface_uses(pipeline)
 
     # Create structured logger
     slogger = SynixLogger(
@@ -434,7 +441,7 @@ def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, 
 
     search_uses = [surface for surface in layer.uses if isinstance(surface, SearchSurface)]
     if search_uses:
-        handles = _search_surface_handles(build_dir, search_uses)
+        handles = search_surface_handles(build_dir, search_uses)
         transform_config["search_surfaces"] = handles
         if len(search_uses) == 1:
             # Keep the single-surface handle easy to consume for bundled
@@ -449,25 +456,6 @@ def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, 
     return transform_config
 
 
-def _surface_local_path(build_dir: Path, surface: SearchSurface) -> Path:
-    """Return the local compatibility path for a search surface."""
-    return build_dir / "surfaces" / f"{surface.name}.db"
-
-
-def _search_surface_handles(build_dir: Path, surfaces: list[SearchSurface]) -> dict[str, dict]:
-    """Build lightweight search-surface handles for transform config injection."""
-    return {
-        surface.name: {
-            "name": surface.name,
-            "kind": "search_surface",
-            "db_path": str(_surface_local_path(build_dir, surface)),
-            "modes": list(surface.modes),
-            "sources": [source.name for source in surface.sources],
-        }
-        for surface in surfaces
-    }
-
-
 def _materialize_layer_search_surfaces(
     pipeline: Pipeline,
     layer_name: str,
@@ -478,23 +466,22 @@ def _materialize_layer_search_surfaces(
 ) -> None:
     """Materialize search surfaces that source from this layer.
 
-    Search surfaces are build-time capabilities, so they are progressively
-    materialized as their source layers become available.
+    Search surfaces only materialize once their full source closure is
+    available, so the on-disk compatibility DB always matches cache state.
     """
     for surface in pipeline.surfaces:
         source_layer_names = [s.name for s in surface.sources]
         if layer_name not in source_layer_names:
             continue
 
-        available_names = [ln for ln in source_layer_names if ln in layer_artifacts]
-        if not available_names:
+        available_names = set(layer_artifacts)
+        if not search_surface_ready(surface, available_names):
             continue
 
         _materialize_projection(
             surface,
             layer_artifacts,
             build_dir,
-            source_layer_override=available_names,
             logger=logger,
             triggered_by=layer_name,
         )
@@ -900,7 +887,7 @@ def _materialize_projection(
     if isinstance(proj, (SearchIndex, SearchSurface)):
         # Use projection registry to avoid direct search import
         try:
-            db_path = build_dir / "search.db" if isinstance(proj, SearchIndex) else _surface_local_path(build_dir, proj)
+            db_path = build_dir / "search.db" if isinstance(proj, SearchIndex) else surface_local_path(build_dir, proj)
             projection = get_projection("search_index", build_dir, db_path)
         except ValueError as exc:
             logger.warning("Projection %r unavailable: %s", proj.name, exc)

@@ -7,8 +7,8 @@ import pytest
 from synix import Artifact, Pipeline, SearchSurface, Source
 from synix.artifacts.store import ArtifactStore
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint, compute_digest
-from synix.pipeline.dag import needs_rebuild, resolve_build_order
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
+from synix.pipeline.dag import needs_rebuild, resolve_build_order
 
 
 class TestResolveBuildOrder:
