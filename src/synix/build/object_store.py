@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import json
 import os
@@ -57,11 +58,50 @@ _REQUIRED_FIELDS: dict[str, set[str]] = {
     },
 }
 
+_FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
+    "blob": {
+        "content_oid": str,
+        "size_bytes": int,
+    },
+    "artifact": {
+        "label": str,
+        "artifact_type": str,
+        "artifact_id": str,
+        "content_oid": str,
+        "input_ids": list,
+        "metadata": dict,
+    },
+    "projection": {
+        "name": str,
+        "projection_type": str,
+        "input_oids": list,
+        "build_state_oid": str,
+        "adapter": str,
+        "release_mode": str,
+    },
+    "manifest": {
+        "pipeline_name": str,
+        "pipeline_fingerprint": str,
+        "artifacts": dict,
+        "projections": dict,
+    },
+    "snapshot": {
+        "manifest_oid": str,
+        "parent_snapshot_oids": list,
+        "created_at": str,
+        "pipeline_name": str,
+        "run_id": str,
+    },
+}
+
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
-        os.write(fd, data)
+        view = memoryview(data)
+        while view:
+            written = os.write(fd, view)
+            view = view[written:]
         os.fsync(fd)
         os.close(fd)
         os.replace(tmp, str(path))
@@ -98,6 +138,15 @@ def _validate_object_payload(payload: dict[str, Any]) -> None:
     if missing:
         msg = f"object payload for type {object_type!r} is missing required fields: {', '.join(missing)}"
         raise ValueError(msg)
+
+    for field_name, expected_type in _FIELD_TYPES.get(object_type, {}).items():
+        value = payload.get(field_name)
+        if not isinstance(value, expected_type):
+            msg = (
+                f"object payload for type {object_type!r} field {field_name!r} "
+                f"must be of type {expected_type}, got {type(value)}"
+            )
+            raise ValueError(msg)
 
 
 class ObjectStore:
@@ -154,6 +203,49 @@ class ObjectStore:
             raise
 
         return oid, size_bytes
+
+    def put_text(self, text: str, *, encoding: str = "utf-8") -> tuple[str, int]:
+        """Store text as encoded bytes without creating a second full-sized bytes copy."""
+        digest = hashlib.sha256()
+        size_bytes = 0
+        encoder = codecs.getincrementalencoder(encoding)()
+
+        fd, tmp = tempfile.mkstemp(dir=self.objects_dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                for start in range(0, len(text), 64 * 1024):
+                    chunk = text[start : start + 64 * 1024]
+                    encoded = encoder.encode(chunk)
+                    if not encoded:
+                        continue
+                    size_bytes += len(encoded)
+                    digest.update(encoded)
+                    handle.write(encoded)
+
+                final_bytes = encoder.encode("", final=True)
+                if final_bytes:
+                    size_bytes += len(final_bytes)
+                    digest.update(final_bytes)
+                    handle.write(final_bytes)
+
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            oid = digest.hexdigest()
+            path = self._path_for_oid(oid)
+            if path.exists():
+                os.unlink(tmp)
+                return oid, size_bytes
+
+            path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(tmp, str(path))
+            return oid, size_bytes
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def get_bytes(self, oid: str) -> bytes:
         """Load raw bytes by oid."""

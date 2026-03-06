@@ -279,6 +279,8 @@ def run(
 
         result.validation = run_validators(pipeline, store, provenance)
 
+    # Non-validating builds still record a snapshot; validating builds only
+    # advance snapshot refs when all validators pass.
     if result.validation is None or result.validation.passed:
         snapshot_info = commit_build_snapshot(pipeline, build_dir, run_id=slogger.run_log.run_id)
         result.snapshot_oid = snapshot_info["snapshot_oid"]

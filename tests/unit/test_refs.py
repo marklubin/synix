@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from synix.build.refs import DEFAULT_HEAD_REF, RefStore
+from synix.build.refs import DEFAULT_HEAD_REF, RefStore, synix_dir_for_build_dir
 
 OID1 = "1" * 64
 OID2 = "2" * 64
@@ -51,3 +51,10 @@ class TestRefStore:
 
         with pytest.raises(ValueError, match="cycle"):
             store.read_ref("HEAD")
+
+    def test_synix_dir_prefers_persistent_sibling_store(self, tmp_path):
+        """Default store placement stays outside build/ so clean does not wipe history."""
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+
+        assert synix_dir_for_build_dir(build_dir) == tmp_path / ".synix"

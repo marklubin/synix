@@ -12,7 +12,7 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
-from synix.build.snapshots import list_runs
+from synix.build.snapshots import _pipeline_fingerprint, list_runs
 from synix.build.validators import RequiredField
 from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
@@ -40,6 +40,43 @@ def _build_pipeline(build_dir: Path, source_dir: Path, *, synix_dir: Path | None
 
 
 class TestSnapshots:
+    def test_pipeline_fingerprint_ignores_machine_local_paths_and_secrets(self, tmp_path):
+        """Fingerprint should reflect logical build config, not local directories or API keys."""
+        pipeline_a = Pipeline(
+            "fingerprint-test",
+            source_dir=str(tmp_path / "sources-a"),
+            build_dir=str(tmp_path / "build-a"),
+            synix_dir=str(tmp_path / ".synix-a"),
+            llm_config={
+                "model": "claude-sonnet-4-20250514",
+                "temperature": 0.3,
+                "api_key": "secret-a",
+            },
+        )
+        pipeline_b = Pipeline(
+            "fingerprint-test",
+            source_dir=str(tmp_path / "sources-b"),
+            build_dir=str(tmp_path / "build-b"),
+            synix_dir=str(tmp_path / ".synix-b"),
+            llm_config={
+                "model": "claude-sonnet-4-20250514",
+                "temperature": 0.3,
+                "api_key": "secret-b",
+            },
+        )
+
+        transcripts_a = Source("transcripts")
+        episodes_a = EpisodeSummary("episodes", depends_on=[transcripts_a])
+        pipeline_a.add(transcripts_a, episodes_a)
+        pipeline_a.add(SearchIndex("memory-index", sources=[episodes_a], search=["fulltext"]))
+
+        transcripts_b = Source("transcripts")
+        episodes_b = EpisodeSummary("episodes", depends_on=[transcripts_b])
+        pipeline_b.add(transcripts_b, episodes_b)
+        pipeline_b.add(SearchIndex("memory-index", sources=[episodes_b], search=["fulltext"]))
+
+        assert _pipeline_fingerprint(pipeline_a) == _pipeline_fingerprint(pipeline_b)
+
     def test_build_commits_manifest_and_snapshot(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """A successful build records immutable objects and moves HEAD."""
         build_dir = tmp_path / "build"

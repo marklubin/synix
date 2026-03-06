@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
@@ -49,3 +51,12 @@ class TestObjectStore:
 
         with pytest.raises(ValueError, match="schema_version"):
             store.put_json({"type": "manifest", "pipeline_name": "test"})
+
+    def test_put_bytes_oid_matches_sha256(self, tmp_path):
+        """Raw byte object ids are pinned to sha256(content)."""
+        store = ObjectStore(tmp_path / ".synix")
+        payload = b"synix-blob-contract"
+
+        oid = store.put_bytes(payload)
+
+        assert oid == hashlib.sha256(payload).hexdigest()

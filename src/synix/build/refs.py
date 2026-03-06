@@ -20,22 +20,23 @@ def synix_dir_for_build_dir(build_dir: str | Path, *, configured_synix_dir: str 
 
     Write path precedence:
     - explicit configured_synix_dir
-    - nested build-local store (`build/.synix`)
+    - persistent sibling store (`<build parent>/.synix`)
 
-    Read-side helpers can still discover the legacy sibling layout by checking
-    whether `build_dir.parent/.synix` already exists.
+    Read-side helpers also honor an existing nested `build/.synix` store for
+    compatibility with experiments, but new callers should default to the
+    sibling store so `synix clean` does not delete snapshot history.
     """
     if configured_synix_dir is not None:
         return Path(configured_synix_dir).resolve()
 
     build_path = Path(build_dir).resolve()
-    nested = build_path / ".synix"
     legacy = build_path.parent / ".synix"
-    if nested.exists():
-        return nested
+    nested = build_path / ".synix"
     if legacy.exists():
         return legacy
-    return nested
+    if nested.exists():
+        return nested
+    return legacy
 
 
 def _validate_ref_name(ref_name: str) -> None:
