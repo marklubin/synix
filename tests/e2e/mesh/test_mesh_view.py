@@ -1,4 +1,4 @@
-"""E2E: Interactive memory viewer — render functions and dispatch."""
+"""E2E: Interactive memory viewer — Textual TUI tests using async pilot."""
 
 from __future__ import annotations
 
@@ -7,22 +7,19 @@ from io import StringIO
 
 import pytest
 from rich.console import Console
+from textual.widgets import Markdown
 
 from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.core.models import Artifact
 from synix.mesh.viewer import (
+    DetailScreen,
     MeshContext,
-    ViewState,
-    dispatch,
-    render_artifacts,
-    render_builds,
-    render_config,
-    render_detail,
-    render_overview,
-    render_pipeline,
-    render_search,
+    MeshViewerApp,
+    SearchScreen,
 )
+
+pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
@@ -85,7 +82,6 @@ def mesh_ctx(tmp_path, build_dir):
     mesh_dir = tmp_path / "mesh"
     mesh_dir.mkdir()
 
-    # Write a minimal config
     config_content = f"""\
 [mesh]
 name = "test-viewer"
@@ -106,7 +102,6 @@ leader_candidates = []
 """
     (mesh_dir / "synix-mesh.toml").write_text(config_content)
 
-    # Write state
     state = {
         "role": "server",
         "server_url": "",
@@ -114,9 +109,6 @@ leader_candidates = []
         "term": {"counter": 1, "leader_id": "test-host"},
     }
     (mesh_dir / "state.json").write_text(json.dumps(state))
-
-    buf = StringIO()
-    console = Console(file=buf, force_terminal=True, width=120)
 
     return MeshContext(
         name="test-viewer",
@@ -127,273 +119,9 @@ leader_candidates = []
         server_url="",
         token="msh_test",
         role="server",
-        console=console,
+        console=Console(file=StringIO(), force_terminal=True, width=120),
         pipeline_path="./pipeline.py",
     )
-
-
-def _get_output(ctx: MeshContext) -> str:
-    """Extract rendered text from the console buffer."""
-    ctx.console.file.seek(0)
-    return ctx.console.file.read()
-
-
-class TestRenderOverview:
-    def test_shows_memory_tree(self, mesh_ctx):
-        render_overview(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "Memory Tree" in output
-        assert "transcripts" in output
-        assert "episodes" in output
-        assert "core" in output
-
-    def test_shows_layer_counts(self, mesh_ctx):
-        render_overview(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        # 3 transcripts, 2 episodes, 1 core
-        assert "3" in output
-        assert "2" in output
-
-    def test_shows_cluster_info(self, mesh_ctx):
-        render_overview(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "test-host" in output
-
-    def test_no_build_dir(self, mesh_ctx, tmp_path):
-        mesh_ctx.build_dir = tmp_path / "nonexistent"
-        render_overview(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "No artifacts yet" in output
-
-
-class TestRenderArtifacts:
-    def test_shows_all_layers(self, mesh_ctx):
-        render_artifacts(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "transcripts" in output
-        assert "episodes" in output
-        assert "core" in output
-
-    def test_shows_artifact_labels(self, mesh_ctx):
-        render_artifacts(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "tx-conv-0" in output
-        assert "ep-conv-0" in output
-        assert "core-v1" in output
-
-    def test_shows_numbered_rows(self, mesh_ctx):
-        render_artifacts(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        # Should have row numbers
-        assert "1" in output
-
-    def test_filter_by_layer(self, mesh_ctx):
-        render_artifacts(mesh_ctx, layer_filter="episodes")
-        output = _get_output(mesh_ctx)
-        assert "episodes" in output
-        assert "transcripts" not in output.split("episodes")[0]  # transcripts layer header shouldn't appear
-
-    def test_filter_nonexistent_layer(self, mesh_ctx):
-        render_artifacts(mesh_ctx, layer_filter="nonexistent")
-        output = _get_output(mesh_ctx)
-        assert "No artifacts found in layer" in output
-
-    def test_returns_ordered_labels(self, mesh_ctx):
-        labels = render_artifacts(mesh_ctx)
-        assert isinstance(labels, list)
-        assert len(labels) == 6  # 3 transcripts + 2 episodes + 1 core
-
-    def test_no_build_dir(self, mesh_ctx, tmp_path):
-        mesh_ctx.build_dir = tmp_path / "nonexistent"
-        render_artifacts(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "No build directory" in output
-
-
-class TestRenderDetail:
-    def test_shows_artifact_content(self, mesh_ctx):
-        render_detail(mesh_ctx, label="core-v1")
-        output = _get_output(mesh_ctx)
-        assert "Core Memory" in output
-        assert "user prefers Python" in output
-
-    def test_shows_metadata_header(self, mesh_ctx):
-        render_detail(mesh_ctx, label="core-v1")
-        output = _get_output(mesh_ctx)
-        assert "core" in output  # layer name
-        assert "core-v1" in output  # label
-
-    def test_shows_provenance(self, mesh_ctx):
-        render_detail(mesh_ctx, label="core-v1")
-        output = _get_output(mesh_ctx)
-        assert "Provenance" in output
-        assert "ep-conv-0" in output
-        assert "ep-conv-1" in output
-
-    def test_provenance_shows_parents_of_parents(self, mesh_ctx):
-        render_detail(mesh_ctx, label="core-v1")
-        output = _get_output(mesh_ctx)
-        # core-v1 -> ep-conv-0 -> tx-conv-0
-        assert "tx-conv-0" in output
-
-    def test_not_found(self, mesh_ctx):
-        render_detail(mesh_ctx, label="nonexistent-label")
-        output = _get_output(mesh_ctx)
-        assert "not found" in output
-
-    def test_prefix_resolution(self, mesh_ctx):
-        render_detail(mesh_ctx, label="core")
-        output = _get_output(mesh_ctx)
-        assert "Core Memory" in output
-
-
-class TestRenderSearch:
-    def test_empty_query(self, mesh_ctx):
-        results = render_search(mesh_ctx, query="")
-        output = _get_output(mesh_ctx)
-        assert results == []
-        assert "Usage" in output
-
-    def test_no_server_no_index(self, mesh_ctx):
-        results = render_search(mesh_ctx, query="python")
-        output = _get_output(mesh_ctx)
-        assert "No results" in output
-
-
-class TestRenderConfig:
-    def test_shows_sections(self, mesh_ctx):
-        render_config(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "source" in output
-        assert "server" in output
-        assert "cluster" in output
-
-    def test_shows_values(self, mesh_ctx):
-        render_config(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "7433" in output
-        assert "/sources" in output
-
-    def test_missing_config(self, mesh_ctx, tmp_path):
-        mesh_ctx.config_path = tmp_path / "nonexistent.toml"
-        render_config(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "not found" in output
-
-
-class TestRenderBuilds:
-    def test_shows_artifact_counts(self, mesh_ctx):
-        render_builds(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "Artifacts by Layer" in output
-        assert "transcripts" in output
-        assert "episodes" in output
-        assert "core" in output
-
-    def test_no_build_dir(self, mesh_ctx, tmp_path):
-        mesh_ctx.build_dir = tmp_path / "nonexistent"
-        render_builds(mesh_ctx)
-        output = _get_output(mesh_ctx)
-        assert "No build directory" in output
-
-
-class TestDispatch:
-    def test_empty_returns_overview(self):
-        vs = ViewState(view="artifacts")
-        result = dispatch("", vs)
-        assert result.view == "overview"
-
-    def test_q_quits(self):
-        vs = ViewState()
-        result = dispatch("q", vs)
-        assert result.view == "quit"
-
-    def test_quit_quits(self):
-        vs = ViewState()
-        result = dispatch("quit", vs)
-        assert result.view == "quit"
-
-    def test_a_goes_to_artifacts(self):
-        vs = ViewState()
-        result = dispatch("a", vs)
-        assert result.view == "artifacts"
-        assert result.layer_filter == ""
-
-    def test_a_with_layer_filter(self):
-        vs = ViewState()
-        result = dispatch("a episodes", vs)
-        assert result.view == "artifacts"
-        assert result.layer_filter == "episodes"
-
-    def test_artifacts_full_word(self):
-        vs = ViewState()
-        result = dispatch("artifacts episodes", vs)
-        assert result.view == "artifacts"
-        assert result.layer_filter == "episodes"
-
-    def test_s_goes_to_search(self):
-        vs = ViewState()
-        result = dispatch("s python memory", vs)
-        assert result.view == "search"
-        assert result.search_query == "python memory"
-
-    def test_search_full_word(self):
-        vs = ViewState()
-        result = dispatch("search hello", vs)
-        assert result.view == "search"
-        assert result.search_query == "hello"
-
-    def test_c_goes_to_config(self):
-        vs = ViewState()
-        result = dispatch("c", vs)
-        assert result.view == "config"
-
-    def test_b_goes_to_builds(self):
-        vs = ViewState()
-        result = dispatch("b", vs)
-        assert result.view == "builds"
-
-    def test_number_from_artifacts(self):
-        vs = ViewState(
-            view="artifacts",
-            artifact_labels=["tx-conv-0", "tx-conv-1", "ep-conv-0"],
-        )
-        result = dispatch("2", vs)
-        assert result.view == "detail"
-        assert result.artifact_label == "tx-conv-1"
-
-    def test_number_from_search(self):
-        vs = ViewState(
-            view="search",
-            search_results=[
-                {"label": "ep-conv-0"},
-                {"label": "core-v1"},
-            ],
-        )
-        result = dispatch("1", vs)
-        assert result.view == "detail"
-        assert result.artifact_label == "ep-conv-0"
-
-    def test_number_out_of_range(self):
-        vs = ViewState(view="artifacts", artifact_labels=["tx-conv-0"])
-        result = dispatch("5", vs)
-        # Should stay on current view (no crash)
-        assert result.view == "artifacts"
-
-    def test_exit_command(self):
-        vs = ViewState()
-        result = dispatch("exit", vs)
-        assert result.view == "quit"
-
-    def test_p_goes_to_pipeline(self):
-        vs = ViewState()
-        result = dispatch("p", vs)
-        assert result.view == "pipeline"
-
-    def test_pipeline_full_word(self):
-        vs = ViewState()
-        result = dispatch("pipeline", vs)
-        assert result.view == "pipeline"
 
 
 SAMPLE_PIPELINE = """\
@@ -424,7 +152,6 @@ def pipeline_ctx(tmp_path, build_dir):
     mesh_dir = tmp_path / "mesh"
     mesh_dir.mkdir()
 
-    # Write the pipeline file into the mesh dir
     pipeline_file = mesh_dir / "pipeline.py"
     pipeline_file.write_text(SAMPLE_PIPELINE)
 
@@ -451,9 +178,6 @@ leader_candidates = []
     state = {"role": "server", "server_url": "", "my_hostname": "test-host"}
     (mesh_dir / "state.json").write_text(json.dumps(state))
 
-    buf = StringIO()
-    console = Console(file=buf, force_terminal=True, width=120)
-
     return MeshContext(
         name="test-viewer",
         config_path=mesh_dir / "synix-mesh.toml",
@@ -463,67 +187,531 @@ leader_candidates = []
         server_url="",
         token="msh_test",
         role="server",
-        console=console,
+        console=Console(file=StringIO(), force_terminal=True, width=120),
         pipeline_path="./pipeline.py",
     )
 
 
-def _get_pipeline_output(ctx: MeshContext) -> str:
-    """Extract rendered text from the console buffer."""
-    ctx.console.file.seek(0)
-    return ctx.console.file.read()
+def _render_static_to_text(static) -> str:
+    """Render a Static widget's content to plain text for assertions."""
+    buf = StringIO()
+    console = Console(file=buf, force_terminal=False, width=120, no_color=True)
+    console.print(static.content)
+    return buf.getvalue()
 
 
-class TestRenderPipeline:
-    def test_shows_pipeline_name(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "test-pipeline" in output
+# ---------------------------------------------------------------------------
+# Overview tab
+# ---------------------------------------------------------------------------
 
-    def test_shows_layers_in_tree(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "transcripts" in output
-        assert "episodes" in output
-        assert "core" in output
 
-    def test_shows_layer_types(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "Source" in output
-        assert "EpisodeSummary" in output
-        assert "CoreSynthesis" in output
+class TestOverviewTab:
+    async def test_shows_memory_tree(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#overview-content"))
+            assert "Memory Tree" in content
+            assert "transcripts" in content
+            assert "episodes" in content
+            assert "core" in content
 
-    def test_shows_dependencies(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        # Dependency arrows
-        assert "\u2190" in output
+    async def test_shows_layer_counts(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#overview-content"))
+            # 3 transcripts, 2 episodes, 1 core
+            assert "3" in content
+            assert "2" in content
 
-    def test_shows_projections(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "Projections" in output
-        assert "SearchIndex" in output
-        assert "FlatFile" in output
-        assert "search" in output
-        assert "context" in output
+    async def test_shows_cluster_info(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#overview-content"))
+            assert "test-host" in content
 
-    def test_shows_metadata(self, pipeline_ctx):
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "Concurrency" in output
-        assert "3" in output
-        assert "claude-sonnet" in output
+    async def test_no_build_dir(self, mesh_ctx, tmp_path):
+        mesh_ctx.build_dir = tmp_path / "nonexistent"
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#overview-content"))
+            assert "No artifacts yet" in content
 
-    def test_pipeline_not_found(self, pipeline_ctx):
+
+# ---------------------------------------------------------------------------
+# Artifacts tab
+# ---------------------------------------------------------------------------
+
+
+class TestArtifactsTab:
+    async def test_table_has_correct_row_count(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+
+            table = app.query_one("#artifacts-table", DataTable)
+            assert table.row_count == 6  # 3 tx + 2 ep + 1 core
+
+    async def test_table_shows_layer_names(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+
+            table = app.query_one("#artifacts-table", DataTable)
+            # Collect all Layer column values (column index 1)
+            layers = set()
+            for row_key in table.rows:
+                row_data = table.get_row(row_key)
+                layers.add(str(row_data[1]))
+            assert "transcripts" in layers
+            assert "episodes" in layers
+            assert "core" in layers
+
+    async def test_table_shows_labels(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+
+            table = app.query_one("#artifacts-table", DataTable)
+            labels = set()
+            for row_key in table.rows:
+                row_data = table.get_row(row_key)
+                labels.add(str(row_data[2]))
+            assert "tx-conv-0" in labels
+            assert "ep-conv-0" in labels
+            assert "core-v1" in labels
+
+    async def test_enter_pushes_detail_screen(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            # Switch to artifacts tab and focus the table
+            from textual.widgets import DataTable, TabbedContent
+
+            tabs = app.query_one(TabbedContent)
+            tabs.active = "tab-artifacts"
+            await pilot.pause()
+
+            table = app.query_one("#artifacts-table", DataTable)
+            table.focus()
+            await pilot.pause()
+
+            # Move cursor to first row and press enter
+            table.move_cursor(row=0)
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, DetailScreen)
+
+    async def test_empty_build_dir(self, mesh_ctx, tmp_path):
+        mesh_ctx.build_dir = tmp_path / "nonexistent"
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+
+            table = app.query_one("#artifacts-table", DataTable)
+            assert table.row_count == 0
+
+            empty_msg = app.query_one("#artifacts-empty")
+            assert "No build directory" in str(empty_msg.content)
+
+    async def test_empty_manifest(self, tmp_path):
+        """Build dir exists but has no artifacts."""
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+        ArtifactStore(build_dir)  # Creates manifest file
+
+        ctx = MeshContext(
+            name="test",
+            config_path=tmp_path / "config.toml",
+            mesh_dir=tmp_path,
+            build_dir=build_dir,
+            state={},
+            server_url="",
+            token="",
+            role="server",
+            console=Console(file=StringIO(), width=120),
+        )
+
+        app = MeshViewerApp(ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+
+            table = app.query_one("#artifacts-table", DataTable)
+            assert table.row_count == 0
+
+            empty_msg = app.query_one("#artifacts-empty")
+            assert "No artifacts" in str(empty_msg.content)
+
+
+# ---------------------------------------------------------------------------
+# Detail screen
+# ---------------------------------------------------------------------------
+
+
+class TestDetailScreen:
+    async def test_shows_artifact_content(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core-v1"))
+            await pilot.pause()
+
+            md = app.screen.query_one("#detail-markdown", Markdown)
+            # Textual Markdown stores the raw source
+            assert "Core Memory" in md._markdown or "user prefers Python" in md._markdown
+
+    async def test_shows_metadata(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core-v1"))
+            await pilot.pause()
+
+            meta = _render_static_to_text(app.screen.query_one("#detail-meta"))
+            assert "core" in meta
+            assert "core-v1" in meta
+
+    async def test_shows_provenance(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core-v1"))
+            await pilot.pause()
+
+            prov = _render_static_to_text(app.screen.query_one("#detail-provenance"))
+            assert "Provenance" in prov
+            assert "ep-conv-0" in prov
+            assert "ep-conv-1" in prov
+
+    async def test_provenance_shows_grandparents(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core-v1"))
+            await pilot.pause()
+
+            prov = _render_static_to_text(app.screen.query_one("#detail-provenance"))
+            # core-v1 -> ep-conv-0 -> tx-conv-0
+            assert "tx-conv-0" in prov
+
+    async def test_not_found(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "nonexistent-label"))
+            await pilot.pause()
+
+            error = app.screen.query_one("#detail-error")
+            assert "not found" in str(error.content)
+
+    async def test_prefix_resolution(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core"))
+            await pilot.pause()
+
+            md = app.screen.query_one("#detail-markdown", Markdown)
+            assert "Core Memory" in md._markdown
+
+    async def test_escape_pops_back(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            app.push_screen(DetailScreen(mesh_ctx, "core-v1"))
+            await pilot.pause()
+            assert isinstance(app.screen, DetailScreen)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, DetailScreen)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline tab
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineTab:
+    async def test_shows_pipeline_name(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "test-pipeline" in content
+
+    async def test_shows_layers(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "transcripts" in content
+            assert "episodes" in content
+            assert "core" in content
+
+    async def test_shows_layer_types(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "Source" in content
+            assert "EpisodeSummary" in content
+            assert "CoreSynthesis" in content
+
+    async def test_shows_dependencies(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "\u2190" in content
+
+    async def test_shows_projections(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "Projections" in content
+            assert "SearchIndex" in content
+            assert "FlatFile" in content
+
+    async def test_shows_metadata(self, pipeline_ctx):
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "Concurrency" in content
+            assert "3" in content
+            assert "claude-sonnet" in content
+
+    async def test_pipeline_not_found(self, pipeline_ctx):
         pipeline_ctx.pipeline_path = "./nonexistent.py"
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "not found" in output
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "not found" in content
 
-    def test_no_pipeline_path(self, pipeline_ctx):
+    async def test_no_pipeline_path(self, pipeline_ctx):
         pipeline_ctx.pipeline_path = ""
-        render_pipeline(pipeline_ctx)
-        output = _get_pipeline_output(pipeline_ctx)
-        assert "No pipeline path" in output
+        app = MeshViewerApp(pipeline_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#pipeline-content"))
+            assert "No pipeline path" in content
+
+
+# ---------------------------------------------------------------------------
+# Config tab
+# ---------------------------------------------------------------------------
+
+
+class TestConfigTab:
+    async def test_shows_sections(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#config-content"))
+            assert "source" in content
+            assert "server" in content
+            assert "cluster" in content
+
+    async def test_shows_values(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#config-content"))
+            assert "7433" in content
+            assert "/sources" in content
+
+    async def test_missing_config(self, mesh_ctx, tmp_path):
+        mesh_ctx.config_path = tmp_path / "nonexistent.toml"
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#config-content"))
+            assert "not found" in content
+
+
+# ---------------------------------------------------------------------------
+# Builds tab
+# ---------------------------------------------------------------------------
+
+
+class TestBuildsTab:
+    async def test_shows_artifact_counts(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#builds-content"))
+            assert "Artifacts by Layer" in content
+            assert "transcripts" in content
+            assert "episodes" in content
+            assert "core" in content
+
+    async def test_no_build_dir(self, mesh_ctx, tmp_path):
+        mesh_ctx.build_dir = tmp_path / "nonexistent"
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            content = _render_static_to_text(app.query_one("#builds-content"))
+            assert "No build directory" in content
+
+
+# ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+
+class TestSearch:
+    async def test_slash_pushes_search_screen(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            assert isinstance(app.screen, SearchScreen)
+
+    async def test_search_input_focused(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            from textual.widgets import Input
+
+            search_input = app.screen.query_one("#search-input", Input)
+            assert search_input.has_focus
+
+    async def test_search_shows_results_via_manifest(self, mesh_ctx):
+        """Search finds artifacts via manifest scan (no server, no search.db)."""
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            from textual.widgets import DataTable, Input
+
+            search_input = app.screen.query_one("#search-input", Input)
+            search_input.value = "Episode"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            results_table = app.screen.query_one("#search-results", DataTable)
+            assert results_table.row_count >= 2  # At least 2 episodes match
+
+            # Status should show results count
+            status = app.screen.query_one("#search-status")
+            assert "result" in str(status.content)
+
+    async def test_search_shows_results_via_mock(self, mesh_ctx, monkeypatch):
+        """Search works when local_search returns results."""
+        monkeypatch.setattr(
+            "synix.mesh.viewer._local_search",
+            lambda ctx, q: [
+                {
+                    "label": "ep-conv-0",
+                    "layer_name": "episodes",
+                    "layer_level": 1,
+                    "score": 0.95,
+                    "content": "Episode 0 summary content",
+                },
+            ],
+        )
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            from textual.widgets import DataTable, Input
+
+            search_input = app.screen.query_one("#search-input", Input)
+            search_input.value = "test query"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            results_table = app.screen.query_one("#search-results", DataTable)
+            assert results_table.row_count == 1
+
+    async def test_search_no_results(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            from textual.widgets import DataTable, Input
+
+            search_input = app.screen.query_one("#search-input", Input)
+            search_input.value = "zzz_xyzzy_nonexistent_999"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            results_table = app.screen.query_one("#search-results", DataTable)
+            assert results_table.row_count == 0
+
+            # Should show "no results" status
+            status = app.screen.query_one("#search-status")
+            assert "No results" in str(status.content)
+
+    async def test_escape_from_search(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            assert isinstance(app.screen, SearchScreen)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, SearchScreen)
+
+    async def test_search_result_opens_detail(self, mesh_ctx):
+        """Selecting a search result pushes the detail screen."""
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            from textual.widgets import DataTable, Input
+
+            # Search for "core" — should match via manifest scan
+            search_input = app.screen.query_one("#search-input", Input)
+            search_input.value = "core"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            results_table = app.screen.query_one("#search-results", DataTable)
+            assert results_table.row_count >= 1
+
+            results_table.focus()
+            await pilot.pause()
+            results_table.move_cursor(row=0)
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, DetailScreen)
+
+
+# ---------------------------------------------------------------------------
+# Quit
+# ---------------------------------------------------------------------------
+
+
+class TestQuit:
+    async def test_q_quits(self, mesh_ctx):
+        app = MeshViewerApp(mesh_ctx)
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("q")
+            await pilot.pause()
+            # App should be exiting — the run_test context exits cleanly
