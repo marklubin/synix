@@ -145,15 +145,14 @@ class BuildTransaction:
     ) -> str:
         artifact.metadata.setdefault("layer_name", layer_name)
         artifact.metadata.setdefault("layer_level", layer_level)
-        if artifact.content:
-            content_hash = f"sha256:{hashlib.sha256(artifact.content.encode('utf-8')).hexdigest()}"
-            if artifact.artifact_id and artifact.artifact_id != content_hash:
-                msg = (
-                    f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
-                    f"that does not match its content hash {content_hash!r}"
-                )
-                raise ValueError(msg)
-            artifact.artifact_id = content_hash
+        content_hash = f"sha256:{hashlib.sha256(artifact.content.encode('utf-8')).hexdigest()}"
+        if artifact.artifact_id and artifact.artifact_id != content_hash:
+            msg = (
+                f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
+                f"that does not match its content hash {content_hash!r}"
+            )
+            raise ValueError(msg)
+        artifact.artifact_id = content_hash
         content_oid = _store_content_text(self.object_store, artifact.content)
         artifact_payload = _object(
             "artifact",

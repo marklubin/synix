@@ -123,6 +123,34 @@ class TestSnapshots:
                 parent_labels=[],
             )
 
+    def test_empty_content_artifacts_are_hashed_and_snapshotted(self, tmp_path):
+        """Empty-string content is still valid content and must hash consistently."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "empty-content",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000003Z")
+        artifact = Artifact(label="empty", artifact_type="note", content="")
+        txn.record_artifact(
+            artifact,
+            layer_name="transcripts",
+            layer_level=0,
+            parent_labels=[],
+        )
+
+        snapshot_info = commit_build_snapshot(txn)
+        manifest = ObjectStore(tmp_path / ".synix").get_json(snapshot_info["manifest_oid"])
+        stored_artifact = ObjectStore(tmp_path / ".synix").get_json(manifest["artifacts"]["empty"])
+
+        assert artifact.artifact_id == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        assert stored_artifact["artifact_id"] == artifact.artifact_id
+        assert ObjectStore(tmp_path / ".synix").get_bytes(stored_artifact["content_oid"]) == b""
+
     def test_runs_list_recovers_pending_ref_updates(self, tmp_path):
         """Interrupted ref updates should be replayed before run history is listed."""
         build_dir = tmp_path / "build"

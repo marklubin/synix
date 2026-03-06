@@ -67,7 +67,7 @@ class ArtifactStore:
     def save_artifact(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Save an artifact to the build directory."""
         # Ensure artifact ID (content hash) is computed
-        if not artifact.artifact_id and artifact.content:
+        if not artifact.artifact_id:
             artifact.artifact_id = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
 
         # Create layer directory

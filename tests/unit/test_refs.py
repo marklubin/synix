@@ -58,3 +58,13 @@ class TestRefStore:
         build_dir.mkdir()
 
         assert synix_dir_for_build_dir(build_dir) == tmp_path / ".synix"
+
+    def test_synix_dir_rejects_ambiguous_legacy_and_nested_store(self, tmp_path):
+        """Ambiguous store discovery should fail loudly instead of silently forking history."""
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+        (tmp_path / ".synix").mkdir()
+        (build_dir / ".synix").mkdir()
+
+        with pytest.raises(ValueError, match="ambiguous snapshot store resolution"):
+            synix_dir_for_build_dir(build_dir)

@@ -285,11 +285,11 @@ def run(
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
-                            _execute_transform_concurrent(
-                                layer,
-                                units,
-                                transform_config,
-                                concurrency,
+                    _execute_transform_concurrent(
+                        layer,
+                        units,
+                        transform_config,
+                        concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,

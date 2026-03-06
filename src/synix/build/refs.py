@@ -32,6 +32,12 @@ def synix_dir_for_build_dir(build_dir: str | Path, *, configured_synix_dir: str 
     build_path = Path(build_dir).resolve()
     legacy = build_path.parent / ".synix"
     nested = build_path / ".synix"
+    if legacy.exists() and nested.exists():
+        msg = (
+            f"ambiguous snapshot store resolution for {build_path}: "
+            f"both {legacy} and {nested} exist; pass an explicit synix_dir"
+        )
+        raise ValueError(msg)
     if legacy.exists():
         return legacy
     if nested.exists():
