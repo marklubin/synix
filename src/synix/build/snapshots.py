@@ -86,26 +86,9 @@ def _pipeline_fingerprint(pipeline: Pipeline) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-def _store_blob_bytes(object_store: ObjectStore, data: bytes) -> str:
-    content_oid = object_store.put_bytes(data)
-    return object_store.put_json(
-        _object(
-            "blob",
-            content_oid=content_oid,
-            size_bytes=len(data),
-        )
-    )
-
-
-def _store_blob_text(object_store: ObjectStore, text: str) -> str:
-    content_oid, size_bytes = object_store.put_text(text)
-    return object_store.put_json(
-        _object(
-            "blob",
-            content_oid=content_oid,
-            size_bytes=size_bytes,
-        )
-    )
+def _store_content_text(object_store: ObjectStore, text: str) -> str:
+    content_oid, _size_bytes = object_store.put_text(text)
+    return content_oid
 
 
 @dataclass
@@ -171,7 +154,7 @@ class BuildTransaction:
                 )
                 raise ValueError(msg)
             artifact.artifact_id = content_hash
-        content_oid = _store_blob_text(self.object_store, artifact.content)
+        content_oid = _store_content_text(self.object_store, artifact.content)
         artifact_payload = _object(
             "artifact",
             label=artifact.label,

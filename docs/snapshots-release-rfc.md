@@ -170,14 +170,11 @@ release_receipt
 
 ### Blob Object
 
-Raw bytes addressed by content hash, wrapped in a lightweight metadata object.
+Current v0.x implementation stores raw content bytes directly at their content-addressed oid. A separate blob metadata object may still be useful later for richer content descriptors, but artifact `content_oid` values should refer directly to raw bytes.
 
 ```json
 {
-  "type": "blob",
-  "schema_version": 1,
-  "content_oid": "oid_bytes_1",
-  "size_bytes": 1234
+  "oid": "sha256(raw-bytes)"
 }
 ```
 
@@ -190,7 +187,7 @@ Raw bytes addressed by content hash, wrapped in a lightweight metadata object.
   "label": "ep-conv-001",
   "artifact_type": "episode",
   "artifact_id": "sha256:...",
-  "content_oid": "oid_blob_1",
+  "content_oid": "oid_bytes_1",
   "input_ids": ["sha256:..."],
   "prompt_id": "episode_summary_v1",
   "model_config": {
