@@ -130,14 +130,21 @@ def _canonical_json_bytes(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
 
-def _validate_object_payload(payload: dict[str, Any]) -> None:
+def _validate_object_payload(payload: dict[str, Any], *, allow_older_schema: bool = False) -> None:
     object_type = payload.get("type")
     if not isinstance(object_type, str) or not object_type:
         msg = "object payload must include a non-empty string 'type'"
         raise ValueError(msg)
 
     schema_version = payload.get("schema_version")
-    if schema_version != SCHEMA_VERSION:
+    if not isinstance(schema_version, int):
+        msg = "object payload must include integer schema_version"
+        raise ValueError(msg)
+    if allow_older_schema:
+        if schema_version > SCHEMA_VERSION:
+            msg = f"object payload schema_version={schema_version} is newer than supported={SCHEMA_VERSION}"
+            raise ValueError(msg)
+    elif schema_version != SCHEMA_VERSION:
         msg = f"object payload must include schema_version={SCHEMA_VERSION}"
         raise ValueError(msg)
 
@@ -283,7 +290,7 @@ class ObjectStore:
 
     def put_json(self, payload: dict[str, Any]) -> str:
         """Store canonical JSON and return the content-addressed oid."""
-        _validate_object_payload(payload)
+        _validate_object_payload(payload, allow_older_schema=False)
         encoded = _canonical_json_bytes(payload)
         oid = hashlib.sha256(encoded).hexdigest()
         path = self._path_for_oid(oid)
@@ -299,5 +306,5 @@ class ObjectStore:
         if not isinstance(payload, dict):
             msg = f"object {oid} is not a JSON object"
             raise ValueError(msg)
-        _validate_object_payload(payload)
+        _validate_object_payload(payload, allow_older_schema=True)
         return payload

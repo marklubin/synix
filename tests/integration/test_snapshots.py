@@ -241,6 +241,36 @@ class TestSnapshots:
 
         assert _pipeline_fingerprint(pipeline_a) == _pipeline_fingerprint(pipeline_b)
 
+    def test_pipeline_fingerprint_keeps_non_secret_llm_fields(self, tmp_path):
+        """Normal llm config like max_tokens must remain part of the fingerprint."""
+        pipeline_a = Pipeline(
+            "fingerprint-llm",
+            source_dir=str(tmp_path / "sources-a"),
+            build_dir=str(tmp_path / "build-a"),
+            synix_dir=str(tmp_path / ".synix-a"),
+            llm_config={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1024,
+            },
+        )
+        pipeline_b = Pipeline(
+            "fingerprint-llm",
+            source_dir=str(tmp_path / "sources-b"),
+            build_dir=str(tmp_path / "build-b"),
+            synix_dir=str(tmp_path / ".synix-b"),
+            llm_config={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 2048,
+            },
+        )
+
+        transcripts_a = Source("transcripts")
+        transcripts_b = Source("transcripts")
+        pipeline_a.add(transcripts_a)
+        pipeline_b.add(transcripts_b)
+
+        assert _pipeline_fingerprint(pipeline_a) != _pipeline_fingerprint(pipeline_b)
+
     def test_build_commits_manifest_and_snapshot(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """A successful build records immutable objects and moves HEAD."""
         build_dir = tmp_path / "build"

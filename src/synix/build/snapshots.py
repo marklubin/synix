@@ -27,9 +27,20 @@ def _object(object_type: str, **fields: Any) -> dict[str, Any]:
 
 def _sanitize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
     redacted: dict[str, Any] = {}
+    secret_keys = {
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth_token",
+        "refresh_token",
+        "secret",
+        "secret_key",
+        "password",
+        "token",
+    }
     for key, value in config.items():
         lower = key.lower()
-        if any(token in lower for token in ("key", "token", "secret", "password")):
+        if lower in secret_keys or lower.endswith(("_api_key", "_secret", "_password", "_token")):
             continue
         redacted[key] = _normalize_fingerprint_value(value)
     return redacted
@@ -152,13 +163,14 @@ class BuildTransaction:
                 f"that does not match its content hash {content_hash!r}"
             )
             raise ValueError(msg)
-        artifact.artifact_id = content_hash
+        if not artifact.artifact_id:
+            artifact.artifact_id = content_hash
         content_oid = _store_content_text(self.object_store, artifact.content)
         artifact_payload = _object(
             "artifact",
             label=artifact.label,
             artifact_type=artifact.artifact_type,
-            artifact_id=artifact.artifact_id,
+            artifact_id=content_hash,
             content_oid=content_oid,
             input_ids=list(artifact.input_ids),
             prompt_id=artifact.prompt_id,
