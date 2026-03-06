@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
 from synix.build.runner import run
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 from synix.search.index import SearchIndex as SearchIdx
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -60,6 +60,28 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
 
     p.add(transcripts, episodes, topics, core)
     p.add(SearchIndex("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
+    return p
+
+
+def _surface_topical_pipeline(build_dir: Path) -> Pipeline:
+    """Pipeline with a named search surface consumed by topical rollups."""
+    p = Pipeline("surface-topical-pipeline")
+    p.build_dir = str(build_dir)
+    p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+    topics = TopicalRollup(
+        "topics",
+        depends_on=[episodes],
+        uses=[episode_search],
+        config={"topics": ["programming", "machine-learning"]},
+    )
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+    p.add(transcripts, episodes, episode_search, topics, core)
     p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
@@ -128,3 +150,19 @@ class TestConfigChange:
         # is the same mock text. What matters is both exist and the file is rewritten.
         assert len(content1) > 0
         assert len(content2) > 0
+
+    def test_topical_rollup_uses_named_search_surface(self, source_dir, build_dir, mock_llm):
+        """Named search surfaces materialize locally without the legacy root search DB."""
+        pipeline = _surface_topical_pipeline(build_dir)
+        run(pipeline, source_dir=str(source_dir))
+
+        surface_db = build_dir / "surfaces" / "episode-search.db"
+        assert surface_db.exists()
+        assert not (build_dir / "search.db").exists()
+
+        index = SearchIdx(surface_db)
+        results = index.query("programming", layers=["episodes"])
+        index.close()
+
+        assert len(results) > 0
+        assert all(result.layer_name == "episodes" for result in results)

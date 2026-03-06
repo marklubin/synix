@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 from synix.ext._render import render_template
 from synix.ext._util import stable_callable_repr
 
@@ -39,6 +39,7 @@ class MapSynthesis(Transform):
         name: str,
         *,
         depends_on: list | None = None,
+        uses: list | None = None,
         prompt: str,
         label_fn: Callable | None = None,
         metadata_fn: Callable | None = None,
@@ -46,7 +47,7 @@ class MapSynthesis(Transform):
         config: dict | None = None,
         batch: bool | None = None,
     ):
-        super().__init__(name, depends_on=depends_on, config=config, batch=batch)
+        super().__init__(name, depends_on=depends_on, uses=uses, config=config, batch=batch)
         self.prompt = prompt
         self.label_fn = label_fn
         self.metadata_fn = metadata_fn
@@ -78,9 +79,10 @@ class MapSynthesis(Transform):
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
-        model_config = config.get("llm_config", {})
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
+        model_config = ctx.llm_config
         prompt_id = self._make_prompt_id()
 
         inp = inputs[0]
@@ -93,7 +95,7 @@ class MapSynthesis(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": rendered}],
             artifact_desc=f"{self.name} {inp.label}",
         )

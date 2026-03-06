@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from synix import Artifact
+import pytest
+
+from synix import (
+    Artifact,
+    Pipeline,
+    SearchSurface,
+    SearchSurfaceUnavailableError,
+    Source,
+    Transform,
+    TransformContext,
+)
+from synix import (
+    SearchSurfaceHandle as PublicSearchSurfaceHandle,
+)
+from synix.build.artifacts import ArtifactStore
 from synix.build.llm_transforms import (
     CoreSynthesis,
     EpisodeSummary,
@@ -10,6 +24,9 @@ from synix.build.llm_transforms import (
     TopicalRollup,
 )
 from synix.build.parse_transform import ParseTransform
+from synix.build.plan import plan_build
+from synix.build.runner import run
+from synix.search.indexer import SearchIndex
 
 
 class TestBaseTransform:
@@ -147,6 +164,104 @@ class TestParseTransformSourcePath:
             assert art.metadata["source_path"] == "export.json"
 
 
+class TestLegacyCustomTransformCompatibility:
+    """Legacy custom transforms keep working with the typed runtime context."""
+
+    def test_transform_context_config_filters_runtime_keys(self):
+        """User config excludes injected runtime-only and underscore-prefixed keys."""
+        ctx = TransformContext(
+            {
+                "topics": ["career"],
+                "llm_config": {"model": "test"},
+                "_logger": object(),
+                "_future_runtime_key": "hidden",
+                "search_db_path": "/tmp/search.db",
+            }
+        )
+
+        assert ctx.config == {"topics": ["career"]}
+
+    def test_runner_supports_legacy_config_copy_and_mutation(self, tmp_path):
+        """Runner passes a mapping-compatible context to old config-style transforms."""
+
+        class LegacyConfigTransform(Transform):
+            def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                assert type(config) is dict
+                copied = config.copy()
+                copied["copied"] = True
+                config["_legacy_seen"] = True
+                assert copied["prefix"] == "legacy"
+                assert config.get("_legacy_seen") is True
+                return [
+                    Artifact(
+                        label=f"{config['prefix']}-{inp.label}",
+                        artifact_type="legacy_summary",
+                        content=f"{inp.content}\nlegacy={copied['copied']}",
+                        input_ids=[inp.artifact_id],
+                    )
+                    for inp in inputs
+                ]
+
+        source_dir = tmp_path / "sources"
+        build_dir = tmp_path / "build"
+        source_dir.mkdir()
+        (source_dir / "alpha.md").write_text("Alpha content\n")
+
+        pipeline = Pipeline("legacy-config-runner")
+        pipeline.source_dir = str(source_dir)
+        pipeline.build_dir = str(build_dir)
+        transcripts = Source("transcripts")
+        legacy = LegacyConfigTransform("legacy", depends_on=[transcripts], config={"prefix": "legacy"})
+        pipeline.add(transcripts, legacy)
+
+        result = run(pipeline)
+
+        assert result.built == 2
+        artifacts = ArtifactStore(build_dir).list_artifacts("legacy")
+        assert len(artifacts) == 1
+        assert "legacy=True" in artifacts[0].content
+
+    def test_plan_supports_legacy_config_style_split(self, tmp_path):
+        """Planner still supports custom split() implementations written against config dicts."""
+
+        class LegacySplitTransform(Transform):
+            def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+                assert type(config) is dict
+                preview = config.copy()
+                fanout = preview.get("fanout", 1)
+                return [([inp], {"_slot": str(i)}) for i, inp in enumerate(inputs[:fanout])]
+
+            def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                assert type(config) is dict
+                return [
+                    Artifact(
+                        label=f"slot-{config.get('_slot', '0')}-{inputs[0].label}",
+                        artifact_type="legacy_slot",
+                        content=inputs[0].content,
+                        input_ids=[inputs[0].artifact_id],
+                    )
+                ]
+
+        source_dir = tmp_path / "sources"
+        build_dir = tmp_path / "build"
+        source_dir.mkdir()
+        (source_dir / "alpha.md").write_text("Alpha content\n")
+        (source_dir / "beta.md").write_text("Beta content\n")
+
+        pipeline = Pipeline("legacy-config-plan")
+        pipeline.source_dir = str(source_dir)
+        pipeline.build_dir = str(build_dir)
+        transcripts = Source("transcripts")
+        legacy = LegacySplitTransform("legacy", depends_on=[transcripts], config={"fanout": 2})
+        pipeline.add(transcripts, legacy)
+
+        plan = plan_build(pipeline)
+        legacy_step = next(step for step in plan.steps if step.name == "legacy")
+
+        assert legacy_step.parallel_units == 2
+        assert legacy_step.status == "new"
+
+
 class TestEpisodeSummaryTransform:
     """Tests for episode summary LLM transform."""
 
@@ -244,6 +359,47 @@ class TestMonthlyRollupTransform:
 class TestTopicalRollupTransform:
     """Tests for topical rollup LLM transform."""
 
+    def test_transform_context_exposes_public_search_handle(self, tmp_path):
+        """Transforms resolve declared search surfaces through a typed public handle."""
+        db_path = tmp_path / "episode-search.db"
+        index = SearchIndex(db_path)
+        index.create()
+        index.insert(
+            Artifact(
+                label="ep-1",
+                artifact_type="episode",
+                content="Discussion about career planning and AI projects.",
+                metadata={"date": "2024-03-15", "title": "Career chat"},
+            ),
+            "episodes",
+            1,
+        )
+        index.close()
+
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
+        ctx = TransformContext(
+            {
+                "topics": ["career"],
+                "search_surfaces": {
+                    "episode-search": {
+                        "name": "episode-search",
+                        "kind": "search_surface",
+                        "db_path": str(db_path),
+                        "modes": ["fulltext"],
+                        "sources": ["episodes"],
+                    }
+                },
+            }
+        )
+
+        handle = transform.get_search_surface(ctx, required=True)
+
+        assert isinstance(handle, PublicSearchSurfaceHandle)
+        assert handle is not None
+        results = handle.query("career", layers=["episodes"])
+        assert [result.label for result in results] == ["ep-1"]
+
     def test_topical_rollup_produces_per_topic(self, mock_llm):
         """3 topics configured → 3 topic artifacts."""
         episodes = [
@@ -276,8 +432,8 @@ class TestTopicalRollupTransform:
         topic_labels = {r.label for r in results}
         assert topic_labels == {"topic-career", "topic-health", "topic-ai-projects"}
 
-    def test_topical_rollup_uses_all_episodes_without_search(self, mock_llm):
-        """Without search_db_path, all episodes used for each topic."""
+    def test_topical_rollup_uses_all_episodes_without_declared_surface(self, mock_llm):
+        """Without a declared search surface, all episodes are used for each topic."""
         episodes = [
             Artifact(
                 label=f"ep-{i}",
@@ -300,6 +456,37 @@ class TestTopicalRollupTransform:
         assert len(results) == 1
         # All 3 episodes should be in input_ids
         assert len(results[0].input_ids) == 3
+
+    def test_topical_rollup_requires_declared_surface_when_unavailable(self, mock_llm, tmp_path):
+        """A declared-but-missing search surface is a hard error, not a silent fallback."""
+        episodes = [
+            Artifact(
+                label="ep-1",
+                artifact_type="episode",
+                content="Discussion about career and AI projects.",
+                metadata={"date": "2024-03-15", "title": "Career chat"},
+            )
+        ]
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface], config={"topics": ["career"]})
+
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(
+                episodes,
+                {
+                    "llm_config": {},
+                    "topics": ["career"],
+                    "search_surfaces": {
+                        "episode-search": {
+                            "name": "episode-search",
+                            "kind": "search_surface",
+                            "db_path": str(tmp_path / "missing.db"),
+                            "modes": ["fulltext"],
+                            "sources": ["episodes"],
+                        }
+                    },
+                },
+            )
 
 
 class TestCoreSynthesisTransform:

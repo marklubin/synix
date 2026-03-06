@@ -25,8 +25,11 @@ from synix.build.provenance import ProvenanceTracker
 from synix.build.runner import (
     _build_source_config,
     _build_transform_config,
+    _build_transform_context,
     _gather_inputs,
     _get_parent_labels,
+    _invoke_transform_execute,
+    _invoke_transform_split,
     _layer_fully_cached,
 )
 from synix.core.config import LLMConfig
@@ -389,6 +392,7 @@ def _run_sync_transform(
 ) -> None:
     """Run a transform layer synchronously (same as regular build)."""
     transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
+    transform_ctx = _build_transform_context(pipeline, layer, src_dir, build_dir, transform_config)
     transform_fp = layer.compute_fingerprint(transform_config)
 
     layer_built = []
@@ -400,11 +404,11 @@ def _run_sync_transform(
             art.metadata["layer_level"] = layer._level
             layer_built.append(art)
     else:
-        transform_config["_layer_name"] = layer.name
-        units = layer.split(inputs, transform_config)
+        transform_ctx = transform_ctx.with_updates({"_layer_name": layer.name})
+        units = _invoke_transform_split(layer, inputs, transform_ctx)
         for unit_inputs, config_extras in units:
-            merged_config = {**transform_config, **config_extras}
-            new_artifacts = layer.execute(unit_inputs, merged_config)
+            unit_ctx = transform_ctx.with_updates(config_extras)
+            new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             for artifact in new_artifacts:
                 layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
 
@@ -430,6 +434,7 @@ def _run_batch_transform(
         "in_progress" if a batch is already in progress.
     """
     transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
+    transform_ctx = _build_transform_context(pipeline, layer, src_dir, build_dir, transform_config)
     transform_fp = layer.compute_fingerprint(transform_config)
 
     if _layer_fully_cached(layer, inputs, store, transform_fp):
@@ -451,10 +456,9 @@ def _run_batch_transform(
 
     batch_client = BatchLLMClient(llm_config, batch_state, layer.name, cassette_responses)
 
-    transform_config["_layer_name"] = layer.name
-    transform_config["_shared_llm_client"] = batch_client
+    transform_ctx = transform_ctx.with_updates({"_layer_name": layer.name, "_shared_llm_client": batch_client})
 
-    units = layer.split(inputs, transform_config)
+    units = _invoke_transform_split(layer, inputs, transform_ctx)
 
     layer_built = []
     collecting = False
@@ -462,9 +466,9 @@ def _run_batch_transform(
 
     failed_units: list[str] = []
     for unit_inputs, config_extras in units:
-        merged_config = {**transform_config, **config_extras}
+        unit_ctx = transform_ctx.with_updates(config_extras)
         try:
-            new_artifacts = layer.execute(unit_inputs, merged_config)
+            new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             # Result was available — save artifacts
             for artifact in new_artifacts:
                 layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))

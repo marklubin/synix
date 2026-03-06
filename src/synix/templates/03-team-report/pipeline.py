@@ -1,4 +1,4 @@
-# pipeline.py — Team Report Pipeline (using synix.ext transforms)
+# pipeline.py — Team Report Pipeline (using synix.transforms primitives)
 #
 # DAG:
 #   Level 0: bios [parse]              -> one artifact per person
@@ -13,7 +13,7 @@
 #   uvx synix search 'hiking'
 
 from synix import Pipeline, SearchIndex, Source
-from synix.ext import FoldSynthesis, MapSynthesis, ReduceSynthesis
+from synix.transforms import FoldSynthesis, MapSynthesis, ReduceSynthesis
 from synix.validators import RequiredField
 
 # -- Pipeline definition -----------------------------------------------------

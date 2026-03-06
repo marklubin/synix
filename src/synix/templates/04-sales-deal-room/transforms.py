@@ -7,7 +7,7 @@
 
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.citations import make_uri
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 
 
 def _source_label_block(inputs: list[Artifact]) -> str:
@@ -33,7 +33,8 @@ _CITATION_INSTRUCTION = (
 class DealCompetitiveIntelTransform(Transform):
     """Analyze each competitor against our product specs, with citations."""
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
+        ctx = self.get_context(ctx)
         competitors = sorted(
             [a for a in inputs if a.metadata.get("layer_name") == "competitor_docs"],
             key=lambda a: a.label,
@@ -44,10 +45,11 @@ class DealCompetitiveIntelTransform(Transform):
         )
         return [([comp] + product_specs, {}) for comp in competitors]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
         prompt_id = "deal_competitive_intel"
-        model_config = config.get("llm_config", {})
+        model_config = ctx.llm_config
 
         # Sort for determinism
         inputs = sorted(inputs, key=lambda a: a.artifact_id)
@@ -82,7 +84,7 @@ class DealCompetitiveIntelTransform(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc=f"competitive intel {competitor.label}",
         )
@@ -104,13 +106,15 @@ class DealCompetitiveIntelTransform(Transform):
 class DealStrategyTransform(Transform):
     """Synthesize all competitive intel + deal context into a positioning strategy."""
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
+        ctx = self.get_context(ctx)
         return [(inputs, {})]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
         prompt_id = "deal_strategy"
-        model_config = config.get("llm_config", {})
+        model_config = ctx.llm_config
 
         inputs = sorted(inputs, key=lambda a: a.artifact_id)
         sources_block = _source_label_block(inputs)
@@ -143,7 +147,7 @@ class DealStrategyTransform(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc="deal strategy",
         )
@@ -163,13 +167,15 @@ class DealStrategyTransform(Transform):
 class DealCallPrepTransform(Transform):
     """Produce a final call prep brief from strategy + deal context."""
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
+        ctx = self.get_context(ctx)
         return [(inputs, {})]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
         prompt_id = "deal_call_prep"
-        model_config = config.get("llm_config", {})
+        model_config = ctx.llm_config
 
         inputs = sorted(inputs, key=lambda a: a.artifact_id)
         sources_block = _source_label_block(inputs)
@@ -199,7 +205,7 @@ class DealCallPrepTransform(Transform):
 
         response = _logged_complete(
             client,
-            config,
+            ctx,
             messages=[{"role": "user", "content": prompt}],
             artifact_desc="call prep brief",
         )

@@ -17,6 +17,12 @@ from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
+from synix.build.search_surfaces import (
+    search_surface_ready,
+    surface_local_path,
+    transform_runtime_search_updates,
+    validate_search_surface_uses,
+)
 from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
@@ -25,8 +31,10 @@ from synix.core.models import (
     Layer,
     Pipeline,
     SearchIndex,
+    SearchSurface,
     Source,
     Transform,
+    TransformContext,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +111,7 @@ def run(
 
     # Compute levels from DAG structure
     compute_levels(pipeline.layers)
+    validate_search_surface_uses(pipeline)
 
     # Create structured logger
     slogger = SynixLogger(
@@ -158,6 +167,7 @@ def run(
             # Transform layer — gather inputs, split, execute
             inputs = _gather_inputs(layer, layer_artifacts, store)
             transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
+            transform_ctx = _build_transform_context(pipeline, layer, src_dir, build_dir, transform_config)
 
             # Compute transform fingerprint
             transform_fp = layer.compute_fingerprint(transform_config)
@@ -182,8 +192,7 @@ def run(
                     slogger.artifact_cached(layer.name, art.label)
             else:
                 # Execute transform
-                transform_config["_logger"] = slogger
-                transform_config["_layer_name"] = layer.name
+                transform_ctx = transform_ctx.with_updates({"_logger": slogger, "_layer_name": layer.name})
 
                 def _save_artifact(
                     artifact: Artifact,
@@ -282,14 +291,14 @@ def run(
                         slogger.artifact_cached(layer.name, cached_art.label)
 
                 # Split inputs into work units
-                units = layer.split(inputs, transform_config)
+                units = _invoke_transform_split(layer, inputs, transform_ctx)
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
                     _execute_transform_concurrent(
                         layer,
                         units,
-                        transform_config,
+                        transform_ctx,
                         concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
@@ -303,8 +312,8 @@ def run(
                         if cached_arts:
                             _on_cached(cached_arts, unit_inputs)
                             continue
-                        merged_config = {**transform_config, **config_extras}
-                        new_artifacts = layer.execute(unit_inputs, merged_config)
+                        unit_ctx = transform_ctx.with_updates(config_extras)
+                        new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
                         for artifact in new_artifacts:
                             _save_artifact(artifact, parent_inputs=unit_inputs)
 
@@ -317,11 +326,14 @@ def run(
         result.skipped += stats.skipped
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
+        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+
         # Materialize intermediate projections for this layer
         _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
     result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
+    _refresh_surface_cache(pipeline, layer_artifacts, build_dir)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
@@ -413,7 +425,7 @@ def _provenance_parent_labels(
 
 
 def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, build_dir: Path) -> dict:
-    """Build config dict for a Transform layer."""
+    """Build fingerprint-stable config dict for a Transform layer."""
     base_llm_config = dict(pipeline.llm_config) if pipeline.llm_config else {}
     transform_config: dict = {}
     transform_config["llm_config"] = dict(base_llm_config)
@@ -427,10 +439,121 @@ def _build_transform_config(pipeline: Pipeline, layer: Transform, src_dir: str, 
         transform_config.update(layer_rest)
         if layer_llm:
             transform_config["llm_config"].update(layer_llm)
-
-    # For topical rollup, pass the search index path
-    transform_config["search_db_path"] = str(build_dir / "search.db")
     return transform_config
+
+
+def _build_transform_context(
+    pipeline: Pipeline,
+    layer: Transform,
+    src_dir: str,
+    build_dir: Path,
+    transform_config: dict,
+) -> TransformContext:
+    """Build the runtime transform context with explicit capabilities."""
+    runtime_updates = {
+        "workspace": {
+            "source_dir": src_dir,
+            "build_dir": str(build_dir),
+        }
+    }
+    runtime_updates.update(
+        transform_runtime_search_updates(
+            layer,
+            build_dir=build_dir,
+            projections=pipeline.projections,
+        )
+    )
+    return TransformContext.from_value(transform_config).with_updates(runtime_updates)
+
+
+def _transform_prefers_legacy_config_dict(method) -> bool:
+    """Return True when ``method`` still advertises the old ``config: dict`` API."""
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return False
+
+    positional = [
+        param
+        for param in signature.parameters.values()
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if len(positional) < 2:
+        return False
+
+    config_param = positional[1]
+    annotation = config_param.annotation
+    annotation_text = ""
+    if annotation is not inspect.Signature.empty:
+        if isinstance(annotation, str):
+            annotation_text = annotation
+        else:
+            annotation_text = getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(
+                annotation
+            )
+
+    if annotation is dict or annotation_text == "dict" or annotation_text.startswith("dict["):
+        return True
+    if "TransformContext" in annotation_text:
+        return False
+
+    return config_param.name == "config"
+
+
+def _transform_runtime_arg(method, ctx: TransformContext) -> TransformContext | dict:
+    """Adapt ``ctx`` for legacy transforms that still expect a raw config dict."""
+    if _transform_prefers_legacy_config_dict(method):
+        return ctx.to_dict()
+    return ctx
+
+
+def _invoke_transform_split(
+    transform: Transform,
+    inputs: list[Artifact],
+    ctx: TransformContext,
+) -> list[tuple[list[Artifact], dict]]:
+    """Invoke ``split`` with either ``TransformContext`` or a legacy plain dict."""
+    return transform.split(inputs, _transform_runtime_arg(transform.split, ctx))
+
+
+def _invoke_transform_execute(
+    transform: Transform,
+    inputs: list[Artifact],
+    ctx: TransformContext,
+) -> list[Artifact]:
+    """Invoke ``execute`` with either ``TransformContext`` or a legacy plain dict."""
+    return transform.execute(inputs, _transform_runtime_arg(transform.execute, ctx))
+
+
+def _materialize_layer_search_surfaces(
+    pipeline: Pipeline,
+    layer_name: str,
+    layer_artifacts: dict[str, list[Artifact]],
+    store: ArtifactStore,
+    build_dir: Path,
+    logger: SynixLogger | None = None,
+) -> None:
+    """Materialize search surfaces that source from this layer.
+
+    Search surfaces only materialize once their full source closure is
+    available, so the on-disk compatibility DB always matches cache state.
+    """
+    for surface in pipeline.surfaces:
+        source_layer_names = [s.name for s in surface.sources]
+        if layer_name not in source_layer_names:
+            continue
+
+        available_names = set(layer_artifacts)
+        if not search_surface_ready(surface, available_names):
+            continue
+
+        _materialize_projection(
+            surface,
+            layer_artifacts,
+            build_dir,
+            logger=logger,
+            triggered_by=layer_name,
+        )
 
 
 def _gather_inputs(
@@ -506,7 +629,7 @@ def _get_parent_labels(artifact: Artifact, inputs: list[Artifact]) -> list[str]:
 def _execute_transform_concurrent(
     transform: Transform,
     units: list[tuple[list[Artifact], dict]],
-    config: dict,
+    config: TransformContext | dict,
     concurrency: int,
     on_complete=None,
     cached_by_inputs: dict[tuple[str, ...], list[Artifact]] | None = None,
@@ -567,6 +690,8 @@ def _execute_transform_concurrent(
 
     # Keys that should be shared (not deep-copied) across workers because they
     # contain non-picklable objects (e.g. logger with file handles).
+    base_ctx = TransformContext.from_value(config)
+    base_config = base_ctx.to_dict()
     _shared_keys = {"_logger"}
 
     # Pre-create a shared LLM client to avoid per-thread connection overhead
@@ -574,7 +699,7 @@ def _execute_transform_concurrent(
     try:
         from synix.build.llm_transforms import _make_llm_client
 
-        shared_client = _make_llm_client(config)
+        shared_client = _make_llm_client(base_config)
     except ImportError:
         pass  # Non-LLM transforms don't need a shared client
     except Exception:
@@ -586,14 +711,15 @@ def _execute_transform_concurrent(
         worker_transform = copy.copy(transform)
         # Deep-copy mutable config to avoid cross-thread mutation, but share
         # non-copyable objects like the logger.
-        shared = {k: config[k] for k in _shared_keys if k in config}
-        copyable = {k: v for k, v in config.items() if k not in _shared_keys}
+        shared = {k: base_config[k] for k in _shared_keys if k in base_config}
+        copyable = {k: v for k, v in base_config.items() if k not in _shared_keys}
         worker_config = copy.deepcopy(copyable)
         worker_config.update(shared)
         worker_config.update(config_extras)
         if shared_client is not None:
             worker_config["_shared_llm_client"] = shared_client
-        return index, worker_transform.execute(unit_inputs, worker_config)
+        worker_ctx = TransformContext.from_value(worker_config)
+        return index, _invoke_transform_execute(worker_transform, unit_inputs, worker_ctx)
 
     first_error: Exception | None = None
 
@@ -750,11 +876,40 @@ def _materialize_all_projections(
     return stats
 
 
+def _refresh_surface_cache(
+    pipeline: Pipeline,
+    layer_artifacts: dict[str, list[Artifact]],
+    build_dir: Path,
+) -> None:
+    """Persist final cache metadata for build-time search surfaces."""
+    cache = _load_projection_cache(build_dir)
+
+    for surface in pipeline.surfaces:
+        all_artifacts: list[Artifact] = []
+        source_layer_names = [s.name for s in surface.sources]
+        for layer_name in source_layer_names:
+            all_artifacts.extend(layer_artifacts.get(layer_name, []))
+
+        cache[surface.name] = {
+            "content_hash": _compute_content_only_hash(all_artifacts),
+            "embedding_hash": _compute_embedding_config_hash(surface),
+            "source_layers": source_layer_names,
+            "artifact_count": len(all_artifacts),
+        }
+
+    _save_projection_cache(build_dir, cache)
+
+
 def _get_projection_config(proj: Layer) -> dict:
-    """Extract projection config from a SearchIndex or FlatFile layer."""
+    """Extract cache-relevant config from a projection or search surface."""
     if isinstance(proj, SearchIndex):
         return {
             "search": proj.search,
+            "embedding_config": proj.embedding_config,
+        }
+    elif isinstance(proj, SearchSurface):
+        return {
+            "modes": proj.modes,
             "embedding_config": proj.embedding_config,
         }
     elif isinstance(proj, FlatFile):
@@ -796,6 +951,8 @@ def _materialize_projection(
 
     if isinstance(proj, SearchIndex):
         proj_type = "search_index"
+    elif isinstance(proj, SearchSurface):
+        proj_type = "search_surface"
     elif isinstance(proj, FlatFile):
         proj_type = "flat_file"
     else:
@@ -804,10 +961,11 @@ def _materialize_projection(
     if logger:
         logger.projection_start(proj.name, proj_type, triggered_by=triggered_by)
 
-    if isinstance(proj, SearchIndex):
+    if isinstance(proj, (SearchIndex, SearchSurface)):
         # Use projection registry to avoid direct search import
         try:
-            projection = get_projection("search_index", build_dir)
+            db_path = build_dir / "search.db" if isinstance(proj, SearchIndex) else surface_local_path(build_dir, proj)
+            projection = get_projection("search_index", build_dir, db_path)
         except ValueError as exc:
             logger.warning("Projection %r unavailable: %s", proj.name, exc)
             return True
@@ -850,7 +1008,7 @@ def _compute_content_only_hash(artifacts: list[Artifact]) -> str:
 
 def _compute_embedding_config_hash(proj) -> str | None:
     """Compute a hash over embedding identity fields only."""
-    if not isinstance(proj, SearchIndex):
+    if not isinstance(proj, (SearchIndex, SearchSurface)):
         return None
     if not proj.embedding_config:
         return None

@@ -70,7 +70,7 @@ class TestMapSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import MapSynthesis
+        from synix.transforms import MapSynthesis
 
         t = MapSynthesis("test-map", prompt="Summarize: {artifact}", artifact_type="summary")
         inp = _make_artifact("inp-1", metadata={"project": "foo", "date": "2025-01-01"})
@@ -86,7 +86,7 @@ class TestMapSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import MapSynthesis
+        from synix.transforms import MapSynthesis
 
         t = MapSynthesis(
             "test-map",
@@ -108,7 +108,7 @@ class TestMapSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import MapSynthesis
+        from synix.transforms import MapSynthesis
 
         t = MapSynthesis("test-map", prompt="Summarize: {artifact}", artifact_type="summary")
         inp = _make_artifact("my-input")
@@ -121,7 +121,7 @@ class TestMapSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import MapSynthesis
+        from synix.transforms import MapSynthesis
 
         t = MapSynthesis("test-map", prompt="Summarize: {artifact}", artifact_type="summary")
         inp = _make_artifact("my-input", metadata={"source_label": "old-label"})
@@ -139,7 +139,7 @@ class TestGroupSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import GroupSynthesis
+        from synix.transforms import GroupSynthesis
 
         t = GroupSynthesis(
             "test-group",
@@ -164,7 +164,7 @@ class TestGroupSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import GroupSynthesis
+        from synix.transforms import GroupSynthesis
 
         t = GroupSynthesis(
             "test-group",
@@ -187,7 +187,7 @@ class TestReduceSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import ReduceSynthesis
+        from synix.transforms import ReduceSynthesis
 
         t = ReduceSynthesis(
             "test-reduce",
@@ -214,7 +214,7 @@ class TestFoldSynthesisMetadata:
         _mock_llm_config(monkeypatch)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        from synix.ext import FoldSynthesis
+        from synix.transforms import FoldSynthesis
 
         t = FoldSynthesis(
             "test-fold",
@@ -239,7 +239,7 @@ class TestMetadataFnFingerprint:
 
     def test_metadata_fn_changes_fingerprint(self):
         """Changing metadata_fn produces a different fingerprint."""
-        from synix.ext import MapSynthesis
+        from synix.transforms import MapSynthesis
 
         fn_a = lambda inp: {"version": "a"}  # noqa: E731
         fn_b = lambda inp: {"version": "b"}  # noqa: E731
@@ -257,7 +257,7 @@ class TestMetadataFnFingerprint:
 
     def test_metadata_fn_changes_cache_key(self):
         """Changing metadata_fn produces a different cache key."""
-        from synix.ext import ReduceSynthesis
+        from synix.transforms import ReduceSynthesis
 
         fn_a = lambda inputs: {"v": "a"}  # noqa: E731
         fn_b = lambda inputs: {"v": "b"}  # noqa: E731

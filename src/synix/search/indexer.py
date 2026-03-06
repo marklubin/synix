@@ -31,6 +31,15 @@ class SearchIndex:
             self._conn.row_factory = sqlite3.Row
         return self._conn
 
+    def has_table(self, name: str) -> bool:
+        """Return True when the underlying SQLite database contains ``name``."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+        return row is not None
+
     def create(self) -> None:
         """Create the FTS5 search index table and citation edges table."""
         conn = self._get_conn()
@@ -259,10 +268,11 @@ class ShadowIndexManager:
     and leave the old index unchanged.
     """
 
-    def __init__(self, build_dir: str | Path):
-        self.build_dir = Path(build_dir)
-        self.main_path = self.build_dir / "search.db"
-        self.shadow_path = self.build_dir / "search_shadow.db"
+    def __init__(self, target_path: str | Path):
+        target = Path(target_path)
+        self.main_path = target if target.suffix else target / "search.db"
+        self.main_path.parent.mkdir(parents=True, exist_ok=True)
+        self.shadow_path = self.main_path.with_name(f"{self.main_path.stem}_shadow{self.main_path.suffix}")
         self._shadow_index: SearchIndex | None = None
 
     def begin_build(self) -> SearchIndex:
@@ -312,9 +322,9 @@ class SearchIndexProjection(BaseProjection):
     is preserved if the build fails.
     """
 
-    def __init__(self, build_dir: str | Path):
+    def __init__(self, build_dir: str | Path, db_path: str | Path | None = None):
         self.build_dir = Path(build_dir)
-        self.db_path = self.build_dir / "search.db"
+        self.db_path = Path(db_path) if db_path is not None else self.build_dir / "search.db"
         self._index: SearchIndex | None = None
 
     def _get_index(self) -> SearchIndex:
@@ -331,7 +341,7 @@ class SearchIndexProjection(BaseProjection):
         If ``embedding_config`` is present in config, also generates and
         caches embeddings for all indexed artifacts.
         """
-        manager = ShadowIndexManager(self.build_dir)
+        manager = ShadowIndexManager(self.db_path)
         shadow_index = manager.begin_build()
 
         sources = config.get("sources", [])

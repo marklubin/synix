@@ -5,7 +5,7 @@ Pipelines are defined in Python. Layers are real objects — `Source` for inputs
 ```python
 # pipeline.py
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("personal-memory")
 pipeline.source_dir = "./sources"
@@ -33,15 +33,15 @@ pipeline.add(
 )
 ```
 
-## Configurable Transforms (`synix.ext`)
+## Generic Transforms (`synix.transforms`)
 
-Most LLM pipeline steps follow one of four patterns. The `synix.ext` module provides configurable transforms for each — just pass a prompt string and parameters instead of writing a custom class.
+Most LLM pipeline steps follow one of four generic patterns. The `synix.transforms` module provides those platform transforms directly — just pass a prompt string and parameters instead of writing a custom class.
 
 ```python
-from synix.ext import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
 ```
 
-All ext transforms share these behaviors:
+All generic transforms share these behaviors:
 - **Prompt templates** with placeholders — changing the prompt automatically invalidates the cache
 - **Deterministic ordering** — multi-input transforms sort by `artifact_id` before building prompts
 - **LLM calls** via the standard pipeline `llm_config`
@@ -186,9 +186,9 @@ FoldSynthesis always runs synchronously (never batched) because each step depend
 | Combines all inputs into one output | `ReduceSynthesis` |
 | Needs to accumulate through inputs in order | `FoldSynthesis` |
 
-## Built-in Transforms
+## Bundled Ext Transforms (`synix.ext`)
 
-Pre-built transforms for agent memory pipelines. Import from `synix.transforms`:
+Synix also ships a small set of opinionated memory-oriented transforms in `synix.ext`:
 
 | Class | Pattern | Description |
 |-------|---------|-------------|
@@ -196,6 +196,15 @@ Pre-built transforms for agent memory pipelines. Import from `synix.transforms`:
 | `MonthlyRollup` | N:M | Group episodes by calendar month, synthesize each |
 | `TopicalRollup` | N:M | Group episodes by user-declared topics. Requires `config={"topics": [...]}` |
 | `CoreSynthesis` | N:1 | All rollups → single core memory document. Respects `context_budget` |
+
+These are bundled convenience transforms rather than the generic platform primitives.
+
+## Other Platform Transforms
+
+Import from `synix.transforms`:
+
+| Class | Pattern | Description |
+|-------|---------|-------------|
 | `Merge` | N:M | Group artifacts by content similarity (Jaccard), merge above threshold |
 
 ## Sources
@@ -211,11 +220,14 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 
 ## Projections
 
+`SearchSurface` is the build-time searchable capability declaration. `SearchIndex` and `FlatFile` remain the user-facing compatibility outputs today.
+
 Import from `synix`:
 
 | Class | Output | Description |
 |-------|--------|-------------|
-| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search |
+| `SearchSurface` | local compatibility realization under `build/surfaces/` today | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
+| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. This is a projection output, not a build-time capability, so it does not satisfy `uses=[...]`. Optional embedding support for semantic/hybrid search |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
 ## Config Change Demo
@@ -223,15 +235,22 @@ Import from `synix`:
 Swap the rollup strategy — transcripts and episodes stay cached:
 
 ```python
-from synix.transforms import TopicalRollup
+from synix import SearchSurface
+from synix.ext import TopicalRollup
 
+episode_search = SearchSurface(
+    "episode-search",
+    sources=[episodes],
+    modes=["fulltext"],
+)
 topics = TopicalRollup(
     "topics",
     depends_on=[episodes],
+    uses=[episode_search],
     config={"topics": ["career", "technical-projects", "san-francisco"]},
 )
 core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
-pipeline.add(transcripts, episodes, topics, core)
+pipeline.add(transcripts, episodes, episode_search, topics, core)
 ```
 
 ## Dynamic Layer Generation
@@ -251,17 +270,28 @@ for topic in ["work", "health", "projects", "relationships"]:
 When you need logic beyond prompt templating — filtering inputs, conditional branching, multi-step LLM chains — extend `Transform` directly:
 
 ```python
-from synix import Transform
+from synix import SearchSurface, Transform, TransformContext
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact
 
+episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+
 class CompetitiveIntel(Transform):
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
-        client = _get_llm_client(config)
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        ctx = self.get_context(ctx)
+        client = _get_llm_client(ctx)
+        search = ctx.search("episode-search")
+        related = search.query("pricing", layers=["episodes"], limit=5) if search is not None else []
         # Your custom logic here — filter, branch, chain multiple LLM calls
         response = _logged_complete(
-            client, config,
-            messages=[{"role": "user", "content": f"Analyze:\n{inputs[0].content}"}],
+            client, ctx,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Analyze:\n{inputs[0].content}\n\n"
+                    f"Related episode hits: {[hit.label for hit in related]}"
+                ),
+            }],
             artifact_desc="competitive-intel",
         )
         return [Artifact(
@@ -270,10 +300,10 @@ class CompetitiveIntel(Transform):
             content=response.content,
             input_ids=[a.artifact_id for a in inputs],
             prompt_id="competitive_intel_v1",
-            model_config=config.get("llm_config"),
+            model_config=ctx.llm_config,
         )]
 
-    def split(self, inputs: list[Artifact], config: dict):
+    def split(self, inputs: list[Artifact], ctx: TransformContext):
         # Optional: decompose into parallel work units (default is 1:1)
         return [(inputs, {})]
 ```
@@ -281,9 +311,15 @@ class CompetitiveIntel(Transform):
 Use it like any transform:
 
 ```python
-intel = CompetitiveIntel("competitive_intel", depends_on=[competitor_docs, product_specs])
+intel = CompetitiveIntel(
+    "competitive_intel",
+    depends_on=[competitor_docs, product_specs],
+    uses=[episode_search],
+)
 pipeline.add(intel)
 ```
+
+Use `ctx.search(...)` or `self.get_search_surface(ctx, required=True)` for build-time retrieval. `TransformContext` stays mapping-compatible during migration so legacy custom transforms keep running, but the public interface is the typed context and search handle rather than `search_db_path` or a hard-coded SQLite path.
 
 ## Validators and Fixers (Experimental)
 

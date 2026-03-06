@@ -1,8 +1,12 @@
-"""Backward compatibility shim — moved to synix.build.llm_transforms."""
+"""Backward compatibility shim — bundled memory transforms now live in ``synix.ext``."""
 
-from synix.build.llm_transforms import (  # noqa: F401
+from synix.ext import (  # noqa: F401
+    CoreSynthesis,
     CoreSynthesisTransform,
+    EpisodeSummary,
     EpisodeSummaryTransform,
+    MonthlyRollup,
     MonthlyRollupTransform,
+    TopicalRollup,
     TopicalRollupTransform,
 )

@@ -1,4 +1,4 @@
-"""Tests for synix.ext configurable transforms — MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis."""
+"""Tests for generic platform transforms — MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import logging
 import pytest
 
 from synix import Artifact
-from synix.ext import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
 from synix.ext._render import render_template
+from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
 
 # ---------------------------------------------------------------------------
 # Helpers

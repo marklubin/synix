@@ -48,7 +48,7 @@ def pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-fp")
 pipeline.source_dir = "{workspace["source_dir"]}"

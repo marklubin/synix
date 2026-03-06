@@ -38,7 +38,7 @@ def pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("snapshot-cli")
 pipeline.source_dir = "{workspace["source_dir"]}"

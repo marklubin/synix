@@ -24,8 +24,8 @@ from synix.build.plan import plan_build
 from synix.build.runner import _execute_transform_concurrent, run
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Transform
+from synix.ext import EpisodeSummary
 from synix.search.embeddings import EmbeddingProvider, OpenAIBackend, _is_payload_too_large
-from synix.transforms import EpisodeSummary
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -648,7 +648,7 @@ class TestPlanEstimationDirtyUpstream:
         N:1 transforms like CoreSynthesis group all inputs into one unit.
         When upstream is dirty, the plan should still produce a valid estimate.
         """
-        from synix.transforms import CoreSynthesis, MonthlyRollup
+        from synix.ext import CoreSynthesis, MonthlyRollup
 
         source_dir = tmp_path / "exports"
         source_dir.mkdir()

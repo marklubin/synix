@@ -6,7 +6,7 @@ import hashlib
 import re
 from collections import defaultdict
 
-from synix.core.models import Artifact, Transform
+from synix.core.models import Artifact, Transform, TransformContext
 
 
 def _tokenize(text: str) -> set[str]:
@@ -207,7 +207,7 @@ class Merge(Transform):
             Not used in v0.1 -- content is concatenated.
     """
 
-    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
         """All inputs needed for pairwise similarity — single unit."""
         return [(inputs, {})]
 
@@ -218,12 +218,12 @@ class Merge(Transform):
         key_str = f"threshold={threshold}|constraints={','.join(constraints)}"
         return hashlib.sha256(key_str.encode()).hexdigest()[:8]
 
-    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         """Merge similar artifacts, respecting constraints.
 
         Args:
             inputs: List of artifacts to consider for merging.
-            config: Transform configuration containing:
+            ctx: Transform context containing:
                 - similarity_threshold: float (default 0.85)
                 - constraints: list of constraint strings
                 - merge_prompt: optional LLM prompt (unused in v0.1)
@@ -231,8 +231,8 @@ class Merge(Transform):
         Returns:
             List of artifacts, with similar ones merged. Count <= len(inputs).
         """
-        threshold: float = config.get("similarity_threshold", 0.85)
-        constraints: list[str] = config.get("constraints", [])
+        threshold: float = ctx.get("similarity_threshold", 0.85)
+        constraints: list[str] = ctx.get("constraints", [])
         constraint_fields = _parse_constraints(constraints)
 
         if not inputs:

@@ -152,7 +152,7 @@ uvx synix batch-build plan pipeline.py
 ### `batch` Parameter on Transform
 
 ```python
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 # Auto (default) — batches if OpenAI and multiple work units
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])

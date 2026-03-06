@@ -49,7 +49,7 @@ def incident_pipeline_file(workspace):
     path = workspace["root"] / "pipeline_incident.py"
     path.write_text(f"""
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("demo3-incident")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -245,7 +245,8 @@ def merge_pipeline_file(workspace):
     path = workspace["root"] / "pipeline_merge.py"
     path.write_text(f"""
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, Merge, CoreSynthesis
+from synix.ext import EpisodeSummary, CoreSynthesis
+from synix.transforms import Merge
 
 pipeline = Pipeline("demo3-merge-bad")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -274,7 +275,8 @@ def merge_pipeline_fixed_file(workspace):
     path = workspace["root"] / "pipeline_merge_fixed.py"
     path.write_text(f"""
 from synix import Pipeline, Source, SearchIndex, FlatFile
-from synix.transforms import EpisodeSummary, Merge, CoreSynthesis
+from synix.ext import EpisodeSummary, CoreSynthesis
+from synix.transforms import Merge
 
 pipeline = Pipeline("demo3-merge-fixed")
 pipeline.source_dir = "{workspace["source_dir"]}"

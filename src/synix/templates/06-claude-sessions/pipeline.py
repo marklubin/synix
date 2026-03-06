@@ -8,7 +8,7 @@ built on the server, and deployed back to clients as context documents.
 """
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 # Define layers
 source = Source("sessions")

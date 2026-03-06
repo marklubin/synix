@@ -14,7 +14,7 @@ from rich.tree import Tree
 
 from synix.cli.main import console, get_layer_style, pipeline_argument
 from synix.cli.progress import BuildProgress
-from synix.core.models import FlatFile, Pipeline, SearchIndex
+from synix.core.models import FlatFile, Pipeline, SearchIndex, SearchSurface
 
 
 def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
@@ -79,6 +79,25 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
     return triggers
 
 
+def _surface_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]]]:
+    """Compute layer_name → [(surface_name, surface_type, trigger_type)] mapping."""
+    from synix.build.dag import resolve_build_order
+
+    build_order = resolve_build_order(pipeline)
+    layer_order = {layer.name: i for i, layer in enumerate(build_order)}
+    triggers: dict[str, list[tuple[str, str, str]]] = {}
+
+    for surface in pipeline.surfaces:
+        source_layer_names = [s.name for s in surface.sources]
+        if not isinstance(surface, SearchSurface):
+            continue
+        if source_layer_names:
+            last = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0))
+            triggers.setdefault(last, []).append((surface.name, "search_surface", "complete"))
+
+    return triggers
+
+
 @click.command()
 @pipeline_argument
 @click.option("--source-dir", default=None, help="Override source directory")
@@ -123,6 +142,7 @@ def build(
             f"[bold]Source:[/bold] {pipeline.source_dir}\n"
             f"[bold]Build:[/bold] {pipeline.build_dir}\n"
             f"[bold]Layers:[/bold] {len(pipeline.layers)}\n"
+            f"[bold]Surfaces:[/bold] {len(pipeline.surfaces)}\n"
             f"[bold]Concurrency:[/bold] {concurrency_label}",
             title="[bold cyan]Synix Build[/bold cyan]",
             border_style="cyan",
@@ -381,7 +401,9 @@ def plan(
             f"[bold]Pipeline:[/bold] {build_plan.pipeline_name}\n"
             f"[bold]Source:[/bold] {pipeline.source_dir}\n"
             f"[bold]Build:[/bold] {pipeline.build_dir}\n"
-            f"[bold]Layers:[/bold] {len(build_plan.steps)}",
+            f"[bold]Layers:[/bold] {len(build_plan.steps)}\n"
+            f"[bold]Surfaces:[/bold] {len(build_plan.surfaces)}\n"
+            f"[bold]Projections:[/bold] {len(build_plan.projections)}",
             title="[bold cyan]Synix Build Plan[/bold cyan]",
             border_style="cyan",
         )
@@ -405,15 +427,16 @@ def plan(
     tree = Tree(f"[bold cyan]{build_plan.pipeline_name}[/bold cyan]  [dim]{model_label} ({provider_label})[/dim]")
 
     # Build lookup: which projections source from which layers
+    surface_plan_map = {sp.name: sp for sp in build_plan.surfaces}
     proj_plan_map = {pp.name: pp for pp in build_plan.projections}
-    # layer_name → list of (proj, source_config)
-    proj_by_source_layer: dict[str, list] = {}
-    for proj in pipeline.projections:
-        for src in proj.sources:
-            proj_by_source_layer.setdefault(src.name, []).append(proj)
 
+    surface_triggers = _surface_triggers(pipeline)
     # Track which projections we've already rendered (show once, on last source layer)
     proj_triggers = _projection_triggers(pipeline)
+    last_trigger_layer_surface: dict[str, str] = {}
+    for layer_name, trigs in surface_triggers.items():
+        for surface_name, _, _ in trigs:
+            last_trigger_layer_surface[surface_name] = layer_name
     last_trigger_layer_plan: dict[str, str] = {}
     for layer_name, trigs in proj_triggers.items():
         for proj_name, _, _ in trigs:
@@ -423,7 +446,8 @@ def plan(
     step_lookup = {s.name: s for s in build_plan.steps}
     layer_lookup = {l.name: l for l in pipeline.layers}
 
-    PROJECTION_TYPE_LABELS = {
+    MATERIALIZATION_TYPE_LABELS = {
+        "search_surface": "search_surface (sqlite)",
         "search_index": "synix_search_index (sqlite)",
         "flat_file": "flat_file (markdown)",
     }
@@ -489,6 +513,37 @@ def plan(
                 component_names = " ".join(sorted(fp.components.keys()))
                 layer_node.add(f"[dim]cache: all components match ({scheme_ver}: {component_names})[/dim]")
 
+        # Show build-time search surfaces on their final trigger layer
+        for surface_name, _, _ in surface_triggers.get(step.name, []):
+            if last_trigger_layer_surface.get(surface_name) != step.name:
+                continue
+            sp = surface_plan_map.get(surface_name)
+            if not sp:
+                continue
+
+            surface_status_style = STATUS_STYLES.get(sp.status, "dim")
+            surface_type_label = MATERIALIZATION_TYPE_LABELS.get(sp.projection_type, sp.projection_type)
+            surface_label = (
+                f"[magenta][bold]{sp.name}[/bold][/magenta]  "
+                f"[dim]{surface_type_label}[/dim]  "
+                f"[{surface_status_style}]{sp.status}[/{surface_status_style}]  "
+                f"{sp.artifact_count} indexed"
+            )
+            surface_node = layer_node.add(f"⇢ {surface_label}")
+
+            for src_name in sp.source_layers:
+                src_style = get_layer_style(step_lookup[src_name].level) if src_name in step_lookup else "dim"
+                surface_node.add(f"[dim]← [{src_style}]{src_name}[/{src_style}][/dim]")
+
+            if sp.embedding_config:
+                ec = sp.embedding_config
+                model = ec.get("model", "?")
+                if "/" in model:
+                    model = model.rsplit("/", 1)[-1]
+                dims = ec.get("dimensions", "")
+                emb_provider = ec.get("provider", "")
+                surface_node.add(f"[dim]embeddings  {model}  {dims}d  ({emb_provider})[/dim]")
+
         # Show projections on their final trigger layer
         for proj_name, _, _ in proj_triggers.get(step.name, []):
             if last_trigger_layer_plan.get(proj_name) != step.name:
@@ -498,7 +553,7 @@ def plan(
                 continue
 
             proj_status_style = STATUS_STYLES.get(pp.status, "dim")
-            proj_type_label = PROJECTION_TYPE_LABELS.get(pp.projection_type, pp.projection_type)
+            proj_type_label = MATERIALIZATION_TYPE_LABELS.get(pp.projection_type, pp.projection_type)
             proj_label = (
                 f"[magenta][bold]{pp.name}[/bold][/magenta]  "
                 f"[dim]{proj_type_label}[/dim]  "
@@ -530,6 +585,7 @@ def plan(
 
     # Layers
     summary_parts.append(f"{build_plan.total_rebuild} layer(s) to build, {build_plan.total_cached} cached")
+    summary_parts.append(f"{len(build_plan.surfaces)} surface(s), {len(build_plan.projections)} projection(s)")
 
     # Cost estimate
     if build_plan.total_estimated_llm_calls > 0:

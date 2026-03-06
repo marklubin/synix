@@ -133,6 +133,14 @@ class TestNormalizeOutput:
         assert result_cached == result_fresh
         assert "<MATERIALIZED>  <N> indexed" in result_cached
 
+    def test_normalize_search_surface_status(self):
+        cached = "    └── ⇢ episode-search  search_surface (sqlite)  cached  9 indexed"
+        fresh = "    └── ⇢ episode-search  search_surface (sqlite)  new  14 indexed"
+        result_cached = _normalize_output(cached, Path("/tmp/case"))
+        result_fresh = _normalize_output(fresh, Path("/tmp/case"))
+        assert result_cached == result_fresh
+        assert "<MATERIALIZED>  <N> indexed" in result_cached
+
     def test_normalize_standalone_built(self):
         text = "│   → search    │ search_index │       │        │       built │"
         result = _normalize_output(text, Path("/tmp/case"))

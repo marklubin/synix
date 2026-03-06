@@ -7,7 +7,7 @@
 # Drop ChatGPT/Claude exports into ./sources/ before running.
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 pipeline = Pipeline("personal-memory")
 

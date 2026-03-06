@@ -3,6 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 5                                                                                                            │
+│ Surfaces: 0                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>

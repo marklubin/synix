@@ -42,7 +42,7 @@ def openai_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-batch")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -63,7 +63,7 @@ def anthropic_only_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-anthropic")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -84,7 +84,7 @@ def mixed_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary, MonthlyRollup, CoreSynthesis
+from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("test-mixed")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -109,7 +109,7 @@ def force_sync_pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("test-force-sync")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -340,7 +340,7 @@ class TestErrorHandling:
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("bad")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -413,6 +413,43 @@ class TestMixedProviders:
         result = runner.invoke(main, ["batch-build", "run", mixed_pipeline_file, "--poll"])
         assert result.exit_code == 0, f"stdout:\n{result.output}\nexception:\n{result.exception}"
 
+    def test_legacy_strict_dict_transform_runs_after_batch_layer(self, runner, workspace, monkeypatch):
+        """Batch runner still passes a raw dict to legacy sync transforms."""
+        path = workspace["root"] / "legacy_pipeline.py"
+        path.write_text(f"""
+from synix import Artifact, Pipeline, Source, Transform
+from synix.ext import EpisodeSummary
+
+pipeline = Pipeline("test-legacy-batch")
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
+pipeline.llm_config = {{"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.3, "max_tokens": 512}}
+
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts], batch=True)
+
+class LegacyStrictDictTransform(Transform):
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+        assert type(config) is dict
+        return [
+            Artifact(
+                label=f"{{config['prefix']}}-{{inp.label}}",
+                artifact_type="legacy_summary",
+                content=inp.content,
+                input_ids=[inp.artifact_id],
+            )
+            for inp in inputs
+        ]
+
+legacy = LegacyStrictDictTransform("legacy", depends_on=[episodes], config={{"prefix": "legacy"}})
+
+pipeline.add(transcripts, episodes, legacy)
+""")
+
+        _mock_openai(monkeypatch)
+        result = runner.invoke(main, ["batch-build", "run", str(path), "--poll"])
+        assert result.exit_code == 0, f"stdout:\n{result.output}\nexception:\n{result.exception}"
+
 
 class TestCorruptedState:
     def test_corrupted_state_quarantined(self, runner, openai_pipeline_file, workspace, monkeypatch):
@@ -479,7 +516,7 @@ class TestFingerprintMismatch:
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v1")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -509,7 +546,7 @@ pipeline.add(transcripts, episodes)
         # Change pipeline (add a layer)
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary, MonthlyRollup
+from synix.ext import EpisodeSummary, MonthlyRollup
 
 pipeline = Pipeline("v2")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -534,7 +571,7 @@ pipeline.add(transcripts, episodes, monthly)
         path = workspace["root"] / "pipeline.py"
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v1")
 pipeline.source_dir = "{workspace["source_dir"]}"
@@ -564,7 +601,7 @@ pipeline.add(transcripts, episodes)
         # Change pipeline name (changes hash)
         path.write_text(f"""
 from synix import Pipeline, Source
-from synix.transforms import EpisodeSummary
+from synix.ext import EpisodeSummary
 
 pipeline = Pipeline("v2-changed")
 pipeline.source_dir = "{workspace["source_dir"]}"

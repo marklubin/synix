@@ -14,16 +14,17 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, FlatFile, Pipeline, Source
+from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source
 from synix import SearchIndex as SearchIndexLayer
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
 from synix.build.runner import (
     _materialize_layer_projections,
+    _materialize_layer_search_surfaces,
     run,
 )
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 from synix.search.indexer import SearchIndex
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -94,6 +95,28 @@ def _topical_pipeline(build_dir: Path) -> Pipeline:
 
     p.add(transcripts, episodes, topics, core)
     p.add(SearchIndexLayer("memory-index", sources=[episodes, topics, core], search=["fulltext"]))
+    p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
+    return p
+
+
+def _surface_topical_pipeline(build_dir: Path) -> Pipeline:
+    """Pipeline with a named search surface used by topical rollups."""
+    p = Pipeline("surface-topical-pipeline")
+    p.build_dir = str(build_dir)
+    p.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+    transcripts = Source("transcripts")
+    episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+    episode_search = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+    topics = TopicalRollup(
+        "topics",
+        depends_on=[episodes],
+        uses=[episode_search],
+        config={"topics": ["programming", "machine-learning"]},
+    )
+    core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
+
+    p.add(transcripts, episodes, episode_search, topics, core)
     p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
     return p
 
@@ -258,6 +281,47 @@ class TestLayerProjectionChain:
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly", "core"}
+
+    def test_search_surface_waits_for_all_source_layers(
+        self,
+        build_dir,
+        episode_artifacts,
+        monthly_artifacts,
+    ):
+        """Search surfaces materialize only once their full source set is available."""
+        build_dir.mkdir(parents=True, exist_ok=True)
+        store = ArtifactStore(build_dir)
+
+        episodes = Source("episodes")
+        monthly = Source("monthly")
+        surface = SearchSurface("episode-monthly-search", sources=[episodes, monthly], modes=["fulltext"])
+
+        pipeline = Pipeline("surface-pipeline")
+        pipeline.build_dir = str(build_dir)
+        pipeline.add(episodes, monthly, surface)
+
+        layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
+        db_path = build_dir / "surfaces" / "episode-monthly-search.db"
+
+        _materialize_layer_search_surfaces(
+            pipeline,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert not db_path.exists(), "surface DB should not exist until all source layers are available"
+
+        layer_artifacts["monthly"] = monthly_artifacts
+        _materialize_layer_search_surfaces(
+            pipeline,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert db_path.exists(), "surface DB should exist once all source layers are available"
+        assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
     def test_flat_file_waits_for_all_sources(
         self,
@@ -504,6 +568,116 @@ class TestProjectionPlan:
             assert "artifact_count" in proj_dict
             assert "reason" in proj_dict
 
+    def test_plan_includes_search_surfaces(self, source_dir, build_dir, mock_llm):
+        """plan_build() exposes build-time search surfaces separately."""
+        plan = plan_build(_surface_topical_pipeline(build_dir), source_dir=str(source_dir))
+
+        assert len(plan.surfaces) == 1
+        assert plan.surfaces[0].name == "episode-search"
+        assert plan.surfaces[0].projection_type == "search_surface"
+        assert plan.surfaces[0].status == "new"
+
+    def test_plan_search_surfaces_cached_after_build(self, source_dir, build_dir, mock_llm):
+        """After running, plan_build() reports search surfaces as cached."""
+        pipeline = _surface_topical_pipeline(build_dir)
+        run(pipeline, source_dir=str(source_dir))
+        plan = plan_build(pipeline, source_dir=str(source_dir))
+
+        assert len(plan.surfaces) == 1
+        assert plan.surfaces[0].status == "cached"
+
+    def test_plan_rejects_surface_that_depends_on_future_layers(self, source_dir, build_dir, mock_llm):
+        """A transform cannot use a search surface whose sources are not all upstream."""
+        pipeline = Pipeline("invalid-surface-order")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        monthly = MonthlyRollup("monthly", depends_on=[episodes])
+        future_surface = SearchSurface("future-surface", sources=[episodes, monthly], modes=["fulltext"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[future_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, monthly, future_surface, topics)
+
+        with pytest.raises(ValueError, match="before all of its source layers are built"):
+            plan_build(pipeline, source_dir=str(source_dir))
+        with pytest.raises(ValueError, match="before all of its source layers are built"):
+            run(pipeline, source_dir=str(source_dir))
+
+    def test_plan_accepts_equivalent_surface_declared_as_separate_object(self, source_dir, build_dir, mock_llm):
+        """Validation resolves declared surfaces against the pipeline by name, not object identity."""
+        pipeline = Pipeline("equivalent-surface")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        registered_surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        equivalent_surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[equivalent_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, registered_surface, topics)
+
+        plan = plan_build(pipeline, source_dir=str(source_dir))
+        assert next(step for step in plan.steps if step.name == "topics").status == "new"
+
+    def test_plan_rejects_mismatched_surface_declaration(self, source_dir, build_dir, mock_llm):
+        """A same-name surface with different semantics is rejected during validation."""
+        pipeline = Pipeline("mismatched-surface")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        registered_surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        mismatched_surface = SearchSurface("episode-search", sources=[episodes], modes=["semantic"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[mismatched_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, registered_surface, topics)
+
+        with pytest.raises(ValueError, match="does not match the surface added to the pipeline"):
+            plan_build(pipeline, source_dir=str(source_dir))
+
+    def test_search_index_projection_does_not_satisfy_surface_use(self, source_dir, build_dir, mock_llm):
+        """A SearchIndex projection with the same name is not a substitute for SearchSurface."""
+        pipeline = Pipeline("projection-is-not-surface")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        declared_surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[declared_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, topics)
+        pipeline.add(SearchIndexLayer("episode-search", sources=[episodes], search=["fulltext"]))
+
+        with pytest.raises(ValueError, match="belongs to a projection"):
+            plan_build(pipeline, source_dir=str(source_dir))
+        with pytest.raises(ValueError, match="belongs to a projection"):
+            run(pipeline, source_dir=str(source_dir))
+
 
 # ---------------------------------------------------------------------------
 # 4. Projection Stats
@@ -533,33 +707,41 @@ class TestProjectionStats:
 
 
 # ---------------------------------------------------------------------------
-# 5. Topical Rollup Defensive Fallback
+# 5. Topical Rollup Surface Requirements
 # ---------------------------------------------------------------------------
 
 
-class TestTopicalRollupDefensiveFallback:
-    def test_topical_rollup_no_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when search_db_path doesn't exist."""
+class TestTopicalRollupSurfaceRequirements:
+    def test_topical_rollup_missing_declared_surface(self, source_dir, build_dir, mock_llm):
+        """TopicalRollup fails when a declared search surface path is missing."""
         # First, run parse + episodes to get episode artifacts
         monthly = _monthly_pipeline(build_dir)
-        result = run(monthly, source_dir=str(source_dir))
+        run(monthly, source_dir=str(source_dir))
 
         store = ArtifactStore(build_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
-        transform = TopicalRollup("test-topics")
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],
-            "search_db_path": str(build_dir / "nonexistent.db"),
+            "search_surfaces": {
+                "episode-search": {
+                    "name": "episode-search",
+                    "kind": "search_surface",
+                    "db_path": str(build_dir / "nonexistent.db"),
+                    "modes": ["fulltext"],
+                    "sources": ["episodes"],
+                }
+            },
         }
-        results = transform.execute(episodes, config)
-        assert len(results) > 0
-        assert results[0].artifact_type == "rollup"
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(episodes, config)
 
-    def test_topical_rollup_empty_search_db(self, source_dir, build_dir, mock_llm):
-        """TopicalRollup succeeds when search db has no FTS5 table."""
+    def test_topical_rollup_invalid_declared_surface(self, source_dir, build_dir, mock_llm):
+        """TopicalRollup fails when the declared search surface lacks an FTS table."""
         # Run a build to get episodes
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
@@ -575,15 +757,23 @@ class TestTopicalRollupDefensiveFallback:
         conn.commit()
         conn.close()
 
-        transform = TopicalRollup("test-topics")
+        surface = SearchSurface("episode-search", sources=[])
+        transform = TopicalRollup("test-topics", uses=[surface])
         config = {
             "llm_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024},
             "topics": ["programming"],
-            "search_db_path": str(empty_db),
+            "search_surfaces": {
+                "episode-search": {
+                    "name": "episode-search",
+                    "kind": "search_surface",
+                    "db_path": str(empty_db),
+                    "modes": ["fulltext"],
+                    "sources": ["episodes"],
+                }
+            },
         }
-        results = transform.execute(episodes, config)
-        assert len(results) > 0
-        assert results[0].artifact_type == "rollup"
+        with pytest.raises(SearchSurfaceUnavailableError):
+            transform.execute(episodes, config)
 
 
 # ---------------------------------------------------------------------------

@@ -68,7 +68,7 @@ A pipeline is a Python file. Layers are real objects with dependencies expressed
 ```python
 # pipeline.py
 from synix import Pipeline, Source, SearchIndex
-from synix.ext import MapSynthesis, ReduceSynthesis
+from synix.transforms import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
 pipeline.source_dir = "./sources"
@@ -108,12 +108,12 @@ This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
 
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 
-## Configurable Transforms (`synix.ext`)
+## Platform Transforms (`synix.transforms`)
 
-Most LLM steps follow one of four patterns. The `synix.ext` module provides configurable transforms for each — no custom classes needed.
+Most LLM steps follow one of four generic patterns. The `synix.transforms` module provides those platform transforms directly — no custom subclass needed for common synthesis flows.
 
 ```python
-from synix.ext import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
 ```
 
 | Transform | Pattern | Use when... |
@@ -125,13 +125,13 @@ from synix.ext import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthes
 
 All four take a `prompt` string with placeholders like `{artifact}`, `{artifacts}`, `{group_key}`, `{accumulated}`. Changing the prompt automatically invalidates the cache.
 
-For full parameter reference and examples of each, see [docs/pipeline-api.md#configurable-transforms](docs/pipeline-api.md#configurable-transforms-synixext).
+For full parameter reference and examples of each, see [docs/pipeline-api.md#generic-transforms-synixtransforms](docs/pipeline-api.md#generic-transforms-synixtransforms).
 
 When you need logic beyond prompt templating — filtering, conditional branching, multi-step chains — write a [custom Transform subclass](docs/pipeline-api.md#custom-transforms).
 
-## Built-in Transforms
+## Bundled Ext Transforms (`synix.ext`)
 
-Pre-built transforms for common agent memory patterns. Import from `synix.transforms`:
+Synix also ships a small set of opinionated memory-oriented transforms in `synix.ext`:
 
 | Class | What it does |
 |-------|-------------|
@@ -139,6 +139,15 @@ Pre-built transforms for common agent memory patterns. Import from `synix.transf
 | `MonthlyRollup` | Group episodes by month, synthesize each |
 | `TopicalRollup` | Group episodes by user-defined topics |
 | `CoreSynthesis` | All rollups → single core memory document |
+
+These are bundled convenience transforms, not the generic platform primitives.
+
+## Other Built-ins
+
+Import from `synix.transforms`:
+
+| Class | What it does |
+|-------|-------------|
 | `Merge` | Group artifacts by content similarity (Jaccard) |
 
 ## CLI Reference
@@ -293,6 +302,7 @@ Synix is not a memory store. It's the build system that produces one.
 | Doc | Contents |
 |-----|----------|
 | [Pipeline API](docs/pipeline-api.md) | Full Python API — ext transforms, built-in transforms, projections, validators, custom transforms |
+| [Search Surface RFC](docs/search-surface-rfc.md) | Proposed design for build-time search capabilities, default Synix search, and explicit release targets |
 | [Entity Model](docs/entity-model.md) | Artifact identity, storage format, cache logic |
 | [Cache Semantics](docs/cache-semantics.md) | Rebuild trigger matrix, fingerprint scheme |
 | [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API for 50% cost reduction |

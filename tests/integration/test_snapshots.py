@@ -15,7 +15,7 @@ from synix.build.runner import run
 from synix.build.snapshots import _pipeline_fingerprint, commit_build_snapshot, list_runs, start_build_transaction
 from synix.build.validators import RequiredField
 from synix.core.models import Artifact
-from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 
 def _manifest_artifact_map(manifest: dict) -> dict[str, str]:
