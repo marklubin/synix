@@ -413,6 +413,43 @@ class TestMixedProviders:
         result = runner.invoke(main, ["batch-build", "run", mixed_pipeline_file, "--poll"])
         assert result.exit_code == 0, f"stdout:\n{result.output}\nexception:\n{result.exception}"
 
+    def test_legacy_strict_dict_transform_runs_after_batch_layer(self, runner, workspace, monkeypatch):
+        """Batch runner still passes a raw dict to legacy sync transforms."""
+        path = workspace["root"] / "legacy_pipeline.py"
+        path.write_text(f"""
+from synix import Artifact, Pipeline, Source, Transform
+from synix.ext import EpisodeSummary
+
+pipeline = Pipeline("test-legacy-batch")
+pipeline.source_dir = "{workspace["source_dir"]}"
+pipeline.build_dir = "{workspace["build_dir"]}"
+pipeline.llm_config = {{"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.3, "max_tokens": 512}}
+
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts], batch=True)
+
+class LegacyStrictDictTransform(Transform):
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+        assert type(config) is dict
+        return [
+            Artifact(
+                label=f"{{config['prefix']}}-{{inp.label}}",
+                artifact_type="legacy_summary",
+                content=inp.content,
+                input_ids=[inp.artifact_id],
+            )
+            for inp in inputs
+        ]
+
+legacy = LegacyStrictDictTransform("legacy", depends_on=[episodes], config={{"prefix": "legacy"}})
+
+pipeline.add(transcripts, episodes, legacy)
+""")
+
+        _mock_openai(monkeypatch)
+        result = runner.invoke(main, ["batch-build", "run", str(path), "--poll"])
+        assert result.exit_code == 0, f"stdout:\n{result.output}\nexception:\n{result.exception}"
+
 
 class TestCorruptedState:
     def test_corrupted_state_quarantined(self, runner, openai_pipeline_file, workspace, monkeypatch):

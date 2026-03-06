@@ -593,6 +593,7 @@ class TestTransformSplit:
                 self._lock = threading.Lock()
 
             def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                assert type(config) is dict
                 with self._lock:
                     self.seen_configs.append(dict(config))
                 return [

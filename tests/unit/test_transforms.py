@@ -186,6 +186,7 @@ class TestLegacyCustomTransformCompatibility:
 
         class LegacyConfigTransform(Transform):
             def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                assert type(config) is dict
                 copied = config.copy()
                 copied["copied"] = True
                 config["_legacy_seen"] = True
@@ -225,11 +226,13 @@ class TestLegacyCustomTransformCompatibility:
 
         class LegacySplitTransform(Transform):
             def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
+                assert type(config) is dict
                 preview = config.copy()
                 fanout = preview.get("fanout", 1)
                 return [([inp], {"_slot": str(i)}) for i, inp in enumerate(inputs[:fanout])]
 
             def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
+                assert type(config) is dict
                 return [
                     Artifact(
                         label=f"slot-{config.get('_slot', '0')}-{inputs[0].label}",

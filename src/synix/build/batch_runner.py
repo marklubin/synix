@@ -28,6 +28,8 @@ from synix.build.runner import (
     _build_transform_context,
     _gather_inputs,
     _get_parent_labels,
+    _invoke_transform_execute,
+    _invoke_transform_split,
     _layer_fully_cached,
 )
 from synix.core.config import LLMConfig
@@ -403,10 +405,10 @@ def _run_sync_transform(
             layer_built.append(art)
     else:
         transform_ctx = transform_ctx.with_updates({"_layer_name": layer.name})
-        units = layer.split(inputs, transform_ctx)
+        units = _invoke_transform_split(layer, inputs, transform_ctx)
         for unit_inputs, config_extras in units:
             unit_ctx = transform_ctx.with_updates(config_extras)
-            new_artifacts = layer.execute(unit_inputs, unit_ctx)
+            new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             for artifact in new_artifacts:
                 layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
 
@@ -456,7 +458,7 @@ def _run_batch_transform(
 
     transform_ctx = transform_ctx.with_updates({"_layer_name": layer.name, "_shared_llm_client": batch_client})
 
-    units = layer.split(inputs, transform_ctx)
+    units = _invoke_transform_split(layer, inputs, transform_ctx)
 
     layer_built = []
     collecting = False
@@ -466,7 +468,7 @@ def _run_batch_transform(
     for unit_inputs, config_extras in units:
         unit_ctx = transform_ctx.with_updates(config_extras)
         try:
-            new_artifacts = layer.execute(unit_inputs, unit_ctx)
+            new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             # Result was available — save artifacts
             for artifact in new_artifacts:
                 layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))

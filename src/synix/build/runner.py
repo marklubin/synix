@@ -291,7 +291,7 @@ def run(
                         slogger.artifact_cached(layer.name, cached_art.label)
 
                 # Split inputs into work units
-                units = layer.split(inputs, transform_ctx)
+                units = _invoke_transform_split(layer, inputs, transform_ctx)
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
@@ -313,7 +313,7 @@ def run(
                             _on_cached(cached_arts, unit_inputs)
                             continue
                         unit_ctx = transform_ctx.with_updates(config_extras)
-                        new_artifacts = layer.execute(unit_inputs, unit_ctx)
+                        new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
                         for artifact in new_artifacts:
                             _save_artifact(artifact, parent_inputs=unit_inputs)
 
@@ -464,6 +464,65 @@ def _build_transform_context(
         )
     )
     return TransformContext.from_value(transform_config).with_updates(runtime_updates)
+
+
+def _transform_prefers_legacy_config_dict(method) -> bool:
+    """Return True when ``method`` still advertises the old ``config: dict`` API."""
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return False
+
+    positional = [
+        param
+        for param in signature.parameters.values()
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if len(positional) < 2:
+        return False
+
+    config_param = positional[1]
+    annotation = config_param.annotation
+    annotation_text = ""
+    if annotation is not inspect.Signature.empty:
+        if isinstance(annotation, str):
+            annotation_text = annotation
+        else:
+            annotation_text = getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(
+                annotation
+            )
+
+    if annotation is dict or annotation_text == "dict" or annotation_text.startswith("dict["):
+        return True
+    if "TransformContext" in annotation_text:
+        return False
+
+    return config_param.name == "config"
+
+
+def _transform_runtime_arg(method, ctx: TransformContext) -> TransformContext | dict:
+    """Adapt ``ctx`` for legacy transforms that still expect a raw config dict."""
+    if _transform_prefers_legacy_config_dict(method):
+        return ctx.to_dict()
+    return ctx
+
+
+def _invoke_transform_split(
+    transform: Transform,
+    inputs: list[Artifact],
+    ctx: TransformContext,
+) -> list[tuple[list[Artifact], dict]]:
+    """Invoke ``split`` with either ``TransformContext`` or a legacy plain dict."""
+    return transform.split(inputs, _transform_runtime_arg(transform.split, ctx))
+
+
+def _invoke_transform_execute(
+    transform: Transform,
+    inputs: list[Artifact],
+    ctx: TransformContext,
+) -> list[Artifact]:
+    """Invoke ``execute`` with either ``TransformContext`` or a legacy plain dict."""
+    return transform.execute(inputs, _transform_runtime_arg(transform.execute, ctx))
 
 
 def _materialize_layer_search_surfaces(
@@ -660,7 +719,7 @@ def _execute_transform_concurrent(
         if shared_client is not None:
             worker_config["_shared_llm_client"] = shared_client
         worker_ctx = TransformContext.from_value(worker_config)
-        return index, worker_transform.execute(unit_inputs, worker_ctx)
+        return index, _invoke_transform_execute(worker_transform, unit_inputs, worker_ctx)
 
     first_error: Exception | None = None
 
