@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
@@ -56,7 +57,10 @@ def _normalize_fingerprint_value(value: Any) -> Any:
             str(key): _normalize_fingerprint_value(item)
             for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
         }
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, set):
+        normalized = [_normalize_fingerprint_value(item) for item in value]
+        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True, ensure_ascii=True))
+    if isinstance(value, (list, tuple)):
         return [_normalize_fingerprint_value(item) for item in value]
     if callable(value):
         qualname = getattr(value, "__qualname__", getattr(value, "__name__", type(value).__name__))
@@ -133,6 +137,7 @@ class BuildTransaction:
     artifact_oids: dict[str, str] = field(default_factory=dict)
     layer_artifact_oids: dict[str, list[str]] = field(default_factory=dict)
     projection_oids: dict[str, str] = field(default_factory=dict)
+    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     @classmethod
     def start(cls, pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:
@@ -161,46 +166,47 @@ class BuildTransaction:
         layer_level: int,
         parent_labels: list[str],
     ) -> str:
-        content = _artifact_text_content(artifact)
-        snapshot_metadata = dict(artifact.metadata)
-        snapshot_metadata.setdefault("layer_name", layer_name)
-        snapshot_metadata.setdefault("layer_level", layer_level)
-        content_hash = f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
-        if artifact.artifact_id and artifact.artifact_id != content_hash:
-            msg = (
-                f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
-                f"that does not match its content hash {content_hash!r}"
+        with self._lock:
+            content = _artifact_text_content(artifact)
+            snapshot_metadata = dict(artifact.metadata)
+            snapshot_metadata.setdefault("layer_name", layer_name)
+            snapshot_metadata.setdefault("layer_level", layer_level)
+            content_hash = f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+            if artifact.artifact_id and artifact.artifact_id != content_hash:
+                msg = (
+                    f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
+                    f"that does not match its content hash {content_hash!r}"
+                )
+                raise ValueError(msg)
+            if not artifact.artifact_id:
+                artifact.artifact_id = content_hash
+            content_oid = _store_content_text(self.object_store, content)
+            artifact_payload = _object(
+                "artifact",
+                label=artifact.label,
+                artifact_type=artifact.artifact_type,
+                artifact_id=content_hash,
+                content_oid=content_oid,
+                input_ids=list(artifact.input_ids),
+                prompt_id=artifact.prompt_id,
+                model_config=artifact.model_config,
+                metadata=snapshot_metadata,
+                parent_labels=parent_labels,
             )
-            raise ValueError(msg)
-        if not artifact.artifact_id:
-            artifact.artifact_id = content_hash
-        content_oid = _store_content_text(self.object_store, content)
-        artifact_payload = _object(
-            "artifact",
-            label=artifact.label,
-            artifact_type=artifact.artifact_type,
-            artifact_id=content_hash,
-            content_oid=content_oid,
-            input_ids=list(artifact.input_ids),
-            prompt_id=artifact.prompt_id,
-            model_config=artifact.model_config,
-            metadata=snapshot_metadata,
-            parent_labels=parent_labels,
-        )
-        artifact_oid = self.object_store.put_json(artifact_payload)
+            artifact_oid = self.object_store.put_json(artifact_payload)
 
-        previous_oid = self.artifact_oids.get(artifact.label)
-        if previous_oid is not None and previous_oid != artifact_oid:
-            layer_oids = self.layer_artifact_oids.get(layer_name, [])
-            if previous_oid in layer_oids:
-                layer_oids.remove(previous_oid)
+            previous_oid = self.artifact_oids.get(artifact.label)
+            if previous_oid is not None and previous_oid != artifact_oid:
+                layer_oids = self.layer_artifact_oids.get(layer_name, [])
+                if previous_oid in layer_oids:
+                    layer_oids.remove(previous_oid)
 
-        self.artifact_oids[artifact.label] = artifact_oid
-        layer_oids = self.layer_artifact_oids.setdefault(layer_name, [])
-        if artifact_oid not in layer_oids:
-            layer_oids.append(artifact_oid)
+            self.artifact_oids[artifact.label] = artifact_oid
+            layer_oids = self.layer_artifact_oids.setdefault(layer_name, [])
+            if artifact_oid not in layer_oids:
+                layer_oids.append(artifact_oid)
 
-        return artifact_oid
+            return artifact_oid
 
     def assert_complete(self, layer_artifacts: dict[str, list[Artifact]]) -> None:
         """Fail closed if the transaction missed artifacts present in the current build state."""
@@ -327,7 +333,10 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             "manifest",
             pipeline_name=transaction.pipeline.name,
             pipeline_fingerprint=_pipeline_fingerprint(transaction.pipeline),
-            artifacts=transaction.artifact_oids,
+            artifacts=[
+                {"label": label, "oid": oid}
+                for label, oid in sorted(transaction.artifact_oids.items())
+            ],
             projections=transaction.projection_oids,
         )
         manifest_oid = transaction.object_store.put_json(manifest_payload)

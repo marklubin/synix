@@ -34,10 +34,7 @@ class Artifact:
     metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        if not isinstance(self.content, str):
-            msg = f"Artifact content must be a string, got {type(self.content).__name__}"
-            raise TypeError(msg)
-        if not self.artifact_id:
+        if not self.artifact_id and isinstance(self.content, str):
             self.artifact_id = f"sha256:{hashlib.sha256(self.content.encode()).hexdigest()}"
 
 

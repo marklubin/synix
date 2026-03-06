@@ -14,7 +14,6 @@ from typing import Any
 SCHEMA_VERSION = 1
 
 _REQUIRED_FIELDS: dict[str, set[str]] = {
-    "blob": {"type", "schema_version", "content_oid", "size_bytes"},
     "artifact": {
         "type",
         "schema_version",
@@ -59,10 +58,6 @@ _REQUIRED_FIELDS: dict[str, set[str]] = {
 }
 
 _FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
-    "blob": {
-        "content_oid": str,
-        "size_bytes": int,
-    },
     "artifact": {
         "label": str,
         "artifact_type": str,
@@ -82,7 +77,7 @@ _FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
     "manifest": {
         "pipeline_name": str,
         "pipeline_fingerprint": str,
-        "artifacts": dict,
+        "artifacts": list,
         "projections": dict,
     },
     "snapshot": {
@@ -100,9 +95,6 @@ _OPTIONAL_FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
         "model_config": (dict, type(None)),
         "created_at": str,
         "parent_labels": list,
-    },
-    "snapshot": {
-        "run_id": str,
     },
 }
 

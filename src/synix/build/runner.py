@@ -208,7 +208,7 @@ def run(
                         artifact.metadata["build_fingerprint"] = build_fp.to_dict()
                         artifact.metadata["transform_fingerprint"] = _transform_fp.to_dict()
                         store.save_artifact(artifact, _layer.name, _layer._level)
-                        parent_labels = _snapshot_parent_labels(artifact, effective_inputs, provenance)
+                        parent_labels = _provenance_parent_labels(artifact, effective_inputs, provenance)
                         provenance.record(
                             artifact.label,
                             parent_labels=parent_labels,
@@ -375,7 +375,33 @@ def _snapshot_parent_labels(
     inputs: list[Artifact],
     provenance: ProvenanceTracker,
 ) -> list[str]:
-    """Prefer current build inputs for lineage, falling back to stored provenance for cached reuse."""
+    """Parent labels for immutable snapshots.
+
+    Snapshots should not invent broad parent sets when an artifact explicitly
+    declared inputs but they could not be resolved unambiguously.
+    """
+    derived = _get_parent_labels(artifact, inputs)
+    if derived:
+        return derived
+    stored = provenance.get_parents(artifact.label)
+    if stored:
+        return stored
+    if artifact.input_ids:
+        return []
+    return [inp.label for inp in inputs]
+
+
+def _provenance_parent_labels(
+    artifact: Artifact,
+    inputs: list[Artifact],
+    provenance: ProvenanceTracker,
+) -> list[str]:
+    """Parent labels for the legacy provenance surface.
+
+    Provenance records keep the pre-snapshot best-effort behavior so existing
+    lineage commands remain informative even when transforms omit explicit
+    input_ids for aggregate artifacts.
+    """
     derived = _get_parent_labels(artifact, inputs)
     if derived:
         return derived

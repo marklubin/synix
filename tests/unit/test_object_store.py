@@ -27,14 +27,14 @@ class TestObjectStore:
             "schema_version": SCHEMA_VERSION,
             "pipeline_name": "test",
             "pipeline_fingerprint": "sha256:test",
-            "artifacts": {"a": "0" * 64},
+            "artifacts": [{"label": "a", "oid": "0" * 64}],
             "projections": {},
         }
         payload2 = {
             "projections": {},
             "pipeline_fingerprint": "sha256:test",
             "pipeline_name": "test",
-            "artifacts": {"a": "0" * 64},
+            "artifacts": [{"label": "a", "oid": "0" * 64}],
             "schema_version": SCHEMA_VERSION,
             "type": "manifest",
         }

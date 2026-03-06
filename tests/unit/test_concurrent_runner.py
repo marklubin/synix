@@ -169,6 +169,34 @@ class TestExecuteTransformConcurrent:
         threads_used = {entry["thread"] for entry in transform.call_log}
         assert len(threads_used) > 1, f"Expected multiple threads, got: {threads_used}"
 
+    def test_on_complete_receives_matching_unit_inputs_when_some_units_are_cached(self):
+        """Callback input mapping stays correct even when cached units are skipped."""
+        inputs = [_make_transcript(f"t-{i}") for i in range(4)]
+        transform = MockEpisodeTransform()
+        config = {"llm_config": {"model": "test"}}
+        units = [([inp], {}) for inp in inputs]
+        cached_by_inputs = {tuple(sorted([inputs[1].artifact_id])): [Artifact(
+            label="ep-t-1",
+            artifact_type="episode",
+            content="cached",
+            input_ids=[inputs[1].artifact_id],
+        )]}
+        seen: list[tuple[str, str]] = []
+
+        def on_complete(artifacts: list[Artifact], unit_inputs: list[Artifact]) -> None:
+            seen.append((artifacts[0].label, unit_inputs[0].label))
+
+        _execute_transform_concurrent(
+            transform,
+            units,
+            config,
+            concurrency=2,
+            cached_by_inputs=cached_by_inputs,
+            on_complete=on_complete,
+        )
+
+        assert sorted(seen) == [("ep-t-0", "t-0"), ("ep-t-2", "t-2"), ("ep-t-3", "t-3")]
+
 
 class TestConcurrentBuildSameResults:
     """Verify that concurrent builds produce identical results to sequential builds."""

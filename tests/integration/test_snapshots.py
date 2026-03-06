@@ -18,6 +18,10 @@ from synix.core.models import Artifact
 from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 
+def _manifest_artifact_map(manifest: dict) -> dict[str, str]:
+    return {entry["label"]: entry["oid"] for entry in manifest["artifacts"]}
+
+
 def _build_pipeline(build_dir: Path, source_dir: Path, *, synix_dir: Path | None = None) -> Pipeline:
     pipeline = Pipeline("snapshot-pipeline")
     pipeline.build_dir = str(build_dir)
@@ -68,8 +72,8 @@ class TestSnapshots:
         object_store = ObjectStore(tmp_path / ".synix")
         manifest = object_store.get_json(snapshot_info["manifest_oid"])
 
-        assert manifest["artifacts"] == {"ep-1": txn.artifact_oids["ep-1"]}
-        stored_artifact = object_store.get_json(manifest["artifacts"]["ep-1"])
+        assert _manifest_artifact_map(manifest) == {"ep-1": txn.artifact_oids["ep-1"]}
+        stored_artifact = object_store.get_json(_manifest_artifact_map(manifest)["ep-1"])
         assert stored_artifact["label"] == "ep-1"
 
     def test_commit_rejects_when_head_advances_during_build(self, tmp_path):
@@ -145,7 +149,7 @@ class TestSnapshots:
 
         snapshot_info = commit_build_snapshot(txn)
         manifest = ObjectStore(tmp_path / ".synix").get_json(snapshot_info["manifest_oid"])
-        stored_artifact = ObjectStore(tmp_path / ".synix").get_json(manifest["artifacts"]["empty"])
+        stored_artifact = ObjectStore(tmp_path / ".synix").get_json(_manifest_artifact_map(manifest)["empty"])
 
         assert artifact.artifact_id == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         assert stored_artifact["artifact_id"] == artifact.artifact_id
@@ -187,7 +191,7 @@ class TestSnapshots:
                 "schema_version": SCHEMA_VERSION,
                 "pipeline_name": "recovery-test",
                 "pipeline_fingerprint": "sha256:test",
-                "artifacts": {},
+                "artifacts": [],
                 "projections": {},
             }
         )
@@ -295,10 +299,28 @@ class TestSnapshots:
 
         assert _pipeline_fingerprint(pipeline_a) != _pipeline_fingerprint(pipeline_b)
 
-    def test_artifact_requires_text_content(self):
-        """Artifact content must be explicit text for the current snapshot slice."""
-        with pytest.raises(TypeError, match="Artifact content must be a string"):
-            Artifact(label="bad", artifact_type="note", content=None)  # type: ignore[arg-type]
+    def test_snapshot_transaction_requires_text_content(self, tmp_path):
+        """Snapshotting should reject non-text artifact content with a clear boundary error."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "non-text-content",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000005Z")
+        artifact = Artifact(label="bad", artifact_type="note", content="")
+        artifact.content = None  # type: ignore[assignment]
+
+        with pytest.raises(TypeError, match="content must be a string"):
+            txn.record_artifact(
+                artifact,
+                layer_name="transcripts",
+                layer_level=0,
+                parent_labels=[],
+            )
 
     def test_build_commits_manifest_and_snapshot(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """A successful build records immutable objects and moves HEAD."""
@@ -330,7 +352,7 @@ class TestSnapshots:
         assert (build_dir / "context.md").exists()
 
         build_store = ArtifactStore(build_dir)
-        first_label, first_artifact_oid = next(iter(manifest["artifacts"].items()))
+        first_label, first_artifact_oid = next(iter(_manifest_artifact_map(manifest).items()))
         first_artifact = object_store.get_json(first_artifact_oid)
         assert object_store.get_bytes(first_artifact["content_oid"]).decode("utf-8") == build_store.load_artifact(first_label).content
 

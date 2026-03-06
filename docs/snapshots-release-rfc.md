@@ -246,11 +246,11 @@ The manifest is the exact closure over artifacts and projections for one build s
   "schema_version": 1,
   "pipeline_name": "monthly-memory",
   "pipeline_fingerprint": "sha256:...",
-  "artifacts": {
-    "tx-conv-001": "oid_art_1",
-    "ep-conv-001": "oid_art_2",
-    "core": "oid_art_3"
-  },
+  "artifacts": [
+    {"label": "tx-conv-001", "oid": "oid_art_1"},
+    {"label": "ep-conv-001", "oid": "oid_art_2"},
+    {"label": "core", "oid": "oid_art_3"}
+  ],
   "projections": {
     "memory-index": "oid_proj_1",
     "context-doc": "oid_proj_2"

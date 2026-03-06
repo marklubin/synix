@@ -66,6 +66,10 @@ class ArtifactStore:
 
     def save_artifact(self, artifact: Artifact, layer_name: str, layer_level: int) -> None:
         """Save an artifact to the build directory."""
+        if not isinstance(artifact.content, str):
+            msg = f"artifact {artifact.label!r} content must be a string, got {type(artifact.content).__name__}"
+            raise TypeError(msg)
+
         # Ensure artifact ID (content hash) is computed
         if not artifact.artifact_id:
             artifact.artifact_id = f"sha256:{hashlib.sha256(artifact.content.encode()).hexdigest()}"
