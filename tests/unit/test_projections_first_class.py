@@ -654,6 +654,30 @@ class TestProjectionPlan:
         with pytest.raises(ValueError, match="does not match the surface added to the pipeline"):
             plan_build(pipeline, source_dir=str(source_dir))
 
+    def test_search_index_projection_does_not_satisfy_surface_use(self, source_dir, build_dir, mock_llm):
+        """A SearchIndex projection with the same name is not a substitute for SearchSurface."""
+        pipeline = Pipeline("projection-is-not-surface")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        declared_surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
+        topics = TopicalRollup(
+            "topics",
+            depends_on=[episodes],
+            uses=[declared_surface],
+            config={"topics": ["programming"]},
+        )
+
+        pipeline.add(transcripts, episodes, topics)
+        pipeline.add(SearchIndexLayer("episode-search", sources=[episodes], search=["fulltext"]))
+
+        with pytest.raises(ValueError, match="belongs to a projection"):
+            plan_build(pipeline, source_dir=str(source_dir))
+        with pytest.raises(ValueError, match="belongs to a projection"):
+            run(pipeline, source_dir=str(source_dir))
+
 
 # ---------------------------------------------------------------------------
 # 4. Projection Stats

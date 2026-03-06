@@ -227,7 +227,7 @@ Import from `synix`:
 | Class | Output | Description |
 |-------|--------|-------------|
 | `SearchSurface` | local compatibility realization under `build/surfaces/` today | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
-| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. Optional embedding support for semantic/hybrid search |
+| `SearchIndex` | `build/search.db` | SQLite FTS5 index across selected layers. This is a projection output, not a build-time capability, so it does not satisfy `uses=[...]`. Optional embedding support for semantic/hybrid search |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
 ## Config Change Demo

@@ -7,7 +7,8 @@ Layer hierarchy:
     │   ├── MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Merge
     │   ├── bundled memory transforms under synix.ext
     │   └── (user-defined subclasses)
-    ├── SearchIndex     → materializes artifacts into FTS5 + embeddings
+    ├── SearchSurface   → build-time searchable capability
+    ├── SearchIndex     → projection compatibility output
     └── FlatFile        → renders artifacts into a markdown file
 """
 
@@ -279,7 +280,7 @@ class SearchSurface(Layer):
         super().__init__(name, depends_on=list(sources), config=config or {})
         self.sources = sources
         self.modes = modes or ["fulltext"]
-        self.search = self.modes  # compatibility alias while SearchIndex still exists
+        self.search = self.modes  # compatibility alias for older config paths
         self.embedding_config = embedding_config or {}
 
     def usage_signature(self) -> dict:
@@ -294,8 +295,12 @@ class SearchSurface(Layer):
         }
 
 
-class SearchIndex(SearchSurface):
-    """Projection compatibility layer — materializes artifacts into a searchable index."""
+class SearchIndex(Layer):
+    """Projection compatibility layer for ``build/search.db``.
+
+    This remains a projection output, not a build-time capability, and cannot
+    satisfy ``uses=[...]`` declarations.
+    """
 
     def __init__(
         self,
@@ -306,14 +311,10 @@ class SearchIndex(SearchSurface):
         embedding_config: dict | None = None,
         config: dict | None = None,
     ):
-        super().__init__(
-            name,
-            sources=sources,
-            modes=search,
-            embedding_config=embedding_config,
-            config=config,
-        )
-        self.search = self.modes
+        super().__init__(name, depends_on=list(sources), config=config or {})
+        self.sources = sources
+        self.search = search or ["fulltext"]
+        self.embedding_config = embedding_config or {}
 
 
 class FlatFile(Layer):

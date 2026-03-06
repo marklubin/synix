@@ -57,11 +57,8 @@ def search_surface_ready(surface: SearchSurface, available_layer_names: set[str]
 
 def validate_search_surface_uses(pipeline: Pipeline) -> None:
     """Validate build-time search surface usage after levels are computed."""
-    registered_surfaces = {
-        layer.name: layer
-        for layer in [*pipeline.surfaces, *pipeline.projections]
-        if isinstance(layer, SearchSurface)
-    }
+    registered_surfaces = {surface.name: surface for surface in pipeline.surfaces if isinstance(surface, SearchSurface)}
+    projection_names = {projection.name for projection in pipeline.projections}
 
     for layer in pipeline.layers:
         if not isinstance(layer, Transform):
@@ -76,6 +73,12 @@ def validate_search_surface_uses(pipeline: Pipeline) -> None:
 
             registered = registered_surfaces.get(used.name)
             if registered is None:
+                if used.name in projection_names:
+                    raise ValueError(
+                        f"Transform '{layer.name}' uses search surface '{used.name}', but that name belongs to a "
+                        "projection. Add a SearchSurface to the pipeline; SearchIndex projections do not satisfy "
+                        "uses=[...]."
+                    )
                 raise ValueError(
                     f"Transform '{layer.name}' uses search surface '{used.name}' but that surface "
                     "was not added to the pipeline."

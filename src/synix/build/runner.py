@@ -842,10 +842,15 @@ def _refresh_surface_cache(
 
 
 def _get_projection_config(proj: Layer) -> dict:
-    """Extract projection config from a SearchIndex or FlatFile layer."""
-    if isinstance(proj, (SearchIndex, SearchSurface)):
+    """Extract cache-relevant config from a projection or search surface."""
+    if isinstance(proj, SearchIndex):
         return {
             "search": proj.search,
+            "embedding_config": proj.embedding_config,
+        }
+    elif isinstance(proj, SearchSurface):
+        return {
+            "modes": proj.modes,
             "embedding_config": proj.embedding_config,
         }
     elif isinstance(proj, FlatFile):
