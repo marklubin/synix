@@ -106,6 +106,17 @@ Synix gives you: edit the pipeline definition, run it again, and your same raw d
 
 The name "Synix" comes from **synthesis** — the core action of transforming raw information into processed understanding. In chip design, synthesis turns high-level descriptions into gate-level implementations. In software, build systems turn source files into artifacts. Synix does the same for agent memory: sources become artifacts through declared build rules, with full lineage tracking and incremental rebuilds.
 
+### 1.5 Immutable Build History
+
+As of the snapshotting work in `v0.15.x`, Synix distinguishes between:
+
+- the **mutable local build surface** (`build/`), which current commands and demos still use as a compatibility materialization target
+- the **immutable canonical history** (`.synix/`), which stores content-addressed objects, manifests, snapshots, and refs
+
+This split is intentional. Build history should survive `synix clean`, and future release targets should be materialized from immutable snapshot state rather than treated as the source of truth.
+
+The first shipped slice records **artifact snapshots only**. Projection/release state is still materialized into the local build surface until the explicit release/adapter layer lands.
+
 ---
 
 ## Part II: Conceptual Grounding

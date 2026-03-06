@@ -18,6 +18,10 @@ Synix should move from a mutable `build/` directory model to a git-like snapshot
 
 This design is the generic platform substrate for reproducibility, diffing, release promotion, rollback, and multi-variation deployment. It is required by LENS, but it is not benchmark-specific.
 
+LENS here refers to an external benchmark effort that motivated some of the
+requirements. The snapshot/ref model in this RFC is intended to be generic
+Synix platform functionality, not benchmark-specific behavior.
+
 The implementation should land in slices. The first mergeable slice is:
 
 - immutable artifact snapshots

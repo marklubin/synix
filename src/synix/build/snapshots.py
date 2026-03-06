@@ -41,7 +41,7 @@ def _sanitize_llm_config(config: dict[str, Any]) -> dict[str, Any]:
     }
     for key, value in config.items():
         lower = key.lower()
-        if lower in secret_keys or lower.endswith(("_api_key", "_secret", "_password", "_token")):
+        if lower in secret_keys or lower.endswith(("_api_key", "_secret", "_password")):
             continue
         redacted[key] = _normalize_fingerprint_value(value)
     return redacted
