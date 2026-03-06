@@ -34,6 +34,7 @@ mesh = [
     "starlette>=0.40",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "textual>=0.60",
 ]
 
 [project.scripts]
@@ -67,6 +68,7 @@ mesh-dev = [
     "starlette>=0.40",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "textual>=0.60",
 ]
 
 [tool.pytest.ini_options]

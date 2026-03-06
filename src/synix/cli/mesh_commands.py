@@ -397,6 +397,22 @@ def dashboard(name: str, refresh: int, lines: int):
     )
 
 
+@mesh.command("view")
+@click.option("--name", required=True, help="Mesh name")
+def view(name: str):
+    """Interactive memory viewer — browse artifacts, search, inspect config."""
+    from synix.mesh.config import DEFAULT_MESH_ROOT
+
+    mesh_dir = DEFAULT_MESH_ROOT / name
+    if not mesh_dir.exists():
+        console.print(f"[red]Error:[/red] Mesh '{name}' not found")
+        sys.exit(1)
+
+    from synix.mesh.viewer import run_viewer
+
+    run_viewer(name)
+
+
 @mesh.command()
 @click.option("--name", required=True, help="Mesh name")
 @click.confirmation_option(prompt="This will remove all mesh data. Continue?")
