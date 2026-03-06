@@ -20,14 +20,15 @@ def runs_group():
 
 @runs_group.command("list")
 @click.option("--build-dir", default="./build", help="Build directory")
-def list_runs_command(build_dir: str):
+@click.option("--synix-dir", default=None, help="Explicit .synix directory")
+def list_runs_command(build_dir: str, synix_dir: str | None):
     """List recorded run refs and snapshot ids."""
     build_path = Path(build_dir)
     if not build_path.exists():
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         raise SystemExit(1)
 
-    runs = list_runs(build_dir)
+    runs = list_runs(build_dir, synix_dir=synix_dir)
     if not runs:
         console.print("[dim]No run snapshots found.[/dim]")
         return

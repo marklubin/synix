@@ -279,12 +279,13 @@ def run(
 
         result.validation = run_validators(pipeline, store, provenance)
 
-    snapshot_info = commit_build_snapshot(pipeline, build_dir, run_id=slogger.run_log.run_id)
-    result.snapshot_oid = snapshot_info["snapshot_oid"]
-    result.manifest_oid = snapshot_info["manifest_oid"]
-    result.head_ref = snapshot_info["head_ref"]
-    result.run_ref = snapshot_info["run_ref"]
-    result.synix_dir = snapshot_info["synix_dir"]
+    if result.validation is None or result.validation.passed:
+        snapshot_info = commit_build_snapshot(pipeline, build_dir, run_id=slogger.run_log.run_id)
+        result.snapshot_oid = snapshot_info["snapshot_oid"]
+        result.manifest_oid = snapshot_info["manifest_oid"]
+        result.head_ref = snapshot_info["head_ref"]
+        result.run_ref = snapshot_info["run_ref"]
+        result.synix_dir = snapshot_info["synix_dir"]
 
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)

@@ -41,6 +41,8 @@ def load_pipeline(path: str) -> Pipeline:
         raise ValueError(f"Pipeline module {path} must define a 'pipeline' variable")
     if not isinstance(pipeline, Pipeline):
         raise TypeError(f"'pipeline' variable must be a Pipeline instance, got {type(pipeline)}")
+    if pipeline.synix_dir is None:
+        pipeline.synix_dir = str(filepath.parent / ".synix")
 
     validate_pipeline(pipeline)
     return pipeline

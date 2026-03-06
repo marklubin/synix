@@ -283,12 +283,14 @@ class Pipeline:
         *,
         source_dir: str = "./sources",
         build_dir: str = "./build",
+        synix_dir: str | None = None,
         llm_config: dict | None = None,
         concurrency: int = 5,
     ):
         self.name = name
         self.source_dir = source_dir
         self.build_dir = build_dir
+        self.synix_dir = synix_dir
         self.llm_config: dict = llm_config or {}
         self.concurrency = concurrency
         self.layers: list[Layer] = []  # Source + Transform

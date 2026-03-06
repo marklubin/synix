@@ -5,18 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
 from synix.build.snapshots import list_runs
+from synix.build.validators import RequiredField
 from synix.transforms import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
 
-def _build_pipeline(build_dir: Path, source_dir: Path) -> Pipeline:
+def _build_pipeline(build_dir: Path, source_dir: Path, *, synix_dir: Path | None = None) -> Pipeline:
     pipeline = Pipeline("snapshot-pipeline")
     pipeline.build_dir = str(build_dir)
     pipeline.source_dir = str(source_dir)
+    pipeline.synix_dir = str(synix_dir) if synix_dir is not None else str(build_dir.parent / ".synix")
     pipeline.llm_config = {
         "model": "claude-sonnet-4-20250514",
         "temperature": 0.3,
@@ -65,6 +70,28 @@ class TestSnapshots:
         assert ref_store.read_head_target() == "refs/heads/main"
         assert ref_store.read_ref("HEAD") == result.snapshot_oid
         assert ref_store.read_ref(result.run_ref) == result.snapshot_oid
+
+    def test_projection_input_closure_uses_projection_sources(self, tmp_path, source_dir_with_fixtures, mock_llm):
+        """Projection input_oids should only include artifacts from the configured source layers."""
+        build_dir = tmp_path / "build"
+        pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
+
+        result = run(pipeline, source_dir=str(source_dir_with_fixtures))
+        assert result.manifest_oid is not None
+
+        object_store = ObjectStore(tmp_path / ".synix")
+        manifest = object_store.get_json(result.manifest_oid)
+        projection_oid = manifest["projections"]["memory-index"]
+        projection = object_store.get_json(projection_oid)
+
+        store = ArtifactStore(build_dir)
+        expected_count = (
+            len(store.list_artifacts("episodes"))
+            + len(store.list_artifacts("monthly"))
+            + len(store.list_artifacts("core"))
+        )
+
+        assert len(projection["input_oids"]) == expected_count
 
     def test_successive_builds_preserve_old_run_ref(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """Each successful build gets a new snapshot while older run refs remain resolvable."""
@@ -139,3 +166,32 @@ class TestSnapshots:
         second_manifest = object_store.get_json(second.manifest_oid)
 
         assert len(second_manifest["artifacts"]) > len(first_manifest["artifacts"])
+
+    def test_validation_failure_does_not_advance_snapshot_refs(self, tmp_path, source_dir_with_fixtures, mock_llm):
+        """A failing validation result should not record or advance snapshot refs."""
+        build_dir = tmp_path / "build"
+        synix_dir = tmp_path / ".synix"
+        pipeline = _build_pipeline(build_dir, source_dir_with_fixtures, synix_dir=synix_dir)
+
+        core = next(layer for layer in pipeline.layers if layer.name == "core")
+        pipeline.add_validator(RequiredField(field="missing_required_field", layers=[core]))
+
+        result = run(pipeline, source_dir=str(source_dir_with_fixtures), validate=True)
+
+        assert result.validation is not None
+        assert not result.validation.passed
+        assert result.snapshot_oid is None
+        assert result.run_ref is None
+        assert result.manifest_oid is None
+        assert list_runs(build_dir, synix_dir=synix_dir) == []
+
+    def test_flatfile_projection_must_live_under_build_dir(self, tmp_path, source_dir_with_fixtures, mock_llm):
+        """Snapshotting rejects flat-file projections that point outside the build root."""
+        build_dir = tmp_path / "build"
+        pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
+        pipeline.projections = [
+            proj for proj in pipeline.projections if not isinstance(proj, FlatFile)
+        ] + [FlatFile("external-doc", sources=[next(layer for layer in pipeline.layers if layer.name == "core")], output_path=str(tmp_path / "outside.md"))]
+
+        with pytest.raises(ValueError, match="must write inside the build directory"):
+            run(pipeline, source_dir=str(source_dir_with_fixtures))

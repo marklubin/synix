@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from synix.build.refs import DEFAULT_HEAD_REF, RefStore
+
+OID1 = "1" * 64
+OID2 = "2" * 64
 
 
 class TestRefStore:
@@ -20,18 +25,29 @@ class TestRefStore:
         """Reading HEAD resolves through the symbolic ref chain."""
         store = RefStore(tmp_path / ".synix")
         store.ensure_head()
-        store.write_ref(DEFAULT_HEAD_REF, "snapshot-oid-1")
+        store.write_ref(DEFAULT_HEAD_REF, OID1)
 
-        assert store.read_ref("HEAD") == "snapshot-oid-1"
-        assert store.read_ref(DEFAULT_HEAD_REF) == "snapshot-oid-1"
+        assert store.read_ref("HEAD") == OID1
+        assert store.read_ref(DEFAULT_HEAD_REF) == OID1
 
     def test_iter_refs_lists_run_refs(self, tmp_path):
         """Run refs are discoverable under refs/runs."""
         store = RefStore(tmp_path / ".synix")
-        store.write_ref("refs/runs/run-1", "snapshot-oid-1")
-        store.write_ref("refs/runs/run-2", "snapshot-oid-2")
+        store.write_ref("refs/runs/run-1", OID1)
+        store.write_ref("refs/runs/run-2", OID2)
 
         assert store.iter_refs("refs/runs") == [
-            ("refs/runs/run-1", "snapshot-oid-1"),
-            ("refs/runs/run-2", "snapshot-oid-2"),
+            ("refs/runs/run-1", OID1),
+            ("refs/runs/run-2", OID2),
         ]
+
+    def test_read_ref_rejects_symbolic_cycles(self, tmp_path):
+        """Corrupt symbolic refs fail loudly instead of looping forever."""
+        store = RefStore(tmp_path / ".synix")
+        store.ensure_head()
+        store.write_head("refs/heads/loop")
+        (tmp_path / ".synix" / "refs" / "heads").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".synix" / "refs" / "heads" / "loop").write_text("ref: refs/heads/loop\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="cycle"):
+            store.read_ref("HEAD")

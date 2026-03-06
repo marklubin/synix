@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from synix.build.object_store import ObjectStore
+import pytest
+
+from synix.build.object_store import SCHEMA_VERSION, ObjectStore
 
 
 class TestObjectStore:
@@ -18,8 +20,32 @@ class TestObjectStore:
         """Equivalent JSON payloads produce the same oid."""
         store = ObjectStore(tmp_path / ".synix")
 
-        oid1 = store.put_json({"b": 2, "a": 1})
-        oid2 = store.put_json({"a": 1, "b": 2})
+        payload1 = {
+            "type": "manifest",
+            "schema_version": SCHEMA_VERSION,
+            "pipeline_name": "test",
+            "pipeline_fingerprint": "sha256:test",
+            "artifacts": {"a": "0" * 64},
+            "projections": {},
+        }
+        payload2 = {
+            "projections": {},
+            "pipeline_fingerprint": "sha256:test",
+            "pipeline_name": "test",
+            "artifacts": {"a": "0" * 64},
+            "schema_version": SCHEMA_VERSION,
+            "type": "manifest",
+        }
+
+        oid1 = store.put_json(payload1)
+        oid2 = store.put_json(payload2)
 
         assert oid1 == oid2
-        assert store.get_json(oid1) == {"a": 1, "b": 2}
+        assert store.get_json(oid1) == payload1
+
+    def test_put_json_rejects_missing_schema_version(self, tmp_path):
+        """Snapshot objects must declare a schema version."""
+        store = ObjectStore(tmp_path / ".synix")
+
+        with pytest.raises(ValueError, match="schema_version"):
+            store.put_json({"type": "manifest", "pipeline_name": "test"})

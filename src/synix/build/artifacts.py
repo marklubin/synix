@@ -139,6 +139,10 @@ class ArtifactStore:
             return None
         return entry["artifact_id"]
 
+    def iter_entries(self) -> dict[str, dict]:
+        """Return a shallow copy of the manifest entries keyed by label."""
+        return dict(self._manifest)
+
     def resolve_prefix(self, prefix: str) -> str | None:
         """Resolve a prefix to a full label (git-like semantics).
 
