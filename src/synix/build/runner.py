@@ -16,6 +16,7 @@ from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshots import commit_build_snapshot
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
     Artifact,
@@ -62,6 +63,11 @@ class RunResult:
     projection_stats: list[ProjectionStats] = field(default_factory=list)
     run_log: dict = field(default_factory=dict)
     validation: object | None = None  # ValidationResult when validators are declared
+    snapshot_oid: str | None = None
+    manifest_oid: str | None = None
+    head_ref: str | None = None
+    run_ref: str | None = None
+    synix_dir: str | None = None
 
 
 def run(
@@ -272,6 +278,13 @@ def run(
         from synix.build.validators import run_validators
 
         result.validation = run_validators(pipeline, store, provenance)
+
+    snapshot_info = commit_build_snapshot(pipeline, build_dir, run_id=slogger.run_log.run_id)
+    result.snapshot_oid = snapshot_info["snapshot_oid"]
+    result.manifest_oid = snapshot_info["manifest_oid"]
+    result.head_ref = snapshot_info["head_ref"]
+    result.run_ref = snapshot_info["run_ref"]
+    result.synix_dir = snapshot_info["synix_dir"]
 
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)

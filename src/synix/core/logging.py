@@ -136,7 +136,9 @@ class SynixLogger:
         self.build_dir = build_dir
         self.progress = progress
         self.run_log = RunLog(
-            run_id=datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ"),
+            # Use microsecond precision so successive builds do not collide on
+            # log paths or run refs when they complete within the same second.
+            run_id=datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%S%fZ"),
         )
         self._lock = Lock()
         self._log_file = None

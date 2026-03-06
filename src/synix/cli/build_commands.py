@@ -224,6 +224,9 @@ def build(
     console.print(f"\n[bold]Total:[/bold] {result.built} built, {result.cached} cached, {result.skipped} skipped")
     if not is_demo_mode():
         console.print(f"[bold]Time:[/bold] {elapsed:.1f}s")
+    if result.snapshot_oid and result.run_ref:
+        console.print(f"[bold]Snapshot:[/bold] {result.snapshot_oid[:12]}")
+        console.print(f"[bold]Run Ref:[/bold] {result.run_ref}")
 
     # Show run log summary when verbose
     run_log = result.run_log
