@@ -51,7 +51,7 @@ uvx synix list                    # all artifacts, grouped by layer
 uvx synix show final-report       # render an artifact
 uvx synix search "hiking"         # full-text search
 uvx synix runs list               # immutable build snapshots for this project
-uvx synix runs list --json        # machine-readable snapshot history
+uvx synix runs list --json        # machine-readable snapshot history (schema_version + runs[])
 uvx synix validate                # run declared validators (experimental)
 ```
 
@@ -59,7 +59,7 @@ Successful builds record canonical immutable artifact snapshots under `.synix/`.
 
 > **Note:** The `.synix` on-disk snapshot format is new in `v0.15.x` and may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
 
-> **Note:** Run refs currently use UTC timestamp-based ids (for example `refs/runs/20260306T082007123456Z`) and remain experimental before `v1.0`. Prefer `uvx synix runs list --json` over scraping the table output.
+> **Note:** Run refs currently use UTC timestamp-based ids (for example `refs/runs/20260306T082007123456Z`) and remain experimental before `v1.0`. Prefer `uvx synix runs list --json` over scraping the table output; the JSON shape is versioned as `{ "schema_version": 1, "runs": [...] }`.
 
 ## Defining a Pipeline
 

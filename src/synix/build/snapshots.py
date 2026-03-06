@@ -102,6 +102,13 @@ def _store_content_text(object_store: ObjectStore, text: str) -> str:
     return content_oid
 
 
+def _artifact_text_content(artifact: Artifact) -> str:
+    if not isinstance(artifact.content, str):
+        msg = f"artifact {artifact.label!r} content must be a string, got {type(artifact.content).__name__}"
+        raise TypeError(msg)
+    return artifact.content
+
+
 @dataclass
 class BuildTransaction:
     """Canonical build state accumulated during a single pipeline run.
@@ -154,9 +161,11 @@ class BuildTransaction:
         layer_level: int,
         parent_labels: list[str],
     ) -> str:
-        artifact.metadata.setdefault("layer_name", layer_name)
-        artifact.metadata.setdefault("layer_level", layer_level)
-        content_hash = f"sha256:{hashlib.sha256(artifact.content.encode('utf-8')).hexdigest()}"
+        content = _artifact_text_content(artifact)
+        snapshot_metadata = dict(artifact.metadata)
+        snapshot_metadata.setdefault("layer_name", layer_name)
+        snapshot_metadata.setdefault("layer_level", layer_level)
+        content_hash = f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
         if artifact.artifact_id and artifact.artifact_id != content_hash:
             msg = (
                 f"artifact {artifact.label!r} has artifact_id {artifact.artifact_id!r} "
@@ -165,7 +174,7 @@ class BuildTransaction:
             raise ValueError(msg)
         if not artifact.artifact_id:
             artifact.artifact_id = content_hash
-        content_oid = _store_content_text(self.object_store, artifact.content)
+        content_oid = _store_content_text(self.object_store, content)
         artifact_payload = _object(
             "artifact",
             label=artifact.label,
@@ -175,7 +184,7 @@ class BuildTransaction:
             input_ids=list(artifact.input_ids),
             prompt_id=artifact.prompt_id,
             model_config=artifact.model_config,
-            metadata=artifact.metadata,
+            metadata=snapshot_metadata,
             parent_labels=parent_labels,
         )
         artifact_oid = self.object_store.put_json(artifact_payload)
@@ -192,6 +201,28 @@ class BuildTransaction:
             layer_oids.append(artifact_oid)
 
         return artifact_oid
+
+    def assert_complete(self, layer_artifacts: dict[str, list[Artifact]]) -> None:
+        """Fail closed if the transaction missed artifacts present in the current build state."""
+        expected_labels = {
+            artifact.label
+            for artifacts in layer_artifacts.values()
+            for artifact in artifacts
+        }
+        recorded_labels = set(self.artifact_oids)
+
+        missing = sorted(expected_labels.difference(recorded_labels))
+        unexpected = sorted(recorded_labels.difference(expected_labels))
+        if not missing and not unexpected:
+            return
+
+        details: list[str] = []
+        if missing:
+            details.append(f"missing={missing[:5]}")
+        if unexpected:
+            details.append(f"unexpected={unexpected[:5]}")
+        msg = "snapshot transaction closure mismatch: " + ", ".join(details)
+        raise RuntimeError(msg)
 
 
 def start_build_transaction(pipeline: Pipeline, build_dir: str | Path, run_id: str) -> BuildTransaction:

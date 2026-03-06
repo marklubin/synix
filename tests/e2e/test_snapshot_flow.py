@@ -113,7 +113,29 @@ class TestSnapshotFlow:
         runs_json = runner.invoke(main, ["runs", "list", "--build-dir", build_dir, "--json"])
         assert runs_json.exit_code == 0, runs_json.output
         payload = json.loads(runs_json.output)
-        assert {run_info["ref"] for run_info in payload} == {first_run_ref, second_run_ref}
+        assert payload["schema_version"] == 1
+        assert {run_info["ref"] for run_info in payload["runs"]} == {first_run_ref, second_run_ref}
 
         recorded_runs = list_runs(build_dir)
         assert {run_info["ref"] for run_info in recorded_runs} == {first_run_ref, second_run_ref}
+
+    def test_clean_removes_build_surface_but_preserves_snapshot_history(self, runner, workspace, pipeline_file):
+        build_dir = str(workspace["build_dir"])
+        synix_dir = workspace["root"] / ".synix"
+
+        built = runner.invoke(main, ["run", str(pipeline_file), "--plain"])
+        assert built.exit_code == 0, built.output
+        assert synix_dir.exists()
+        assert workspace["build_dir"].exists()
+
+        cleaned = runner.invoke(main, ["clean", build_dir, "--yes"])
+        assert cleaned.exit_code == 0, cleaned.output
+        assert not workspace["build_dir"].exists()
+        assert synix_dir.exists()
+
+        runs_json = runner.invoke(main, ["runs", "list", "--build-dir", build_dir, "--json"])
+        assert runs_json.exit_code == 0, runs_json.output
+        payload = json.loads(runs_json.output)
+        assert payload["schema_version"] == 1
+        assert len(payload["runs"]) == 1
+        assert payload["runs"][0]["pipeline_name"] == "snapshot-cli"

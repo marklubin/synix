@@ -13,6 +13,8 @@ from synix.build.refs import synix_dir_for_build_dir
 from synix.build.snapshots import list_runs
 from synix.cli.main import console
 
+RUNS_LIST_JSON_SCHEMA_VERSION = 1
+
 
 @click.group("runs")
 def runs_group():
@@ -32,7 +34,14 @@ def list_runs_command(build_dir: str, synix_dir: str | None, json_output: bool):
 
     runs = list_runs(build_dir, synix_dir=resolved_synix_dir)
     if json_output:
-        console.print_json(json.dumps(runs))
+        console.print_json(
+            json.dumps(
+                {
+                    "schema_version": RUNS_LIST_JSON_SCHEMA_VERSION,
+                    "runs": runs,
+                }
+            )
+        )
         return
     if not runs:
         console.print("[dim]No run snapshots found.[/dim]")

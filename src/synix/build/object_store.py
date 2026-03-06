@@ -235,30 +235,18 @@ class ObjectStore:
         return oid, size_bytes
 
     def put_text(self, text: str, *, encoding: str = "utf-8") -> tuple[str, int]:
-        """Store text as encoded bytes without creating a second full-sized bytes copy."""
+        """Store text as encoded bytes in one pass.
+
+        Text is incrementally encoded while writing to a temporary file so the
+        digest and persisted bytes are computed from the same byte stream.
+        """
+        if not isinstance(text, str):
+            msg = f"text must be a string, got {type(text).__name__}"
+            raise TypeError(msg)
+
         digest = hashlib.sha256()
         size_bytes = 0
-        encoder = codecs.getincrementalencoder(encoding)()
-        for start in range(0, len(text), 64 * 1024):
-            chunk = text[start : start + 64 * 1024]
-            encoded = encoder.encode(chunk)
-            if not encoded:
-                continue
-            size_bytes += len(encoded)
-            digest.update(encoded)
-
-        final_bytes = encoder.encode("", final=True)
-        if final_bytes:
-            size_bytes += len(final_bytes)
-            digest.update(final_bytes)
-
-        oid = digest.hexdigest()
-        path = self._path_for_oid(oid)
-        if path.exists():
-            return oid, size_bytes
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        fd, tmp = tempfile.mkstemp(dir=self.objects_dir, suffix=".tmp")
         try:
             encoder = codecs.getincrementalencoder(encoding)()
             with os.fdopen(fd, "wb") as handle:
@@ -266,15 +254,26 @@ class ObjectStore:
                     chunk = text[start : start + 64 * 1024]
                     encoded = encoder.encode(chunk)
                     if encoded:
+                        size_bytes += len(encoded)
+                        digest.update(encoded)
                         handle.write(encoded)
 
                 final_bytes = encoder.encode("", final=True)
                 if final_bytes:
+                    size_bytes += len(final_bytes)
+                    digest.update(final_bytes)
                     handle.write(final_bytes)
 
                 handle.flush()
                 os.fsync(handle.fileno())
 
+            oid = digest.hexdigest()
+            path = self._path_for_oid(oid)
+            if path.exists():
+                os.unlink(tmp)
+                return oid, size_bytes
+
+            path.parent.mkdir(parents=True, exist_ok=True)
             os.replace(tmp, str(path))
         except BaseException:
             try:

@@ -60,3 +60,10 @@ class TestObjectStore:
         oid = store.put_bytes(payload)
 
         assert oid == hashlib.sha256(payload).hexdigest()
+
+    def test_put_text_rejects_non_string(self, tmp_path):
+        """Text objects must be explicitly textual."""
+        store = ObjectStore(tmp_path / ".synix")
+
+        with pytest.raises(TypeError, match="text must be a string"):
+            store.put_text(b"not-text")  # type: ignore[arg-type]

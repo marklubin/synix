@@ -331,6 +331,7 @@ def run(
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
     if result.validation is None or result.validation.passed:
+        snapshot_txn.assert_complete(layer_artifacts)
         snapshot_info = commit_build_snapshot(snapshot_txn)
         result.snapshot_oid = snapshot_info["snapshot_oid"]
         result.manifest_oid = snapshot_info["manifest_oid"]

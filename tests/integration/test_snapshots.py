@@ -151,6 +151,30 @@ class TestSnapshots:
         assert stored_artifact["artifact_id"] == artifact.artifact_id
         assert ObjectStore(tmp_path / ".synix").get_bytes(stored_artifact["content_oid"]) == b""
 
+    def test_transaction_requires_complete_artifact_closure(self, tmp_path):
+        """Snapshot commit must fail closed if the run's artifact closure was not fully recorded."""
+        build_dir = tmp_path / "build"
+        pipeline = Pipeline(
+            "closure-check",
+            build_dir=str(build_dir),
+            synix_dir=str(tmp_path / ".synix"),
+        )
+        transcripts = Source("transcripts")
+        pipeline.add(transcripts)
+
+        txn = start_build_transaction(pipeline, build_dir, run_id="20260306T120000000004Z")
+        present = Artifact(label="present", artifact_type="note", content="Recorded")
+        missing = Artifact(label="missing", artifact_type="note", content="Not recorded")
+        txn.record_artifact(
+            present,
+            layer_name="transcripts",
+            layer_level=0,
+            parent_labels=[],
+        )
+
+        with pytest.raises(RuntimeError, match="snapshot transaction closure mismatch"):
+            txn.assert_complete({"transcripts": [present, missing]})
+
     def test_runs_list_recovers_pending_ref_updates(self, tmp_path):
         """Interrupted ref updates should be replayed before run history is listed."""
         build_dir = tmp_path / "build"
@@ -270,6 +294,11 @@ class TestSnapshots:
         pipeline_b.add(transcripts_b)
 
         assert _pipeline_fingerprint(pipeline_a) != _pipeline_fingerprint(pipeline_b)
+
+    def test_artifact_requires_text_content(self):
+        """Artifact content must be explicit text for the current snapshot slice."""
+        with pytest.raises(TypeError, match="Artifact content must be a string"):
+            Artifact(label="bad", artifact_type="note", content=None)  # type: ignore[arg-type]
 
     def test_build_commits_manifest_and_snapshot(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """A successful build records immutable objects and moves HEAD."""
