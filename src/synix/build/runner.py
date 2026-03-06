@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -521,6 +522,33 @@ def _execute_transform_concurrent(
     Units whose input_ids match ``cached_by_inputs`` are skipped (reported
     via ``on_cached``) and never submitted to the thread pool.
     """
+
+    def _invoke_callback(callback, artifacts: list[Artifact], unit_inputs: list[Artifact]) -> None:
+        if callback is None:
+            return
+        try:
+            signature = inspect.signature(callback)
+        except (TypeError, ValueError):
+            callback(artifacts, unit_inputs)
+            return
+
+        params = list(signature.parameters.values())
+        if any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in params):
+            callback(artifacts, unit_inputs)
+            return
+
+        positional = [
+            param
+            for param in params
+            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        if len(positional) >= 2:
+            callback(artifacts, unit_inputs)
+        elif len(positional) == 1:
+            callback(artifacts)
+        else:
+            callback()
+
     # Filter out cached units before submitting to pool
     units_to_run: list[tuple[int, list[Artifact], dict]] = []
     for i, (unit_inputs, config_extras) in enumerate(units):
@@ -528,8 +556,7 @@ def _execute_transform_concurrent(
             unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
             cached_arts = cached_by_inputs.get(unit_input_ids)
             if cached_arts:
-                if on_cached:
-                    on_cached(cached_arts, unit_inputs)
+                _invoke_callback(on_cached, cached_arts, unit_inputs)
                 continue
         units_to_run.append((i, unit_inputs, config_extras))
 
@@ -581,9 +608,8 @@ def _execute_transform_concurrent(
             try:
                 _, artifacts = future.result()
                 results[idx] = artifacts
-                if on_complete:
-                    _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
-                    on_complete(artifacts, unit_inputs)
+                _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
+                _invoke_callback(on_complete, artifacts, unit_inputs)
             except Exception as exc:
                 results[idx] = exc
                 if first_error is None:

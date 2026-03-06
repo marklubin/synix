@@ -197,6 +197,43 @@ class TestExecuteTransformConcurrent:
 
         assert sorted(seen) == [("ep-t-0", "t-0"), ("ep-t-2", "t-2"), ("ep-t-3", "t-3")]
 
+    def test_legacy_single_argument_callbacks_still_work(self):
+        """Backward compatibility: callbacks that only accept artifacts still work."""
+        inputs = [_make_transcript(f"t-{i}") for i in range(3)]
+        transform = MockEpisodeTransform()
+        units = [([inp], {}) for inp in inputs]
+        cached_by_inputs = {
+            tuple(sorted([inputs[0].artifact_id])): [
+                Artifact(
+                    label="ep-t-0",
+                    artifact_type="episode",
+                    content="cached",
+                    input_ids=[inputs[0].artifact_id],
+                )
+            ]
+        }
+        cached_calls: list[str] = []
+        complete_calls: list[str] = []
+
+        def on_cached(artifacts: list[Artifact]) -> None:
+            cached_calls.append(artifacts[0].label)
+
+        def on_complete(artifacts: list[Artifact]) -> None:
+            complete_calls.append(artifacts[0].label)
+
+        _execute_transform_concurrent(
+            transform,
+            units,
+            {"llm_config": {"model": "test"}},
+            concurrency=2,
+            cached_by_inputs=cached_by_inputs,
+            on_cached=on_cached,
+            on_complete=on_complete,
+        )
+
+        assert cached_calls == ["ep-t-0"]
+        assert sorted(complete_calls) == ["ep-t-1", "ep-t-2"]
+
 
 class TestConcurrentBuildSameResults:
     """Verify that concurrent builds produce identical results to sequential builds."""
