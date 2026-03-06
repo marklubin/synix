@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -64,7 +65,16 @@ def _normalize_fingerprint_value(value: Any) -> Any:
         return [_normalize_fingerprint_value(item) for item in value]
     if callable(value):
         qualname = getattr(value, "__qualname__", getattr(value, "__name__", type(value).__name__))
-        return f"{getattr(value, '__module__', 'builtins')}.{qualname}"
+        normalized = {
+            "callable": f"{getattr(value, '__module__', 'builtins')}.{qualname}",
+        }
+        try:
+            source = inspect.getsource(value)
+        except (OSError, TypeError):
+            source = None
+        if source is not None:
+            normalized["source_sha256"] = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        return normalized
     isoformat = getattr(value, "isoformat", None)
     if callable(isoformat):
         try:

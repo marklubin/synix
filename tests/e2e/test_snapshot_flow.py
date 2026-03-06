@@ -90,14 +90,14 @@ class TestSnapshotFlow:
 
         first = runner.invoke(main, ["run", str(pipeline_file), "--plain"])
         assert first.exit_code == 0, first.output
-        assert "Snapshot:" in first.output
+        assert "Artifact Snapshot:" in first.output
         assert "Run Ref:" in first.output
 
         first_run_ref = next(line.split("Run Ref:", 1)[1].strip() for line in first.output.splitlines() if "Run Ref:" in line)
 
         second = runner.invoke(main, ["run", str(pipeline_file), "--plain"])
         assert second.exit_code == 0, second.output
-        assert "Snapshot:" in second.output
+        assert "Artifact Snapshot:" in second.output
         assert "Run Ref:" in second.output
 
         second_run_ref = next(
@@ -107,7 +107,7 @@ class TestSnapshotFlow:
 
         runs_list = runner.invoke(main, ["runs", "list", "--build-dir", build_dir], terminal_width=160)
         assert runs_list.exit_code == 0, runs_list.output
-        assert "Run Snapshots" in runs_list.output
+        assert "Run Artifact Snapshots" in runs_list.output
         assert "Run ID" in runs_list.output
         assert "Ref" in runs_list.output
 

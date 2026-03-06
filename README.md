@@ -50,7 +50,7 @@ Browse, search, and validate:
 uvx synix list                    # all artifacts, grouped by layer
 uvx synix show final-report       # render an artifact
 uvx synix search "hiking"         # full-text search
-uvx synix runs list               # immutable build snapshots for this project
+uvx synix runs list               # immutable artifact snapshots for this project
 uvx synix runs list --json        # machine-readable snapshot history (schema_version + runs[])
 uvx synix validate                # run declared validators (experimental)
 ```

@@ -299,6 +299,31 @@ class TestSnapshots:
 
         assert _pipeline_fingerprint(pipeline_a) != _pipeline_fingerprint(pipeline_b)
 
+    def test_pipeline_fingerprint_includes_callable_source_when_available(self, tmp_path):
+        """Callable config should contribute source identity, not just module + qualname."""
+
+        def strategy_a(text: str) -> str:
+            return text.strip()
+
+        def strategy_b(text: str) -> str:
+            return text.rstrip("!")
+
+        pipeline_a = Pipeline(
+            "fingerprint-callable",
+            build_dir=str(tmp_path / "build-a"),
+            synix_dir=str(tmp_path / ".synix-a"),
+        )
+        pipeline_b = Pipeline(
+            "fingerprint-callable",
+            build_dir=str(tmp_path / "build-b"),
+            synix_dir=str(tmp_path / ".synix-b"),
+        )
+
+        pipeline_a.add(Source("transcripts", config={"strategy": strategy_a}))
+        pipeline_b.add(Source("transcripts", config={"strategy": strategy_b}))
+
+        assert _pipeline_fingerprint(pipeline_a) != _pipeline_fingerprint(pipeline_b)
+
     def test_snapshot_transaction_requires_text_content(self, tmp_path):
         """Snapshotting should reject non-text artifact content with a clear boundary error."""
         build_dir = tmp_path / "build"

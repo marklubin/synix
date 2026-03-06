@@ -226,7 +226,7 @@ def build(
         console.print(f"[bold]Time:[/bold] {elapsed:.1f}s")
     if not is_demo_mode() and result.snapshot_oid and result.run_ref:
         run_id = result.run_ref.rsplit("/", 1)[-1]
-        console.print(f"[bold]Snapshot:[/bold] {result.snapshot_oid[:12]}")
+        console.print(f"[bold]Artifact Snapshot:[/bold] {result.snapshot_oid[:12]}")
         console.print(f"[bold]Run ID:[/bold] {run_id}")
         console.print(f"[bold]Run Ref:[/bold] {result.run_ref}")
 
