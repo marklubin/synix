@@ -311,7 +311,7 @@ class SynixSearch(Layer):
         self.surface = surface
         self.sources = list(surface.sources)
         self.search = list(surface.modes)
-        self.embedding_config = dict(surface.embedding_config)
+        self.embedding_config = dict(surface.embedding_config or {})
         self.output_path = output_path
 
 

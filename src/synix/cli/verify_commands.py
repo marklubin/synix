@@ -67,6 +67,7 @@ def status(build_dir: str, resolved: bool):
 
     from synix.build.artifacts import ArtifactStore
     from synix.build.provenance import ProvenanceTracker
+    from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
 
     build_path = Path(build_dir)
     if not build_path.exists():
@@ -123,11 +124,18 @@ def status(build_dir: str, resolved: bool):
     console.print(table)
 
     # ── Projections ─────────────────────────────────────────────────────
-    search_db = build_path / "search.db"
     context_doc = build_path / "context.md"
     proj_parts = []
-    if search_db.exists():
-        proj_parts.append("[green]search index[/green]")
+    try:
+        search_outputs = list_search_outputs(build_path)
+    except SearchOutputResolutionError:
+        proj_parts.append("[yellow]search output metadata invalid[/yellow]")
+    else:
+        if search_outputs:
+            if len(search_outputs) == 1:
+                proj_parts.append("[green]search index[/green]")
+            else:
+                proj_parts.append(f"[green]{len(search_outputs)} search outputs[/green]")
     if context_doc.exists():
         size = context_doc.stat().st_size
         proj_parts.append(f"[green]context doc[/green] ({size}b)")

@@ -171,7 +171,7 @@ Import from `synix.transforms`:
 | `uvx synix runs list` | List immutable build snapshots recorded under `.synix` |
 | `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
 | `uvx synix show <id>` | Display an artifact. Resolves by label or ID prefix. `--raw` for JSON |
-| `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic |
+| `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic, `--projection <name>` for multiple outputs |
 | `uvx synix validate` | *(Experimental)* Run validators against build artifacts |
 | `uvx synix fix` | *(Experimental)* LLM-assisted repair of violations |
 | `uvx synix lineage <id>` | Show the full provenance chain for an artifact |

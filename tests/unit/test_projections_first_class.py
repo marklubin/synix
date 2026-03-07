@@ -572,6 +572,15 @@ class TestProjectionCaching:
         with pytest.raises(ValueError, match="must stay inside the build directory"):
             run(pipeline, source_dir=str(source_dir))
 
+    def test_synix_search_tolerates_surface_without_embedding_config(self):
+        """SynixSearch defensively handles surfaces whose embedding_config is None."""
+        transcripts = Source("transcripts")
+        surface = SearchSurface("memory-search", sources=[transcripts], modes=["fulltext"])
+        surface.embedding_config = None
+
+        search_output = SynixSearch("search", surface=surface)
+        assert search_output.embedding_config == {}
+
     def test_projection_rebuilds_on_new_artifacts(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """After adding a new conversation, at least one projection rebuilds."""
         run(pipeline_obj, source_dir=str(source_dir))

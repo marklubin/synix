@@ -388,3 +388,48 @@ def test_search_requires_projection_when_multiple_outputs_exist(runner, tmp_path
     result = runner.invoke(main, ["search", "machine learning", "--build-dir", str(build_dir)])
     assert result.exit_code != 0
     assert "--projection" in result.output
+
+
+def test_search_prefers_named_search_output_when_multiple_outputs_exist(runner, tmp_path):
+    """Search defaults to the output named 'search' when several outputs exist."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+
+    archive_db = build_dir / "outputs" / "archive.db"
+    archive_db.parent.mkdir(parents=True, exist_ok=True)
+    archive_artifact = Artifact(
+        label="archive-001",
+        artifact_type="episode",
+        content="Historical archive data",
+        metadata={"layer_name": "episodes"},
+    )
+    archive_index = SearchIndex(archive_db)
+    archive_index.create()
+    archive_index.insert(archive_artifact, "episodes", 1)
+    archive_index.close()
+
+    preferred_db = build_dir / "outputs" / "search.db"
+    preferred_artifact = Artifact(
+        label="preferred-001",
+        artifact_type="episode",
+        content="Preferred search output contains machine learning notes",
+        metadata={"layer_name": "episodes"},
+    )
+    preferred_index = SearchIndex(preferred_db)
+    preferred_index.create()
+    preferred_index.insert(preferred_artifact, "episodes", 1)
+    preferred_index.close()
+
+    (build_dir / ".projection_cache.json").write_text(
+        json.dumps(
+            {
+                "archive": {"projection_type": "search_index", "db_path": "outputs/archive.db"},
+                "search": {"projection_type": "synix_search", "db_path": "outputs/search.db"},
+            }
+        )
+    )
+
+    result = runner.invoke(main, ["search", "machine learning", "--build-dir", str(build_dir)])
+    assert result.exit_code == 0
+    assert "preferred-001" in result.output
+    assert "archive-001" not in result.output

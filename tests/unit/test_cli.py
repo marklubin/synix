@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
+from synix.build.artifacts import ArtifactStore
 from synix.cli import main
+from synix.core.models import Artifact
+from synix.search.indexer import SearchIndex
 
 
 @pytest.fixture
@@ -204,6 +209,60 @@ def test_info_shows_logo(runner, tmp_path, monkeypatch):
     assert result.exit_code == 0
     # The logo contains these distinctive Unicode box-drawing characters
     assert "███" in result.output
+
+
+def _create_build_with_custom_search_output(build_dir):
+    store = ArtifactStore(build_dir)
+    artifact = Artifact(
+        label="ep-custom-001",
+        artifact_type="episode",
+        content="Custom search output artifact",
+        metadata={"layer_name": "episodes"},
+    )
+    store.save_artifact(artifact, "episodes", 1)
+
+    custom_db = build_dir / "outputs" / "memory.db"
+    custom_db.parent.mkdir(parents=True, exist_ok=True)
+    index = SearchIndex(custom_db)
+    index.create()
+    index.insert(artifact, "episodes", 1)
+    index.close()
+
+    (build_dir / ".projection_cache.json").write_text(
+        json.dumps(
+            {
+                "search": {
+                    "projection_type": "synix_search",
+                    "db_path": "outputs/memory.db",
+                }
+            }
+        )
+    )
+
+
+def test_status_uses_custom_search_output(runner, tmp_path):
+    """synix status detects a SynixSearch output stored outside build/search.db."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    _create_build_with_custom_search_output(build_dir)
+
+    result = runner.invoke(main, ["status", "--build-dir", str(build_dir)])
+    assert result.exit_code == 0
+    assert "Projections:" in result.output
+    assert "search index" in result.output
+
+
+def test_info_uses_custom_search_output(runner, tmp_path, monkeypatch):
+    """synix info reports SynixSearch outputs discovered from projection metadata."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    _create_build_with_custom_search_output(build_dir)
+
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(main, ["info"])
+    assert result.exit_code == 0
+    assert "Synix Search" in result.output
+    assert "1 entries" in result.output
 
 
 def test_version_flag(runner):
