@@ -98,9 +98,7 @@ pipeline.add(
 # -- Projection: full-text search on all layers (sources + transforms) --
 #    Fixer needs access to source docs to verify claims and add citations.
 
-pipeline.add(
-    SynixSearch("search", surface=deal_search)
-)
+pipeline.add(SynixSearch("search", surface=deal_search))
 
 # -- Validator: citation grounding check on strategy + call_prep -------
 

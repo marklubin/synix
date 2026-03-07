@@ -66,9 +66,7 @@ cs_search = SearchSurface(
 pipeline.add(product_offers, policies, policy_index, cs_product_brief, cs_search)
 
 # -- Projection: makes artifacts searchable ----------------------------
-pipeline.add(
-    SynixSearch("search", surface=cs_search)
-)
+pipeline.add(SynixSearch("search", surface=cs_search))
 
 # -- Validators: domain rules checked after build ---------------------
 pipeline.add_validator(

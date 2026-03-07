@@ -372,21 +372,27 @@ class TestSnapshots:
         assert manifest["type"] == "manifest"
         assert manifest["pipeline_name"] == "snapshot-pipeline"
         assert len(manifest["artifacts"]) > 0
-        assert manifest["projections"] == {}
+        assert "memory-index" in manifest["projections"]
+        assert manifest["projections"]["memory-index"]["adapter"] == "search_index"
+        assert "context-doc" in manifest["projections"]
+        assert manifest["projections"]["context-doc"]["adapter"] == "flat_file"
         assert (build_dir / "search.db").exists()
         assert (build_dir / "context.md").exists()
 
         build_store = ArtifactStore(build_dir)
         first_label, first_artifact_oid = next(iter(_manifest_artifact_map(manifest).items()))
         first_artifact = object_store.get_json(first_artifact_oid)
-        assert object_store.get_bytes(first_artifact["content_oid"]).decode("utf-8") == build_store.load_artifact(first_label).content
+        assert (
+            object_store.get_bytes(first_artifact["content_oid"]).decode("utf-8")
+            == build_store.load_artifact(first_label).content
+        )
 
         assert ref_store.read_head_target() == "refs/heads/main"
         assert ref_store.read_ref("HEAD") == result.snapshot_oid
         assert ref_store.read_ref(result.run_ref) == result.snapshot_oid
 
-    def test_snapshot_scope_is_artifacts_only_for_now(self, tmp_path, source_dir_with_fixtures, mock_llm):
-        """Canonical snapshots currently capture artifacts only; projections stay in the compatibility surface."""
+    def test_snapshot_records_structured_projection_declarations(self, tmp_path, source_dir_with_fixtures, mock_llm):
+        """Canonical snapshots record structured projection declarations in the manifest."""
         build_dir = tmp_path / "build"
         pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
 
@@ -396,7 +402,18 @@ class TestSnapshots:
         object_store = ObjectStore(tmp_path / ".synix")
         manifest = object_store.get_json(result.manifest_oid)
 
-        assert manifest["projections"] == {}
+        assert len(manifest["projections"]) == 2
+        search_proj = manifest["projections"]["memory-index"]
+        assert search_proj["adapter"] == "search_index"
+        assert isinstance(search_proj["input_artifacts"], list)
+        assert len(search_proj["input_artifacts"]) > 0
+        assert isinstance(search_proj["config"], dict)
+        assert search_proj["config_fingerprint"].startswith("sha256:")
+        assert search_proj["precomputed_oid"] is None
+
+        flatfile_proj = manifest["projections"]["context-doc"]
+        assert flatfile_proj["adapter"] == "flat_file"
+        assert isinstance(flatfile_proj["input_artifacts"], list)
         assert (build_dir / "search.db").exists()
         assert (build_dir / "context.md").exists()
 
@@ -493,19 +510,17 @@ class TestSnapshots:
         assert result.manifest_oid is None
         assert list_runs(build_dir, synix_dir=synix_dir) == []
 
-    def test_flatfile_projection_outside_build_dir_is_allowed_but_not_snapshotted(
+    def test_flatfile_projection_outside_build_dir_records_declaration(
         self,
         tmp_path,
         source_dir_with_fixtures,
         mock_llm,
     ):
-        """Projection outputs can still target arbitrary paths until release adapters own projection state."""
+        """Projection outputs targeting arbitrary paths still record declarations in the manifest."""
         build_dir = tmp_path / "build"
         pipeline = _build_pipeline(build_dir, source_dir_with_fixtures)
         outside_path = tmp_path / "outside.md"
-        pipeline.projections = [
-            proj for proj in pipeline.projections if not isinstance(proj, FlatFile)
-        ] + [
+        pipeline.projections = [proj for proj in pipeline.projections if not isinstance(proj, FlatFile)] + [
             FlatFile(
                 "external-doc",
                 sources=[next(layer for layer in pipeline.layers if layer.name == "core")],
@@ -517,5 +532,7 @@ class TestSnapshots:
         assert result.manifest_oid is not None
         manifest = ObjectStore(tmp_path / ".synix").get_json(result.manifest_oid)
 
-        assert manifest["projections"] == {}
+        assert "memory-index" in manifest["projections"]
+        assert "external-doc" in manifest["projections"]
+        assert manifest["projections"]["external-doc"]["adapter"] == "flat_file"
         assert outside_path.exists()

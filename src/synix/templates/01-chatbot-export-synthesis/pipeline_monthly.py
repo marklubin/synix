@@ -52,9 +52,7 @@ pipeline.add(transcripts, episodes, monthly, core, memory_search)
 # --- Projections ---
 
 # SynixSearch — default local search output over the declared memory surface
-pipeline.add(
-    SynixSearch("search", surface=memory_search)
-)
+pipeline.add(SynixSearch("search", surface=memory_search))
 
 # Context document — ready-to-use agent system prompt
 pipeline.add(

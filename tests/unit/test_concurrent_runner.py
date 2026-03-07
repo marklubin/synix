@@ -175,12 +175,16 @@ class TestExecuteTransformConcurrent:
         transform = MockEpisodeTransform()
         config = {"llm_config": {"model": "test"}}
         units = [([inp], {}) for inp in inputs]
-        cached_by_inputs = {tuple(sorted([inputs[1].artifact_id])): [Artifact(
-            label="ep-t-1",
-            artifact_type="episode",
-            content="cached",
-            input_ids=[inputs[1].artifact_id],
-        )]}
+        cached_by_inputs = {
+            tuple(sorted([inputs[1].artifact_id])): [
+                Artifact(
+                    label="ep-t-1",
+                    artifact_type="episode",
+                    content="cached",
+                    input_ids=[inputs[1].artifact_id],
+                )
+            ]
+        }
         seen: list[tuple[str, str]] = []
 
         def on_complete(artifacts: list[Artifact], unit_inputs: list[Artifact]) -> None:

@@ -94,7 +94,9 @@ class TestSnapshotFlow:
         assert "Artifact Snapshot:" in first.output
         assert "Run Ref:" in first.output
 
-        first_run_ref = next(line.split("Run Ref:", 1)[1].strip() for line in first.output.splitlines() if "Run Ref:" in line)
+        first_run_ref = next(
+            line.split("Run Ref:", 1)[1].strip() for line in first.output.splitlines() if "Run Ref:" in line
+        )
 
         second = runner.invoke(main, ["run", str(pipeline_file), "--plain"])
         assert second.exit_code == 0, second.output

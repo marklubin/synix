@@ -86,9 +86,7 @@ report_search = SearchSurface(
 pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report, report_search)
 
 # SynixSearch — every layer searchable via the declared report surface
-pipeline.add(
-    SynixSearch("search", surface=report_search)
-)
+pipeline.add(SynixSearch("search", surface=report_search))
 
 # Validator — final report must have input_count metadata
 pipeline.add_validator(RequiredField(layers=[final_report], field="input_count"))

@@ -379,6 +379,9 @@ def run(
     result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
     _refresh_surface_cache(pipeline, layer_artifacts, build_dir)
 
+    # Record projection declarations in the snapshot transaction
+    _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
+
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
         from synix.build.validators import run_validators
@@ -425,6 +428,52 @@ def _record_snapshot_artifact(
         layer_level=layer_level,
         parent_labels=parent_labels,
     )
+
+
+def _projection_config_fingerprint(config: dict) -> str:
+    """Compute a sha256 fingerprint of canonical JSON projection config."""
+    encoded = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _record_snapshot_projections(
+    snapshot_txn: BuildTransaction,
+    pipeline: Pipeline,
+    layer_artifacts: dict[str, list[Artifact]],
+) -> None:
+    """Record structured projection declarations into the snapshot transaction."""
+    for proj in pipeline.projections:
+        source_layer_names = [s.name for s in proj.sources]
+        input_labels = sorted(a.label for layer_name in source_layer_names for a in layer_artifacts.get(layer_name, []))
+
+        if isinstance(proj, SynixSearch):
+            adapter = "synix_search"
+            config: dict = {
+                "modes": list(proj.search),
+                "embedding_config": dict(proj.embedding_config) if proj.embedding_config else {},
+            }
+        elif isinstance(proj, SearchIndex):
+            adapter = "search_index"
+            config = {
+                "modes": list(proj.search),
+                "embedding_config": dict(proj.embedding_config) if proj.embedding_config else {},
+            }
+        elif isinstance(proj, FlatFile):
+            adapter = "flat_file"
+            config = {
+                "output_path": proj.output_path,
+            }
+        else:
+            adapter = type(proj).__name__.lower()
+            config = dict(proj.config) if proj.config else {}
+
+        snapshot_txn.record_projection(
+            proj.name,
+            adapter=adapter,
+            input_artifact_labels=input_labels,
+            config=config,
+            config_fingerprint=_projection_config_fingerprint(config),
+        )
 
 
 def _snapshot_parent_labels(
@@ -532,8 +581,8 @@ def _transform_prefers_legacy_config_dict(method) -> bool:
         if isinstance(annotation, str):
             annotation_text = annotation
         else:
-            annotation_text = getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(
-                annotation
+            annotation_text = (
+                getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(annotation)
             )
 
     if annotation is dict or annotation_text == "dict" or annotation_text.startswith("dict["):
@@ -1034,6 +1083,7 @@ def _materialize_projection(
         logger.projection_finish(proj.name, triggered_by=triggered_by)
 
     return False
+
 
 def _compute_projection_hash(artifacts: list[Artifact], proj_config: dict | None = None) -> str:
     """Compute a hash over sorted artifact IDs (hashes) and projection config."""

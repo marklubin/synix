@@ -154,6 +154,7 @@ class BuildTransaction:
     artifact_oids: dict[str, str] = field(default_factory=dict)
     layer_artifact_oids: dict[str, list[str]] = field(default_factory=dict)
     projection_oids: dict[str, str] = field(default_factory=dict)
+    projection_declarations: dict[str, dict] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     @classmethod
@@ -225,13 +226,29 @@ class BuildTransaction:
 
             return artifact_oid
 
+    def record_projection(
+        self,
+        name: str,
+        *,
+        adapter: str,
+        input_artifact_labels: list[str],
+        config: dict,
+        config_fingerprint: str,
+        precomputed_oid: str | None = None,
+    ) -> None:
+        """Record a structured projection declaration for the manifest."""
+        with self._lock:
+            self.projection_declarations[name] = {
+                "adapter": adapter,
+                "input_artifacts": list(input_artifact_labels),
+                "config": config,
+                "config_fingerprint": config_fingerprint,
+                "precomputed_oid": precomputed_oid,
+            }
+
     def assert_complete(self, layer_artifacts: dict[str, list[Artifact]]) -> None:
         """Fail closed if the transaction missed artifacts present in the current build state."""
-        expected_labels = {
-            artifact.label
-            for artifacts in layer_artifacts.values()
-            for artifact in artifacts
-        }
+        expected_labels = {artifact.label for artifacts in layer_artifacts.values() for artifact in artifacts}
         recorded_labels = set(self.artifact_oids)
 
         missing = sorted(expected_labels.difference(recorded_labels))
@@ -350,11 +367,8 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             "manifest",
             pipeline_name=transaction.pipeline.name,
             pipeline_fingerprint=_pipeline_fingerprint(transaction.pipeline),
-            artifacts=[
-                {"label": label, "oid": oid}
-                for label, oid in sorted(transaction.artifact_oids.items())
-            ],
-            projections=transaction.projection_oids,
+            artifacts=[{"label": label, "oid": oid} for label, oid in sorted(transaction.artifact_oids.items())],
+            projections=transaction.projection_declarations,
         )
         manifest_oid = transaction.object_store.put_json(manifest_payload)
 

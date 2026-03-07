@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _OID_RE = re.compile(r"^[0-9a-f]{64}$")
 
 _REQUIRED_FIELDS: dict[str, set[str]] = {
@@ -186,6 +186,38 @@ def _validate_object_payload(payload: dict[str, Any], *, allow_older_schema: boo
             if not isinstance(oid, str) or not _OID_RE.fullmatch(oid):
                 msg = f"manifest artifacts[{idx}] must include valid oid"
                 raise ValueError(msg)
+
+        if schema_version >= 2:
+            projections = payload["projections"]
+            for proj_name, proj_entry in projections.items():
+                if not isinstance(proj_entry, dict):
+                    msg = f"manifest projections[{proj_name!r}] must be an object, got {type(proj_entry)}"
+                    raise ValueError(msg)
+                _PROJ_REQUIRED = {"adapter": str, "input_artifacts": list, "config": dict, "config_fingerprint": str}
+                for field_name, expected in _PROJ_REQUIRED.items():
+                    value = proj_entry.get(field_name)
+                    if value is None and field_name in proj_entry:
+                        msg = (
+                            f"manifest projections[{proj_name!r}] field {field_name!r} "
+                            f"must be of type {expected.__name__}, got None"
+                        )
+                        raise ValueError(msg)
+                    if field_name not in proj_entry:
+                        msg = f"manifest projections[{proj_name!r}] is missing required field {field_name!r}"
+                        raise ValueError(msg)
+                    if not isinstance(value, expected):
+                        msg = (
+                            f"manifest projections[{proj_name!r}] field {field_name!r} "
+                            f"must be of type {expected.__name__}, got {type(value).__name__}"
+                        )
+                        raise ValueError(msg)
+                precomputed_oid = proj_entry.get("precomputed_oid")
+                if precomputed_oid is not None and not isinstance(precomputed_oid, str):
+                    msg = (
+                        f"manifest projections[{proj_name!r}] field 'precomputed_oid' "
+                        f"must be a string or None, got {type(precomputed_oid).__name__}"
+                    )
+                    raise ValueError(msg)
 
 
 class ObjectStore:

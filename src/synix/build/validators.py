@@ -965,6 +965,7 @@ class Citation(BaseValidator):
 
 def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
     """Gather artifacts matching the validator config's scope/layers filters."""
+
     def _artifact_sort_key(artifact: Artifact) -> tuple[str, str]:
         return (artifact.label, artifact.artifact_id)
 
