@@ -5,6 +5,8 @@
 **Baseline**: `v0.15.0` (`93b9c6b`)  
 **Decision target**: Design approval before implementation
 
+> **Implementation note:** The first immutable artifact-snapshot slice has now landed on `main`, but canonical projection state, explicit release refs and receipts, and ref-first projection lifecycle are still follow-on work. For the full snapshot/projection/release closeout design, see [docs/projection-release-slice-rfc.md](docs/projection-release-slice-rfc.md).
+
 ## Summary
 
 Synix should move from a mutable `build/` directory model to a git-like snapshot model:
