@@ -342,7 +342,11 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)
         line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
         line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
-        line = re.sub(r"(\bSearch index has )\d+( entries\b)", r"\g<1><N>\2", line)
+        line = re.sub(
+            r"(\bSynix search(?: '[^']+')? has )\d+( entries\b)",
+            r"\g<1><N>\2",
+            line,
+        )
         # Drop embedding progress lines — presence varies with projection cache state
         if re.search(r"└─ embeddings\s+\d+/\d+", line):
             continue

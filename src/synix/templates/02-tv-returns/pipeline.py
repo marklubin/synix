@@ -19,7 +19,7 @@ from transforms import (
     DemoLoadProductOffersTransform,
 )
 
-from synix import Pipeline, SearchIndex
+from synix import Pipeline, SearchSurface, SynixSearch
 from synix.fixers import SemanticEnrichment
 from synix.validators import PII, SemanticConflict
 
@@ -52,20 +52,22 @@ cs_product_brief = DemoEnrichCSBriefTransform(  # LLM merges product data + poli
     depends_on=[product_offers, policy_index],  # rules into CS reference briefs
 )
 
-pipeline.add(product_offers, policies, policy_index, cs_product_brief)
+cs_search = SearchSurface(
+    "cs-search",
+    sources=[cs_product_brief],
+    modes=["fulltext", "semantic"],
+    embedding_config={
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+        "dimensions": 384,
+    },
+)
+
+pipeline.add(product_offers, policies, policy_index, cs_product_brief, cs_search)
 
 # -- Projection: makes artifacts searchable ----------------------------
 pipeline.add(
-    SearchIndex(
-        "cs-search",
-        sources=[cs_product_brief],  # SQLite FTS5 + semantic embeddings
-        search=["fulltext", "semantic"],
-        embedding_config={
-            "provider": "fastembed",
-            "model": "BAAI/bge-small-en-v1.5",
-            "dimensions": 384,
-        },
-    )
+    SynixSearch("search", surface=cs_search)
 )
 
 # -- Validators: domain rules checked after build ---------------------

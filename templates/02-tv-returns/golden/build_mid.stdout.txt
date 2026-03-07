@@ -3,7 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 4                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
@@ -11,7 +11,8 @@
   ✓ policy_index (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ cs_product_brief (level 2)  <BUILD_COUNTS>  <TIME>
     └─ cs-search  <MATERIALIZED>
-    └─ cs-search  <MATERIALIZED>
+    └─ search  <MATERIALIZED>
+    └─ search  <MATERIALIZED>
                         Build Summary
 ╭──────────────────┬──────────────┬───────┬────────┬─────────╮
 │ Layer            │    Level     │ Built │ Cached │ Skipped │
@@ -20,7 +21,7 @@
 │ policies         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policy_index     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → cs-search    │ search_index │       │        │ <MATERIALIZED> │
+│   → search       │ synix_search │       │        │ <MATERIALIZED> │
 ╰──────────────────┴──────────────┴───────┴────────┴─────────╯
 
 <BUILD_TOTAL>

@@ -12,7 +12,7 @@
 #   uvx synix validate pipeline.py
 #   uvx synix search 'hiking'
 
-from synix import Pipeline, SearchIndex, Source
+from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.transforms import FoldSynthesis, MapSynthesis, ReduceSynthesis
 from synix.validators import RequiredField
 
@@ -77,15 +77,17 @@ final_report = FoldSynthesis(
     artifact_type="final_report",
 )
 
-pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report)
+report_search = SearchSurface(
+    "report-search",
+    sources=[bios, project_brief, work_styles, team_dynamics, final_report],
+    modes=["fulltext"],
+)
 
-# Projection — every layer searchable
+pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report, report_search)
+
+# SynixSearch — every layer searchable via the declared report surface
 pipeline.add(
-    SearchIndex(
-        "search",
-        sources=[bios, project_brief, work_styles, team_dynamics, final_report],
-        search=["fulltext"],
-    )
+    SynixSearch("search", surface=report_search)
 )
 
 # Validator — final report must have input_count metadata

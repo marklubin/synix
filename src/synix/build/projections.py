@@ -36,12 +36,12 @@ class FlatFileProjection(BaseProjection):
 def get_projection(name: str, *args, **kwargs):
     """Get an instantiated projection by type name.
 
-    Only search_index is registered dynamically (via search module).
+    Only the local SQLite search adapter is registered dynamically (via search module).
     flat_file is handled directly by the runner via FlatFileProjection.
     """
     # Lazy import to avoid build->search circular dependency
-    if name == "search_index":
+    if name in {"search_index", "synix_search"}:
         from synix.search.indexer import SearchIndexProjection
 
         return SearchIndexProjection(*args, **kwargs)
-    raise ValueError(f"Unknown projection type: {name}. Available: ['search_index', 'flat_file']")
+    raise ValueError(f"Unknown projection type: {name}. Available: ['synix_search', 'search_index', 'flat_file']")

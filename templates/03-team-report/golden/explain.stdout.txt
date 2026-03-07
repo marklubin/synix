@@ -3,7 +3,7 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 5                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Projections: 1                                                                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
@@ -32,7 +32,13 @@ my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
     ├── ← team_dynamics
     ├── ← project_brief
     ├── cache: all components match (v2: config model source transform_id)
-    └── → search  synix_search_index (sqlite)  <MATERIALIZED>  <N> indexed
+    ├── ⇢ report-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   ├── ← bios
+    │   ├── ← project_brief
+    │   ├── ← work_styles
+    │   ├── ← team_dynamics
+    │   └── ← final_report
+    └── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
         ├── ← bios
         ├── ← project_brief
         ├── ← work_styles

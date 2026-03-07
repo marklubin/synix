@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
+from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
 from synix.cli import main
@@ -50,9 +50,10 @@ def pipeline_obj(build_dir, source_dir):
     episodes = EpisodeSummary("episodes", depends_on=[transcripts])
     monthly = MonthlyRollup("monthly", depends_on=[episodes])
     core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+    memory_search = SearchSurface("memory-search", sources=[episodes, monthly, core], modes=["fulltext"])
 
-    p.add(transcripts, episodes, monthly, core)
-    p.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+    p.add(transcripts, episodes, monthly, core, memory_search)
+    p.add(SynixSearch("search", surface=memory_search))
     p.add(FlatFile("context-doc", sources=[core], output_path=str(build_dir / "context.md")))
 
     return p

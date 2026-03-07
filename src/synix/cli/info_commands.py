@@ -112,6 +112,7 @@ def _show_build_status() -> None:
     import sqlite3
 
     from synix.build.artifacts import MANIFEST_FILENAME
+    from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
 
     build_path = Path.cwd() / "build"
     manifest_path = build_path / MANIFEST_FILENAME
@@ -154,19 +155,41 @@ def _show_build_status() -> None:
         last_dt = datetime.fromtimestamp(last_modified)
         table.add_row("Last Build", last_dt.strftime("%Y-%m-%d %H:%M:%S"))
 
-    # Search index status
-    search_db = build_path / "search.db"
-    if search_db.exists():
-        try:
-            conn = sqlite3.connect(str(search_db))
-            cursor = conn.execute("SELECT COUNT(*) FROM search_index")
-            count = cursor.fetchone()[0]
-            conn.close()
-            table.add_row("Search Index", f"{count} entries")
-        except Exception:
-            table.add_row("Search Index", "exists (could not read)")
+    # Local Synix search status
+    try:
+        search_outputs = list_search_outputs(build_path)
+    except SearchOutputResolutionError:
+        table.add_row("Synix Search", "[yellow]invalid metadata[/yellow]")
     else:
-        table.add_row("Search Index", "[dim]not built[/dim]")
+        if not search_outputs:
+            table.add_row("Synix Search", "[dim]not built[/dim]")
+        else:
+            output_counts: list[tuple[str, int]] = []
+            unreadable = False
+            for output in search_outputs:
+                try:
+                    conn = sqlite3.connect(str(output.db_path))
+                    try:
+                        cursor = conn.execute("SELECT COUNT(*) FROM search_index")
+                        count = cursor.fetchone()[0]
+                    finally:
+                        conn.close()
+                    output_counts.append((output.name, count))
+                except Exception:
+                    unreadable = True
+                    break
+
+            if unreadable:
+                table.add_row("Synix Search", "exists (could not read)")
+            elif len(output_counts) == 1:
+                output_name, count = output_counts[0]
+                if output_name == "search":
+                    table.add_row("Synix Search", f"{count} entries")
+                else:
+                    table.add_row("Synix Search", f"{output_name} ({count} entries)")
+            else:
+                summary = ", ".join(f"{name} ({count})" for name, count in output_counts)
+                table.add_row("Synix Search", f"{len(output_counts)} outputs: {summary}")
 
     surfaces_dir = build_path / "surfaces"
     surface_dbs = sorted(surfaces_dir.glob("*.db")) if surfaces_dir.exists() else []

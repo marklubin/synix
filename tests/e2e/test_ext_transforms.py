@@ -46,7 +46,7 @@ def ext_pipeline_file(workspace):
     """Write a pipeline using ext transforms."""
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
-from synix import Pipeline, SearchIndex, Source
+from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.transforms import MapSynthesis, ReduceSynthesis, FoldSynthesis
 
 pipeline = Pipeline("ext-test")
@@ -78,8 +78,14 @@ final_report = FoldSynthesis(
     artifact_type="final_report",
 )
 
-pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report)
-pipeline.add(SearchIndex("search", sources=[work_styles, team_dynamics, final_report], search=["fulltext"]))
+report_search = SearchSurface(
+    "report-search",
+    sources=[work_styles, team_dynamics, final_report],
+    modes=["fulltext"],
+)
+
+pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report, report_search)
+pipeline.add(SynixSearch("search", surface=report_search))
 """)
     return path
 

@@ -97,6 +97,12 @@ class TestNormalizeOutput:
         assert "<N> artifacts" in result
         assert "27" not in result
 
+    def test_normalize_named_synix_search_counts(self):
+        text = "│ synix_search        │  PASS  │ Synix search 'search' has 3 entries   │"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert "Synix search 'search' has <N> entries" in result
+        assert "3" not in result
+
     def test_normalize_plan_tree_stats(self):
         cached = "├── bios  source:parse  3 cached"
         fresh = "├── bios  source:parse  3 new"
@@ -126,8 +132,8 @@ class TestNormalizeOutput:
         assert "<MATERIALIZED>" in result1
 
     def test_normalize_search_projection_status(self):
-        cached = "    └── → search  synix_search_index (sqlite)  cached  9 indexed"
-        fresh = "    └── → search  synix_search_index (sqlite)  new  14 indexed"
+        cached = "    └── → search  synix_search (sqlite)  cached  9 indexed"
+        fresh = "    └── → search  synix_search (sqlite)  new  14 indexed"
         result_cached = _normalize_output(cached, Path("/tmp/case"))
         result_fresh = _normalize_output(fresh, Path("/tmp/case"))
         assert result_cached == result_fresh
@@ -142,7 +148,7 @@ class TestNormalizeOutput:
         assert "<MATERIALIZED>  <N> indexed" in result_cached
 
     def test_normalize_standalone_built(self):
-        text = "│   → search    │ search_index │       │        │       built │"
+        text = "│   → search    │ synix_search │       │        │       built │"
         result = _normalize_output(text, Path("/tmp/case"))
         assert "<MATERIALIZED>" in result
         assert "built" not in result

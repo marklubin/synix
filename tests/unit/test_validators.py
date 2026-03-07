@@ -10,6 +10,7 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import (
     PII,
+    BaseValidator,
     MutualExclusion,
     ProvenanceStep,
     RequiredField,
@@ -592,6 +593,53 @@ class TestRunValidators:
         result = run_validators(pipeline, store, provenance)
         assert result.passed is True
         assert len(result.violations) == 0
+
+    def test_run_validators_sorts_artifacts_and_violations_stably(self, store, provenance):
+        left = _make_artifact("z-art", content="left", layer_name="left")
+        right = _make_artifact("a-art", content="right", layer_name="right")
+        store.save_artifact(left, "left", 2)
+        store.save_artifact(right, "right", 1)
+
+        class _UnorderedValidator(BaseValidator):
+            name = "unordered"
+
+            def to_config_dict(self) -> dict:
+                return {"layers": ["left", "right"]}
+
+            def validate(self, artifacts, ctx):
+                assert [artifact.label for artifact in artifacts] == ["z-art", "a-art"]
+                return [
+                    Violation(
+                        "ungrounded_claim",
+                        "error",
+                        "msg z",
+                        "z-art",
+                        "content",
+                        metadata={"claim": "zeta"},
+                    ),
+                    Violation(
+                        "ungrounded_claim",
+                        "error",
+                        "msg a",
+                        "a-art",
+                        "content",
+                        metadata={"claim": "alpha"},
+                    ),
+                ]
+
+        pipeline = Pipeline("test")
+        pipeline.add_validator(_UnorderedValidator())
+
+        result = run_validators(pipeline, store, provenance)
+
+        assert [(v.label, v.metadata["claim"]) for v in result.violations] == [
+            ("z-art", "zeta"),
+            ("a-art", "alpha"),
+        ]
+        assert [(v["label"], v["metadata"]["claim"]) for v in result.to_dict()["violations"]] == [
+            ("a-art", "alpha"),
+            ("z-art", "zeta"),
+        ]
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source
+from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source, SynixSearch
 from synix import SearchIndex as SearchIndexLayer
 from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
@@ -323,6 +323,48 @@ class TestLayerProjectionChain:
         assert db_path.exists(), "surface DB should exist once all source layers are available"
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
+    def test_synix_search_waits_for_full_surface(
+        self,
+        build_dir,
+        episode_artifacts,
+        monthly_artifacts,
+    ):
+        """SynixSearch materializes only after its declared surface is complete."""
+        build_dir.mkdir(parents=True, exist_ok=True)
+        store = ArtifactStore(build_dir)
+
+        episodes = Source("episodes")
+        monthly = Source("monthly")
+        surface = SearchSurface("episode-monthly-search", sources=[episodes, monthly], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface)
+
+        pipeline = Pipeline("synix-search-pipeline")
+        pipeline.build_dir = str(build_dir)
+        pipeline.add(episodes, monthly, surface, search_output)
+
+        layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
+        db_path = build_dir / "search.db"
+
+        _materialize_layer_projections(
+            pipeline,
+            "episodes",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert not db_path.exists(), "search.db should not exist until the full surface is available"
+
+        layer_artifacts["monthly"] = monthly_artifacts
+        _materialize_layer_projections(
+            pipeline,
+            "monthly",
+            layer_artifacts,
+            store,
+            build_dir,
+        )
+        assert db_path.exists(), "search.db should exist once the full surface is available"
+        assert _layers_in_index(db_path) == {"episodes", "monthly"}
+
     def test_flat_file_waits_for_all_sources(
         self,
         build_dir,
@@ -495,6 +537,50 @@ class TestProjectionCaching:
         for ps in result2.projection_stats:
             assert ps.status == "cached", f"Projection {ps.name} was {ps.status}, expected cached"
 
+    def test_synix_search_records_custom_output_path_in_projection_cache(self, source_dir, build_dir, mock_llm):
+        """SynixSearch persists its concrete DB path in projection cache metadata."""
+        pipeline = Pipeline("custom-search-output")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir / "outputs" / "search.db"))
+
+        pipeline.add(transcripts, episodes, surface, search_output)
+
+        run(pipeline, source_dir=str(source_dir))
+
+        cache = json.loads((build_dir / ".projection_cache.json").read_text())
+        assert cache["search"]["projection_type"] == "synix_search"
+        assert cache["search"]["db_path"] == "outputs/search.db"
+
+    def test_synix_search_output_path_must_stay_inside_build_dir(self, source_dir, build_dir, mock_llm):
+        """SynixSearch rejects output paths outside the build directory."""
+        pipeline = Pipeline("invalid-search-output")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir.parent / "escape.db"))
+
+        pipeline.add(transcripts, episodes, surface, search_output)
+
+        with pytest.raises(ValueError, match="must stay inside the build directory"):
+            run(pipeline, source_dir=str(source_dir))
+
+    def test_synix_search_tolerates_surface_without_embedding_config(self):
+        """SynixSearch defensively handles surfaces whose embedding_config is None."""
+        transcripts = Source("transcripts")
+        surface = SearchSurface("memory-search", sources=[transcripts], modes=["fulltext"])
+        surface.embedding_config = None
+
+        search_output = SynixSearch("search", surface=surface)
+        assert search_output.embedding_config == {}
+
     def test_projection_rebuilds_on_new_artifacts(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """After adding a new conversation, at least one projection rebuilds."""
         run(pipeline_obj, source_dir=str(source_dir))
@@ -585,6 +671,22 @@ class TestProjectionPlan:
 
         assert len(plan.surfaces) == 1
         assert plan.surfaces[0].status == "cached"
+
+    def test_plan_includes_synix_search_projection_type(self, source_dir, build_dir):
+        """plan_build() exposes SynixSearch as the canonical search projection type."""
+        pipeline = Pipeline("synix-search-plan")
+        pipeline.build_dir = str(build_dir)
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface)
+
+        pipeline.add(transcripts, episodes, surface, search_output)
+
+        plan = plan_build(pipeline, source_dir=str(source_dir))
+        assert len(plan.projections) == 1
+        assert plan.projections[0].projection_type == "synix_search"
 
     def test_plan_rejects_surface_that_depends_on_future_layers(self, source_dir, build_dir, mock_llm):
         """A transform cannot use a search surface whose sources are not all upstream."""

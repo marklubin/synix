@@ -3,26 +3,23 @@
 │ Source: ./sources                                                                                                    │
 │ Build: ./build                                                                                                       │
 │ Layers: 3                                                                                                            │
-│ Surfaces: 0                                                                                                          │
+│ Surfaces: 1                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
-    └─ search  <MATERIALIZED>
   ✓ team_summary (level 2)  <BUILD_COUNTS>  <TIME>
+    └─ team-search  <MATERIALIZED>
     └─ search  <MATERIALIZED>
     └─ search  <MATERIALIZED>
-                        Build Summary
-╭──────────────┬──────────────┬───────┬────────┬─────────────╮
-│ Layer        │    Level     │ Built │ Cached │     Skipped │
-├──────────────┼──────────────┼───────┼────────┼─────────────┤
+                      Build Summary
+╭──────────────┬──────────────┬───────┬────────┬─────────╮
+│ Layer        │    Level     │ Built │ Cached │ Skipped │
+├──────────────┼──────────────┼───────┼────────┼─────────┤
 │ bios         │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search   │ search_index │       │        │ <MATERIALIZED> │
 │ work_styles  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search   │ search_index │       │        │ <MATERIALIZED> │
 │ team_summary │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search   │ search_index │       │        │ <MATERIALIZED> │
-╰──────────────┴──────────────┴───────┴────────┴─────────────╯
+│   → search   │ synix_search │       │        │ <MATERIALIZED> │
+╰──────────────┴──────────────┴───────┴────────┴─────────╯
 
 <BUILD_TOTAL>

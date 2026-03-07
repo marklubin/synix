@@ -12,6 +12,7 @@ from synix.build.artifacts import ArtifactStore
 from synix.build.provenance import ProvenanceTracker
 from synix.build.verify import verify_build
 from synix.cli import main
+from synix.search.indexer import SearchIndex
 
 
 @pytest.fixture
@@ -138,6 +139,36 @@ class TestVerifyBuild:
         result = verify_build(populated_build, checks=["nonexistent_check"])
         assert not result.passed
         assert "Unknown check" in result.checks[0].message
+
+    def test_synix_search_uses_custom_output_path(self, populated_build):
+        custom_db = populated_build / "outputs" / "memory.db"
+        custom_db.parent.mkdir()
+
+        artifact = Artifact(
+            label="search-001",
+            artifact_type="episode",
+            content="Machine learning verification artifact",
+            metadata={"layer_name": "episodes"},
+        )
+        index = SearchIndex(custom_db)
+        index.create()
+        index.insert(artifact, "episodes", 1)
+        index.close()
+
+        (populated_build / ".projection_cache.json").write_text(
+            json.dumps(
+                {
+                    "search": {
+                        "projection_type": "synix_search",
+                        "db_path": "outputs/memory.db",
+                    }
+                }
+            )
+        )
+
+        result = verify_build(populated_build, checks=["synix_search"])
+        assert result.passed
+        assert result.checks[0].message == "Synix search 'search' has 1 entries"
 
     def test_to_dict(self, populated_build):
         result = verify_build(populated_build)

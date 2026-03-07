@@ -117,6 +117,8 @@ This split is intentional. Build history should survive `synix clean`, and futur
 
 The first shipped slice records **artifact snapshots only**. Projection/release state is still materialized into the local build surface until the explicit release/adapter layer lands.
 
+Within that mutable local surface, `SearchSurface` is the build-time retrieval capability and `SynixSearch` is the default local search output. Files like `build/search.db` and `.projection_cache.json` are operational compatibility state, not stable public schemas.
+
 ---
 
 ## Part II: Conceptual Grounding

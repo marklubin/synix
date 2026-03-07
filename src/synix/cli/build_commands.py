@@ -14,7 +14,7 @@ from rich.tree import Tree
 
 from synix.cli.main import console, get_layer_style, pipeline_argument
 from synix.cli.progress import BuildProgress
-from synix.core.models import FlatFile, Pipeline, SearchIndex, SearchSurface
+from synix.core.models import FlatFile, Pipeline, SearchIndex, SearchSurface, SynixSearch
 
 
 def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
@@ -41,8 +41,8 @@ def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
 def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]]]:
     """Compute layer_name → [(proj_name, proj_type, trigger_type)] mapping.
 
-    - search_index projections: every source layer → "progressive"
-    - flat_file projections: only the last source layer (by build order) → "complete"
+    - SearchIndex compatibility projections: every source layer → "progressive"
+    - SynixSearch and FlatFile projections: only the last source layer → "complete"
     """
     from synix.build.dag import resolve_build_order
 
@@ -54,7 +54,9 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
     for proj in pipeline.projections:
         source_layer_names = [s.name for s in proj.sources]
 
-        if isinstance(proj, SearchIndex):
+        if isinstance(proj, SynixSearch):
+            proj_type = "synix_search"
+        elif isinstance(proj, SearchIndex):
             proj_type = "search_index"
         elif isinstance(proj, FlatFile):
             proj_type = "flat_file"
@@ -65,7 +67,7 @@ def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, s
             # Progressive: every source layer triggers
             for ln in source_layer_names:
                 triggers.setdefault(ln, []).append((proj.name, proj_type, "progressive"))
-        elif proj_type == "flat_file":
+        elif proj_type in {"synix_search", "flat_file"}:
             # Complete: only the last source layer triggers
             if source_layer_names:
                 last = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0))
@@ -448,7 +450,8 @@ def plan(
 
     MATERIALIZATION_TYPE_LABELS = {
         "search_surface": "search_surface (sqlite)",
-        "search_index": "synix_search_index (sqlite)",
+        "synix_search": "synix_search (sqlite)",
+        "search_index": "search_index (legacy sqlite)",
         "flat_file": "flat_file (markdown)",
     }
 

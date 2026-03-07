@@ -8,7 +8,7 @@
 #   cd templates/01-chatbot-export-synthesis
 #   uvx synix build pipeline_topical.py
 
-from synix import FlatFile, Pipeline, SearchIndex, SearchSurface, Source
+from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
 from synix.ext import CoreSynthesis, EpisodeSummary, TopicalRollup
 
 pipeline = Pipeline("personal-memory-topical")
@@ -62,20 +62,22 @@ topics = TopicalRollup(
 #   config={"llm_config": {"model": "claude-opus-4-6", "max_tokens": 4096}}
 core = CoreSynthesis("core", depends_on=[topics], context_budget=10000)
 
-pipeline.add(transcripts, episodes, episode_search, topics, core)
+memory_search = SearchSurface(
+    "memory-search",
+    sources=[episodes, topics, core],
+    modes=["fulltext", "semantic"],
+    embedding_config={
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+    },
+)
+
+pipeline.add(transcripts, episodes, episode_search, topics, core, memory_search)
 
 # --- Projections ---
 
 pipeline.add(
-    SearchIndex(
-        "memory-index",
-        sources=[episodes, topics, core],
-        search=["fulltext", "semantic"],
-        embedding_config={
-            "provider": "fastembed",
-            "model": "BAAI/bge-small-en-v1.5",
-        },
-    )
+    SynixSearch("search", surface=memory_search)
 )
 
 pipeline.add(

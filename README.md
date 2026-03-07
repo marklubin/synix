@@ -67,7 +67,7 @@ A pipeline is a Python file. Layers are real objects with dependencies expressed
 
 ```python
 # pipeline.py
-from synix import Pipeline, Source, SearchIndex
+from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.transforms import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
@@ -100,11 +100,37 @@ report = ReduceSynthesis(
     artifact_type="report",
 )
 
-pipeline.add(bios, work_styles, report)
-pipeline.add(SearchIndex("search", sources=[work_styles, report], search=["fulltext"]))
+report_search = SearchSurface(
+    "report-search",
+    sources=[work_styles, report],
+    modes=["fulltext"],
+)
+
+pipeline.add(bios, work_styles, report, report_search)
+pipeline.add(SynixSearch("search", surface=report_search))
 ```
 
 This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
+
+`SearchSurface` is the build-time search capability. `SynixSearch` is the canonical local search output. `SearchIndex` still works as a compatibility API, but new pipelines should use surfaces plus `SynixSearch`.
+
+Compatibility migration during `v0.x`:
+
+```python
+from synix import SearchIndex
+
+pipeline.add(SearchIndex("search", sources=[report], search=["fulltext"]))
+```
+
+Existing `SearchIndex` pipelines remain supported during the current `v0.x` migration window. New templates and docs use `SearchSurface + SynixSearch`, and any future deprecation will ship with an explicit migration note instead of a silent break.
+
+Search output selection rules:
+- if the build has one local search output, `synix search` uses it automatically
+- if several outputs exist, Synix prefers the one named `search`; if both `SynixSearch("search")` and `SearchIndex("search")` exist, `SynixSearch` wins
+- otherwise, if there is exactly one `SynixSearch` output, Synix uses it
+- otherwise, pass `--projection <name>`
+
+`SynixSearch.output_path` must stay under the build directory. `.projection_cache.json` is mutable build metadata used to discover local outputs; treat it as internal cache state, not a stable public schema.
 
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 
@@ -161,7 +187,7 @@ Import from `synix.transforms`:
 | `uvx synix runs list` | List immutable build snapshots recorded under `.synix` |
 | `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
 | `uvx synix show <id>` | Display an artifact. Resolves by label or ID prefix. `--raw` for JSON |
-| `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic |
+| `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic, `--projection <name>` for multiple outputs |
 | `uvx synix validate` | *(Experimental)* Run validators against build artifacts |
 | `uvx synix fix` | *(Experimental)* LLM-assisted repair of violations |
 | `uvx synix lineage <id>` | Show the full provenance chain for an artifact |

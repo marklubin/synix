@@ -37,7 +37,7 @@ def workspace(tmp_path):
 def pipeline_file(workspace):
     path = workspace["root"] / "pipeline.py"
     path.write_text(f"""
-from synix import Pipeline, Source, SearchIndex, FlatFile
+from synix import Pipeline, SearchSurface, Source, SynixSearch, FlatFile
 from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("snapshot-cli")
@@ -49,9 +49,10 @@ transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 monthly = MonthlyRollup("monthly", depends_on=[episodes])
 core = CoreSynthesis("core", depends_on=[monthly], context_budget=10000)
+memory_search = SearchSurface("memory-search", sources=[episodes, monthly, core], modes=["fulltext"])
 
-pipeline.add(transcripts, episodes, monthly, core)
-pipeline.add(SearchIndex("memory-index", sources=[episodes, monthly, core], search=["fulltext"]))
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
 pipeline.add(FlatFile("context-doc", sources=[core], output_path="{workspace["build_dir"] / "context.md"}"))
 """)
     return path

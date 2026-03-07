@@ -20,6 +20,7 @@ from synix.core.models import (
     SearchIndex,
     SearchSurface,
     Source,
+    SynixSearch,
     Transform,
     TransformContext,
 )
@@ -665,7 +666,7 @@ def _plan_projection(
     build_dir = Path(pipeline.build_dir)
 
     # Extract embedding config for display
-    embedding_config = proj.embedding_config if isinstance(proj, (SearchIndex, SearchSurface)) else None
+    embedding_config = proj.embedding_config if isinstance(proj, (SearchIndex, SynixSearch, SearchSurface)) else None
 
     # Count total artifacts that would feed this projection
     all_artifacts: list[Artifact] = []
@@ -678,7 +679,9 @@ def _plan_projection(
     artifact_count = len(all_artifacts)
 
     # Determine projection type
-    if isinstance(proj, SearchIndex):
+    if isinstance(proj, SynixSearch):
+        proj_type = "synix_search"
+    elif isinstance(proj, SearchIndex):
         proj_type = "search_index"
     elif isinstance(proj, SearchSurface):
         proj_type = "search_surface"
@@ -713,7 +716,9 @@ def _plan_projection(
     if "content_hash" in cached_entry:
         # New split-hash format
         content_hash = _compute_content_only_hash(all_artifacts)
-        emb_hash = _compute_embedding_config_hash(proj) if isinstance(proj, (SearchIndex, SearchSurface)) else None
+        emb_hash = None
+        if isinstance(proj, (SearchIndex, SynixSearch, SearchSurface)):
+            emb_hash = _compute_embedding_config_hash(proj)
 
         content_cached = (
             cached_entry.get("content_hash") == content_hash and cached_entry.get("artifact_count") == artifact_count

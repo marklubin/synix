@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
+from synix.build.search_outputs import SearchOutputResolutionError, resolve_search_output
 from synix.cli.main import console, get_layer_style
 
 
@@ -20,6 +21,11 @@ from synix.cli.main import console, get_layer_style
 @click.option("--layers", default=None, help="Comma-separated layer names to search")
 @click.option("--step", default=None, help="Filter to a specific pipeline step/layer (alias for --layers)")
 @click.option("--build-dir", default="./build", help="Build directory")
+@click.option(
+    "--projection",
+    default=None,
+    help="Search output name to query when a build has multiple local outputs",
+)
 @click.option("--limit", default=10, help="Max results to return (alias for --top-k)")
 @click.option(
     "--mode",
@@ -36,6 +42,7 @@ def search(
     layers: str | None,
     step: str | None,
     build_dir: str,
+    projection: str | None,
     limit: int,
     mode: str,
     top_k: int | None,
@@ -51,6 +58,14 @@ def search(
       semantic — cosine-similarity search over embeddings
       hybrid   — combines keyword + semantic via Reciprocal Rank Fusion
       layered  — like hybrid, but boosts higher-level layers in semantic scoring
+
+    Output selection:
+      one local search output        — use it automatically
+      several outputs, one named search
+                                    — use that one (SynixSearch before SearchIndex)
+      several outputs, one SynixSearch
+                                    — use that one
+      otherwise                     — re-run with --projection <name>
     """
     from synix.build.artifacts import ArtifactStore
     from synix.build.provenance import ProvenanceTracker
@@ -69,10 +84,17 @@ def search(
         else:
             mode = "keyword"
 
-    db_path = Path(build_dir) / "search.db"
-    if not db_path.exists():
-        console.print("[red]No search index found.[/red] Run [bold]synix build[/bold] first.")
+    try:
+        search_output = resolve_search_output(build_dir, projection_name=projection)
+    except SearchOutputResolutionError as exc:
+        console.print(f"[red]{exc}[/red]")
         sys.exit(1)
+
+    if search_output is None or not search_output.db_path.exists():
+        console.print("[red]No local Synix search output found.[/red] Run [bold]synix build[/bold] first.")
+        sys.exit(1)
+
+    db_path = search_output.db_path
 
     # Combine --layers and --step: both specify layer names to filter
     layer_names: list[str] = []
@@ -86,12 +108,13 @@ def search(
 
     if mode == "keyword":
         # Fast path: use existing FTS5 query directly
-        projection = SearchIndexProjection(build_dir)
-        results = projection.query(
+        search_projection = SearchIndexProjection(build_dir, db_path)
+        results = search_projection.query(
             query,
             layers=layer_filter,
             provenance_tracker=provenance,
         )
+        search_projection.close()
         results = results[:effective_top_k]
     else:
         # Semantic, hybrid, or layered: need embedding provider
@@ -106,17 +129,20 @@ def search(
                 sys.exit(1)
 
         search_index = SearchIndex(db_path)
-        retriever = HybridRetriever(
-            search_index=search_index,
-            embedding_provider=embedding_provider,
-            provenance_tracker=provenance,
-        )
-        results = retriever.query(
-            query,
-            mode=mode,
-            layers=layer_filter,
-            top_k=effective_top_k,
-        )
+        try:
+            retriever = HybridRetriever(
+                search_index=search_index,
+                embedding_provider=embedding_provider,
+                provenance_tracker=provenance,
+            )
+            results = retriever.query(
+                query,
+                mode=mode,
+                layers=layer_filter,
+                top_k=effective_top_k,
+            )
+        finally:
+            search_index.close()
 
     # Filter by customer metadata if requested
     if customer is not None:
