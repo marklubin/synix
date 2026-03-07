@@ -114,7 +114,23 @@ This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
 
 `SearchSurface` is the build-time search capability. `SynixSearch` is the canonical local search output. `SearchIndex` still works as a compatibility API, but new pipelines should use surfaces plus `SynixSearch`.
 
-`synix search` resolves the only local search output by default, or the one named `search` when multiple outputs exist. If a build has several local search outputs, pass `--projection <name>`. `SynixSearch.output_path` must stay under the build directory.
+Compatibility migration during `v0.x`:
+
+```python
+from synix import SearchIndex
+
+pipeline.add(SearchIndex("search", sources=[report], search=["fulltext"]))
+```
+
+Existing `SearchIndex` pipelines remain supported during the current `v0.x` migration window. New templates and docs use `SearchSurface + SynixSearch`, and any future deprecation will ship with an explicit migration note instead of a silent break.
+
+Search output selection rules:
+- if the build has one local search output, `synix search` uses it automatically
+- if several outputs exist, Synix prefers the one named `search`; if both `SynixSearch("search")` and `SearchIndex("search")` exist, `SynixSearch` wins
+- otherwise, if there is exactly one `SynixSearch` output, Synix uses it
+- otherwise, pass `--projection <name>`
+
+`SynixSearch.output_path` must stay under the build directory. `.projection_cache.json` is mutable build metadata used to discover local outputs; treat it as internal cache state, not a stable public schema.
 
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 

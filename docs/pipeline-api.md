@@ -236,6 +236,40 @@ Import from `synix`:
 | `SearchIndex` | `build/search.db` | Legacy compatibility projection over direct source layers. This does not satisfy `uses=[...]`; prefer `SearchSurface + SynixSearch` for new pipelines |
 | `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
+### Migrating from SearchIndex
+
+Old direct-layer compatibility style:
+
+```python
+from synix import SearchIndex
+
+pipeline.add(SearchIndex("search", sources=[report], search=["fulltext"]))
+```
+
+Canonical new style:
+
+```python
+from synix import SearchSurface, SynixSearch
+
+report_search = SearchSurface("report-search", sources=[report], modes=["fulltext"])
+pipeline.add(report_search, SynixSearch("search", surface=report_search))
+```
+
+`SearchIndex` remains supported during the current `v0.x` migration window, but it is compatibility sugar. It does not satisfy `uses=[...]` and is no longer the teaching path for new pipelines.
+
+### Search Output Selection
+
+`synix search` resolves local outputs with these rules:
+
+1. If the build has exactly one local search output, use it.
+2. If multiple outputs exist, prefer the one named `search`. If both a `SynixSearch("search")` and a `SearchIndex("search")` exist, `SynixSearch` wins.
+3. Otherwise, if there is exactly one `SynixSearch` output, use it.
+4. Otherwise, re-run with `--projection <name>`.
+
+`synix info`, `synix status`, and `synix verify` enumerate all discovered local search outputs automatically. `--projection` only matters for commands like `synix search` that need one concrete target to query.
+
+`.projection_cache.json` is mutable build metadata used for local output discovery. Treat it as an internal compatibility mechanism rather than a stable public schema; rebuild instead of scripting against its exact JSON shape.
+
 ## Config Change Demo
 
 Swap the rollup strategy — transcripts and episodes stay cached:

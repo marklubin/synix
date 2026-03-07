@@ -135,6 +135,13 @@ def test_projection_flag_exists(runner):
     assert "--projection" in result.output
 
 
+def test_projection_help_mentions_multiple_outputs(runner):
+    """CLI help documents projection disambiguation for multiple outputs."""
+    result = runner.invoke(main, ["search", "--help"])
+    assert result.exit_code == 0
+    assert "multiple local outputs" in result.output
+
+
 # --- Functional tests ---
 
 

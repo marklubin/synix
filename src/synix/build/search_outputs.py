@@ -51,7 +51,8 @@ def list_search_outputs(build_dir: str | Path) -> list[SearchOutputSpec]:
     """List local search outputs recorded for a build.
 
     Falls back to the legacy ``build/search.db`` location when no projection
-    metadata is available.
+    metadata is available. ``.projection_cache.json`` is treated as mutable
+    build metadata rather than a stable public schema.
     """
     build_path = Path(build_dir)
     cache = _load_projection_cache(build_path)
@@ -76,7 +77,17 @@ def list_search_outputs(build_dir: str | Path) -> list[SearchOutputSpec]:
 
 
 def resolve_search_output(build_dir: str | Path, *, projection_name: str | None = None) -> SearchOutputSpec | None:
-    """Resolve the search output the CLI should query by default."""
+    """Resolve the search output the CLI should query by default.
+
+    Resolution rules:
+    1. ``--projection <name>`` wins when provided.
+    2. If the build has exactly one local search output, use it.
+    3. If multiple outputs exist, prefer the one named ``search``.
+       When both legacy and canonical outputs use that name, prefer
+       ``synix_search`` over ``search_index``.
+    4. Otherwise, if there is exactly one ``synix_search`` output, use it.
+    5. Otherwise, fail and require ``--projection <name>``.
+    """
     outputs = list_search_outputs(build_dir)
     if not outputs:
         return None

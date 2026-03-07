@@ -21,7 +21,11 @@ from synix.cli.main import console, get_layer_style
 @click.option("--layers", default=None, help="Comma-separated layer names to search")
 @click.option("--step", default=None, help="Filter to a specific pipeline step/layer (alias for --layers)")
 @click.option("--build-dir", default="./build", help="Build directory")
-@click.option("--projection", default=None, help="Search output projection name when a build has multiple outputs")
+@click.option(
+    "--projection",
+    default=None,
+    help="Search output name to query when a build has multiple local outputs",
+)
 @click.option("--limit", default=10, help="Max results to return (alias for --top-k)")
 @click.option(
     "--mode",
@@ -54,6 +58,14 @@ def search(
       semantic — cosine-similarity search over embeddings
       hybrid   — combines keyword + semantic via Reciprocal Rank Fusion
       layered  — like hybrid, but boosts higher-level layers in semantic scoring
+
+    Output selection:
+      one local search output        — use it automatically
+      several outputs, one named search
+                                    — use that one (SynixSearch before SearchIndex)
+      several outputs, one SynixSearch
+                                    — use that one
+      otherwise                     — re-run with --projection <name>
     """
     from synix.build.artifacts import ArtifactStore
     from synix.build.provenance import ProvenanceTracker
