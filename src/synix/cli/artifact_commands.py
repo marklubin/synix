@@ -22,15 +22,17 @@ def list_artifacts(layer: str | None, build_dir: str):
     LAYER is an optional layer name to filter (e.g., episodes, monthly, core).
     Without it, lists all artifacts grouped by layer.
     """
-    from synix.build.artifacts import ArtifactStore
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
     if not build_path.exists():
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    store = ArtifactStore(build_dir)
-    manifest = store._manifest
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
+    manifest = store.iter_entries()
 
     if not manifest:
         console.print("[dim]No artifacts found.[/dim]")
@@ -113,14 +115,16 @@ def show_artifact(artifact_id: str, build_dir: str, raw: bool):
     """
     import json
 
-    from synix.build.artifacts import ArtifactStore
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
     if not build_path.exists():
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    store = ArtifactStore(build_dir)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
 
     # Resolve prefix (git-like: artifact ID prefix or content hash prefix)
     try:
@@ -155,7 +159,8 @@ def show_artifact(artifact_id: str, build_dir: str, raw: bool):
         return
 
     # Render content as markdown in a panel
-    info = store._manifest.get(artifact_id, {})
+    entries = store.iter_entries()
+    info = entries.get(resolved_id, {})
     level = info.get("level", 0)
     layer_name = info.get("layer", "unknown")
     style = get_layer_style(level)

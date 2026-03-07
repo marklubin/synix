@@ -16,13 +16,13 @@ import pytest
 
 from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source, SynixSearch
 from synix import SearchIndex as SearchIndexLayer
-from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
 from synix.build.runner import (
     _materialize_layer_projections,
     _materialize_layer_search_surfaces,
     run,
 )
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 from synix.search.indexer import SearchIndex
 
@@ -187,14 +187,12 @@ class TestLayerProjectionChain:
     ):
         """After episodes complete, search index contains episode data only."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
         layer_artifacts = {"episodes": episode_artifacts}
 
         _materialize_layer_projections(
             pipeline_obj,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
 
@@ -211,7 +209,6 @@ class TestLayerProjectionChain:
     ):
         """After monthly completes, search index contains both episodes and monthly."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
         layer_artifacts = {"episodes": episode_artifacts}
 
         # Step 1: episodes complete → first projection
@@ -219,7 +216,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
         db_path = build_dir / "search.db"
@@ -231,7 +227,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "monthly",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
@@ -246,7 +241,6 @@ class TestLayerProjectionChain:
     ):
         """After core completes, search index contains episodes + monthly + core."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
         layer_artifacts: dict[str, list[Artifact]] = {}
 
         db_path = build_dir / "search.db"
@@ -257,7 +251,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes"}
@@ -267,7 +260,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "monthly",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
@@ -277,7 +269,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "core",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert _layers_in_index(db_path) == {"episodes", "monthly", "core"}
@@ -290,7 +281,6 @@ class TestLayerProjectionChain:
     ):
         """Search surfaces materialize only once their full source set is available."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
 
         episodes = Source("episodes")
         monthly = Source("monthly")
@@ -307,7 +297,6 @@ class TestLayerProjectionChain:
             pipeline,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert not db_path.exists(), "surface DB should not exist until all source layers are available"
@@ -317,7 +306,6 @@ class TestLayerProjectionChain:
             pipeline,
             "monthly",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert db_path.exists(), "surface DB should exist once all source layers are available"
@@ -331,7 +319,6 @@ class TestLayerProjectionChain:
     ):
         """SynixSearch materializes only after its declared surface is complete."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
 
         episodes = Source("episodes")
         monthly = Source("monthly")
@@ -349,7 +336,6 @@ class TestLayerProjectionChain:
             pipeline,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert not db_path.exists(), "search.db should not exist until the full surface is available"
@@ -359,7 +345,6 @@ class TestLayerProjectionChain:
             pipeline,
             "monthly",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert db_path.exists(), "search.db should exist once the full surface is available"
@@ -374,7 +359,6 @@ class TestLayerProjectionChain:
     ):
         """context-doc (flat_file) is NOT created until core layer is available."""
         build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
         context_path = build_dir / "context.md"
 
         layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
@@ -382,7 +366,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "episodes",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert not context_path.exists(), "context.md should not exist after only episodes"
@@ -392,7 +375,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "monthly",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert not context_path.exists(), "context.md should not exist after only monthly"
@@ -410,7 +392,6 @@ class TestLayerProjectionChain:
             pipeline_obj,
             "core",
             layer_artifacts,
-            store,
             build_dir,
         )
         assert context_path.exists(), "context.md should exist after core completes"
@@ -820,7 +801,8 @@ class TestTopicalRollupSurfaceRequirements:
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
 
-        store = ArtifactStore(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
@@ -848,7 +830,8 @@ class TestTopicalRollupSurfaceRequirements:
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
 
-        store = ArtifactStore(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 

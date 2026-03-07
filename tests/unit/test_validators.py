@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.validators import (
     PII,
     BaseValidator,
@@ -27,6 +26,7 @@ from synix.build.validators import (
     run_validators,
 )
 from synix.core.models import Artifact, Pipeline
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -40,21 +40,6 @@ def build_dir(tmp_path):
     return d
 
 
-@pytest.fixture
-def store(build_dir):
-    return ArtifactStore(build_dir)
-
-
-@pytest.fixture
-def provenance(build_dir):
-    return ProvenanceTracker(build_dir)
-
-
-@pytest.fixture
-def ctx(store, provenance):
-    return ValidationContext(store=store, provenance=provenance)
-
-
 def _make_artifact(aid, atype="episode", content="test", **meta):
     return Artifact(
         label=aid,
@@ -62,6 +47,18 @@ def _make_artifact(aid, atype="episode", content="test", **meta):
         content=content,
         metadata=meta,
     )
+
+
+def _build_store(build_dir, layer_artifacts, parent_labels_map=None):
+    """Create a SnapshotArtifactCache from layer->artifact mapping."""
+    create_test_snapshot(build_dir, layer_artifacts, parent_labels_map=parent_labels_map)
+    return SnapshotArtifactCache(build_dir / ".synix")
+
+
+def _build_ctx(build_dir, layer_artifacts, parent_labels_map=None):
+    """Create a ValidationContext backed by a snapshot."""
+    store = _build_store(build_dir, layer_artifacts, parent_labels_map)
+    return store, ValidationContext(store=store)
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +237,9 @@ class TestInstantiation:
 
 
 class TestTraceFieldOrigin:
-    def test_single_artifact_no_parents(self, store, provenance, ctx):
+    def test_single_artifact_no_parents(self, build_dir):
         art = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
-        store.save_artifact(art, "transcripts", 0)
+        store, ctx = _build_ctx(build_dir, {"transcripts": [art]})
 
         steps = ctx.trace_field_origin("t-1", "customer_id")
         assert len(steps) == 1
@@ -250,14 +247,14 @@ class TestTraceFieldOrigin:
         assert steps[0].field_value == "acme"
         assert steps[0].layer == "transcripts"
 
-    def test_two_level_chain(self, store, provenance, ctx):
+    def test_two_level_chain(self, build_dir):
         t = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
-        store.save_artifact(t, "transcripts", 0)
-
         ep = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
-        store.save_artifact(ep, "episodes", 1)
-
-        provenance.record("ep-1", parent_labels=["t-1"])
+        store, ctx = _build_ctx(
+            build_dir,
+            {"transcripts": [t], "episodes": [ep]},
+            parent_labels_map={"ep-1": ["t-1"]},
+        )
 
         steps = ctx.trace_field_origin("ep-1", "customer_id")
         assert len(steps) == 2
@@ -265,32 +262,31 @@ class TestTraceFieldOrigin:
         assert "ep-1" in ids
         assert "t-1" in ids
 
-    def test_missing_field_returns_none_value(self, store, provenance, ctx):
+    def test_missing_field_returns_none_value(self, build_dir):
         art = _make_artifact("t-1", "transcript", layer_name="transcripts")
-        store.save_artifact(art, "transcripts", 0)
+        store, ctx = _build_ctx(build_dir, {"transcripts": [art]})
 
         steps = ctx.trace_field_origin("t-1", "customer_id")
         assert len(steps) == 1
         assert steps[0].field_value is None
 
-    def test_branching_provenance(self, store, provenance, ctx):
+    def test_branching_provenance(self, build_dir):
         """Merge artifact with two parents from different customers."""
         t1 = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
         t2 = _make_artifact("t-2", "transcript", customer_id="globex", layer_name="transcripts")
-        store.save_artifact(t1, "transcripts", 0)
-        store.save_artifact(t2, "transcripts", 0)
-
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-
-        provenance.record("ep-1", parent_labels=["t-1"])
-        provenance.record("ep-2", parent_labels=["t-2"])
-
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
+
+        store, ctx = _build_ctx(
+            build_dir,
+            {"transcripts": [t1, t2], "episodes": [ep1, ep2], "merge": [merge]},
+            parent_labels_map={
+                "ep-1": ["t-1"],
+                "ep-2": ["t-2"],
+                "merge-ep-1": ["ep-1", "ep-2"],
+            },
+        )
 
         steps = ctx.trace_field_origin("merge-ep-1", "customer_id")
         ids = {s.label for s in steps}
@@ -307,29 +303,31 @@ class TestTraceFieldOrigin:
 
 
 class TestMutualExclusionValidator:
-    def test_no_violations_single_customer(self, store, provenance, ctx):
+    def test_no_violations_single_customer(self, build_dir):
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="acme", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
+
+        store, ctx = _build_ctx(
+            build_dir,
+            {"episodes": [ep1, ep2], "merge": [merge]},
+            parent_labels_map={"merge-ep-1": ["ep-1", "ep-2"]},
+        )
 
         validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert violations == []
 
-    def test_violation_multiple_customers(self, store, provenance, ctx):
+    def test_violation_multiple_customers(self, build_dir):
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-
         merge = _make_artifact("merge-ep-1", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-ep-1", parent_labels=["ep-1", "ep-2"])
+
+        store, ctx = _build_ctx(
+            build_dir,
+            {"episodes": [ep1, ep2], "merge": [merge]},
+            parent_labels_map={"merge-ep-1": ["ep-1", "ep-2"]},
+        )
 
         validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
@@ -339,7 +337,7 @@ class TestMutualExclusionValidator:
         assert "acme" in violations[0].metadata["conflicting_values"]
         assert "globex" in violations[0].metadata["conflicting_values"]
 
-    def test_source_field_metadata_detected(self, store, provenance, ctx):
+    def test_source_field_metadata_detected(self, build_dir):
         """source_customer_ids in merge artifact metadata also triggers."""
         merge = _make_artifact(
             "merge-ep-2",
@@ -347,39 +345,37 @@ class TestMutualExclusionValidator:
             layer_name="merge",
             source_customer_ids=["acme", "globex"],
         )
-        store.save_artifact(merge, "merge", 2)
+        store, ctx = _build_ctx(build_dir, {"merge": [merge]})
 
         validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert len(violations) == 1
 
-    def test_no_parents_no_violation(self, store, provenance, ctx):
+    def test_no_parents_no_violation(self, build_dir):
         """Artifact with no parents and no source metadata: no violation."""
         merge = _make_artifact("merge-ep-3", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
+        store, ctx = _build_ctx(build_dir, {"merge": [merge]})
 
         validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([merge], ctx)
         assert violations == []
 
-    def test_multiple_merge_artifacts(self, store, provenance, ctx):
+    def test_multiple_merge_artifacts(self, build_dir):
         """Only violating merge artifacts are flagged."""
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
         ep3 = _make_artifact("ep-3", "episode", customer_id="acme", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-        store.save_artifact(ep3, "episodes", 1)
-
-        # merge-1: cross-customer (violation)
         m1 = _make_artifact("merge-1", "merge", layer_name="merge")
-        store.save_artifact(m1, "merge", 2)
-        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
-
-        # merge-2: single customer (no violation)
         m2 = _make_artifact("merge-2", "merge", layer_name="merge")
-        store.save_artifact(m2, "merge", 2)
-        provenance.record("merge-2", parent_labels=["ep-1", "ep-3"])
+
+        store, ctx = _build_ctx(
+            build_dir,
+            {"episodes": [ep1, ep2, ep3], "merge": [m1, m2]},
+            parent_labels_map={
+                "merge-1": ["ep-1", "ep-2"],
+                "merge-2": ["ep-1", "ep-3"],
+            },
+        )
 
         validator = MutualExclusion(field="customer_id", scope="merge", layers=[])
         violations = validator.validate([m1, m2], ctx)
@@ -393,17 +389,17 @@ class TestMutualExclusionValidator:
 
 
 class TestRequiredFieldValidator:
-    def test_no_violations_field_present(self, store, provenance, ctx):
+    def test_no_violations_field_present(self, build_dir):
         art = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
-        store.save_artifact(art, "episodes", 1)
+        store, ctx = _build_ctx(build_dir, {"episodes": [art]})
 
         validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_violation_field_missing(self, store, provenance, ctx):
+    def test_violation_field_missing(self, build_dir):
         art = _make_artifact("ep-1", "episode", layer_name="episodes")
-        store.save_artifact(art, "episodes", 1)
+        store, ctx = _build_ctx(build_dir, {"episodes": [art]})
 
         validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
@@ -411,29 +407,27 @@ class TestRequiredFieldValidator:
         assert violations[0].violation_type == "required_field"
         assert violations[0].label == "ep-1"
 
-    def test_violation_field_empty_string(self, store, provenance, ctx):
+    def test_violation_field_empty_string(self, build_dir):
         art = _make_artifact("ep-1", "episode", customer_id="", layer_name="episodes")
-        store.save_artifact(art, "episodes", 1)
+        store, ctx = _build_ctx(build_dir, {"episodes": [art]})
 
         validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
 
-    def test_violation_field_whitespace(self, store, provenance, ctx):
+    def test_violation_field_whitespace(self, build_dir):
         art = _make_artifact("ep-1", "episode", customer_id="  ", layer_name="episodes")
-        store.save_artifact(art, "episodes", 1)
+        store, ctx = _build_ctx(build_dir, {"episodes": [art]})
 
         validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([art], ctx)
         assert len(violations) == 1
 
-    def test_multiple_artifacts_mixed(self, store, provenance, ctx):
+    def test_multiple_artifacts_mixed(self, build_dir):
         a1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         a2 = _make_artifact("ep-2", "episode", layer_name="episodes")
         a3 = _make_artifact("ep-3", "episode", customer_id="globex", layer_name="episodes")
-        store.save_artifact(a1, "episodes", 1)
-        store.save_artifact(a2, "episodes", 1)
-        store.save_artifact(a3, "episodes", 1)
+        store, ctx = _build_ctx(build_dir, {"episodes": [a1, a2, a3]})
 
         validator = RequiredField(field="customer_id", layers=[])
         violations = validator.validate([a1, a2, a3], ctx)
@@ -447,42 +441,37 @@ class TestRequiredFieldValidator:
 
 
 class TestGatherArtifacts:
-    def test_filter_by_layers(self, store):
+    def test_filter_by_layers(self, build_dir):
         a1 = _make_artifact("ep-1", "episode", layer_name="episodes")
         a2 = _make_artifact("t-1", "transcript", layer_name="transcripts")
-        store.save_artifact(a1, "episodes", 1)
-        store.save_artifact(a2, "transcripts", 0)
+        store = _build_store(build_dir, {"episodes": [a1], "transcripts": [a2]})
 
         result = _gather_artifacts(store, {"layers": ["episodes"]})
         assert len(result) == 1
         assert result[0].label == "ep-1"
 
-    def test_filter_by_scope_prefix(self, store):
+    def test_filter_by_scope_prefix(self, build_dir):
         a1 = _make_artifact("merge-1", "merge", layer_name="merge")
         a2 = _make_artifact("ep-1", "episode", layer_name="episodes")
-        store.save_artifact(a1, "merge", 2)
-        store.save_artifact(a2, "episodes", 1)
+        store = _build_store(build_dir, {"merge": [a1], "episodes": [a2]})
 
         result = _gather_artifacts(store, {"scope": "merge"})
         assert len(result) == 1
         assert result[0].label == "merge-1"
 
-    def test_no_filter_returns_all(self, store):
+    def test_no_filter_returns_all(self, build_dir):
         a1 = _make_artifact("ep-1", "episode", layer_name="episodes")
         a2 = _make_artifact("t-1", "transcript", layer_name="transcripts")
-        store.save_artifact(a1, "episodes", 1)
-        store.save_artifact(a2, "transcripts", 0)
+        store = _build_store(build_dir, {"episodes": [a1], "transcripts": [a2]})
 
         result = _gather_artifacts(store, {})
         assert len(result) == 2
 
-    def test_filter_multiple_layers(self, store):
+    def test_filter_multiple_layers(self, build_dir):
         a1 = _make_artifact("ep-1", "episode", layer_name="episodes")
         a2 = _make_artifact("t-1", "transcript", layer_name="transcripts")
         a3 = _make_artifact("m-1", "merge", layer_name="merge")
-        store.save_artifact(a1, "episodes", 1)
-        store.save_artifact(a2, "transcripts", 0)
-        store.save_artifact(a3, "merge", 2)
+        store = _build_store(build_dir, {"episodes": [a1], "transcripts": [a2], "merge": [a3]})
 
         result = _gather_artifacts(store, {"layers": ["episodes", "merge"]})
         labels = {a.label for a in result}
@@ -495,84 +484,87 @@ class TestGatherArtifacts:
 
 
 class TestRunValidators:
-    def test_no_validators_empty_result(self, store, provenance):
+    def test_no_validators_empty_result(self, build_dir):
+        store = _build_store(build_dir, {})
         pipeline = Pipeline("test")
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert result.passed is True
         assert result.validators_run == []
         assert result.violations == []
 
-    def test_mutual_exclusion_end_to_end(self, store, provenance):
+    def test_mutual_exclusion_end_to_end(self, build_dir):
         """Full integration: pipeline declares mutual_exclusion validator."""
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-
         merge = _make_artifact("merge-1", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
+
+        store = _build_store(
+            build_dir,
+            {"episodes": [ep1, ep2], "merge": [merge]},
+            parent_labels_map={"merge-1": ["ep-1", "ep-2"]},
+        )
 
         pipeline = Pipeline("test")
         pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert result.passed is False
         assert "mutual_exclusion" in result.validators_run
         assert len(result.violations) == 1
         assert result.violations[0].label == "merge-1"
 
-    def test_required_field_end_to_end(self, store, provenance):
+    def test_required_field_end_to_end(self, build_dir):
         """Full integration: pipeline declares required_field validator."""
         a1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         a2 = _make_artifact("ep-2", "episode", layer_name="episodes")
-        store.save_artifact(a1, "episodes", 1)
-        store.save_artifact(a2, "episodes", 1)
+
+        store = _build_store(build_dir, {"episodes": [a1, a2]})
 
         pipeline = Pipeline("test")
         pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert result.passed is False
         assert len(result.violations) == 1
         assert result.violations[0].label == "ep-2"
 
-    def test_multiple_validators(self, store, provenance):
+    def test_multiple_validators(self, build_dir):
         """Both validators run; results aggregated."""
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
+
+        store = _build_store(build_dir, {"episodes": [ep1, ep2]})
 
         pipeline = Pipeline("test")
         pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
         pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert len(result.validators_run) == 2
         # Only required_field should have a violation (no merge artifacts)
         assert len(result.violations) == 1
         assert result.violations[0].violation_type == "required_field"
 
-    def test_provenance_auto_resolved(self, store, provenance):
+    def test_provenance_auto_resolved(self, build_dir):
         """Violations get provenance traces auto-resolved."""
         t1 = _make_artifact("t-1", "transcript", customer_id="acme", layer_name="transcripts")
-        store.save_artifact(t1, "transcripts", 0)
-
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="globex", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-        provenance.record("ep-1", parent_labels=["t-1"])
-
         merge = _make_artifact("merge-1", "merge", layer_name="merge")
-        store.save_artifact(merge, "merge", 2)
-        provenance.record("merge-1", parent_labels=["ep-1", "ep-2"])
+
+        store = _build_store(
+            build_dir,
+            {"transcripts": [t1], "episodes": [ep1, ep2], "merge": [merge]},
+            parent_labels_map={
+                "ep-1": ["t-1"],
+                "merge-1": ["ep-1", "ep-2"],
+            },
+        )
 
         pipeline = Pipeline("test")
         pipeline.add_validator(MutualExclusion(field="customer_id", scope="merge", layers=[]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert len(result.violations) == 1
         trace = result.violations[0].provenance_trace
         assert len(trace) >= 2  # at least merge-1 and parents
@@ -580,25 +572,25 @@ class TestRunValidators:
         assert "merge-1" in trace_ids
         assert "ep-1" in trace_ids
 
-    def test_all_pass(self, store, provenance):
+    def test_all_pass(self, build_dir):
         """No violations when all artifacts are valid."""
         ep1 = _make_artifact("ep-1", "episode", customer_id="acme", layer_name="episodes")
         ep2 = _make_artifact("ep-2", "episode", customer_id="acme", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
+
+        store = _build_store(build_dir, {"episodes": [ep1, ep2]})
 
         pipeline = Pipeline("test")
         pipeline.add_validator(RequiredField(field="customer_id", layers=[]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert result.passed is True
         assert len(result.violations) == 0
 
-    def test_run_validators_sorts_artifacts_and_violations_stably(self, store, provenance):
+    def test_run_validators_sorts_artifacts_and_violations_stably(self, build_dir):
         left = _make_artifact("z-art", content="left", layer_name="left")
         right = _make_artifact("a-art", content="right", layer_name="right")
-        store.save_artifact(left, "left", 2)
-        store.save_artifact(right, "right", 1)
+
+        store = _build_store(build_dir, {"left": [left], "right": [right]})
 
         class _UnorderedValidator(BaseValidator):
             name = "unordered"
@@ -630,7 +622,7 @@ class TestRunValidators:
         pipeline = Pipeline("test")
         pipeline.add_validator(_UnorderedValidator())
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
 
         assert [(v.label, v.metadata["claim"]) for v in result.violations] == [
             ("z-art", "zeta"),
@@ -726,7 +718,12 @@ class TestComputeViolationId:
 
 
 class TestPIIValidator:
-    def test_detects_credit_card(self, store, provenance, ctx):
+    @pytest.fixture
+    def ctx(self, build_dir):
+        store = _build_store(build_dir, {})
+        return ValidationContext(store=store)
+
+    def test_detects_credit_card(self, ctx):
         art = _make_artifact("a-1", content="My card is 4111-1111-1111-1111 ok?")
         violations = PII(layers=[]).validate([art], ctx)
         cc_violations = [v for v in violations if v.metadata["pattern"] == "credit_card"]
@@ -735,7 +732,7 @@ class TestPIIValidator:
         assert "4111" in cc_violations[0].metadata["redacted_value"]
         assert "****" in cc_violations[0].metadata["redacted_value"]
 
-    def test_detects_ssn(self, store, provenance, ctx):
+    def test_detects_ssn(self, ctx):
         art = _make_artifact("a-1", content="SSN: 123-45-6789")
         violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) == 1
@@ -743,14 +740,14 @@ class TestPIIValidator:
         assert "6789" in violations[0].metadata["redacted_value"]
         assert violations[0].metadata["redacted_value"].startswith("***-**-")
 
-    def test_detects_email(self, store, provenance, ctx):
+    def test_detects_email(self, ctx):
         art = _make_artifact("a-1", content="Email me at user@example.com")
         violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) == 1
         assert violations[0].metadata["pattern"] == "email"
         assert violations[0].metadata["redacted_value"] == "us***@example.com"
 
-    def test_detects_phone(self, store, provenance, ctx):
+    def test_detects_phone(self, ctx):
         art = _make_artifact("a-1", content="Call 555-867-5309")
         violations = PII(layers=[]).validate([art], ctx)
         assert len(violations) >= 1
@@ -758,12 +755,12 @@ class TestPIIValidator:
         assert len(phone_violations) >= 1
         assert "5309" in phone_violations[0].metadata["redacted_value"]
 
-    def test_clean_text_no_violations(self, store, provenance, ctx):
+    def test_clean_text_no_violations(self, ctx):
         art = _make_artifact("a-1", content="This is clean text with no PII")
         violations = PII(layers=[]).validate([art], ctx)
         assert violations == []
 
-    def test_multiple_pii_in_one_artifact(self, store, provenance, ctx):
+    def test_multiple_pii_in_one_artifact(self, ctx):
         art = _make_artifact(
             "a-1",
             content="Card: 4111-1111-1111-1111 and SSN: 123-45-6789",
@@ -773,7 +770,7 @@ class TestPIIValidator:
         assert "credit_card" in patterns
         assert "ssn" in patterns
 
-    def test_patterns_config_filter(self, store, provenance, ctx):
+    def test_patterns_config_filter(self, ctx):
         art = _make_artifact(
             "a-1",
             content="Card: 4111-1111-1111-1111 and SSN: 123-45-6789",
@@ -783,7 +780,7 @@ class TestPIIValidator:
         assert len(violations) == 1
         assert violations[0].metadata["pattern"] == "ssn"
 
-    def test_violation_has_violation_id(self, store, provenance, ctx):
+    def test_violation_has_violation_id(self, ctx):
         art = _make_artifact("a-1", content="SSN: 123-45-6789")
         violations = PII(layers=[]).validate([art], ctx)
         assert violations[0].violation_id != ""
@@ -1070,10 +1067,14 @@ def _mock_llm_for_validator(monkeypatch, response_content):
 
 
 class TestSemanticConflictValidator:
-    def test_no_conflicts(self, store, provenance, ctx, monkeypatch):
+    @pytest.fixture
+    def ctx(self, build_dir):
+        store = _build_store(build_dir, {})
+        return ValidationContext(store=store)
+
+    def test_no_conflicts(self, ctx, monkeypatch):
         """LLM returns no conflicts -> no violations."""
         art = _make_artifact("monthly-1", "monthly", content="Mark likes Python.", layer_name="monthly")
-        store.save_artifact(art, "monthly", 2)
 
         _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
@@ -1081,12 +1082,11 @@ class TestSemanticConflictValidator:
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_conflict_found(self, store, provenance, ctx, monkeypatch):
+    def test_conflict_found(self, ctx, monkeypatch):
         """LLM finds a conflict -> violation with metadata."""
         art = _make_artifact(
             "monthly-1", "monthly", content="Mark owns a BMW. Mark drives a Dodge Neon daily.", layer_name="monthly"
         )
-        store.save_artifact(art, "monthly", 2)
 
         conflict_json = json.dumps(
             {
@@ -1113,10 +1113,9 @@ class TestSemanticConflictValidator:
         assert violations[0].metadata["explanation"] != ""
         assert violations[0].violation_id != ""
 
-    def test_violation_id_deterministic(self, store, provenance, ctx, monkeypatch):
+    def test_violation_id_deterministic(self, ctx, monkeypatch):
         """Same claims -> same violation_id."""
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
-        store.save_artifact(art, "monthly", 2)
 
         conflict = {"conflicts": [{"claim_a": "A", "claim_b": "B", "explanation": "x", "confidence": "high"}]}
         _mock_llm_for_validator(monkeypatch, json.dumps(conflict))
@@ -1126,13 +1125,9 @@ class TestSemanticConflictValidator:
         v2 = validator.validate([art], ctx)
         assert v1[0].violation_id == v2[0].violation_id
 
-    def test_max_artifacts_respected(self, store, provenance, ctx, monkeypatch):
+    def test_max_artifacts_respected(self, ctx, monkeypatch):
         """Only first max_artifacts are checked."""
-        arts = []
-        for i in range(5):
-            a = _make_artifact(f"m-{i}", "monthly", content=f"content {i}", layer_name="monthly")
-            store.save_artifact(a, "monthly", 2)
-            arts.append(a)
+        arts = [_make_artifact(f"m-{i}", "monthly", content=f"content {i}", layer_name="monthly") for i in range(5)]
 
         _, call_count = _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
@@ -1140,10 +1135,9 @@ class TestSemanticConflictValidator:
         validator.validate(arts, ctx)
         assert call_count[0] == 2
 
-    def test_llm_error_graceful_skip(self, store, provenance, ctx, monkeypatch):
+    def test_llm_error_graceful_skip(self, ctx, monkeypatch):
         """LLM error -> skip artifact, no crash."""
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
-        store.save_artifact(art, "monthly", 2)
 
         _mock_llm_for_validator(monkeypatch, RuntimeError("LLM failed"))
 
@@ -1151,10 +1145,9 @@ class TestSemanticConflictValidator:
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_invalid_json_returns_empty(self, store, provenance, ctx, monkeypatch):
+    def test_invalid_json_returns_empty(self, ctx, monkeypatch):
         """Invalid JSON from LLM -> no violations."""
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
-        store.save_artifact(art, "monthly", 2)
 
         _mock_llm_for_validator(monkeypatch, "not valid json at all")
 
@@ -1162,21 +1155,25 @@ class TestSemanticConflictValidator:
         violations = validator.validate([art], ctx)
         assert violations == []
 
-    def test_llm_trace_stored(self, store, provenance, ctx, monkeypatch):
-        """LLM call produces a trace artifact in layer99-traces."""
+    def test_llm_trace_stored(self, build_dir, monkeypatch):
+        """LLM call produces a trace artifact when store supports save_artifact."""
+        from synix.build.artifacts import ArtifactStore
+
+        writable_store = ArtifactStore(build_dir)
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
-        store.save_artifact(art, "monthly", 2)
+        writable_store.save_artifact(art, "monthly", 2)
 
         _mock_llm_for_validator(monkeypatch, '{"conflicts": []}')
 
+        writable_ctx = ValidationContext(store=writable_store)
         validator = SemanticConflict(llm_config={"api_key": "test"})
-        validator.validate([art], ctx)
+        validator.validate([art], writable_ctx)
 
-        traces = store.list_artifacts("traces")
+        traces = writable_store.list_artifacts("traces")
         assert len(traces) >= 1
         assert traces[0].artifact_type == "llm_trace"
 
-    def test_no_llm_config_returns_empty(self, store, provenance, ctx):
+    def test_no_llm_config_returns_empty(self, ctx):
         """No LLM config -> returns empty (can't create client)."""
         art = _make_artifact("m-1", "monthly", content="test", layer_name="monthly")
         validator = SemanticConflict()

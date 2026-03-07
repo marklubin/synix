@@ -242,12 +242,14 @@ def create_app(config: MeshConfig) -> Starlette:
             return JSONResponse({"error": "no search index available"}, status_code=404)
 
         try:
-            from synix.build.provenance import ProvenanceTracker
+            from synix.build.refs import synix_dir_for_build_dir
+            from synix.build.snapshot_view import SnapshotArtifactCache
             from synix.search.indexer import SearchIndex
             from synix.search.retriever import HybridRetriever
 
             index = SearchIndex(search_db)
-            provenance = ProvenanceTracker(build_dir)
+            synix_dir = synix_dir_for_build_dir(build_dir)
+            provenance = SnapshotArtifactCache(synix_dir)
             retriever = HybridRetriever(
                 search_index=index,
                 provenance_tracker=provenance,

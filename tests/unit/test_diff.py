@@ -6,19 +6,18 @@ import pytest
 from click.testing import CliRunner
 
 from synix import Artifact
-from synix.build.artifacts import ArtifactStore
 from synix.build.diff import diff_artifact, diff_artifact_by_label, diff_builds
 from synix.cli import main
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 
 @pytest.fixture
 def two_builds(tmp_path):
-    """Create two build directories with overlapping artifacts."""
+    """Create two build directories with overlapping artifacts via snapshots."""
     old_dir = tmp_path / "build_old"
+    old_dir.mkdir()
     new_dir = tmp_path / "build_new"
-
-    old_store = ArtifactStore(old_dir)
-    new_store = ArtifactStore(new_dir)
+    new_dir.mkdir()
 
     # Shared artifact with same content (no change)
     t1 = Artifact(
@@ -27,8 +26,6 @@ def two_builds(tmp_path):
         content="User: Hello\n\nAssistant: Hi!",
         metadata={"source": "chatgpt", "date": "2025-01-15"},
     )
-    old_store.save_artifact(t1, "transcripts", 0)
-    new_store.save_artifact(t1, "transcripts", 0)
 
     # Shared artifact with changed content
     ep_old = Artifact(
@@ -45,8 +42,6 @@ def two_builds(tmp_path):
         prompt_id="v2",
         metadata={"source_conversation_id": "001", "updated": True},
     )
-    old_store.save_artifact(ep_old, "episodes", 1)
-    new_store.save_artifact(ep_new, "episodes", 1)
 
     # Artifact only in old (removed)
     removed = Artifact(
@@ -55,7 +50,6 @@ def two_builds(tmp_path):
         content="This episode was removed.",
         metadata={},
     )
-    old_store.save_artifact(removed, "episodes", 1)
 
     # Artifact only in new (added)
     added = Artifact(
@@ -64,7 +58,23 @@ def two_builds(tmp_path):
         content="This episode was added.",
         metadata={},
     )
-    new_store.save_artifact(added, "episodes", 1)
+
+    # Create snapshots as nested .synix inside each build dir
+    # synix_dir_for_build_dir will find build_dir/.synix when it exists
+    create_test_snapshot(
+        old_dir,
+        {
+            "transcripts": [t1],
+            "episodes": [ep_old, removed],
+        },
+    )
+    create_test_snapshot(
+        new_dir,
+        {
+            "transcripts": [t1],
+            "episodes": [ep_new, added],
+        },
+    )
 
     return old_dir, new_dir
 
@@ -140,11 +150,12 @@ class TestDiffBuilds:
 
     def test_no_changes(self, tmp_path):
         """Same build compared to itself."""
-        store = ArtifactStore(tmp_path / "build")
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
         art = Artifact(label="t-001", artifact_type="transcript", content="Hello")
-        store.save_artifact(art, "transcripts", 0)
+        create_test_snapshot(build_dir, {"transcripts": [art]})
 
-        result = diff_builds(tmp_path / "build", tmp_path / "build")
+        result = diff_builds(build_dir, build_dir)
         assert not result.has_changes
 
     def test_layer_filter(self, two_builds):

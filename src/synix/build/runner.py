@@ -7,16 +7,16 @@ import hashlib
 import inspect
 import json
 import logging
+import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
-from synix.build.provenance import ProvenanceTracker
 from synix.build.search_outputs import PROJECTION_CACHE_FILE
 from synix.build.search_surfaces import (
     search_surface_ready,
@@ -24,6 +24,7 @@ from synix.build.search_surfaces import (
     transform_runtime_search_updates,
     validate_search_surface_uses,
 )
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
@@ -149,8 +150,6 @@ def run(
     build_dir = Path(pipeline.build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
     result = RunResult()
 
     # Compute levels from DAG structure
@@ -164,6 +163,7 @@ def run(
         progress=progress,
     )
     snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
+    store = SnapshotArtifactCache(snapshot_txn.synix_dir)
 
     # Resolve build order
     build_order = resolve_build_order(pipeline)
@@ -189,12 +189,10 @@ def run(
                 logger.warning("Source %s failed to load", layer.name, exc_info=True)
                 artifacts = []
 
-            # Save source artifacts
+            # Record source artifacts in snapshot
             for artifact in artifacts:
                 artifact.metadata["layer_name"] = layer.name
                 artifact.metadata["layer_level"] = layer._level
-                store.save_artifact(artifact, layer.name, layer._level)
-                provenance.record(artifact.label, parent_labels=[], prompt_id=None, model_config=None)
                 _record_snapshot_artifact(
                     snapshot_txn,
                     artifact,
@@ -230,7 +228,7 @@ def run(
                         art,
                         layer_name=layer.name,
                         layer_level=layer._level,
-                        parent_labels=_snapshot_parent_labels(art, inputs, provenance),
+                        parent_labels=_snapshot_parent_labels(art, inputs, store),
                     )
                     stats.cached += 1
                     slogger.artifact_cached(layer.name, art.label)
@@ -261,14 +259,9 @@ def run(
                         artifact.metadata["layer_level"] = _layer._level
                         artifact.metadata["build_fingerprint"] = build_fp.to_dict()
                         artifact.metadata["transform_fingerprint"] = _transform_fp.to_dict()
-                        store.save_artifact(artifact, _layer.name, _layer._level)
-                        parent_labels = _provenance_parent_labels(artifact, effective_inputs, provenance)
-                        provenance.record(
-                            artifact.label,
-                            parent_labels=parent_labels,
-                            prompt_id=artifact.prompt_id,
-                            model_config=artifact.model_config,
-                        )
+                        parent_labels = _get_parent_labels(artifact, effective_inputs)
+                        if not parent_labels:
+                            parent_labels = [inp.label for inp in effective_inputs]
                         _record_snapshot_artifact(
                             snapshot_txn,
                             artifact,
@@ -290,7 +283,7 @@ def run(
                                 cached,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, provenance),
+                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, store),
                             )
                         else:
                             layer_built.append(artifact)
@@ -299,7 +292,7 @@ def run(
                                 artifact,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, provenance),
+                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, store),
                             )
                         stats.cached += 1
                         slogger.artifact_cached(_layer.name, artifact.label)
@@ -329,7 +322,7 @@ def run(
                             cached_art,
                             layer_name=layer.name,
                             layer_level=layer._level,
-                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, provenance),
+                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, store),
                         )
                         stats.cached += 1
                         slogger.artifact_cached(layer.name, cached_art.label)
@@ -370,23 +363,27 @@ def run(
         result.skipped += stats.skipped
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
-        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, build_dir, logger=slogger)
 
         # Materialize intermediate projections for this layer
-        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, build_dir, logger=slogger)
 
     # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
+    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, build_dir, logger=slogger)
     _refresh_surface_cache(pipeline, layer_artifacts, build_dir)
 
     # Record projection declarations in the snapshot transaction
     _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
 
+    # Refresh the in-memory cache with the current build's artifacts so
+    # downstream consumers (validators, fixers) see newly built data.
+    store.update_from_build(layer_artifacts)
+
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
         from synix.build.validators import run_validators
 
-        result.validation = run_validators(pipeline, store, provenance)
+        result.validation = run_validators(pipeline, store)
 
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
@@ -399,10 +396,94 @@ def run(
         result.run_ref = snapshot_info["run_ref"]
         result.synix_dir = snapshot_info["synix_dir"]
 
+    # Write compatibility release surface (manifest.json, provenance.json,
+    # per-layer artifact files) so that verify checks, CLI list/show, and
+    # downstream consumers that read from build/ still work during the
+    # transition period.
+    _write_compatibility_files(build_dir, layer_artifacts, snapshot_txn)
+
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)
     result.run_log = slogger.run_log.to_dict()
     return result
+
+
+def _write_compatibility_files(
+    build_dir: Path,
+    layer_artifacts: dict[str, list[Artifact]],
+    snapshot_txn: BuildTransaction,
+) -> None:
+    """Write backward-compatible build/ files from in-memory state.
+
+    Materializes manifest.json, provenance.json, and per-layer artifact JSON
+    files so that tools reading from the legacy build/ surface continue to
+    work.  This is a transitional compatibility shim — once all consumers read
+    from .synix, this function will be removed.
+    """
+    manifest: dict[str, dict] = {}
+    provenance: dict[str, dict] = {}
+
+    # Remove stale layer directories from previous builds so orphan checks pass.
+    for existing in build_dir.iterdir():
+        if existing.is_dir() and existing.name.startswith("layer"):
+            shutil.rmtree(existing)
+
+    for layer_name, artifacts in layer_artifacts.items():
+        level = 0
+        if artifacts:
+            level = artifacts[0].metadata.get("layer_level", 0)
+
+        layer_dir = build_dir / f"layer{level}-{layer_name}"
+        layer_dir.mkdir(parents=True, exist_ok=True)
+
+        for art in artifacts:
+            art_level = art.metadata.get("layer_level", level)
+            art_layer_dir = build_dir / f"layer{art_level}-{layer_name}"
+            art_layer_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write individual artifact file
+            art_path = art_layer_dir / f"{art.label}.json"
+            art_data = {
+                "label": art.label,
+                "artifact_id": art.artifact_id,
+                "artifact_type": art.artifact_type,
+                "content": art.content,
+                "input_ids": list(art.input_ids),
+                "prompt_id": art.prompt_id,
+                "model_config": art.model_config,
+                "metadata": art.metadata,
+            }
+            if art.created_at:
+                art_data["created_at"] = (
+                    art.created_at.isoformat() if hasattr(art.created_at, "isoformat") else str(art.created_at)
+                )
+            art_path.write_text(json.dumps(art_data, indent=2))
+
+            # Manifest entry
+            manifest[art.label] = {
+                "path": str(art_path.relative_to(build_dir)),
+                "artifact_id": art.artifact_id,
+                "layer": layer_name,
+                "level": art_level,
+            }
+
+            # Provenance entry for non-root artifacts
+            parent_labels = snapshot_txn.parent_labels_map.get(art.label, [])
+            if parent_labels:
+                provenance[art.label] = {
+                    "label": art.label,
+                    "parent_labels": parent_labels,
+                    "prompt_id": art.prompt_id,
+                    "model_config": art.model_config,
+                    "created_at": (
+                        art.created_at.isoformat()
+                        if art.created_at and hasattr(art.created_at, "isoformat")
+                        else datetime.now().isoformat()
+                    ),
+                }
+
+    (build_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (build_dir / "provenance.json").write_text(json.dumps(provenance, indent=2))
 
 
 def _build_source_config(pipeline: Pipeline, source: Source, src_dir: str) -> dict:
@@ -479,7 +560,7 @@ def _record_snapshot_projections(
 def _snapshot_parent_labels(
     artifact: Artifact,
     inputs: list[Artifact],
-    provenance: ProvenanceTracker,
+    cache: SnapshotArtifactCache,
 ) -> list[str]:
     """Parent labels for immutable snapshots.
 
@@ -489,31 +570,11 @@ def _snapshot_parent_labels(
     derived = _get_parent_labels(artifact, inputs)
     if derived:
         return derived
-    stored = provenance.get_parents(artifact.label)
+    stored = cache.get_parents(artifact.label)
     if stored:
         return stored
     if artifact.input_ids:
         return []
-    return [inp.label for inp in inputs]
-
-
-def _provenance_parent_labels(
-    artifact: Artifact,
-    inputs: list[Artifact],
-    provenance: ProvenanceTracker,
-) -> list[str]:
-    """Parent labels for the legacy provenance surface.
-
-    Provenance records keep the pre-snapshot best-effort behavior so existing
-    lineage commands remain informative even when transforms omit explicit
-    input_ids for aggregate artifacts.
-    """
-    derived = _get_parent_labels(artifact, inputs)
-    if derived:
-        return derived
-    stored = provenance.get_parents(artifact.label)
-    if stored:
-        return stored
     return [inp.label for inp in inputs]
 
 
@@ -622,7 +683,6 @@ def _materialize_layer_search_surfaces(
     pipeline: Pipeline,
     layer_name: str,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
     build_dir: Path,
     logger: SynixLogger | None = None,
 ) -> None:
@@ -652,14 +712,14 @@ def _materialize_layer_search_surfaces(
 def _gather_inputs(
     layer: Layer,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
+    store: SnapshotArtifactCache,
 ) -> list[Artifact]:
     """Gather inputs from dependent layers."""
     inputs: list[Artifact] = []
     for dep in layer.depends_on:
         dep_artifacts = layer_artifacts.get(dep.name)
         if dep_artifacts is None:
-            # Load from store if not in memory (e.g., cached from previous run)
+            # Load from snapshot cache if not in memory (e.g., cached from previous run)
             dep_artifacts = store.list_artifacts(dep.name)
         inputs.extend(dep_artifacts)
     return inputs
@@ -668,7 +728,7 @@ def _gather_inputs(
 def _layer_fully_cached(
     layer: Layer,
     inputs: list[Artifact],
-    store: ArtifactStore,
+    store: SnapshotArtifactCache,
     transform_fp: Fingerprint | None = None,
 ) -> bool:
     """Check if a layer can be entirely skipped (all artifacts cached)."""
@@ -851,7 +911,6 @@ def _materialize_layer_projections(
     pipeline: Pipeline,
     layer_name: str,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
     build_dir: Path,
     logger: SynixLogger | None = None,
 ) -> None:
@@ -896,7 +955,6 @@ def _materialize_layer_projections(
 def _materialize_all_projections(
     pipeline: Pipeline,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
     build_dir: Path,
     logger: SynixLogger | None = None,
 ) -> list[ProjectionStats]:

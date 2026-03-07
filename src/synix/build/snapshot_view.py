@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import datetime
 from pathlib import Path
 
 from synix.build.object_store import ObjectStore
 from synix.build.refs import RefStore
+from synix.core.models import Artifact
+
+logger = logging.getLogger(__name__)
 
 
 class SnapshotView:
@@ -143,3 +148,146 @@ class SnapshotView:
             raise ValueError(f"ambiguous hash prefix '{prefix}' matches {len(hash_matches)} artifacts: {labels}")
 
         return None
+
+
+class SnapshotArtifactCache:
+    """Read-only artifact cache backed by the previous snapshot.
+
+    Provides the same read interface as ArtifactStore (load_artifact,
+    list_artifacts, get_artifact_id, iter_entries, resolve_prefix) plus
+    provenance methods (get_parents, get_chain). Used as a drop-in
+    replacement for ArtifactStore in the runner and planner.
+    """
+
+    def __init__(self, synix_dir: Path):
+        self._artifacts_by_label: dict[str, Artifact] = {}
+        self._artifacts_by_layer: dict[str, list[Artifact]] = {}
+        self._parent_labels_map: dict[str, list[str]] = {}
+        self._manifest_entries: dict[str, dict] = {}
+        self._view: SnapshotView | None = None
+
+        try:
+            view = SnapshotView.open(synix_dir)
+            self._view = view
+            for entry in view._manifest["artifacts"]:
+                label = entry["label"]
+                oid = entry["oid"]
+                art_obj = view._object_store.get_json(oid)
+                content = view._object_store.get_bytes(art_obj["content_oid"]).decode("utf-8")
+
+                created_at_str = art_obj.get("metadata", {}).get("created_at")
+                created_at = datetime.fromisoformat(created_at_str) if created_at_str else datetime.now()
+
+                artifact = Artifact(
+                    label=art_obj["label"],
+                    artifact_type=art_obj["artifact_type"],
+                    artifact_id=art_obj["artifact_id"],
+                    input_ids=art_obj.get("input_ids", []),
+                    prompt_id=art_obj.get("prompt_id"),
+                    model_config=art_obj.get("model_config"),
+                    created_at=created_at,
+                    content=content,
+                    metadata=art_obj.get("metadata", {}),
+                )
+
+                layer_name = art_obj.get("metadata", {}).get("layer_name", "")
+                layer_level = art_obj.get("metadata", {}).get("layer_level", 0)
+
+                self._artifacts_by_label[label] = artifact
+                self._artifacts_by_layer.setdefault(layer_name, []).append(artifact)
+                self._parent_labels_map[label] = art_obj.get("parent_labels", [])
+                self._manifest_entries[label] = {
+                    "path": "",
+                    "artifact_id": art_obj["artifact_id"],
+                    "layer": layer_name,
+                    "level": layer_level,
+                }
+        except (ValueError, FileNotFoundError, KeyError):
+            logger.debug("No previous snapshot found in %s — starting with empty cache", synix_dir)
+
+    def load_artifact(self, label: str) -> Artifact | None:
+        """Load an artifact by label. Returns None if not found."""
+        return self._artifacts_by_label.get(label)
+
+    def list_artifacts(self, layer: str) -> list[Artifact]:
+        """Return all artifacts for a given layer name."""
+        return list(self._artifacts_by_layer.get(layer, []))
+
+    def get_artifact_id(self, label: str) -> str | None:
+        """Quick artifact ID (hash) lookup without loading full artifact."""
+        art = self._artifacts_by_label.get(label)
+        return art.artifact_id if art else None
+
+    def iter_entries(self) -> dict[str, dict]:
+        """Return a shallow copy of the manifest entries keyed by label."""
+        return dict(self._manifest_entries)
+
+    def resolve_prefix(self, prefix: str) -> str | None:
+        """Resolve a prefix to a full label (git-like semantics)."""
+        hash_prefix = prefix.removeprefix("sha256:")
+
+        if prefix in self._manifest_entries:
+            return prefix
+
+        label_matches = [lbl for lbl in self._manifest_entries if lbl.startswith(prefix)]
+        if len(label_matches) == 1:
+            return label_matches[0]
+        if len(label_matches) > 1:
+            labels = ", ".join(sorted(label_matches)[:5])
+            raise ValueError(f"ambiguous prefix '{prefix}' matches {len(label_matches)} labels: {labels}")
+
+        hash_matches = [
+            lbl
+            for lbl, entry in self._manifest_entries.items()
+            if entry["artifact_id"].removeprefix("sha256:").startswith(hash_prefix)
+        ]
+        if len(hash_matches) == 1:
+            return hash_matches[0]
+        if len(hash_matches) > 1:
+            labels = ", ".join(sorted(hash_matches)[:5])
+            raise ValueError(f"ambiguous hash prefix '{prefix}' matches {len(hash_matches)} artifacts: {labels}")
+
+        return None
+
+    def get_parents(self, label: str) -> list[str]:
+        """Return direct parent labels for an artifact."""
+        return list(self._parent_labels_map.get(label, []))
+
+    def get_chain(self, label: str) -> list[str]:
+        """Walk parent_labels transitively, returning BFS-ordered labels."""
+        visited: set[str] = set()
+        queue: list[str] = [label]
+        chain: list[str] = []
+
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            chain.append(current)
+
+            for parent in self._parent_labels_map.get(current, []):
+                if parent not in visited:
+                    queue.append(parent)
+
+        return chain
+
+    def update_from_build(self, layer_artifacts: dict[str, list]) -> None:
+        """Merge in-memory build results into the cache.
+
+        After a pipeline run completes, the cache is still a snapshot of the
+        *previous* build.  This method overlays the current build's artifacts so
+        that downstream consumers (validators, fixers) see the freshly built
+        data without requiring a full snapshot commit + reload cycle.
+        """
+        for layer_name, artifacts in layer_artifacts.items():
+            self._artifacts_by_layer[layer_name] = list(artifacts)
+            for art in artifacts:
+                self._artifacts_by_label[art.label] = art
+                level = art.metadata.get("layer_level", 0)
+                self._manifest_entries[art.label] = {
+                    "path": "",
+                    "artifact_id": art.artifact_id,
+                    "layer": layer_name,
+                    "level": level,
+                }

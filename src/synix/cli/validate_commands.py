@@ -18,7 +18,7 @@ from rich.tree import Tree
 from synix.cli.main import console, pipeline_argument
 
 
-def _build_provenance_tree(label, store, provenance):
+def _build_provenance_tree(label, store):
     """Build a Rich Tree showing the actual provenance DAG for an artifact."""
     root_art = store.load_artifact(label)
     root_layer = root_art.metadata.get("layer_name", root_art.artifact_type) if root_art else ""
@@ -35,13 +35,13 @@ def _build_provenance_tree(label, store, provenance):
         display = f"[bold]{node_label}[/bold] [dim]({layer})[/dim]"
         node = parent_tree.add(display)
 
-        parents = provenance.get_parents(node_label)
+        parents = store.get_parents(node_label)
         for pid in sorted(parents):
             _add_node(node, pid, visited)
 
     # Start from the violation artifact
     root_node = tree.add(f"[bold]{label}[/bold] [dim]({root_layer})[/dim]")
-    parents = provenance.get_parents(label)
+    parents = store.get_parents(label)
     for pid in sorted(parents):
         _add_node(root_node, pid, {label})
 
@@ -81,7 +81,7 @@ def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
     _run_validate_mode(pipeline, build_path, output_json)
 
 
-def _run_validators_with_progress(pipeline, store, provenance, output_json: bool):
+def _run_validators_with_progress(pipeline, store, output_json: bool):
     """Run validators one by one with live status output.
 
     Returns the aggregated ValidationResult.
@@ -92,7 +92,7 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
         _gather_artifacts,
     )
 
-    ctx = ValidationContext(store, provenance, pipeline)
+    ctx = ValidationContext(store, pipeline)
     result = ValidationResult()
     result.violations_by_validator = {}
 
@@ -141,12 +141,12 @@ def _run_validators_with_progress(pipeline, store, provenance, output_json: bool
 
 def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
     """Run validators and report violations."""
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
     from synix.build.validators import ViolationQueue
 
-    store = ArtifactStore(build_path)
-    provenance = ProvenanceTracker(build_path)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
 
     if not output_json:
         console.print(
@@ -167,7 +167,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
     if not output_json:
         console.print()
 
-    result = _run_validators_with_progress(pipeline, store, provenance, output_json)
+    result = _run_validators_with_progress(pipeline, store, output_json)
 
     # Persist violations to queue
     queue = ViolationQueue.load(build_path)
@@ -243,7 +243,7 @@ def _run_validate_mode(pipeline, build_path: Path, output_json: bool):
 
         # Build panel content — text body + optional provenance tree
         if v.provenance_trace:
-            provenance_tree = _build_provenance_tree(v.label, store, provenance)
+            provenance_tree = _build_provenance_tree(v.label, store)
             panel_content = Group(body, "", provenance_tree)
         else:
             panel_content = body

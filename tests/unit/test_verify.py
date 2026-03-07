@@ -13,11 +13,12 @@ from synix.build.provenance import ProvenanceTracker
 from synix.build.verify import verify_build
 from synix.cli import main
 from synix.search.indexer import SearchIndex
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 
 @pytest.fixture
 def populated_build(tmp_path):
-    """Create a build directory with artifacts and provenance."""
+    """Create a build directory with artifacts, provenance, and snapshot."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
 
@@ -58,6 +59,16 @@ def populated_build(tmp_path):
     )
     store.save_artifact(core, "core", 3)
     provenance.record("core-memory", parent_labels=["ep-001"], prompt_id="core_memory_v1")
+
+    # Also create a .synix snapshot for checks that use SnapshotArtifactCache
+    create_test_snapshot(
+        build_dir,
+        {"transcripts": [t1], "episodes": [ep1], "core": [core]},
+        parent_labels_map={
+            "ep-001": ["t-001"],
+            "core-memory": ["ep-001"],
+        },
+    )
 
     return build_dir
 
@@ -107,15 +118,28 @@ class TestVerifyBuild:
         assert "1" in check.message  # 1 artifact missing provenance
 
     def test_content_hash_mismatch(self, populated_build):
-        """Tamper with artifact content without updating artifact_id."""
-        manifest = json.loads((populated_build / "manifest.json").read_text())
-        for aid, entry in manifest.items():
-            art_path = populated_build / entry["path"]
-            data = json.loads(art_path.read_text())
-            data["content"] = "TAMPERED CONTENT"
-            # Don't update artifact_id — this should fail verification
-            art_path.write_text(json.dumps(data))
-            break
+        """Tamper with artifact_id in snapshot object store."""
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import RefStore, synix_dir_for_build_dir
+
+        synix_dir = synix_dir_for_build_dir(populated_build)
+        obj_store = ObjectStore(synix_dir)
+        ref_store = RefStore(synix_dir)
+
+        # Walk the snapshot -> manifest -> artifact objects to find one to tamper
+        head_oid = ref_store.read_ref("refs/heads/main")
+        snapshot_obj = obj_store.get_json(head_oid)
+        manifest_obj = obj_store.get_json(snapshot_obj["manifest_oid"])
+
+        target_entry = manifest_obj["artifacts"][0]
+        art_obj = obj_store.get_json(target_entry["oid"])
+
+        # Tamper: set artifact_id to a wrong hash
+        art_obj["artifact_id"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        # Overwrite the object file in place (bypassing content-addressing)
+        oid = target_entry["oid"]
+        obj_path = synix_dir / "objects" / oid[:2] / oid[2:]
+        obj_path.write_text(json.dumps(art_obj))
 
         result = verify_build(populated_build, checks=["content_hashes"])
         assert not result.passed

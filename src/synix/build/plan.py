@@ -7,10 +7,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.search_surfaces import transform_runtime_search_updates, validate_search_surface_uses
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import (
     Artifact,
@@ -108,7 +109,8 @@ def plan_build(
     compute_levels(pipeline.layers)
     validate_search_surface_uses(pipeline)
 
-    store = ArtifactStore(build_dir) if build_dir.exists() else None
+    synix_dir = synix_dir_for_build_dir(build_dir)
+    store = SnapshotArtifactCache(synix_dir) if synix_dir.exists() else None
 
     build_order = resolve_build_order(pipeline)
 
@@ -162,7 +164,7 @@ def _plan_layer(
     layer: Layer,
     pipeline: Pipeline,
     src_dir: str,
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
     prior_steps: list[StepPlan],
     input_tokens_per_call: int,
@@ -305,7 +307,7 @@ def _plan_source_layer(
     layer: Source,
     pipeline: Pipeline,
     src_dir: str,
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
 ) -> StepPlan:
     """Plan a Source layer by running its load() method."""
@@ -404,7 +406,7 @@ def _plan_source_layer(
 def _plan_transform_layer(
     layer: Transform,
     inputs: list[Artifact],
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
     upstream_dirty: bool,
     input_tokens_per_call: int,
@@ -651,7 +653,7 @@ def _plan_projection(
     proj,
     pipeline: Pipeline,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
 ) -> ProjectionPlan:
     """Analyze a projection to determine its plan status."""
     from synix.build.runner import (

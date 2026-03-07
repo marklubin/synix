@@ -258,6 +258,7 @@ class TestConcurrentBuildSameResults:
         build_dir_seq = tmp_path / "build_seq"
         p_seq = Pipeline("test-seq")
         p_seq.build_dir = str(build_dir_seq)
+        p_seq.synix_dir = str(tmp_path / "synix_seq")
         p_seq.source_dir = str(source_dir)
         p_seq.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
@@ -272,6 +273,7 @@ class TestConcurrentBuildSameResults:
         build_dir_conc = tmp_path / "build_conc"
         p_conc = Pipeline("test-conc")
         p_conc.build_dir = str(build_dir_conc)
+        p_conc.synix_dir = str(tmp_path / "synix_conc")
         p_conc.source_dir = str(source_dir)
         p_conc.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
 
@@ -298,10 +300,10 @@ class TestConcurrentBuildSameResults:
             )
 
         # Load artifacts from both builds and compare
-        from synix.build.artifacts import ArtifactStore
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store_seq = ArtifactStore(build_dir_seq)
-        store_conc = ArtifactStore(build_dir_conc)
+        store_seq = SnapshotArtifactCache(tmp_path / "synix_seq")
+        store_conc = SnapshotArtifactCache(tmp_path / "synix_conc")
 
         ep_seq = sorted(store_seq.list_artifacts("episodes"), key=lambda a: a.label)
         ep_conc = sorted(store_conc.list_artifacts("episodes"), key=lambda a: a.label)
@@ -386,9 +388,11 @@ class TestConcurrentBuildDefaultSequential:
         assert result.built > 0
 
         # Verify artifacts were created
-        from synix.build.artifacts import ArtifactStore
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store = ArtifactStore(build_dir)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        store = SnapshotArtifactCache(synix_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
@@ -463,9 +467,11 @@ class TestConcurrentErrorsDontCrash:
         assert result.built > 0
 
         # Monthly and core layers should have been built
-        from synix.build.artifacts import ArtifactStore
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store = ArtifactStore(build_dir)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        store = SnapshotArtifactCache(synix_dir)
         assert len(store.list_artifacts("monthly")) >= 1
         assert len(store.list_artifacts("core")) == 1
 

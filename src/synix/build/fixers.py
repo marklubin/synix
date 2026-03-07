@@ -16,8 +16,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import ValidationResult, Violation, _store_llm_trace
 from synix.core.citations import make_uri
 from synix.core.models import Pipeline
@@ -65,10 +63,14 @@ class FixResult:
 
 @dataclass
 class FixContext:
-    """Context passed to fixers."""
+    """Context passed to fixers.
 
-    store: ArtifactStore
-    provenance: ProvenanceTracker
+    The store must provide load_artifact(), list_artifacts(),
+    get_parents(), get_chain(), and iter_entries() — works with
+    both ArtifactStore+ProvenanceTracker and SnapshotArtifactCache.
+    """
+
+    store: object  # SnapshotArtifactCache or any duck-typed equivalent
     pipeline: Pipeline
     search_index: object | None = None  # SearchIndex when available
     llm_client: object | None = None  # LLMClient when available
@@ -122,12 +124,14 @@ class BaseFixer(ABC):
 
 def _find_downstream_artifacts(
     label: str,
-    provenance: ProvenanceTracker,
+    store: object,
 ) -> list[str]:
     """Find all artifacts that have label as a parent (direct children)."""
     downstream: list[str] = []
-    for aid, rec in provenance._records.items():
-        if label in rec.get("parent_labels", []):
+    entries = store.iter_entries()
+    for aid in entries:
+        parents = store.get_parents(aid)
+        if label in parents:
             downstream.append(aid)
     return downstream
 
@@ -139,22 +143,24 @@ def _find_downstream_artifacts(
 
 def apply_fix(
     action: FixAction,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: object,
 ) -> None:
     """Apply an approved fix: rewrite artifact content and update provenance.
 
     - Loads the existing artifact
     - Updates content and artifact_id
-    - Saves via store.save_artifact() (atomic write)
-    - Records new provenance with evidence_source_ids as parents
+    - Saves via store.save_artifact() (atomic write) if available
+
+    Note: With SnapshotArtifactCache, the store is read-only and save is a no-op.
+    The fix will be persisted on the next build run.
     """
     artifact = store.load_artifact(action.label)
     if artifact is None:
         return
 
-    # Get layer info from manifest
-    manifest_entry = store._manifest.get(action.label, {})
+    # Get layer info from manifest entries
+    entries = store.iter_entries()
+    manifest_entry = entries.get(action.label, {})
     layer_name = manifest_entry.get("layer", artifact.metadata.get("layer_name", "unknown"))
     layer_level = manifest_entry.get("level", artifact.metadata.get("layer_level", 0))
 
@@ -162,18 +168,21 @@ def apply_fix(
     artifact.content = action.new_content
     artifact.artifact_id = f"sha256:{hashlib.sha256(action.new_content.encode()).hexdigest()}"
 
-    # Save updated artifact
-    store.save_artifact(artifact, layer_name, layer_level)
+    # Save updated artifact if store supports it
+    save_fn = getattr(store, "save_artifact", None)
+    if save_fn is not None:
+        save_fn(artifact, layer_name, layer_level)
 
-    # Re-record provenance with existing parents (evidence sources are
-    # reference context for the fixer, not true input lineage).
-    existing_parents = provenance.get_parents(action.label)
-    provenance.record(
-        action.label,
-        parent_labels=existing_parents,
-        prompt_id=artifact.prompt_id,
-        model_config=artifact.model_config,
-    )
+    # Re-record provenance if store supports it
+    record_fn = getattr(store, "record", None)
+    if record_fn is not None:
+        existing_parents = store.get_parents(action.label)
+        record_fn(
+            action.label,
+            parent_labels=existing_parents,
+            prompt_id=artifact.prompt_id,
+            model_config=artifact.model_config,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +193,7 @@ def apply_fix(
 def run_fixers(
     validation_result: ValidationResult,
     pipeline: Pipeline,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: object,
     search_index: object | None = None,
     llm_client: object | None = None,
     on_progress: Callable[[str, int, int], None] | None = None,
@@ -202,7 +210,7 @@ def run_fixers(
 
     Returns FixResult with proposed actions (not yet applied).
     """
-    ctx = FixContext(store, provenance, pipeline, search_index, llm_client)
+    ctx = FixContext(store, pipeline, search_index, llm_client)
     result = FixResult()
 
     for fixer in pipeline.fixers:
@@ -224,7 +232,7 @@ def run_fixers(
                 )
             try:
                 action = fixer.fix_batch(violations, ctx)
-                action.downstream_invalidated = _find_downstream_artifacts(action.label, provenance)
+                action.downstream_invalidated = _find_downstream_artifacts(action.label, store)
                 result.actions.append(action)
                 result.rebuild_required.extend(action.downstream_invalidated)
             except Exception as exc:

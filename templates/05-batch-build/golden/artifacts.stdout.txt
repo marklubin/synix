@@ -11,14 +11,14 @@
 ╭──────────┬─────────────┬──────┬──────────────────────────────────────────────────────────────╮
 │ Label    │ Artifact ID │ Date │ Title / Summary                                              │
 ├──────────┼─────────────┼──────┼──────────────────────────────────────────────────────────────┤
-│ ws-alice │ 876eff9     │      │ Alice Chen likely approaches problems with a methodical a... │
-│ ws-bob   │  <N>  │      │ Bob Martinez likely approaches problems with a user-centr... │
-│ ws-carol │ 6b999a6     │      │ Carol Okafor likely approaches problems with a methodical... │
+│ ws-alice │ 2cf80f7     │      │ Alice Chen likely approaches problems with a methodical a... │
+│ ws-bob   │ 50af944     │      │ Bob Martinez likely approaches problems with a user-cente... │
+│ ws-carol │ 327c4a1     │      │ Carol Okafor likely approaches problems with a strong ana... │
 ╰──────────┴─────────────┴──────┴──────────────────────────────────────────────────────────────╯
 
             team_summary (L2) — 1 artifacts
 ╭──────────────┬─────────────┬──────┬─────────────────╮
 │ Label        │ Artifact ID │ Date │ Title / Summary │
 ├──────────────┼─────────────┼──────┼─────────────────┤
-│ team-summary │ 8552d44     │      │ Team Summary    │
+│ team-summary │ f1b1cae     │      │ Team Summary    │
 ╰──────────────┴─────────────┴──────┴─────────────────╯

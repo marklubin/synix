@@ -7,9 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.fixers import SemanticEnrichment, apply_fix, run_fixers
-from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.validators import (
     PII,
     SemanticConflict,
@@ -19,6 +18,7 @@ from synix.build.validators import (
     run_validators,
 )
 from synix.core.models import Artifact, Layer, Pipeline
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -30,16 +30,6 @@ def build_dir(tmp_path):
     d = tmp_path / "build"
     d.mkdir()
     return d
-
-
-@pytest.fixture
-def store(build_dir):
-    return ArtifactStore(build_dir)
-
-
-@pytest.fixture
-def provenance(build_dir):
-    return ProvenanceTracker(build_dir)
 
 
 def _make_artifact(aid, content, atype="episode", layer_name="episodes", **meta):
@@ -57,30 +47,31 @@ def _make_artifact(aid, content, atype="episode", layer_name="episodes", **meta)
 
 
 class TestPIIDetectionE2E:
-    def test_pii_detected_in_episodes(self, store, provenance, build_dir):
+    def test_pii_detected_in_episodes(self, build_dir, tmp_path):
         """Build artifacts with PII -> validate detects them with provenance."""
-        # Set up artifacts with provenance
         transcript = _make_artifact(
             "t-1",
             "User says their SSN is 123-45-6789",
             atype="transcript",
             layer_name="transcripts",
         )
-        store.save_artifact(transcript, "transcripts", 0)
-
         episode = _make_artifact(
             "ep-1",
             "The user mentioned their SSN: 123-45-6789",
             atype="episode",
             layer_name="episodes",
         )
-        store.save_artifact(episode, "episodes", 1)
-        provenance.record("ep-1", parent_labels=["t-1"])
+        synix_dir = create_test_snapshot(
+            tmp_path,
+            {"transcripts": [transcript], "episodes": [episode]},
+            parent_labels_map={"ep-1": ["t-1"]},
+        )
+        store = SnapshotArtifactCache(synix_dir)
 
         pipeline = Pipeline("test")
         pipeline.add_validator(PII(layers=[Layer("episodes")], severity="warning"))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert len(result.violations) >= 1
         ssn_viols = [v for v in result.violations if v.metadata.get("pattern") == "ssn"]
         assert len(ssn_viols) == 1
@@ -97,15 +88,16 @@ class TestPIIDetectionE2E:
 
 
 class TestViolationQueueE2E:
-    def test_validate_persists_to_queue(self, store, provenance, build_dir):
+    def test_validate_persists_to_queue(self, build_dir, tmp_path):
         """Validate -> violations saved to queue -> load roundtrip."""
         art = _make_artifact("ep-1", "Email: user@example.com")
-        store.save_artifact(art, "episodes", 1)
+        synix_dir = create_test_snapshot(tmp_path, {"episodes": [art]})
+        store = SnapshotArtifactCache(synix_dir)
 
         pipeline = Pipeline("test")
         pipeline.add_validator(PII(layers=[Layer("episodes")]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
 
         # Save to queue
         queue = ViolationQueue(build_dir=build_dir)
@@ -197,7 +189,7 @@ class TestSemanticFixCycleE2E:
         monkeypatch.setattr("synix.build.llm_client.LLMClient", lambda cfg: conflict_client)
         monkeypatch.setattr("synix.core.config.LLMConfig.from_dict", lambda d: None)
 
-    def test_validate_fix_rebuild_cycle(self, store, provenance, build_dir, monkeypatch):
+    def test_validate_fix_rebuild_cycle(self, build_dir, tmp_path, monkeypatch):
         """Full cycle: build -> validate (conflict) -> fix (accept) -> verify artifact rewritten."""
         # Set up: monthly artifact with a contradiction
         monthly = _make_artifact(
@@ -206,24 +198,24 @@ class TestSemanticFixCycleE2E:
             atype="monthly",
             layer_name="monthly",
         )
-        store.save_artifact(monthly, "monthly", 2)
-
-        # Episode sources
         ep1 = _make_artifact("ep-aug", "Mark talked about his BMW.", layer_name="episodes")
         ep2 = _make_artifact("ep-dec", "Mark drives a Dodge Neon.", layer_name="episodes")
-        store.save_artifact(ep1, "episodes", 1)
-        store.save_artifact(ep2, "episodes", 1)
-        provenance.record("monthly-dec", parent_labels=["ep-aug", "ep-dec"])
-
-        # Core depends on monthly
         core = _make_artifact(
             "core-1",
             "Core memory based on monthly summaries.",
             atype="core",
             layer_name="core",
         )
-        store.save_artifact(core, "core", 3)
-        provenance.record("core-1", parent_labels=["monthly-dec"])
+
+        synix_dir = create_test_snapshot(
+            tmp_path,
+            {"episodes": [ep1, ep2], "monthly": [monthly], "core": [core]},
+            parent_labels_map={
+                "monthly-dec": ["ep-aug", "ep-dec"],
+                "core-1": ["monthly-dec"],
+            },
+        )
+        store = SnapshotArtifactCache(synix_dir)
 
         # Patch LLM to use mock conflict client
         self._patch_llm(monkeypatch, _make_mock_conflict_client())
@@ -238,7 +230,7 @@ class TestSemanticFixCycleE2E:
         pipeline.add_fixer(SemanticEnrichment(max_context_episodes=3))
 
         # Step 1: Validate -- should find the contradiction
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert len(result.violations) >= 1
         conflict_viols = [v for v in result.violations if v.violation_type == "semantic_conflict"]
         assert len(conflict_viols) >= 1
@@ -257,7 +249,6 @@ class TestSemanticFixCycleE2E:
             result,
             pipeline,
             store,
-            provenance,
             llm_client=mock_fix_client,
         )
 
@@ -267,7 +258,7 @@ class TestSemanticFixCycleE2E:
 
         # Step 4: Apply fix for monthly-dec (simulating user accept)
         monthly_action = next(a for a in rewrite_actions if a.label == "monthly-dec")
-        apply_fix(monthly_action, store, provenance)
+        apply_fix(monthly_action, store)
 
         # Mark resolved in queue
         for v in result.violations:
@@ -276,13 +267,13 @@ class TestSemanticFixCycleE2E:
 
         queue.save_state()
 
-        # Step 5: Verify artifact was rewritten
+        # Step 5: Verify artifact was rewritten (in-memory via store)
         reloaded = store.load_artifact("monthly-dec")
         assert reloaded is not None
         assert "previously owned" in reloaded.content
 
-        # Step 6: Verify evidence provenance
-        parents = provenance.get_parents("monthly-dec")
+        # Step 6: Verify provenance still accessible
+        parents = store.get_parents("monthly-dec")
         assert "ep-aug" in parents
         assert "ep-dec" in parents
 
@@ -290,7 +281,7 @@ class TestSemanticFixCycleE2E:
         monthly_fix = next(a for a in fix_result.actions if a.label == "monthly-dec")
         assert "core-1" in monthly_fix.downstream_invalidated
 
-    def test_unresolved_accept_original(self, store, provenance, build_dir, monkeypatch):
+    def test_unresolved_accept_original(self, build_dir, tmp_path, monkeypatch):
         """Unresolved -> user accepts original -> violation resolved, no content change."""
         monthly = _make_artifact(
             "monthly-1",
@@ -298,8 +289,10 @@ class TestSemanticFixCycleE2E:
             atype="monthly",
             layer_name="monthly",
         )
-        store.save_artifact(monthly, "monthly", 2)
         original_hash = monthly.artifact_id
+
+        synix_dir = create_test_snapshot(tmp_path, {"monthly": [monthly]})
+        store = SnapshotArtifactCache(synix_dir)
 
         # Patch LLM to use mock conflict client
         self._patch_llm(monkeypatch, _make_mock_conflict_client())
@@ -312,7 +305,7 @@ class TestSemanticFixCycleE2E:
         )
         pipeline.add_fixer(SemanticEnrichment())
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         assert len(result.violations) >= 1
 
         # Run fixer -- returns unresolved
@@ -321,7 +314,6 @@ class TestSemanticFixCycleE2E:
             result,
             pipeline,
             store,
-            provenance,
             llm_client=mock_client,
         )
 
@@ -350,15 +342,16 @@ class TestSemanticFixCycleE2E:
 
 
 class TestJSONOutput:
-    def test_validate_json_parseable(self, store, provenance, build_dir):
+    def test_validate_json_parseable(self, build_dir, tmp_path):
         """--json output includes reasoning and violation_ids."""
         art = _make_artifact("ep-1", "SSN: 123-45-6789")
-        store.save_artifact(art, "episodes", 1)
+        synix_dir = create_test_snapshot(tmp_path, {"episodes": [art]})
+        store = SnapshotArtifactCache(synix_dir)
 
         pipeline = Pipeline("test")
         pipeline.add_validator(PII(layers=[Layer("episodes")]))
 
-        result = run_validators(pipeline, store, provenance)
+        result = run_validators(pipeline, store)
         out = result.to_dict()
         # Add violation_ids as the CLI does
         for i, v in enumerate(result.violations):

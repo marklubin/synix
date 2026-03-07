@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.artifacts.provenance import ProvenanceTracker
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 from synix.search.index import SearchIndex as SearchIdx
 
@@ -72,14 +72,15 @@ class TestProjections:
         """Core result traces back to transcript through all layers."""
         run(pipeline_obj, source_dir=str(source_dir))
 
-        provenance = ProvenanceTracker(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # Core memory should have a provenance chain
-        chain = provenance.get_chain("core-memory")
+        chain = store.get_chain("core-memory")
         assert len(chain) > 0
 
         # The chain should include the core artifact
-        chain_ids = [r.label for r in chain]
+        chain_ids = list(chain)
         assert "core-memory" in chain_ids
 
         # Should trace through monthly rollups

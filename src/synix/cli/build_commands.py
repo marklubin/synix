@@ -620,13 +620,15 @@ def _display_source_change_warnings(build_plan, pipeline):
 
     from pathlib import Path
 
-    from synix.build.artifacts import ArtifactStore
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
     if not build_path.exists():
         return
 
-    store = ArtifactStore(build_path)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
     layer_lookup = {layer.name: layer for layer in pipeline.layers}
 
     for step in build_plan.steps:

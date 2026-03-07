@@ -24,15 +24,14 @@ def lineage(artifact_id: str, build_dir: str):
 
     ARTIFACT_ID is the artifact to trace.
     """
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
-    provenance = ProvenanceTracker(build_dir)
-    store = ArtifactStore(build_dir)
+    synix_dir = synix_dir_for_build_dir(Path(build_dir))
+    store = SnapshotArtifactCache(synix_dir)
 
-    chain = provenance.get_chain(artifact_id)
-
-    if not chain:
+    artifact = store.load_artifact(artifact_id)
+    if artifact is None:
         console.print(f"[red]No provenance found for:[/red] {artifact_id}")
         sys.exit(1)
 
@@ -41,15 +40,14 @@ def lineage(artifact_id: str, build_dir: str):
     tree = Tree(f"[bold]{artifact_id}[/bold]")
 
     def add_parents(node, aid):
-        record = next((r for r in chain if r.label == aid), None)
-        if record:
-            for parent_id in record.parent_labels:
-                artifact = store.load_artifact(parent_id)
-                label = parent_id
-                if artifact:
-                    label += f" [dim]({artifact.artifact_type})[/dim]"
-                child_node = node.add(label)
-                add_parents(child_node, parent_id)
+        parent_labels = store.get_parents(aid)
+        for parent_id in parent_labels:
+            artifact = store.load_artifact(parent_id)
+            label = parent_id
+            if artifact:
+                label += f" [dim]({artifact.artifact_type})[/dim]"
+            child_node = node.add(label)
+            add_parents(child_node, parent_id)
 
     add_parents(tree, artifact_id)
     console.print(tree)
@@ -65,17 +63,17 @@ def status(build_dir: str, resolved: bool):
 
     from rich.tree import Tree
 
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
     from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
     if not build_path.exists():
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
 
     # ── Build layers table ──────────────────────────────────────────────
     table = Table(title="Build Status", box=box.ROUNDED)
@@ -84,7 +82,7 @@ def status(build_dir: str, resolved: bool):
     table.add_column("Last Built", justify="center")
 
     # Group artifacts by layer, track newest created_at per layer
-    manifest = store._manifest
+    manifest = store.iter_entries()
     layers: dict[str, dict] = {}
     for aid, info in manifest.items():
         layer = info.get("layer", "unknown")
@@ -143,7 +141,7 @@ def status(build_dir: str, resolved: bool):
         console.print(f"\n[bold]Projections:[/bold] {', '.join(proj_parts)}")
 
     # ── Stale artifacts ─────────────────────────────────────────────────
-    stale = _find_stale_artifacts(store, provenance)
+    stale = _find_stale_artifacts(store)
     if stale:
         stale_tree = Tree(f"[yellow bold]Stale Artifacts: {len(stale)} artifact(s) need rebuild[/yellow bold]")
         for label, changed_parents in sorted(stale.items()):
@@ -210,7 +208,7 @@ def status(build_dir: str, resolved: bool):
     _print_next_steps(active_count, stale_count)
 
 
-def _find_stale_artifacts(store, provenance) -> dict[str, list[str]]:
+def _find_stale_artifacts(store) -> dict[str, list[str]]:
     """Find artifacts whose parents have changed since they were built.
 
     Returns a dict mapping stale artifact labels to the list of parent labels
@@ -218,8 +216,8 @@ def _find_stale_artifacts(store, provenance) -> dict[str, list[str]]:
     """
     stale: dict[str, list[str]] = {}
 
-    for label in store._manifest:
-        parent_labels = provenance.get_parents(label)
+    for label in store.iter_entries():
+        parent_labels = store.get_parents(label)
         if not parent_labels:
             continue
 
@@ -330,9 +328,9 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_
     validation_result = None
     if pipeline_path:
         try:
-            from synix.build.artifacts import ArtifactStore
             from synix.build.pipeline import load_pipeline
-            from synix.build.provenance import ProvenanceTracker
+            from synix.build.refs import synix_dir_for_build_dir
+            from synix.build.snapshot_view import SnapshotArtifactCache
             from synix.build.validators import run_validators
 
             pipeline = load_pipeline(pipeline_path)
@@ -340,9 +338,9 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_
                 pipeline.build_dir = build_dir
 
             if pipeline.validators:
-                store = ArtifactStore(pipeline.build_dir)
-                provenance = ProvenanceTracker(pipeline.build_dir)
-                validation_result = run_validators(pipeline, store, provenance)
+                v_synix_dir = synix_dir_for_build_dir(Path(pipeline.build_dir))
+                v_store = SnapshotArtifactCache(v_synix_dir)
+                validation_result = run_validators(pipeline, v_store)
         except Exception as e:
             console.print(f"[yellow]Warning: could not run pipeline validators:[/yellow] {e}")
 

@@ -67,8 +67,8 @@ def search(
                                     — use that one
       otherwise                     — re-run with --projection <name>
     """
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
     from synix.search.indexer import SearchIndex, SearchIndexProjection
     from synix.search.retriever import HybridRetriever
 
@@ -104,7 +104,8 @@ def search(
         layer_names.extend(s.strip() for s in step.split(","))
     layer_filter = layer_names if layer_names else None
 
-    provenance = ProvenanceTracker(build_dir)
+    synix_dir = synix_dir_for_build_dir(Path(build_dir))
+    store = SnapshotArtifactCache(synix_dir)
 
     if mode == "keyword":
         # Fast path: use existing FTS5 query directly
@@ -112,7 +113,7 @@ def search(
         results = search_projection.query(
             query,
             layers=layer_filter,
-            provenance_tracker=provenance,
+            provenance_tracker=store,
         )
         search_projection.close()
         results = results[:effective_top_k]
@@ -133,7 +134,7 @@ def search(
             retriever = HybridRetriever(
                 search_index=search_index,
                 embedding_provider=embedding_provider,
-                provenance_tracker=provenance,
+                provenance_tracker=store,
             )
             results = retriever.query(
                 query,
@@ -146,7 +147,6 @@ def search(
 
     # Filter by customer metadata if requested
     if customer is not None:
-        store = ArtifactStore(build_dir)
         filtered = []
         for result in results:
             artifact = store.load_artifact(result.label)
@@ -218,12 +218,11 @@ def search(
                 if aid in visited:
                     return
                 visited.add(aid)
-                rec = provenance.get_record(aid)
-                if rec:
-                    for parent_label in sorted(rec.parent_labels):
-                        tree_label = f"[dim]{parent_label}[/dim]"
-                        child = node.add(tree_label)
-                        _build_trace_tree(child, parent_label, visited)
+                parents = store.get_parents(aid)
+                for parent_label in sorted(parents):
+                    tree_label = f"[dim]{parent_label}[/dim]"
+                    child = node.add(tree_label)
+                    _build_trace_tree(child, parent_label, visited)
 
             _build_trace_tree(prov_tree, result.label)
             console.print(prov_tree)
@@ -237,11 +236,10 @@ def search(
                 if aid in visited:
                     return
                 visited.add(aid)
-                rec = provenance.get_record(aid)
-                if rec:
-                    for parent_label in sorted(rec.parent_labels):
-                        child = node.add(f"[dim]{parent_label}[/dim]")
-                        _add_parents(child, parent_label, visited)
+                parents = store.get_parents(aid)
+                for parent_label in sorted(parents):
+                    child = node.add(f"[dim]{parent_label}[/dim]")
+                    _add_parents(child, parent_label, visited)
 
             _add_parents(tree, result.label)
             console.print(tree)

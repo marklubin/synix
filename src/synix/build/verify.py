@@ -7,8 +7,10 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import MANIFEST_FILENAME, ArtifactStore
+from synix.build.artifacts import MANIFEST_FILENAME
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
+from synix.build.snapshot_view import SnapshotArtifactCache
 
 
 @dataclass
@@ -356,11 +358,12 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
     """Verify content hashes match actual content."""
     import hashlib
 
-    store = ArtifactStore(build_path)
-    manifest = store._manifest
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
+    entries = store.iter_entries()
     mismatches = []
 
-    for aid in manifest:
+    for aid in entries:
         artifact = store.load_artifact(aid)
         if artifact is None:
             continue
@@ -380,7 +383,7 @@ def _check_content_hashes(build_path: Path) -> VerifyCheck:
     return VerifyCheck(
         name="content_hashes",
         passed=True,
-        message=f"All {len(manifest)} content hashes verified",
+        message=f"All {len(entries)} content hashes verified",
     )
 
 
@@ -460,14 +463,15 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
     if provenance_path.exists():
         provenance = json.loads(provenance_path.read_text())
 
-    store = ArtifactStore(build_path)
+    merge_synix_dir = synix_dir_for_build_dir(build_path)
+    merge_store = SnapshotArtifactCache(merge_synix_dir)
 
     violations: list[str] = []
     affected_customers: set[str] = set()
 
     for merge_id in merge_artifact_ids:
         # Get the merge artifact to check its metadata
-        merge_artifact = store.load_artifact(merge_id)
+        merge_artifact = merge_store.load_artifact(merge_id)
         if merge_artifact is None:
             continue
 
@@ -483,7 +487,7 @@ def _check_merge_integrity(build_path: Path) -> VerifyCheck:
         if merge_id in provenance:
             parent_ids = provenance[merge_id].get("parent_labels", [])
             for parent_id in parent_ids:
-                parent = store.load_artifact(parent_id)
+                parent = merge_store.load_artifact(parent_id)
                 if parent and parent.metadata.get("customer_id"):
                     customer_ids.add(parent.metadata["customer_id"])
 

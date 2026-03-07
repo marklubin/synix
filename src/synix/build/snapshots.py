@@ -153,6 +153,7 @@ class BuildTransaction:
     parent_snapshot_oid: str | None
     artifact_oids: dict[str, str] = field(default_factory=dict)
     layer_artifact_oids: dict[str, list[str]] = field(default_factory=dict)
+    parent_labels_map: dict[str, list[str]] = field(default_factory=dict)
     projection_oids: dict[str, str] = field(default_factory=dict)
     projection_declarations: dict[str, dict] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -220,6 +221,7 @@ class BuildTransaction:
                     layer_oids.remove(previous_oid)
 
             self.artifact_oids[artifact.label] = artifact_oid
+            self.parent_labels_map[artifact.label] = parent_labels
             layer_oids = self.layer_artifact_oids.setdefault(layer_name, [])
             if artifact_oid not in layer_oids:
                 layer_oids.append(artifact_oid)

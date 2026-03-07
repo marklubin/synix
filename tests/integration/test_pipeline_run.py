@@ -8,9 +8,8 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.artifacts.provenance import ProvenanceTracker
-from synix.artifacts.store import ArtifactStore
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 from synix.search.index import SearchIndex as SearchIdx
 
@@ -70,7 +69,8 @@ class TestFullPipelineRun:
     def test_artifact_count_matches_expectations(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Correct number of artifacts per layer."""
         run(pipeline_obj, source_dir=str(source_dir))
-        store = ArtifactStore(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # 3 ChatGPT + 5 Claude = 8 transcripts
         transcripts = store.list_artifacts("transcripts")
@@ -91,19 +91,19 @@ class TestFullPipelineRun:
     def test_all_artifacts_have_provenance(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Every non-root artifact has provenance records."""
         run(pipeline_obj, source_dir=str(source_dir))
-        store = ArtifactStore(build_dir)
-        provenance = ProvenanceTracker(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # Episodes should have provenance pointing to transcripts
         episodes = store.list_artifacts("episodes")
         for ep in episodes:
-            parents = provenance.get_parents(ep.label)
+            parents = store.get_parents(ep.label)
             assert len(parents) > 0, f"Episode {ep.label} has no provenance parents"
 
         # Core should have provenance
         core = store.list_artifacts("core")
         for c in core:
-            parents = provenance.get_parents(c.label)
+            parents = store.get_parents(c.label)
             assert len(parents) > 0, f"Core {c.label} has no provenance parents"
 
     def test_search_returns_results_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):

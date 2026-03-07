@@ -7,7 +7,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.core.models import Artifact
 
 
@@ -80,16 +81,20 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
 
 def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path, layer: str | None = None) -> DiffResult:
     """Compare artifacts between two build directories."""
-    old_store = ArtifactStore(old_build_dir)
-    new_store = ArtifactStore(new_build_dir)
+    old_synix_dir = synix_dir_for_build_dir(Path(old_build_dir))
+    new_synix_dir = synix_dir_for_build_dir(Path(new_build_dir))
+    old_store = SnapshotArtifactCache(old_synix_dir)
+    new_store = SnapshotArtifactCache(new_synix_dir)
 
-    old_ids = set(old_store._manifest.keys())
-    new_ids = set(new_store._manifest.keys())
+    old_entries = old_store.iter_entries()
+    new_entries = new_store.iter_entries()
+    old_ids = set(old_entries.keys())
+    new_ids = set(new_entries.keys())
 
     # Filter by layer if specified
     if layer:
-        old_ids = {aid for aid in old_ids if old_store._manifest[aid].get("layer") == layer}
-        new_ids = {aid for aid in new_ids if new_store._manifest[aid].get("layer") == layer}
+        old_ids = {aid for aid in old_ids if old_entries[aid].get("layer") == layer}
+        new_ids = {aid for aid in new_ids if new_entries[aid].get("layer") == layer}
 
     result = DiffResult()
     result.added = sorted(new_ids - old_ids)
@@ -115,13 +120,15 @@ def diff_artifact_by_label(
     If previous_build_dir is provided, compares across builds.
     Otherwise, checks for version history in the same build directory.
     """
-    store = ArtifactStore(build_dir)
+    synix_dir = synix_dir_for_build_dir(Path(build_dir))
+    store = SnapshotArtifactCache(synix_dir)
     new_art = store.load_artifact(label)
     if new_art is None:
         return None
 
     if previous_build_dir:
-        old_store = ArtifactStore(previous_build_dir)
+        old_synix_dir = synix_dir_for_build_dir(Path(previous_build_dir))
+        old_store = SnapshotArtifactCache(old_synix_dir)
         old_art = old_store.load_artifact(label)
         if old_art is None:
             return None

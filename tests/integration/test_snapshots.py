@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.build.artifacts import ArtifactStore
 from synix.build.object_store import SCHEMA_VERSION, ObjectStore
 from synix.build.refs import RefStore
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.snapshots import _pipeline_fingerprint, commit_build_snapshot, list_runs, start_build_transaction
 from synix.build.validators import RequiredField
 from synix.core.models import Artifact
@@ -379,12 +379,12 @@ class TestSnapshots:
         assert (build_dir / "search.db").exists()
         assert (build_dir / "context.md").exists()
 
-        build_store = ArtifactStore(build_dir)
+        snapshot_store = SnapshotArtifactCache(tmp_path / ".synix")
         first_label, first_artifact_oid = next(iter(_manifest_artifact_map(manifest).items()))
         first_artifact = object_store.get_json(first_artifact_oid)
         assert (
             object_store.get_bytes(first_artifact["content_oid"]).decode("utf-8")
-            == build_store.load_artifact(first_label).content
+            == snapshot_store.load_artifact(first_label).content
         )
 
         assert ref_store.read_head_target() == "refs/heads/main"

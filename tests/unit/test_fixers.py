@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.fixers import (
     BaseFixer,
     CitationEnrichment,
@@ -16,9 +15,10 @@ from synix.build.fixers import (
     apply_fix,
     run_fixers,
 )
-from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.validators import ValidationResult, Violation
 from synix.core.models import Artifact, Pipeline
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -34,12 +34,9 @@ def build_dir(tmp_path):
 
 @pytest.fixture
 def store(build_dir):
-    return ArtifactStore(build_dir)
-
-
-@pytest.fixture
-def provenance(build_dir):
-    return ProvenanceTracker(build_dir)
+    # Create an empty snapshot so SnapshotArtifactCache has valid state
+    create_test_snapshot(build_dir, {})
+    return SnapshotArtifactCache(build_dir / ".synix")
 
 
 def _make_artifact(aid, atype="episode", content="test content", **meta):
@@ -178,14 +175,14 @@ class _DownstreamFixer(_InlineFixer):
 
 
 class TestRunFixers:
-    def test_no_fixers(self, store, provenance):
+    def test_no_fixers(self, store):
         pipeline = Pipeline("test")
         vr = ValidationResult(violations=[Violation("test", "error", "msg", "a", "f")])
-        result = run_fixers(vr, pipeline, store, provenance)
+        result = run_fixers(vr, pipeline, store)
         assert result.actions == []
         assert result.fixers_run == []
 
-    def test_fixer_matches_violations(self, store, provenance):
+    def test_fixer_matches_violations(self, store):
         pipeline = Pipeline("test")
         pipeline.add_fixer(_MatchFixer())
 
@@ -195,12 +192,12 @@ class TestRunFixers:
                 Violation("other_type", "error", "msg", "art-2", "f"),
             ]
         )
-        result = run_fixers(vr, pipeline, store, provenance)
+        result = run_fixers(vr, pipeline, store)
         assert len(result.actions) == 1
         assert result.actions[0].label == "art-1"
         assert "test_match_fixer" in result.fixers_run
 
-    def test_fixer_error_captured(self, store, provenance):
+    def test_fixer_error_captured(self, store):
         pipeline = Pipeline("test")
         pipeline.add_fixer(_ErrorFixer())
 
@@ -209,17 +206,26 @@ class TestRunFixers:
                 Violation("error_type", "error", "msg", "art-1", "f"),
             ]
         )
-        result = run_fixers(vr, pipeline, store, provenance)
+        result = run_fixers(vr, pipeline, store)
         assert len(result.errors) == 1
         assert "fixer broke" in result.errors[0]
         assert result.actions == []
 
-    def test_downstream_invalidation_computed(self, store, provenance):
+    def test_downstream_invalidation_computed(self, build_dir):
         """Verify that run_fixers populates downstream_invalidated on actions."""
         # Set up provenance: child depends on parent
-        provenance.record("parent-1", parent_labels=[])
-        provenance.record("child-1", parent_labels=["parent-1"])
-        provenance.record("child-2", parent_labels=["parent-1"])
+        parent = _make_artifact("parent-1")
+        child1 = _make_artifact("child-1")
+        child2 = _make_artifact("child-2")
+        create_test_snapshot(
+            build_dir,
+            {"episodes": [parent, child1, child2]},
+            parent_labels_map={
+                "child-1": ["parent-1"],
+                "child-2": ["parent-1"],
+            },
+        )
+        store = SnapshotArtifactCache(build_dir / ".synix")
 
         pipeline = Pipeline("test")
         pipeline.add_fixer(_DownstreamFixer())
@@ -229,7 +235,7 @@ class TestRunFixers:
                 Violation("downstream_type", "error", "msg", "parent-1", "f"),
             ]
         )
-        result = run_fixers(vr, pipeline, store, provenance)
+        result = run_fixers(vr, pipeline, store)
         assert len(result.actions) == 1
         assert set(result.actions[0].downstream_invalidated) == {"child-1", "child-2"}
         assert set(result.rebuild_required) == {"child-1", "child-2"}
@@ -241,17 +247,38 @@ class TestRunFixers:
 
 
 class TestFindDownstream:
-    def test_finds_children(self, provenance):
-        provenance.record("child-1", parent_labels=["parent-1"])
-        provenance.record("child-2", parent_labels=["parent-1"])
-        provenance.record("unrelated", parent_labels=["other"])
+    def test_finds_children(self, build_dir):
+        child1 = _make_artifact("child-1")
+        child2 = _make_artifact("child-2")
+        unrelated = _make_artifact("unrelated")
+        parent = _make_artifact("parent-1")
+        other = _make_artifact("other")
+        create_test_snapshot(
+            build_dir,
+            {"episodes": [child1, child2, unrelated, parent, other]},
+            parent_labels_map={
+                "child-1": ["parent-1"],
+                "child-2": ["parent-1"],
+                "unrelated": ["other"],
+            },
+        )
+        store = SnapshotArtifactCache(build_dir / ".synix")
 
-        downstream = _find_downstream_artifacts("parent-1", provenance)
+        downstream = _find_downstream_artifacts("parent-1", store)
         assert set(downstream) == {"child-1", "child-2"}
 
-    def test_no_children(self, provenance):
-        provenance.record("leaf", parent_labels=["some-parent"])
-        downstream = _find_downstream_artifacts("leaf", provenance)
+    def test_no_children(self, build_dir):
+        leaf = _make_artifact("leaf")
+        some_parent = _make_artifact("some-parent")
+        create_test_snapshot(
+            build_dir,
+            {"episodes": [leaf, some_parent]},
+            parent_labels_map={
+                "leaf": ["some-parent"],
+            },
+        )
+        store = SnapshotArtifactCache(build_dir / ".synix")
+        downstream = _find_downstream_artifacts("leaf", store)
         assert downstream == []
 
 
@@ -261,10 +288,13 @@ class TestFindDownstream:
 
 
 class TestApplyFix:
-    def test_rewrites_artifact(self, store, provenance):
+    def test_rewrites_artifact_with_writable_store(self, build_dir):
+        """apply_fix rewrites content when the store supports save_artifact."""
+        from synix.build.artifacts import ArtifactStore
+
+        writable_store = ArtifactStore(build_dir)
         art = _make_artifact("art-1", "episode", "original content", layer_name="episodes", layer_level=1)
-        store.save_artifact(art, "episodes", 1)
-        provenance.record("art-1", parent_labels=["t-1"])
+        writable_store.save_artifact(art, "episodes", 1)
 
         action = FixAction(
             label="art-1",
@@ -275,19 +305,40 @@ class TestApplyFix:
             description="test fix",
             evidence_source_ids=["evidence-1"],
         )
-        apply_fix(action, store, provenance)
+        apply_fix(action, writable_store)
 
-        reloaded = store.load_artifact("art-1")
+        reloaded = writable_store.load_artifact("art-1")
         assert reloaded is not None
         assert reloaded.content == "fixed content"
         assert "sha256:" in reloaded.artifact_id
 
-        # Provenance preserves original parents (evidence sources are
-        # reference context, not true input lineage)
-        parents = provenance.get_parents("art-1")
-        assert "t-1" in parents
+    def test_snapshot_cache_mutates_in_memory(self, build_dir):
+        """apply_fix with SnapshotArtifactCache mutates in-memory but doesn't persist."""
+        art = _make_artifact("art-1", "episode", "original content")
+        create_test_snapshot(build_dir, {"episodes": [art]})
+        store = SnapshotArtifactCache(build_dir / ".synix")
 
-    def test_missing_artifact_noop(self, store, provenance):
+        action = FixAction(
+            label="art-1",
+            action="rewrite",
+            original_artifact_id="",
+            new_content="fixed content",
+            new_artifact_id="",
+            description="test fix",
+        )
+        apply_fix(action, store)
+
+        # In-memory artifact is updated
+        reloaded = store.load_artifact("art-1")
+        assert reloaded is not None
+        assert reloaded.content == "fixed content"
+
+        # But reloading from disk shows original content
+        fresh_store = SnapshotArtifactCache(build_dir / ".synix")
+        fresh = fresh_store.load_artifact("art-1")
+        assert fresh.content == "original content"
+
+    def test_missing_artifact_noop(self, store):
         action = FixAction(
             label="nonexistent",
             action="rewrite",
@@ -297,7 +348,7 @@ class TestApplyFix:
             description="",
         )
         # Should not raise
-        apply_fix(action, store, provenance)
+        apply_fix(action, store)
 
 
 # ---------------------------------------------------------------------------
@@ -361,9 +412,14 @@ class TestSemanticEnrichmentFixer:
             violation_id="vid-1",
         )
 
-    def test_resolved_path(self, store, provenance):
-        art = _make_artifact("a-1", "episode", "He likes cats. He hates cats.")
-        store.save_artifact(art, "episodes", 1)
+    def _make_store(self, build_dir, artifacts):
+        """Create a SnapshotArtifactCache from a list of (label, content) tuples."""
+        arts = [_make_artifact(label, "episode", content) for label, content in artifacts]
+        create_test_snapshot(build_dir, {"episodes": arts})
+        return SnapshotArtifactCache(build_dir / ".synix")
+
+    def test_resolved_path(self, build_dir):
+        store = self._make_store(build_dir, [("a-1", "He likes cats. He hates cats.")])
 
         mock_llm = _MockLLMClient(
             '{"status": "resolved", "content": "He initially liked cats but later changed his mind.", '
@@ -375,7 +431,7 @@ class TestSemanticEnrichmentFixer:
             ]
         )
 
-        ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
         fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
@@ -386,15 +442,14 @@ class TestSemanticEnrichmentFixer:
         assert action.interactive is True
         assert action.llm_explanation == "Temporal resolution"
 
-    def test_unresolved_path(self, store, provenance):
-        art = _make_artifact("a-1", "episode", "Contradictory content.")
-        store.save_artifact(art, "episodes", 1)
+    def test_unresolved_path(self, build_dir):
+        store = self._make_store(build_dir, [("a-1", "Contradictory content.")])
 
         mock_llm = _MockLLMClient(
             '{"status": "unresolved", "content": "", "explanation": "Not enough context to resolve"}'
         )
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), llm_client=mock_llm)
 
         fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
@@ -403,29 +458,26 @@ class TestSemanticEnrichmentFixer:
         assert action.new_content == ""
         assert "Not enough context" in action.llm_explanation
 
-    def test_missing_artifact_skip(self, store, provenance):
-        ctx = FixContext(store, provenance, Pipeline("test"))
+    def test_missing_artifact_skip(self, store):
+        ctx = FixContext(store, Pipeline("test"))
         fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation("nonexistent"), ctx)
         assert action.action == "skip"
         assert "not found" in action.description.lower()
 
-    def test_no_llm_client_skip(self, store, provenance):
-        art = _make_artifact("a-1", "episode", "Some content.")
-        store.save_artifact(art, "episodes", 1)
+    def test_no_llm_client_skip(self, build_dir):
+        store = self._make_store(build_dir, [("a-1", "Some content.")])
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=None)
+        ctx = FixContext(store, Pipeline("test"), llm_client=None)
 
         fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
         assert action.action == "skip"
         assert "no llm client" in action.description.lower()
 
-    def test_evidence_provenance_on_apply(self, store, provenance):
-        """Full flow: fix then apply, verify provenance includes evidence."""
-        art = _make_artifact("a-1", "episode", "Original content.", layer_name="episodes", layer_level=1)
-        store.save_artifact(art, "episodes", 1)
-        provenance.record("a-1", parent_labels=["t-1"])
+    def test_evidence_fix_then_apply(self, build_dir):
+        """Full flow: fix then apply — with snapshot store, apply is a no-op."""
+        store = self._make_store(build_dir, [("a-1", "Original content.")])
 
         mock_llm = _MockLLMClient('{"status": "resolved", "content": "Fixed content.", "explanation": "resolved"}')
         mock_search = _MockSearchIndex(
@@ -434,20 +486,24 @@ class TestSemanticEnrichmentFixer:
             ]
         )
 
-        ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
         fixer = SemanticEnrichment()
         action = fixer.fix(self._make_violation(), ctx)
         assert action.action == "rewrite"
+        assert action.new_content == "Fixed content."
+        assert action.evidence_source_ids == ["evidence-1"]
 
-        # Apply the fix
-        apply_fix(action, store, provenance)
+        # Apply mutates in-memory but doesn't persist to disk
+        apply_fix(action, store)
 
         reloaded = store.load_artifact("a-1")
         assert reloaded.content == "Fixed content."
 
-        parents = provenance.get_parents("a-1")
-        assert "t-1" in parents
+        # Verify disk is unchanged (not persisted)
+        fresh_store = SnapshotArtifactCache(build_dir / ".synix")
+        fresh = fresh_store.load_artifact("a-1")
+        assert fresh.content == "Original content."
 
     def test_semantic_enrichment_instantiation(self):
         fixer = SemanticEnrichment()

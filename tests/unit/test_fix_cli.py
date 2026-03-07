@@ -95,21 +95,15 @@ class TestFixCommand:
 
     def test_fix_stale_violations_expired(self, runner, simple_pipeline, build_dir):
         """Violation with hash X, artifact rebuilt with hash Y -> auto-expired."""
-        from synix.build.artifacts import ArtifactStore
+        import hashlib
+
         from synix.build.validators import Violation, ViolationQueue
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
-
-        # Save an artifact with original content
-        art = Artifact(
-            label="ep-1",
-            artifact_type="episode",
-            content="SSN: 123-45-6789",
-            metadata={"layer_name": "episodes"},
-        )
-        store.save_artifact(art, "episodes", 1)
-        original_hash = store.get_artifact_id("ep-1")
+        # Compute the hash of the original content (the violation references this)
+        original_content = "SSN: 123-45-6789"
+        original_hash = f"sha256:{hashlib.sha256(original_content.encode()).hexdigest()}"
 
         # Persist a violation against the original hash
         queue = ViolationQueue.load(build_dir)
@@ -129,14 +123,14 @@ class TestFixCommand:
         # Verify it's active before rebuild
         assert len(queue.active()) == 1
 
-        # "Rebuild" the artifact with different content
+        # "Rebuild" the artifact with different content and create a snapshot
         art2 = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="No PII here, all clean.",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art2, "episodes", 1)
+        create_test_snapshot(build_dir, {"episodes": [art2]})
 
         # Now run fix — violation should be auto-expired
         result = runner.invoke(
@@ -156,19 +150,20 @@ class TestFixCommand:
 
     def test_fix_active_violations_no_fixer(self, runner, simple_pipeline, build_dir):
         """Active violations but no fixer -> 'No fixers declared'."""
-        from synix.build.artifacts import ArtifactStore
+        import hashlib
+
         from synix.build.validators import Violation, ViolationQueue
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
         art = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="SSN: 123-45-6789",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art, "episodes", 1)
-        content_hash = store.get_artifact_id("ep-1")
+        create_test_snapshot(build_dir, {"episodes": [art]})
+        content_hash = f"sha256:{hashlib.sha256(art.content.encode()).hexdigest()}"
 
         queue = ViolationQueue.load(build_dir)
         queue.upsert(
