@@ -97,6 +97,12 @@ class TestNormalizeOutput:
         assert "<N> artifacts" in result
         assert "27" not in result
 
+    def test_normalize_named_synix_search_counts(self):
+        text = "│ synix_search        │  PASS  │ Synix search 'search' has 3 entries   │"
+        result = _normalize_output(text, Path("/tmp/case"))
+        assert "Synix search 'search' has <N> entries" in result
+        assert "3" not in result
+
     def test_normalize_plan_tree_stats(self):
         cached = "├── bios  source:parse  3 cached"
         fresh = "├── bios  source:parse  3 new"

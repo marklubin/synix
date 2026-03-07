@@ -537,6 +537,41 @@ class TestProjectionCaching:
         for ps in result2.projection_stats:
             assert ps.status == "cached", f"Projection {ps.name} was {ps.status}, expected cached"
 
+    def test_synix_search_records_custom_output_path_in_projection_cache(self, source_dir, build_dir, mock_llm):
+        """SynixSearch persists its concrete DB path in projection cache metadata."""
+        pipeline = Pipeline("custom-search-output")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir / "outputs" / "search.db"))
+
+        pipeline.add(transcripts, episodes, surface, search_output)
+
+        run(pipeline, source_dir=str(source_dir))
+
+        cache = json.loads((build_dir / ".projection_cache.json").read_text())
+        assert cache["search"]["projection_type"] == "synix_search"
+        assert cache["search"]["db_path"] == "outputs/search.db"
+
+    def test_synix_search_output_path_must_stay_inside_build_dir(self, source_dir, build_dir, mock_llm):
+        """SynixSearch rejects output paths outside the build directory."""
+        pipeline = Pipeline("invalid-search-output")
+        pipeline.build_dir = str(build_dir)
+        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+        transcripts = Source("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
+        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir.parent / "escape.db"))
+
+        pipeline.add(transcripts, episodes, surface, search_output)
+
+        with pytest.raises(ValueError, match="must stay inside the build directory"):
+            run(pipeline, source_dir=str(source_dir))
+
     def test_projection_rebuilds_on_new_artifacts(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """After adding a new conversation, at least one projection rebuilds."""
         run(pipeline_obj, source_dir=str(source_dir))

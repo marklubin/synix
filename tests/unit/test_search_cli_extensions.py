@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from click.testing import CliRunner
 
@@ -124,6 +126,13 @@ def test_customer_flag_exists(runner):
     result = runner.invoke(main, ["search", "--help"])
     assert result.exit_code == 0
     assert "--customer" in result.output
+
+
+def test_projection_flag_exists(runner):
+    """CLI accepts --projection flag."""
+    result = runner.invoke(main, ["search", "--help"])
+    assert result.exit_code == 0
+    assert "--projection" in result.output
 
 
 # --- Functional tests ---
@@ -312,3 +321,70 @@ def test_trace_without_provenance_data(runner, tmp_path):
     assert result.exit_code == 0
     # Should still show results, just without provenance tree
     assert "orphan-001" in result.output
+
+
+def test_search_uses_custom_synix_output_path(runner, tmp_path):
+    """Search resolves a custom SynixSearch DB path from projection metadata."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    custom_db = build_dir / "outputs" / "memory.db"
+    custom_db.parent.mkdir()
+
+    artifact = Artifact(
+        label="custom-001",
+        artifact_type="episode",
+        content="Custom Synix output contains machine learning notes",
+        metadata={"layer_name": "episodes"},
+    )
+    index = SearchIndex(custom_db)
+    index.create()
+    index.insert(artifact, "episodes", 1)
+    index.close()
+
+    (build_dir / ".projection_cache.json").write_text(
+        json.dumps(
+            {
+                "custom-search": {
+                    "projection_type": "synix_search",
+                    "db_path": "outputs/memory.db",
+                }
+            }
+        )
+    )
+
+    result = runner.invoke(main, ["search", "machine learning", "--build-dir", str(build_dir)])
+    assert result.exit_code == 0
+    assert "custom-001" in result.output
+
+
+def test_search_requires_projection_when_multiple_outputs_exist(runner, tmp_path):
+    """Search asks for --projection when multiple local search outputs are present."""
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+
+    for rel_path, label in (("outputs/a.db", "alpha-001"), ("outputs/b.db", "beta-001")):
+        db_path = build_dir / rel_path
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact = Artifact(
+            label=label,
+            artifact_type="episode",
+            content=f"{label} discusses machine learning",
+            metadata={"layer_name": "episodes"},
+        )
+        index = SearchIndex(db_path)
+        index.create()
+        index.insert(artifact, "episodes", 1)
+        index.close()
+
+    (build_dir / ".projection_cache.json").write_text(
+        json.dumps(
+            {
+                "alpha": {"projection_type": "synix_search", "db_path": "outputs/a.db"},
+                "beta": {"projection_type": "synix_search", "db_path": "outputs/b.db"},
+            }
+        )
+    )
+
+    result = runner.invoke(main, ["search", "machine learning", "--build-dir", str(build_dir)])
+    assert result.exit_code != 0
+    assert "--projection" in result.output

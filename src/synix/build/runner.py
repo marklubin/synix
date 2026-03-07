@@ -17,6 +17,7 @@ from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import FlatFileProjection, get_projection
 from synix.build.provenance import ProvenanceTracker
+from synix.build.search_outputs import PROJECTION_CACHE_FILE
 from synix.build.search_surfaces import (
     search_surface_ready,
     surface_local_path,
@@ -100,8 +101,26 @@ def _search_projection_db_path(proj: Layer, build_dir: Path) -> Path:
     if isinstance(proj, SearchSurface):
         return surface_local_path(build_dir, proj)
     if isinstance(proj, SynixSearch):
-        return Path(proj.output_path) if proj.output_path else build_dir / "search.db"
+        output_path = Path(proj.output_path) if proj.output_path else build_dir / "search.db"
+        resolved_build_dir = build_dir.resolve(strict=False)
+        resolved_output_path = output_path.resolve(strict=False)
+        if not resolved_output_path.is_relative_to(resolved_build_dir):
+            raise ValueError(
+                f"SynixSearch output_path for {proj.name!r} must stay inside the build directory {resolved_build_dir}"
+            )
+        return resolved_output_path
     return build_dir / "search.db"
+
+
+def _search_output_cache_metadata(proj: Layer, build_dir: Path) -> dict:
+    if not _is_search_output_projection(proj):
+        return {}
+
+    db_path = _search_projection_db_path(proj, build_dir)
+    return {
+        "projection_type": _search_projection_type(proj),
+        "db_path": str(db_path.relative_to(build_dir.resolve(strict=False))),
+    }
 
 
 def run(
@@ -898,6 +917,7 @@ def _materialize_all_projections(
             "embedding_hash": embedding_hash,
             "source_layers": source_layer_names,
             "artifact_count": len(all_artifacts),
+            **_search_output_cache_metadata(proj, build_dir),
         }
 
     _save_projection_cache(build_dir, cache)
@@ -991,8 +1011,8 @@ def _materialize_projection(
 
     if _is_search_output_projection(proj) or isinstance(proj, SearchSurface):
         # Use projection registry to avoid direct search import
+        db_path = _search_projection_db_path(proj, build_dir)
         try:
-            db_path = _search_projection_db_path(proj, build_dir)
             adapter_name = "synix_search" if isinstance(proj, SynixSearch) else "search_index"
             projection = get_projection(adapter_name, build_dir, db_path)
         except ValueError as exc:
@@ -1014,10 +1034,6 @@ def _materialize_projection(
         logger.projection_finish(proj.name, triggered_by=triggered_by)
 
     return False
-
-
-PROJECTION_CACHE_FILE = ".projection_cache.json"
-
 
 def _compute_projection_hash(artifacts: list[Artifact], proj_config: dict | None = None) -> str:
     """Compute a hash over sorted artifact IDs (hashes) and projection config."""
@@ -1060,9 +1076,10 @@ def _regenerate_embeddings_only(
     embedding_config = proj.embedding_config
     if not embedding_config or not artifacts:
         return
+    db_path = _search_projection_db_path(proj, build_dir)
     try:
         adapter_name = "synix_search" if isinstance(proj, SynixSearch) else "search_index"
-        projection = get_projection(adapter_name, build_dir, _search_projection_db_path(proj, build_dir))
+        projection = get_projection(adapter_name, build_dir, db_path)
     except ValueError:
         logger.warning("Cannot regenerate embeddings: Synix search projection unavailable")
         return

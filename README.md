@@ -114,6 +114,8 @@ This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
 
 `SearchSurface` is the build-time search capability. `SynixSearch` is the canonical local search output. `SearchIndex` still works as a compatibility API, but new pipelines should use surfaces plus `SynixSearch`.
 
+`synix search` resolves the only local search output by default, or the one named `search` when multiple outputs exist. If a build has several local search outputs, pass `--projection <name>`. `SynixSearch.output_path` must stay under the build directory.
+
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 
 ## Platform Transforms (`synix.transforms`)

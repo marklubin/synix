@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from synix.build.artifacts import MANIFEST_FILENAME, ArtifactStore
+from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
 
 
 @dataclass
@@ -278,45 +279,72 @@ def _check_provenance_complete(build_path: Path) -> VerifyCheck:
 
 def _check_synix_search(build_path: Path) -> VerifyCheck:
     """Check local Synix search output consistency."""
-    db_path = build_path / "search.db"
-    if not db_path.exists():
+    try:
+        outputs = list_search_outputs(build_path)
+    except SearchOutputResolutionError as exc:
+        return VerifyCheck(
+            name="synix_search",
+            passed=False,
+            message=f"Invalid Synix search output metadata: {exc}",
+            fix_hint="Re-run synix build to regenerate the local search output metadata",
+        )
+
+    if not outputs:
         return VerifyCheck(
             name="synix_search",
             passed=True,
             message="No Synix search output (not required)",
         )
 
-    try:
-        conn = sqlite3.connect(str(db_path))
-        # Check table exists
-        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        table_names = [t[0] for t in tables]
+    counts: list[tuple[str, int]] = []
+    failures: list[str] = []
 
-        if "search_index" not in table_names:
-            conn.close()
-            return VerifyCheck(
-                name="synix_search",
-                passed=False,
-                message="search.db exists but search_index table missing",
-                fix_hint="Re-run synix build to rebuild the Synix search output",
-            )
+    for output in outputs:
+        try:
+            if not output.db_path.exists():
+                failures.append(f"{output.name}: missing database at {output.db_path.relative_to(build_path)}")
+                continue
 
-        # Count rows
-        count = conn.execute("SELECT COUNT(*) FROM search_index").fetchone()[0]
-        conn.close()
+            conn = sqlite3.connect(str(output.db_path))
+            try:
+                tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+                table_names = [t[0] for t in tables]
+                if "search_index" not in table_names:
+                    failures.append(
+                        f"{output.name}: database at {output.db_path.relative_to(build_path)} is missing search_index"
+                    )
+                    continue
 
-        return VerifyCheck(
-            name="synix_search",
-            passed=True,
-            message=f"Synix search has {count} entries",
-        )
-    except sqlite3.Error as e:
+                count = conn.execute("SELECT COUNT(*) FROM search_index").fetchone()[0]
+                counts.append((output.name, count))
+            finally:
+                conn.close()
+        except sqlite3.Error as e:
+            failures.append(f"{output.name}: SQLite error at {output.db_path.relative_to(build_path)}: {e}")
+
+    if failures:
         return VerifyCheck(
             name="synix_search",
             passed=False,
-            message=f"Synix search error: {e}",
-            fix_hint="Delete search.db and re-run synix build",
+            message=f"{len(failures)} Synix search output(s) failed verification",
+            details=failures[:20],
+            fix_hint="Re-run synix build to rebuild the local search outputs",
         )
+
+    if len(counts) == 1:
+        output_name, count = counts[0]
+        return VerifyCheck(
+            name="synix_search",
+            passed=True,
+            message=f"Synix search '{output_name}' has {count} entries",
+        )
+
+    summary = ", ".join(f"{name} ({count} entries)" for name, count in counts)
+    return VerifyCheck(
+        name="synix_search",
+        passed=True,
+        message=f"Synix search outputs verified: {summary}",
+    )
 
 
 def _check_search_index(build_path: Path) -> VerifyCheck:
