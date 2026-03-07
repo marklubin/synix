@@ -28,6 +28,7 @@ def create_test_snapshot(
     *,
     synix_subdir: str = ".synix",
     parent_labels_map: dict[str, list[str]] | None = None,
+    projections: dict[str, dict] | None = None,
 ) -> Path:
     """Create a minimal .synix snapshot from a layer -> artifacts mapping.
 
@@ -38,6 +39,7 @@ def create_test_snapshot(
             If None, an empty snapshot is created.
         synix_subdir: Name of the synix directory (default ".synix").
         parent_labels_map: Optional mapping of artifact label -> parent labels.
+        projections: Optional structured projection declarations for the manifest.
 
     Returns:
         Path to the .synix directory, suitable for SnapshotArtifactCache().
@@ -97,7 +99,7 @@ def create_test_snapshot(
         "pipeline_name": "test-pipeline",
         "pipeline_fingerprint": "sha256:test",
         "artifacts": sorted(artifact_entries, key=lambda e: e["label"]),
-        "projections": {},
+        "projections": projections if projections is not None else {},
     }
     manifest_oid = object_store.put_json(manifest_payload)
 
