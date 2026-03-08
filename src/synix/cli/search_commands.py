@@ -473,6 +473,13 @@ def _scratch_realize(build_dir: str, synix_dir_option: str | None, ref: str) -> 
 
     db_path = Path(work_dir) / "search.db"
     provenance = ReleaseProvenanceProvider(db_path)
+
+    # Register cleanup so scratch directories don't accumulate
+    import atexit
+    import shutil
+
+    atexit.register(shutil.rmtree, work_dir, True)
+
     return db_path, provenance
 
 

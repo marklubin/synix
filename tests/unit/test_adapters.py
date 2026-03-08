@@ -200,7 +200,9 @@ class TestSynixSearchAdapter:
         assert rows["snapshot_oid"] == "a" * 64
         assert rows["manifest_oid"] == "b" * 64
         assert rows["pipeline_name"] == "test"
-        assert rows["released_at"] == "2026-03-07T12:00:00Z"
+        # released_at is the actual release time (not snapshot creation time)
+        assert "released_at" in rows
+        assert rows["released_at"] != ""
 
     def test_search_apply_creates_citation_edges(self, tmp_path):
         """Artifacts containing synix:// citations produce edge rows."""

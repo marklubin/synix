@@ -807,7 +807,8 @@ def _save_plan_artifact(build_plan, pipeline):
     }
     snapshot_oid = object_store.put_json(snapshot_payload)
 
-    ref_store.ensure_head()
-    ref_store.write_ref("refs/heads/main", snapshot_oid)
+    # Write to a separate plans ref — never clobber refs/heads/main which
+    # holds the real build HEAD. This avoids destroying build history.
+    ref_store.write_ref("refs/plans/latest", snapshot_oid)
 
     console.print(f"\n[dim]Plan saved as artifact 'build-plan' ({artifact_oid[:12]}) in {synix_dir}[/dim]")

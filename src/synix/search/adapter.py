@@ -21,6 +21,12 @@ from synix.core.citations import extract_citations
 logger = logging.getLogger(__name__)
 
 
+def _now_iso() -> str:
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).isoformat()
+
+
 class SynixSearchAdapter(ProjectionAdapter):
     """Materializes a self-contained search.db for a release."""
 
@@ -158,7 +164,7 @@ class SynixSearchAdapter(ProjectionAdapter):
             )
             conn.execute(
                 "INSERT INTO release_metadata (key, value) VALUES (?, ?)",
-                ("released_at", closure.created_at),
+                ("released_at", _now_iso()),
             )
 
             conn.commit()

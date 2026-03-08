@@ -170,6 +170,12 @@ def execute_release(
             plan = adapter.plan(closure, declaration, prev)
             receipt = adapter.apply(plan, target_path)
 
+            if not adapter.verify(receipt, target_path):
+                raise RuntimeError(
+                    f"Adapter {declaration.adapter!r} verification failed for "
+                    f"projection {proj_name!r}. Release aborted."
+                )
+
             adapter_receipts[proj_name] = receipt.to_dict()
 
     except Exception:

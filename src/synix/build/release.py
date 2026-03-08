@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,10 +42,10 @@ class ProjectionDeclaration:
 def _walk_provenance(label: str, artifact_objects: dict[str, dict]) -> list[str]:
     """BFS walk of parent_labels to build a provenance chain."""
     visited: set[str] = set()
-    queue: list[str] = [label]
+    queue: deque[str] = deque([label])
     chain: list[str] = []
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         if current in visited:
             continue
         visited.add(current)
