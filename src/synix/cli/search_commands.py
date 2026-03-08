@@ -479,16 +479,18 @@ def _scratch_realize(build_dir: str, synix_dir_option: str | None, ref: str) -> 
 def _filter_by_customer(results: list, customer: str, build_dir: str) -> list:
     """Filter search results by customer_id metadata.
 
-    Tries the ArtifactStore first for full metadata, falls back to
+    Tries SnapshotArtifactCache first for full metadata, falls back to
     the metadata already on the search result.
     """
     try:
-        from synix.build.artifacts import ArtifactStore
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store = ArtifactStore(build_dir)
-    except Exception:
+        sd = synix_dir_for_build_dir(Path(build_dir))
+        store = SnapshotArtifactCache(sd)
+    except (ValueError, OSError):
         store = None
-        logger.debug("Could not load ArtifactStore for customer filtering", exc_info=True)
+        logger.debug("Could not load SnapshotArtifactCache for customer filtering", exc_info=True)
 
     filtered = []
     for result in results:

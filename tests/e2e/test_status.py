@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.validators import Violation, ViolationQueue, compute_violation_id
 from synix.core.models import Artifact
 from tests.helpers.snapshot_factory import create_test_snapshot
@@ -74,13 +73,6 @@ def built_dir(tmp_path):
         tmp_path,
         {"sources": sources, "summaries": summaries},
     )
-
-    # Also write old-style files for verify checks
-    store = ArtifactStore(build_dir)
-    for art in sources:
-        store.save_artifact(art, "sources", 0)
-    for art in summaries:
-        store.save_artifact(art, "summaries", 1)
 
     return build_dir
 
@@ -241,18 +233,27 @@ class TestStatusViolations:
         assert "PII: email found" in result.stdout
         assert "PII: SSN found" not in result.stdout
 
-    def test_traces_excluded_from_layers(self, built_dir):
+    def test_traces_excluded_from_layers(self, tmp_path):
         """Trace artifacts should not appear in the layer table."""
-        store = ArtifactStore(built_dir)
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+
+        sources = [
+            _make_artifact("src-0", "Source content 0", atype="transcript", layer_name="sources", layer_level=0),
+        ]
         trace = Artifact(
             label="trace-check-sum-0-abc123",
             artifact_type="llm_trace",
             content="{}",
-            metadata={"trace_type": "citation_check", "layer_name": "traces"},
+            metadata={"trace_type": "citation_check", "layer_name": "traces", "layer_level": 99},
         )
-        store.save_artifact(trace, "traces", 99)
 
-        result = _run("status", "--build-dir", str(built_dir))
+        create_test_snapshot(
+            tmp_path,
+            {"sources": sources, "traces": [trace]},
+        )
+
+        result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
         assert (
             "traces" not in result.stdout.lower().split("violations")[0]
@@ -269,18 +270,21 @@ class TestStatusViolations:
 class TestStatusStale:
     def _build_with_provenance(self, tmp_path):
         """Helper: build dir with parent→child provenance and matching input_ids."""
+        import hashlib
+
         build_dir = tmp_path / "build"
         build_dir.mkdir()
-        store = ArtifactStore(build_dir)
 
         # Parent artifact
         parent = _make_artifact(
             "strategy", "Strategy content v1", atype="episode", layer_name="episodes", layer_level=1
         )
-        store.save_artifact(parent, "episodes", 1)
+
+        # Compute parent's content hash to set as input_ids on child
+        parent_hash = f"sha256:{hashlib.sha256(b'Strategy content v1').hexdigest()}"
+        parent.artifact_id = parent_hash
 
         # Child artifact with parent's hash in input_ids
-        parent_hash = store.get_artifact_id("strategy")
         child = Artifact(
             label="call-prep",
             artifact_type="core_memory",
@@ -288,16 +292,14 @@ class TestStatusStale:
             input_ids=[parent_hash],
             metadata={"layer_name": "core", "layer_level": 2},
         )
-        store.save_artifact(child, "core", 2)
 
-        # Create snapshot for SnapshotArtifactCache readers
         create_test_snapshot(
             tmp_path,
             {"episodes": [parent], "core": [child]},
             parent_labels_map={"call-prep": ["strategy"]},
         )
 
-        return build_dir, store
+        return build_dir
 
     def test_stale_artifacts_detected(self, tmp_path):
         """Parent with changed content makes the child stale."""
@@ -329,11 +331,6 @@ class TestStatusStale:
             parent_labels_map={"call-prep": ["strategy"]},
         )
 
-        # Also write compatibility files
-        store = ArtifactStore(build_dir)
-        store.save_artifact(new_parent, "episodes", 1)
-        store.save_artifact(child, "core", 2)
-
         result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
         assert "Stale Artifacts" in result.stdout
@@ -342,7 +339,7 @@ class TestStatusStale:
 
     def test_no_stale_when_fresh(self, tmp_path):
         """Consistent hashes produce no stale section."""
-        build_dir, _ = self._build_with_provenance(tmp_path)
+        build_dir = self._build_with_provenance(tmp_path)
 
         result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
@@ -434,11 +431,9 @@ class TestStatusNextSteps:
         """Stale artifacts only → guidance says build."""
         build_dir = tmp_path / "build"
         build_dir.mkdir()
-        store = ArtifactStore(build_dir)
 
         # Parent
         parent = _make_artifact("monthly-dec", "December rollup", atype="rollup", layer_name="rollups", layer_level=1)
-        store.save_artifact(parent, "rollups", 1)
 
         # Child with old parent hash
         child = Artifact(
@@ -448,7 +443,6 @@ class TestStatusNextSteps:
             input_ids=["sha256:old_hash_that_doesnt_match"],
             metadata={"layer_name": "core", "layer_level": 2},
         )
-        store.save_artifact(child, "core", 2)
 
         create_test_snapshot(
             tmp_path,

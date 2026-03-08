@@ -7,11 +7,10 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 from synix.cli import main
 from synix.core.models import Artifact
 from synix.search.indexer import SearchIndex
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 
 @pytest.fixture
@@ -24,10 +23,6 @@ def populated_build_dir(tmp_path):
     """Build dir with a search index, artifacts, and provenance for testing."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
-
-    # Create artifacts with varying layers and metadata
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
 
     # Transcript artifact
     t1 = Artifact(
@@ -43,7 +38,6 @@ def populated_build_dir(tmp_path):
             "customer_id": "acme-corp",
         },
     )
-    store.save_artifact(t1, layer_name="transcripts", layer_level=0)
 
     # Episode artifact
     ep1 = Artifact(
@@ -57,7 +51,6 @@ def populated_build_dir(tmp_path):
             "customer_id": "acme-corp",
         },
     )
-    store.save_artifact(ep1, layer_name="episodes", layer_level=1)
 
     # Another episode with different customer
     ep2 = Artifact(
@@ -71,7 +64,6 @@ def populated_build_dir(tmp_path):
             "customer_id": "beta-inc",
         },
     )
-    store.save_artifact(ep2, layer_name="episodes", layer_level=1)
 
     # Monthly rollup artifact
     m1 = Artifact(
@@ -84,13 +76,20 @@ def populated_build_dir(tmp_path):
             "customer_id": "acme-corp",
         },
     )
-    store.save_artifact(m1, layer_name="monthly", layer_level=2)
 
-    # Record provenance chains
-    provenance.record("t-conv001", parent_labels=[], prompt_id=None)
-    provenance.record("ep-conv001", parent_labels=["t-conv001"], prompt_id="episode_summary_v1")
-    provenance.record("ep-conv002", parent_labels=[], prompt_id="episode_summary_v1")
-    provenance.record("monthly-2024-03", parent_labels=["ep-conv001", "ep-conv002"], prompt_id="monthly_rollup_v1")
+    # Create snapshot with provenance
+    create_test_snapshot(
+        tmp_path,
+        {
+            "transcripts": [t1],
+            "episodes": [ep1, ep2],
+            "monthly": [m1],
+        },
+        parent_labels_map={
+            "ep-conv001": ["t-conv001"],
+            "monthly-2024-03": ["ep-conv001", "ep-conv002"],
+        },
+    )
 
     # Build search index
     db_path = build_dir / "search.db"

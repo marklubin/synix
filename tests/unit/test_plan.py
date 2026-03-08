@@ -10,8 +10,9 @@ import pytest
 from click.testing import CliRunner
 
 from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
-from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
@@ -614,9 +615,12 @@ pipeline.add(transcripts, episodes)
 
         result = runner.invoke(main, ["plan", str(pipeline_file), "--save"])
         assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Plan saved as artifact" in result.output
 
-        # Check artifact was saved
-        store = ArtifactStore(build_dir)
+        # Check artifact was saved via SnapshotArtifactCache
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        assert synix_dir.exists(), f"Expected .synix dir at {synix_dir}"
+        store = SnapshotArtifactCache(synix_dir)
         artifact = store.load_artifact("build-plan")
         assert artifact is not None
         assert artifact.artifact_type == "build_plan"
