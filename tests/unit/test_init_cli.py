@@ -112,7 +112,7 @@ def test_init_pipeline_loadable(runner, tmp_path, monkeypatch):
     assert "team_dynamics" in layer_names
     assert "final_report" in layer_names
     assert len(pipeline.projections) == 1
-    assert len(pipeline.validators) == 1
+    assert len(pipeline.validators) == 0
 
 
 def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
@@ -171,7 +171,7 @@ def _make_mock_response(text):
 
 
 def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
-    """Full flow: init -> build -> validate -> search with mocked LLM."""
+    """Full flow: init -> build -> release -> search with mocked LLM."""
     monkeypatch.chdir(tmp_path)
 
     # 1. Init
@@ -257,22 +257,7 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, f"Release failed: {result.output}"
 
-    # 3. Validate — should pass (mock responses are under 5000 chars)
-    #    Create build/ dir so validate's build_path.exists() check passes;
-    #    validate resolves .synix/ from build_dir's parent.
-    (project_dir / "build").mkdir(exist_ok=True)
-    result = runner.invoke(
-        main,
-        [
-            "validate",
-            pipeline_path,
-            "--build-dir",
-            str(project_dir / "build"),
-        ],
-    )
-    assert result.exit_code == 0, f"Validate failed: {result.output}"
-
-    # 4. Search — should find hiking (from bios and work_style artifacts)
+    # 3. Search — should find hiking (from bios and work_style artifacts)
     #    Search uses the released search.db in .synix/releases/local/
     result = runner.invoke(
         main,
@@ -289,46 +274,16 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     assert "hiking" in result.output.lower()
 
 
-def test_init_validate_passes_with_valid_metadata(runner, tmp_path, monkeypatch):
-    """Validate passes when required metadata (input_count) is present."""
+def test_init_pipeline_has_no_validators(runner, tmp_path, monkeypatch):
+    """Init scaffold pipeline declares no validators (experimental feature)."""
     monkeypatch.chdir(tmp_path)
 
-    # Init
     runner.invoke(main, ["init", "valid-test"])
     project_dir = tmp_path / "valid-test"
     pipeline_path = str(project_dir / "pipeline.py")
-    monkeypatch.chdir(project_dir)
 
-    # Build with mocked LLM
-    short = _make_mock_response("Mock response.")
+    from synix.build.pipeline import load_pipeline
 
-    with patch("synix.build.llm_client.LLMClient.complete", return_value=short):
-        result = runner.invoke(
-            main,
-            [
-                "build",
-                pipeline_path,
-                "--source-dir",
-                str(project_dir / "sources"),
-                "--build-dir",
-                str(project_dir / "build"),
-            ],
-        )
-        assert result.exit_code == 0
-
-    # Create build/ dir so validate's build_path.exists() check passes;
-    # validate resolves .synix/ from build_dir's parent.
-    (project_dir / "build").mkdir(exist_ok=True)
-
-    # Validate should pass — FoldSynthesis always sets input_count
-    result = runner.invoke(
-        main,
-        [
-            "validate",
-            pipeline_path,
-            "--build-dir",
-            str(project_dir / "build"),
-        ],
-    )
-    assert result.exit_code == 0
-    assert "required_field" in result.output.lower()
+    pipeline = load_pipeline(pipeline_path)
+    assert pipeline.validators == []
+    assert pipeline.fixers == []

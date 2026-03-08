@@ -57,5 +57,8 @@ def test_cassette_files_exist():
 
 def test_golden_files_exist():
     """Golden directory has the expected output files."""
-    golden_file = CASE_DIR / "golden" / "validate.json"
-    assert golden_file.exists(), f"Missing golden file: {golden_file}"
+    golden_dir = CASE_DIR / "golden"
+    assert golden_dir.exists(), f"Missing golden directory: {golden_dir}"
+    # At minimum, build and plan goldens should exist
+    assert (golden_dir / "build.stdout.txt").exists(), "Missing golden: build.stdout.txt"
+    assert (golden_dir / "plan.stdout.txt").exists(), "Missing golden: plan.stdout.txt"

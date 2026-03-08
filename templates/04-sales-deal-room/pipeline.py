@@ -10,12 +10,9 @@
 #   Level 3: call_prep         [deal_call_prep] <- strategy + deal_context
 #
 # Search: SynixSearch over a declared deal search surface
-# Validator: citation on strategy, call_prep
-# Fixer: citation_enrichment
 #
 # Usage:
 #   uvx synix build pipeline.py
-#   uvx synix validate pipeline.py
 #   uvx synix search "pricing"
 
 from transforms import (
@@ -25,8 +22,6 @@ from transforms import (
 )
 
 from synix import Pipeline, SearchSurface, Source, SynixSearch
-from synix.fixers import CitationEnrichment
-from synix.validators import Citation
 
 # ======================================================================
 # PIPELINE DEFINITION
@@ -96,24 +91,5 @@ pipeline.add(
 )
 
 # -- Projection: full-text search on all layers (sources + transforms) --
-#    Fixer needs access to source docs to verify claims and add citations.
 
 pipeline.add(SynixSearch("search", surface=deal_search))
-
-# -- Validator: citation grounding check on strategy + call_prep -------
-
-pipeline.add_validator(
-    Citation(
-        layers=[strategy, call_prep],
-        llm_config={
-            "provider": "anthropic",
-            "model": "claude-haiku-4-5-20251001",
-            "temperature": 0.0,
-            "max_tokens": 4096,
-        },
-    )
-)
-
-# -- Fixer: LLM adds citations or removes ungrounded claims -----------
-
-pipeline.add_fixer(CitationEnrichment(max_context_episodes=5, temperature=0.3))

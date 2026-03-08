@@ -1,0 +1,39 @@
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: tv-returns-demo                                                                                            │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 4                                                                                                            │
+│ Surfaces: 1                                                                                                          │
+│ Projections: 1                                                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value                     │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic                 │
+│ Model       │ claude-haiku-4-5-20251001 │
+│ Temperature │ 0.3                       │
+│ Max Tokens  │ 2048                      │
+╰─────────────┴───────────────────────────╯
+
+tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)
+├── product_offers  source:parse  <STATS>
+│   └── ← ./sources (3 .md, 2 .json files, nested)
+├── policies  source:parse  <STATS>
+│   └── ← ./sources (3 .md, 2 .json files, nested)
+├── policy_index  transform:DemoExtractPoliciesTransform  <STATS>
+│   ├── ← policies
+│   └── cache: all components match (v2: model source transform_id)
+└── cs_product_brief  transform:DemoEnrichCSBriefTransform  <STATS>
+    ├── ← product_offers
+    ├── ← policy_index
+    ├── cache: all components match (v2: model source transform_id)
+    ├── ⇢ cs-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   ├── ← cs_product_brief
+    │   └── embeddings  bge-small-en-v1.5  384d  (fastembed)
+    └── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← cs_product_brief
+        └── embeddings  bge-small-en-v1.5  384d  (fastembed)
+
+<PLAN_SUMMARY>

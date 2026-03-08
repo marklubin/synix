@@ -14,7 +14,6 @@
 
 from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.transforms import FoldSynthesis, MapSynthesis, ReduceSynthesis
-from synix.validators import RequiredField
 
 # -- Pipeline definition -----------------------------------------------------
 
@@ -87,6 +86,3 @@ pipeline.add(bios, project_brief, work_styles, team_dynamics, final_report, repo
 
 # SynixSearch — every layer searchable via the declared report surface
 pipeline.add(SynixSearch("search", surface=report_search))
-
-# Validator — final report must have input_count metadata
-pipeline.add_validator(RequiredField(layers=[final_report], field="input_count"))
