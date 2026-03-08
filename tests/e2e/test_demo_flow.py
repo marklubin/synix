@@ -5,7 +5,6 @@ Run → search → run again (cached) → config change → run (partial rebuild
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -13,6 +12,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -165,11 +166,11 @@ class TestDemoFlow:
         )
         assert "Build Summary" in result1.output
 
-        # Verify artifacts were built
-        assert workspace["build_dir"].exists()
-        manifest_path = workspace["build_dir"] / "manifest.json"
-        assert manifest_path.exists()
-        manifest = json.loads(manifest_path.read_text())
+        # Verify artifacts were built via snapshot store
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        assert synix_dir.exists(), "Synix snapshot dir should exist after build"
+        store = SnapshotArtifactCache(synix_dir)
+        manifest = store.iter_entries()
         assert len(manifest) > 0, "No artifacts were built"
 
         # ---- Step 2: Search ----
@@ -211,11 +212,12 @@ class TestDemoFlow:
         result = runner.invoke(main, ["run", str(pipeline_file)], catch_exceptions=False)
         assert result.exit_code == 0, f"Run failed:\n{result.output}"
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Group by layer
         layers: dict[str, int] = {}
-        for _aid, info in manifest.items():
+        for _label, info in manifest.items():
             layer = info.get("layer", "unknown")
             layers[layer] = layers.get(layer, 0) + 1
 
@@ -254,15 +256,15 @@ class TestDemoFlow:
         """All derived artifacts should have provenance records."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Every episode, monthly, and core artifact should have provenance
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        for aid in derived:
-            assert aid in provenance, f"Missing provenance for {aid}"
+        derived = {label for label, info in manifest.items() if info.get("layer") != "transcripts"}
+        for label in derived:
+            parents = store.get_parents(label)
+            assert parents is not None, f"Missing provenance for {label}"
+            assert len(parents) > 0, f"No parents for derived artifact {label}"
 
     def test_lineage_command(self, runner, workspace, pipeline_file):
         """Lineage command should show provenance tree."""
@@ -281,24 +283,26 @@ class TestDemoFlow:
         assert result1.exit_code == 0
 
         # Capture manifest after first run
-        manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
-        episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
+        store1 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest1 = store1.iter_entries()
+        transcript_labels = {label for label, info in manifest1.items() if info["layer"] == "transcripts"}
+        episode_labels = {label for label, info in manifest1.items() if info["layer"] == "episodes"}
 
         # Second run with topical pipeline
         result2 = runner.invoke(main, ["run", str(topical_pipeline_file)])
         assert result2.exit_code == 0
 
         # Verify the manifest now has topic artifacts instead of monthly
-        manifest2 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store2 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest2 = store2.iter_entries()
         layers2 = {info["layer"] for info in manifest2.values()}
         assert "topics" in layers2, "Topical pipeline should produce 'topics' layer"
 
         # Transcripts and episodes should still be present (cached, not deleted)
-        for tid in transcript_ids:
-            assert tid in manifest2, f"Transcript {tid} should still be in manifest"
-        for eid in episode_ids:
-            assert eid in manifest2, f"Episode {eid} should still be in manifest"
+        for tlabel in transcript_labels:
+            assert tlabel in manifest2, f"Transcript {tlabel} should still be in manifest"
+        for elabel in episode_labels:
+            assert elabel in manifest2, f"Episode {elabel} should still be in manifest"
 
         # Core memory should be rebuilt (new dependency on topics)
         assert "core-memory" in manifest2

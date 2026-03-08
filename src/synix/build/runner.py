@@ -7,11 +7,9 @@ import hashlib
 import inspect
 import json
 import logging
-import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
@@ -396,94 +394,10 @@ def run(
         result.run_ref = snapshot_info["run_ref"]
         result.synix_dir = snapshot_info["synix_dir"]
 
-    # Write compatibility release surface (manifest.json, provenance.json,
-    # per-layer artifact files) so that verify checks, CLI list/show, and
-    # downstream consumers that read from build/ still work during the
-    # transition period.
-    _write_compatibility_files(build_dir, layer_artifacts, snapshot_txn)
-
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)
     result.run_log = slogger.run_log.to_dict()
     return result
-
-
-def _write_compatibility_files(
-    build_dir: Path,
-    layer_artifacts: dict[str, list[Artifact]],
-    snapshot_txn: BuildTransaction,
-) -> None:
-    """Write backward-compatible build/ files from in-memory state.
-
-    Materializes manifest.json, provenance.json, and per-layer artifact JSON
-    files so that tools reading from the legacy build/ surface continue to
-    work.  This is a transitional compatibility shim — once all consumers read
-    from .synix, this function will be removed.
-    """
-    manifest: dict[str, dict] = {}
-    provenance: dict[str, dict] = {}
-
-    # Remove stale layer directories from previous builds so orphan checks pass.
-    for existing in build_dir.iterdir():
-        if existing.is_dir() and existing.name.startswith("layer"):
-            shutil.rmtree(existing)
-
-    for layer_name, artifacts in layer_artifacts.items():
-        level = 0
-        if artifacts:
-            level = artifacts[0].metadata.get("layer_level", 0)
-
-        layer_dir = build_dir / f"layer{level}-{layer_name}"
-        layer_dir.mkdir(parents=True, exist_ok=True)
-
-        for art in artifacts:
-            art_level = art.metadata.get("layer_level", level)
-            art_layer_dir = build_dir / f"layer{art_level}-{layer_name}"
-            art_layer_dir.mkdir(parents=True, exist_ok=True)
-
-            # Write individual artifact file
-            art_path = art_layer_dir / f"{art.label}.json"
-            art_data = {
-                "label": art.label,
-                "artifact_id": art.artifact_id,
-                "artifact_type": art.artifact_type,
-                "content": art.content,
-                "input_ids": list(art.input_ids),
-                "prompt_id": art.prompt_id,
-                "model_config": art.model_config,
-                "metadata": art.metadata,
-            }
-            if art.created_at:
-                art_data["created_at"] = (
-                    art.created_at.isoformat() if hasattr(art.created_at, "isoformat") else str(art.created_at)
-                )
-            art_path.write_text(json.dumps(art_data, indent=2))
-
-            # Manifest entry
-            manifest[art.label] = {
-                "path": str(art_path.relative_to(build_dir)),
-                "artifact_id": art.artifact_id,
-                "layer": layer_name,
-                "level": art_level,
-            }
-
-            # Provenance entry for non-root artifacts
-            parent_labels = snapshot_txn.parent_labels_map.get(art.label, [])
-            if parent_labels:
-                provenance[art.label] = {
-                    "label": art.label,
-                    "parent_labels": parent_labels,
-                    "prompt_id": art.prompt_id,
-                    "model_config": art.model_config,
-                    "created_at": (
-                        art.created_at.isoformat()
-                        if art.created_at and hasattr(art.created_at, "isoformat")
-                        else datetime.now().isoformat()
-                    ),
-                }
-
-    (build_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
-    (build_dir / "provenance.json").write_text(json.dumps(provenance, indent=2))
 
 
 def _build_source_config(pipeline: Pipeline, source: Source, src_dir: str) -> dict:

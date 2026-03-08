@@ -339,7 +339,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
             line = re.sub(r"│\s+<MATERIALIZED>\s+│", "│ <MATERIALIZED> │", line)
         # Replace verify output counts (artifact/provenance/hash counts grow across runs)
         line = re.sub(r"(\bManifest valid with )\d+( artifacts\b)", r"\g<1><N>\2", line)
-        line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bAll )\d+( artifact (?:files|objects)\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bSnapshot store exists with )\d+( artifacts\b)", r"\g<1><N>\2", line)
         line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
         line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
         line = re.sub(

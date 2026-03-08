@@ -3,13 +3,13 @@
 ╭─────────────────────┬────────┬────────────────────────────────────────────────╮
 │ Check               │ Status │ Message                                        │
 ├─────────────────────┼────────┼────────────────────────────────────────────────┤
-│ build_exists        │  PASS  │ Build directory exists with manifest           │
+│ build_exists        │  PASS  │ Snapshot store exists with <N> artifacts        │
 │ manifest_valid      │  PASS  │ Manifest valid with <N> artifacts               │
-│ artifacts_exist     │  PASS  │ All <N> artifact files present                  │
+│ artifacts_exist     │  PASS  │ All <N> artifact objects present                │
 │ provenance_complete │  PASS  │ All non-root artifacts have provenance records │
 │ synix_search        │  PASS  │ Synix search 'search' has <N> entries            │
 │ content_hashes      │  PASS  │ All <N> content hashes verified                 │
-│ no_orphans          │  PASS  │ No orphaned artifact files                     │
+│ no_orphans          │  PASS  │ Content-addressed store — no orphans possible  │
 │ merge_integrity     │  PASS  │ No merge artifacts found                       │
 ╰─────────────────────┴────────┴────────────────────────────────────────────────╯
 

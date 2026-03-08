@@ -6,7 +6,6 @@ Exercises: build, plan, search, verify, diff, config change (monthly→topical),
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -14,6 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,8 @@ class TestDT1FreshBuild:
         assert result.exit_code == 0, f"Build failed: {result.output}"
         assert "Build Summary" in result.output
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Count by layer
         layers: dict[str, int] = {}
@@ -224,13 +226,10 @@ class TestDT1FreshBuild:
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
-
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
         derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        missing = [aid for aid in derived if aid not in provenance]
+        missing = [aid for aid in derived if not store.get_parents(aid)]
         assert not missing, f"Missing provenance for: {missing}"
 
 
@@ -272,7 +271,8 @@ class TestDT1ConfigChange:
         assert result1.exit_code == 0
         calls_after_first = mock_anthropic["n"]
 
-        manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store1 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest1 = store1.iter_entries()
         transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
         episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
 
@@ -280,7 +280,8 @@ class TestDT1ConfigChange:
         result2 = runner.invoke(main, ["build", str(topical_pipeline_file)])
         assert result2.exit_code == 0
 
-        manifest2 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store2 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest2 = store2.iter_entries()
 
         # Transcripts and episodes should be preserved
         for tid in transcript_ids:

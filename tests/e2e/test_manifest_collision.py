@@ -14,6 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
@@ -93,10 +95,10 @@ class TestForeignManifestDoesNotCrash:
         result = runner.invoke(main, ["build", str(pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-        # Verify synix created valid artifacts
-        manifest = json.loads((build_dir / "manifest.json").read_text())
-        # Should have synix entries now
-        transcript_entries = [k for k, v in manifest.items() if isinstance(v, dict) and v.get("layer") == "transcripts"]
+        # Verify synix created valid artifacts in snapshot store
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest = store.iter_entries()
+        transcript_entries = [k for k, v in manifest.items() if v.get("layer") == "transcripts"]
         assert len(transcript_entries) > 0
 
 

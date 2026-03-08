@@ -8,7 +8,6 @@ behavior, and the merge transform (cross-customer merge contamination and fix fl
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -154,7 +153,11 @@ class TestDT3FreshBuild:
         assert result.exit_code == 0, f"Build failed: {result.output}"
         assert "Build Summary" in result.output
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
+
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Count by layer
         layers: dict[str, int] = {}
@@ -194,13 +197,16 @@ class TestDT3FreshBuild:
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(incident_pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        assert (synix_dir / "refs" / "heads" / "main").exists()
+
+        store = SnapshotArtifactCache(synix_dir)
+        manifest = store.iter_entries()
         derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        missing = [aid for aid in derived if aid not in provenance]
+        missing = [aid for aid in derived if not store.get_parents(aid)]
         assert not missing, f"Missing provenance for: {missing}"
 
 
@@ -312,7 +318,11 @@ class TestDT3MergeTransform:
         result = runner.invoke(main, ["build", str(merge_pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
+
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Count by layer
         layers: dict[str, int] = {}
@@ -326,15 +336,10 @@ class TestDT3MergeTransform:
         assert layers.get("core", 0) == 1
 
         # Verify merge artifacts exist (IDs start with "merge-" or type is "merge")
-        merge_aids = [
-            aid for aid, info in manifest.items() if aid.startswith("merge-") or info.get("artifact_type") == "merge"
-        ]
+        merge_aids = [aid for aid, info in manifest.items() if aid.startswith("merge-")]
         assert len(merge_aids) >= 1, "No merge artifacts found in manifest"
 
         # Verify at least one merge artifact contains content from multiple customers
-        from synix.build.artifacts import ArtifactStore
-
-        store = ArtifactStore(workspace["build_dir"])
         found_multi_customer = False
         for merge_id in merge_aids:
             art = store.load_artifact(merge_id)
@@ -350,12 +355,11 @@ class TestDT3MergeTransform:
         """Provenance chain from a merged artifact reveals cross-customer contamination."""
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
-        from synix.build.artifacts import ArtifactStore
-        from synix.build.provenance import ProvenanceTracker
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store = ArtifactStore(workspace["build_dir"])
-        tracker = ProvenanceTracker(workspace["build_dir"])
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Find a merge artifact with multiple customers
         merge_aids = [aid for aid, info in manifest.items() if aid.startswith("merge-")]
@@ -372,7 +376,7 @@ class TestDT3MergeTransform:
         assert contaminated_merge_id is not None, "No merge artifact found with cross-customer contamination"
 
         # Get the provenance parents of this merge artifact
-        parent_ids = tracker.get_parents(contaminated_merge_id)
+        parent_ids = store.get_parents(contaminated_merge_id)
         assert len(parent_ids) > 1, f"Expected merge artifact to have multiple parents, got {len(parent_ids)}"
 
         # Check that parent artifacts map to different customer_ids
@@ -407,11 +411,15 @@ class TestDT3MergeTransform:
         self, runner, workspace, merge_pipeline_file, merge_pipeline_fixed_file, mock_anthropic
     ):
         """Fixing the merge config triggers rebuild of only merge+downstream layers."""
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
+
         # First build: bad merge pipeline
         result1 = runner.invoke(main, ["build", str(merge_pipeline_file)])
         assert result1.exit_code == 0, f"First build failed: {result1.output}"
 
-        manifest_before = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store_before = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest_before = store_before.iter_entries()
         transcript_count_before = sum(1 for info in manifest_before.values() if info.get("layer") == "transcripts")
         episode_count_before = sum(1 for info in manifest_before.values() if info.get("layer") == "episodes")
         calls_after_first = mock_anthropic["n"]
@@ -420,7 +428,8 @@ class TestDT3MergeTransform:
         result2 = runner.invoke(main, ["build", str(merge_pipeline_fixed_file)])
         assert result2.exit_code == 0, f"Second build failed: {result2.output}"
 
-        manifest_after = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store_after = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest_after = store_after.iter_entries()
         transcript_count_after = sum(1 for info in manifest_after.values() if info.get("layer") == "transcripts")
         episode_count_after = sum(1 for info in manifest_after.values() if info.get("layer") == "episodes")
 
@@ -450,17 +459,22 @@ class TestDT3MergeTransform:
 
     def test_post_fix_no_collateral_damage(self, runner, workspace, merge_pipeline_file, merge_pipeline_fixed_file):
         """After fix, transcript and episode artifact IDs are preserved — no collateral damage."""
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
+
         # First build: bad merge pipeline
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
-        manifest_before = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store_before = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest_before = store_before.iter_entries()
         transcript_ids_before = {aid for aid, info in manifest_before.items() if info.get("layer") == "transcripts"}
         episode_ids_before = {aid for aid, info in manifest_before.items() if info.get("layer") == "episodes"}
 
         # Second build: fixed merge pipeline
         runner.invoke(main, ["build", str(merge_pipeline_fixed_file)])
 
-        manifest_after = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store_after = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest_after = store_after.iter_entries()
         transcript_ids_after = {aid for aid, info in manifest_after.items() if info.get("layer") == "transcripts"}
         episode_ids_after = {aid for aid, info in manifest_after.items() if info.get("layer") == "episodes"}
 
@@ -482,12 +496,11 @@ class TestDT3MergeTransform:
         """Reconstruct incident timeline: full chain from merge -> episodes -> transcripts."""
         runner.invoke(main, ["build", str(merge_pipeline_file)])
 
-        from synix.build.artifacts import ArtifactStore
-        from synix.build.provenance import ProvenanceTracker
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.snapshot_view import SnapshotArtifactCache
 
-        store = ArtifactStore(workspace["build_dir"])
-        tracker = ProvenanceTracker(workspace["build_dir"])
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Find a merge artifact that spans customers
         merge_aids = [aid for aid, info in manifest.items() if aid.startswith("merge-")]
@@ -502,23 +515,17 @@ class TestDT3MergeTransform:
 
         assert contaminated_id is not None, "No cross-customer merge artifact found"
 
-        # Walk the full provenance chain
-        chain = tracker.get_chain(contaminated_id)
+        # Walk the full provenance chain — get_chain returns list[str] (raw labels)
+        chain = store.get_chain(contaminated_id)
         assert len(chain) >= 1, "Provenance chain should not be empty"
 
-        # The chain should reach transcript-level artifacts
-        chain_artifact_ids = {rec.label for rec in chain}
-        # Also collect all parent IDs referenced in the chain
-        all_referenced_ids: set[str] = set()
-        for rec in chain:
-            all_referenced_ids.add(rec.label)
-            all_referenced_ids.update(rec.parent_labels)
+        # The chain already contains all labels transitively reachable
+        chain_labels = set(chain)
 
-        # Verify that some of the referenced IDs are transcript-level artifacts
+        # Verify that some of the labels are transcript-level artifacts
         transcript_ids_in_chain = {
-            aid for aid in all_referenced_ids if aid in manifest and manifest[aid].get("layer") == "transcripts"
+            aid for aid in chain_labels if aid in manifest and manifest[aid].get("layer") == "transcripts"
         }
         assert transcript_ids_in_chain, (
-            f"Provenance chain should trace back to transcript-level artifacts. "
-            f"Chain artifact IDs: {sorted(chain_artifact_ids)}"
+            f"Provenance chain should trace back to transcript-level artifacts. Chain labels: {sorted(chain_labels)}"
         )
