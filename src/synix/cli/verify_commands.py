@@ -123,11 +123,15 @@ def status(build_dir: str, resolved: bool):
     from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
-    if not build_path.exists():
+    try:
+        synix_dir = synix_dir_for_build_dir(build_path)
+    except (ValueError, OSError):
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    synix_dir = synix_dir_for_build_dir(build_path)
+    if not synix_dir.exists():
+        console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
+        sys.exit(1)
     store = SnapshotArtifactCache(synix_dir)
 
     # ── Build layers table ──────────────────────────────────────────────

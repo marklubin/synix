@@ -53,9 +53,15 @@ def pipeline_obj(build_dir):
 class TestProjections:
     def test_search_index_reflects_all_layers(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Search results come from multiple layers."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        index = SearchIdx(build_dir / "search.db")
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        index = SearchIdx(release_dir / "search.db")
 
         # Query broadly — should get results from episodes, monthly, and core
         results = index.query("programming")
@@ -89,9 +95,15 @@ class TestProjections:
 
     def test_flat_file_is_ready_to_use(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """context.md could be pasted into a system prompt."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        context_path = build_dir / "context.md"
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        context_path = release_dir / "context.md"
         assert context_path.exists()
 
         content = context_path.read_text()

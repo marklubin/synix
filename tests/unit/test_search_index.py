@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from synix import Artifact
-from synix.artifacts.provenance import ProvenanceTracker
 from synix.search.index import SearchIndex
 from synix.search.indexer import SearchIndexProjection, ShadowIndexManager
 
@@ -94,11 +93,15 @@ class TestSearchIndex:
             1,
         )
 
-        tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_labels=[])
+        class _FakeProvenance:
+            """Minimal provenance stub for query test."""
 
-        results = index.query("AI", provenance_tracker=tracker)
+            _chains = {"ep-001": ["ep-001", "t-001"], "t-001": ["t-001"]}
+
+            def get_chain(self, label):
+                return self._chains.get(label, [])
+
+        results = index.query("AI", provenance_tracker=_FakeProvenance())
         assert len(results) > 0
         assert len(results[0].provenance_chain) > 0
         assert "ep-001" in results[0].provenance_chain

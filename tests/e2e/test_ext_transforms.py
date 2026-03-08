@@ -152,12 +152,17 @@ class TestExtPipelineBuild:
         assert "final_report" in result.output
 
     def test_search_after_build(self, runner, workspace, ext_pipeline_file):
-        """Search works after building with ext transforms."""
+        """Search works after building and releasing with ext transforms."""
         result1 = runner.invoke(main, ["run", str(ext_pipeline_file)])
         assert result1.exit_code == 0
 
-        build_dir = str(workspace["root"] / "build")
-        result2 = runner.invoke(main, ["search", "mock", "--build-dir", build_dir])
+        from synix.build.release_engine import execute_release
+
+        build_dir = workspace["root"] / "build"
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        execute_release(synix_dir, release_name="local")
+
+        result2 = runner.invoke(main, ["search", "mock", "--build-dir", str(build_dir), "--release", "local"])
         assert result2.exit_code == 0
 
     def test_list_shows_artifacts(self, runner, workspace, ext_pipeline_file):

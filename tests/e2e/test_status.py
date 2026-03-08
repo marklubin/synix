@@ -106,12 +106,13 @@ class TestStatusLayers:
             assert "│     -      │" not in line, f"Missing timestamp in: {line}"
 
     def test_empty_build_dir(self, tmp_path):
-        """Status with empty build shows empty table."""
+        """Status with empty build dir (no .synix) shows 'no build' error."""
         build_dir = tmp_path / "build"
         build_dir.mkdir()
         result = _run("status", "--build-dir", str(build_dir))
-        assert result.returncode == 0
-        assert "Build Status" in result.stdout
+        # After Phase 12, build/ alone is not enough — .synix/ must exist
+        assert result.returncode != 0
+        assert "No build directory" in result.stdout
 
     def test_missing_build_dir(self, tmp_path):
         """Status with nonexistent build dir shows error."""

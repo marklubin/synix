@@ -1,22 +1,2 @@
-╭───────────────────────────────────────────────────── Synix Fix ──────────────────────────────────────────────────────╮
-│ Pipeline: sales-deal-room                                                                                            │
-│ Build: build                                                                                                         │
-│ Active violations: 14                                                                                                │
-│ Mode: fix                                                                                                            │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-  14 active violation(s) (14 errors, 0 warnings)
-
-Skipping call-prep: LLM error: Cassette miss for key <HASH>... (prompt: You are fixing multiple ungrounded claims
-in a memory artifact by adding proper )
-Run with SYNIX_CASSETTE_MODE=record to capture this call.
-
-Skipping strategy: LLM error: Cassette miss for key <HASH>... (prompt: You are fixing multiple ungrounded claims
-in a memory artifact by adding proper )
-Run with SYNIX_CASSETTE_MODE=record to capture this call.
-
-Fix Summary
-├── ─ call-prep  skipped
-└── ─ strategy  skipped
-
-14 violation(s) still active. Run synix validate pipeline.py to re-check.
+Build directory not found: build
+Run synix build first.

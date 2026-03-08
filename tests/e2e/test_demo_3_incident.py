@@ -187,10 +187,19 @@ class TestDT3FreshBuild:
         """Search returns results for support-domain content after build."""
         runner.invoke(main, ["build", str(incident_pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
+        # Release to materialize search.db
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, ["search", "billing", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "billing", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_all_derived_artifacts_have_provenance(self, runner, workspace, incident_pipeline_file):

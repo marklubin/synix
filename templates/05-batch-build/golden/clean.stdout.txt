@@ -1,1 +1,1 @@
-Cleaned: build
+Cleaned: work (<CASE_DIR>/.synix/work)

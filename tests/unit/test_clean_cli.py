@@ -14,67 +14,124 @@ def runner():
 
 
 @pytest.fixture
-def build_dir(tmp_path):
-    d = tmp_path / "build"
-    d.mkdir()
-    return d
+def synix_dir(tmp_path):
+    """Create a .synix directory with releases and work subdirectories."""
+    sd = tmp_path / ".synix"
+    sd.mkdir()
+    releases = sd / "releases"
+    releases.mkdir()
+    local_release = releases / "local"
+    local_release.mkdir()
+    (local_release / "search.db").write_text("fake")
+    work = sd / "work"
+    work.mkdir()
+    (work / "scratch.tmp").write_text("temp")
+    return sd
 
 
 class TestCleanHelp:
     def test_help(self, runner):
         result = runner.invoke(main, ["clean", "--help"])
         assert result.exit_code == 0
-        assert "BUILD_DIR" in result.output
-        assert "--yes" in result.output
+        assert "--build-dir" in result.output
+        assert "--yes" in result.output or "-y" in result.output
 
     def test_help_description(self, runner):
         result = runner.invoke(main, ["clean", "--help"])
-        assert "Remove all build artifacts" in result.output
+        assert "release" in result.output.lower()
 
 
 class TestClean:
-    def test_no_build_dir(self, runner, tmp_path):
-        """Clean when build dir doesn't exist — nothing to do."""
-        result = runner.invoke(main, ["clean", str(tmp_path / "nobuild"), "-y"])
+    def test_no_synix_dir(self, runner, tmp_path):
+        """Clean when .synix dir doesn't exist — nothing to do."""
+        result = runner.invoke(
+            main,
+            ["clean", "--build-dir", str(tmp_path / "nobuild"), "-y"],
+        )
         assert result.exit_code == 0
         assert "Nothing to clean" in result.output
 
-    def test_clean_removes_build_dir(self, runner, build_dir):
-        """clean -y removes the build directory."""
-        (build_dir / "manifest.json").write_text("{}")
-        (build_dir / "provenance.json").write_text("{}")
-        layer_dir = build_dir / "layer0-transcripts"
-        layer_dir.mkdir()
-        (layer_dir / "t-1.json").write_text("{}")
+    def test_clean_removes_releases_and_work(self, runner, tmp_path, synix_dir):
+        """clean -y removes releases and work directories under .synix."""
+        assert (synix_dir / "releases").exists()
+        assert (synix_dir / "work").exists()
 
-        assert build_dir.exists()
-        result = runner.invoke(main, ["clean", str(build_dir), "-y"])
+        # --build-dir points to tmp_path/build so .synix is sibling at tmp_path/.synix
+        build_dir = tmp_path / "build"
+        result = runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir), "-y"],
+        )
         assert result.exit_code == 0
         assert "Cleaned" in result.output
-        assert not build_dir.exists()
+        assert not (synix_dir / "releases").exists()
+        assert not (synix_dir / "work").exists()
 
-    def test_clean_confirmation_abort(self, runner, build_dir):
+    def test_clean_specific_release(self, runner, tmp_path, synix_dir):
+        """clean --release NAME removes only that release."""
+        # Add a second release to verify only one is removed
+        prod = synix_dir / "releases" / "prod"
+        prod.mkdir()
+        (prod / "search.db").write_text("fake")
+
+        result = runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir), "--release", "local", "-y"],
+        )
+        assert result.exit_code == 0
+        assert "Cleaned" in result.output
+        assert not (synix_dir / "releases" / "local").exists()
+        # prod release should still exist
+        assert (synix_dir / "releases" / "prod").exists()
+
+    def test_clean_confirmation_abort(self, runner, tmp_path, synix_dir):
         """Without -y, answering 'n' aborts."""
-        (build_dir / "manifest.json").write_text("{}")
-        result = runner.invoke(main, ["clean", str(build_dir)], input="n\n")
+        result = runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir)],
+            input="n\n",
+        )
         assert result.exit_code == 0
         assert "Aborted" in result.output
-        assert build_dir.exists()
+        assert (synix_dir / "releases").exists()
 
-    def test_clean_confirmation_proceed(self, runner, build_dir):
+    def test_clean_confirmation_proceed(self, runner, tmp_path, synix_dir):
         """Without -y, answering 'y' proceeds."""
-        (build_dir / "manifest.json").write_text("{}")
-        result = runner.invoke(main, ["clean", str(build_dir)], input="y\n")
+        result = runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir)],
+            input="y\n",
+        )
         assert result.exit_code == 0
         assert "Cleaned" in result.output
-        assert not build_dir.exists()
+        assert not (synix_dir / "releases").exists()
 
-    def test_clean_idempotent(self, runner, build_dir):
+    def test_clean_idempotent(self, runner, tmp_path, synix_dir):
         """Cleaning twice — second time says nothing to clean."""
-        (build_dir / "manifest.json").write_text("{}")
-        runner.invoke(main, ["clean", str(build_dir), "-y"])
-        assert not build_dir.exists()
+        runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir), "-y"],
+        )
+        assert not (synix_dir / "releases").exists()
+        assert not (synix_dir / "work").exists()
 
-        result = runner.invoke(main, ["clean", str(build_dir), "-y"])
+        result = runner.invoke(
+            main,
+            ["clean", "--synix-dir", str(synix_dir), "-y"],
+        )
         assert result.exit_code == 0
         assert "Nothing to clean" in result.output
+
+    def test_clean_legacy_build_dir(self, runner, tmp_path, synix_dir):
+        """Clean also removes legacy build/ directory if it exists."""
+        legacy_build = tmp_path / "build"
+        legacy_build.mkdir()
+        (legacy_build / "manifest.json").write_text("{}")
+
+        result = runner.invoke(
+            main,
+            ["clean", "--build-dir", str(legacy_build), "--synix-dir", str(synix_dir), "-y"],
+        )
+        assert result.exit_code == 0
+        assert "Cleaned" in result.output
+        assert not legacy_build.exists()

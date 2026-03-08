@@ -373,11 +373,10 @@ class TestSnapshots:
         assert manifest["pipeline_name"] == "snapshot-pipeline"
         assert len(manifest["artifacts"]) > 0
         assert "memory-index" in manifest["projections"]
-        assert manifest["projections"]["memory-index"]["adapter"] == "search_index"
+        assert manifest["projections"]["memory-index"]["adapter"] == "synix_search"
         assert "context-doc" in manifest["projections"]
         assert manifest["projections"]["context-doc"]["adapter"] == "flat_file"
-        assert (build_dir / "search.db").exists()
-        assert (build_dir / "context.md").exists()
+        # Projections are no longer materialized at build time — use execute_release()
 
         snapshot_store = SnapshotArtifactCache(tmp_path / ".synix")
         first_label, first_artifact_oid = next(iter(_manifest_artifact_map(manifest).items()))
@@ -404,7 +403,7 @@ class TestSnapshots:
 
         assert len(manifest["projections"]) == 2
         search_proj = manifest["projections"]["memory-index"]
-        assert search_proj["adapter"] == "search_index"
+        assert search_proj["adapter"] == "synix_search"
         assert isinstance(search_proj["input_artifacts"], list)
         assert len(search_proj["input_artifacts"]) > 0
         assert isinstance(search_proj["config"], dict)
@@ -414,8 +413,7 @@ class TestSnapshots:
         flatfile_proj = manifest["projections"]["context-doc"]
         assert flatfile_proj["adapter"] == "flat_file"
         assert isinstance(flatfile_proj["input_artifacts"], list)
-        assert (build_dir / "search.db").exists()
-        assert (build_dir / "context.md").exists()
+        # Projections are no longer materialized at build time — use execute_release()
 
     def test_successive_builds_preserve_old_run_ref(self, tmp_path, source_dir_with_fixtures, mock_llm):
         """Each successful build gets a new snapshot while older run refs remain resolvable."""
@@ -535,4 +533,4 @@ class TestSnapshots:
         assert "memory-index" in manifest["projections"]
         assert "external-doc" in manifest["projections"]
         assert manifest["projections"]["external-doc"]["adapter"] == "flat_file"
-        assert outside_path.exists()
+        # Projections are no longer materialized at build time — use execute_release()

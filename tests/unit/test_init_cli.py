@@ -240,7 +240,24 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     # Verify all 6 LLM calls: 3 work_style (Map) + 1 dynamics (Reduce) + 2 report (Fold)
     assert call_count == 6
 
+    # 2b. Release — materialize projections (search.db, context.md) into a release target
+    result = runner.invoke(
+        main,
+        [
+            "release",
+            "HEAD",
+            "--to",
+            "local",
+            "--build-dir",
+            str(project_dir / "build"),
+        ],
+    )
+    assert result.exit_code == 0, f"Release failed: {result.output}"
+
     # 3. Validate — should pass (mock responses are under 5000 chars)
+    #    Create build/ dir so validate's build_path.exists() check passes;
+    #    validate resolves .synix/ from build_dir's parent.
+    (project_dir / "build").mkdir(exist_ok=True)
     result = runner.invoke(
         main,
         [
@@ -253,6 +270,7 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     assert result.exit_code == 0, f"Validate failed: {result.output}"
 
     # 4. Search — should find hiking (from bios and work_style artifacts)
+    #    Search uses the released search.db in .synix/releases/local/
     result = runner.invoke(
         main,
         [
@@ -260,6 +278,8 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
             "hiking",
             "--build-dir",
             str(project_dir / "build"),
+            "--release",
+            "local",
         ],
     )
     assert result.exit_code == 0, f"Search failed: {result.output}"
@@ -292,6 +312,10 @@ def test_init_validate_passes_with_valid_metadata(runner, tmp_path, monkeypatch)
             ],
         )
         assert result.exit_code == 0
+
+    # Create build/ dir so validate's build_path.exists() check passes;
+    # validate resolves .synix/ from build_dir's parent.
+    (project_dir / "build").mkdir(exist_ok=True)
 
     # Validate should pass — FoldSynthesis always sets input_count
     result = runner.invoke(

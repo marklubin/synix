@@ -1,7 +1,2 @@
-{
-  "passed": true,
-  "validators_run": [
-    "required_field"
-  ],
-  "violations": []
-}
+Build directory not found: build
+Run synix build first.

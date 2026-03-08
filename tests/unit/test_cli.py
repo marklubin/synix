@@ -72,12 +72,13 @@ def test_lineage_no_provenance(runner, tmp_path):
 
 
 def test_status_empty_build_dir(runner, tmp_path):
-    """synix status with empty build dir shows empty table."""
+    """synix status with empty build dir (no .synix) shows 'no build' error."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
     result = runner.invoke(main, ["status", "--build-dir", str(build_dir)])
-    assert result.exit_code == 0
-    assert "Build Status" in result.output
+    # After Phase 12, build/ alone is not enough — .synix/ must exist
+    assert result.exit_code != 0
+    assert "No build directory" in result.output
 
 
 def test_main_help(runner):

@@ -209,17 +209,31 @@ class TestDT2FreshBuild:
         """Search returns results for financial content."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
+        # Release to materialize projections
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, ["search", "investment", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "investment", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_context_doc_created(self, runner, workspace, financial_pipeline_file):
         """Context doc contains the core memory synthesis."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        context_doc = workspace["build_dir"] / "context.md"
+        # Release to materialize projections
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()
         content = context_doc.read_text()
         assert len(content) > 0
@@ -346,19 +360,23 @@ class TestDT2ParallelPaths:
 
     def test_independent_search_indexes(self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file):
         """Each pipeline config produces a search index reflecting its own layer structure."""
-        # Build path A (monthly rollups) and search
-        result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
-        assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
-
+        from synix.build.release_engine import execute_release
         from synix.search.indexer import SearchIndexProjection
 
         build_dir = workspace["build_dir"]
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+
+        # Build path A (monthly rollups) and release
+        result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
+        assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
+        execute_release(synix_dir, release_name="local")
 
         # Query path A search index — should contain "monthly" layer results.
         # Use "portfolio" which appears in the monthly mock response:
         # "portfolio diversification, market volatility response..."
-        proj_a = SearchIndexProjection(build_dir)
-        prov_a = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        proj_a = SearchIndexProjection(str(release_dir), release_dir / "search.db")
+        prov_a = SnapshotArtifactCache(synix_dir)
         results_a = proj_a.query("portfolio", provenance_tracker=prov_a)
         proj_a.close()
 
@@ -371,12 +389,13 @@ class TestDT2ParallelPaths:
         # Build path B (topical rollups) — rebuilds search index with topics instead of monthly
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
         assert result_b.exit_code == 0, f"Path B build failed: {result_b.output}"
+        execute_release(synix_dir, release_name="local")
 
         # Query path B search index — should contain "topics" layer results, not "monthly".
         # Use "tolerances" which appears in the topical mock response:
         # "clients showed varied risk tolerances and investment strategies"
-        proj_b = SearchIndexProjection(build_dir)
-        prov_b = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        proj_b = SearchIndexProjection(str(release_dir), release_dir / "search.db")
+        prov_b = SnapshotArtifactCache(synix_dir)
         results_b = proj_b.query("tolerances", provenance_tracker=prov_b)
         proj_b.close()
 
@@ -402,8 +421,13 @@ class TestDT2ParallelPaths:
         core_a = core_artifacts_a[0]
         core_a_content = core_a.content
 
-        # Also snapshot the context.md
-        context_a = (build_dir / "context.md").read_text()
+        # Release to get context.md
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+        execute_release(synix_dir, release_name="local")
+        context_a = (release_dir / "context.md").read_text()
 
         # Build path B (topical rollups) — core memory is rebuilt with different inputs
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
@@ -424,7 +448,8 @@ class TestDT2ParallelPaths:
 
         # Context doc should also reflect the rebuild (content may or may not differ
         # with mocked LLM, but the file was rewritten)
-        context_b = (build_dir / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        context_b = (release_dir / "context.md").read_text()
         assert len(context_b) > 0, "Path B context.md should have content"
 
     def test_incremental_update_both_paths(

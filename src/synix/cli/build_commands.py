@@ -251,6 +251,8 @@ def build(
         console.print(f"[bold]Artifact Snapshot:[/bold] {result.snapshot_oid[:12]}")
         console.print(f"[bold]Run ID:[/bold] {run_id}")
         console.print(f"[bold]Run Ref:[/bold] {result.run_ref}")
+        console.print()
+        console.print("[dim]Next: synix release HEAD --to local[/dim]")
 
     # Show run log summary when verbose
     run_log = result.run_log

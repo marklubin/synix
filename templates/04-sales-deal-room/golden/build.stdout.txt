@@ -14,12 +14,10 @@
   ✓ strategy (level 2)  <BUILD_COUNTS>  <TIME>
   ✓ call_prep (level 3)  <BUILD_COUNTS>  <TIME>
     └─ deal-search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
                          Build Summary
-╭───────────────────┬──────────────┬───────┬────────┬─────────╮
-│ Layer             │    Level     │ Built │ Cached │ Skipped │
-├───────────────────┼──────────────┼───────┼────────┼─────────┤
+╭───────────────────┬──────────────┬───────┬────────┬──────────╮
+│ Layer             │    Level     │ Built │ Cached │  Skipped │
+├───────────────────┼──────────────┼───────┼────────┼──────────┤
 │ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
@@ -27,7 +25,7 @@
 │ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
 │ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search        │ synix_search │       │        │ <MATERIALIZED> │
-╰───────────────────┴──────────────┴───────┴────────┴─────────╯
+│   → search        │ synix_search │       │        │ complete │
+╰───────────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

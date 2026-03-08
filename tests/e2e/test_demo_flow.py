@@ -156,8 +156,10 @@ class TestDemoFlow:
     """The exact demo recording sequence, automated."""
 
     def test_full_demo_sequence(self, runner, workspace, pipeline_file, topical_pipeline_file, mock_anthropic):
-        """Run the entire demo: run → search → run (cached) → config change → run → search."""
+        """Run the entire demo: run → release → search → run (cached) → config change → run → search."""
         build_dir = str(workspace["build_dir"])
+
+        from synix.build.release_engine import execute_release
 
         # ---- Step 1: First run — full build ----
         result1 = runner.invoke(main, ["run", str(pipeline_file)])
@@ -173,14 +175,18 @@ class TestDemoFlow:
         manifest = store.iter_entries()
         assert len(manifest) > 0, "No artifacts were built"
 
+        # Release to materialize projections
+        execute_release(synix_dir, release_name="local")
+        releases_dir = synix_dir / "releases" / "local"
+
         # ---- Step 2: Search ----
-        result2 = runner.invoke(main, ["search", "machine learning", "--build-dir", build_dir])
+        result2 = runner.invoke(main, ["search", "machine learning", "--build-dir", build_dir, "--release", "local"])
         assert result2.exit_code == 0, f"Search failed: {result2.output}"
         # Should find results (our fixtures contain ML content)
         assert "No results" not in result2.output or "machine learning" in result2.output.lower()
 
         # ---- Step 3: Context doc exists ----
-        context_doc = workspace["build_dir"] / "context.md"
+        context_doc = releases_dir / "context.md"
         assert context_doc.exists(), "Context doc was not created"
         context_content1 = context_doc.read_text()
         assert len(context_content1) > 0
@@ -198,8 +204,11 @@ class TestDemoFlow:
         assert result4.exit_code == 0, f"Run 3 (topical) failed: {result4.output}"
         assert "Build Summary" in result4.output
 
+        # Release after topical build
+        execute_release(synix_dir, release_name="local")
+
         # ---- Step 6: Search again — results may differ ----
-        result5 = runner.invoke(main, ["search", "programming", "--build-dir", build_dir])
+        result5 = runner.invoke(main, ["search", "programming", "--build-dir", build_dir, "--release", "local"])
         assert result5.exit_code == 0, f"Search 2 failed: {result5.output}"
 
         # ---- Step 7: Status command ----
@@ -231,21 +240,33 @@ class TestDemoFlow:
         assert layers.get("core", 0) == 1
 
     def test_search_index_populated(self, runner, workspace, pipeline_file):
-        """Search index should be populated after a run."""
+        """Search index should be populated after a run and release."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
-        assert search_db.exists(), "Search DB should exist after run"
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
+        assert search_db.exists(), "Search DB should exist after release"
 
         # Query should return results
-        result = runner.invoke(main, ["search", "programming", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "programming", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_context_doc_created(self, runner, workspace, pipeline_file):
-        """Context doc should be created after a run."""
+        """Context doc should be created after a run and release."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        context_doc = workspace["build_dir"] / "context.md"
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()
         content = context_doc.read_text()
         assert len(content) > 0
@@ -307,6 +328,10 @@ class TestDemoFlow:
         # Core memory should be rebuilt (new dependency on topics)
         assert "core-memory" in manifest2
 
-        # Context doc should be updated
-        context_doc = workspace["build_dir"] / "context.md"
+        # Context doc should be updated after release
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()

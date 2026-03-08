@@ -10,16 +10,14 @@
   ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ team_summary (level 2)  <BUILD_COUNTS>  <TIME>
     └─ team-search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
-                      Build Summary
-╭──────────────┬──────────────┬───────┬────────┬─────────╮
-│ Layer        │    Level     │ Built │ Cached │ Skipped │
-├──────────────┼──────────────┼───────┼────────┼─────────┤
+                       Build Summary
+╭──────────────┬──────────────┬───────┬────────┬──────────╮
+│ Layer        │    Level     │ Built │ Cached │  Skipped │
+├──────────────┼──────────────┼───────┼────────┼──────────┤
 │ bios         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ work_styles  │  <N>  │  <N>  │  <N>  │  <N>  │
 │ team_summary │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search   │ synix_search │       │        │ <MATERIALIZED> │
-╰──────────────┴──────────────┴───────┴────────┴─────────╯
+│   → search   │ synix_search │       │        │ complete │
+╰──────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

@@ -107,20 +107,32 @@ class TestFullPipelineRun:
             assert len(parents) > 0, f"Core {c.label} has no provenance parents"
 
     def test_search_returns_results_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Pipeline run → search works."""
+        """Pipeline run → release → search works."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        index = SearchIdx(build_dir / "search.db")
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        index = SearchIdx(release_dir / "search.db")
         results = index.query("programming")
         # Should find results from mock LLM responses
         assert len(results) > 0
         index.close()
 
     def test_context_doc_exists_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Pipeline run → context.md exists."""
+        """Pipeline run → release → context.md exists."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        context_path = build_dir / "context.md"
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        context_path = release_dir / "context.md"
         assert context_path.exists()
         content = context_path.read_text()
         assert len(content) > 0
