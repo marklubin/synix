@@ -3,6 +3,5 @@ Released <SNAPSHOT_OID> → local
   Pipeline: personal-memory
   Source:   HEAD
 
-  ● context-doc  flat_file  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>
-(<N> artifacts)
+  ● context-doc  flat_file  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (<N> artifacts)
   ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (<N> artifacts)

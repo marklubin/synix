@@ -387,6 +387,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
     # Fix Rich line-wrapping that splits release "→  path" across lines
     # e.g., "● context-doc  flat_file  →\n<CASE_DIR>/..." → single line
     joined = re.sub(r"→\s*\n\s*", "→  ", joined)
+    # Join release path with artifact count that wrapped to next line
+    joined = re.sub(r"(<RELEASE_PATH>)\s*\n\s*(\(<N> artifacts\))", r"\1  \2", joined)
     normalized = joined.splitlines()
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
