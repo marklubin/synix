@@ -125,7 +125,9 @@ The validate step should catch these in the cs_product_brief layer:
 $ synix build tv_demo.py
 Built 14 artifacts (5 sources → 6 intermediate → 3 cs_product_brief)
 
-$ synix search "return policy samsung tv"
+$ synix release HEAD --to local
+
+$ synix search "return policy samsung tv" --release local
 [product_offer_view]  SAM-OLED-65: "90-day defect replacement direct to Samsung"
 [policy_index]        return_policy: "Electronics over $500: 15-day return window"
 [policy_index]        warranty_policy: "We do NOT process warranty claims for manufacturers"

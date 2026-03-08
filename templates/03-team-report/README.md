@@ -32,8 +32,9 @@ cd templates/03-team-report
 cp .env.example .env     # add your API key
 
 uvx synix build pipeline.py
+uvx synix release HEAD --to local
 uvx synix validate pipeline.py
-uvx synix search 'hiking'
+uvx synix search 'hiking' --release local
 ```
 
 ## Try It Yourself
@@ -54,7 +55,8 @@ Then rebuild — only the new bio and downstream layers recompute:
 
 ```bash
 uvx synix build pipeline.py    # bios: 1 new, 3 cached
-uvx synix search 'frontend'
+uvx synix release HEAD --to local
+uvx synix search 'frontend' --release local
 ```
 
 ### Change the project

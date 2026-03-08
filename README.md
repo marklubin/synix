@@ -27,8 +27,8 @@ Conversations are sources. Prompts are build rules. Summaries and world models a
 
 ```bash
 uvx synix build pipeline.py
-uvx synix search "return policy"
-uvx synix validate                # experimental
+uvx synix release HEAD --to local
+uvx synix search "return policy" --release local
 ```
 
 ## Quick Start
@@ -38,28 +38,27 @@ uvx synix init my-project
 cd my-project
 ```
 
-Add your API key (see `pipeline.py` for provider config), then build:
+Add your API key (see `pipeline.py` for provider config), then build and release:
 
 ```bash
-uvx synix build
+uvx synix build                   # produce immutable snapshot in .synix/
+uvx synix release HEAD --to local # materialize projections (search.db, context.md)
 ```
 
-Browse, search, and validate:
+Browse, search, and inspect:
 
 ```bash
 uvx synix list                    # all artifacts, grouped by layer
 uvx synix show final-report       # render an artifact
-uvx synix search "hiking"         # full-text search
-uvx synix runs list               # immutable artifact snapshots for this project
-uvx synix runs list --json        # machine-readable snapshot history (schema_version + runs[])
+uvx synix search "hiking" --release local  # search a released projection
+uvx synix runs list               # immutable build snapshots
+uvx synix releases list           # all named releases and their snapshots
 uvx synix validate                # run declared validators (experimental)
 ```
 
-Successful builds record canonical immutable artifact snapshots under `.synix/`. The local `build/` directory still exists as the default compatibility materialization surface for current commands and demos, but it is no longer the source of truth for build history. Projection release state remains in that local surface until the explicit `release`/adapter slice lands. `uvx synix clean` only removes the mutable local surface; it does not delete snapshot history.
+All build state lives under `.synix/` — content-addressed objects, snapshots, refs, and releases. There is no `build/` directory. `uvx synix clean` removes release targets and transient work state; it does not delete snapshot history.
 
-> **Note:** The `.synix` on-disk snapshot format is new in `v0.15.x` and may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
-
-> **Note:** Run refs currently use opaque, time-prefixed ids (for example `refs/runs/20260306T082007123456Z-1f2e3d4c`) and remain experimental before `v1.0`. Prefer `uvx synix runs list --json` over scraping the table output; the JSON shape is versioned as `{ "schema_version": 1, "runs": [...] }`.
+> **Note:** The `.synix` on-disk format may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
 
 ## Defining a Pipeline
 
@@ -72,7 +71,6 @@ from synix.transforms import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
 pipeline.source_dir = "./sources"
-pipeline.build_dir = "./build"
 pipeline.llm_config = {
     "provider": "anthropic",
     "model": "claude-haiku-4-5-20251001",
@@ -124,13 +122,7 @@ pipeline.add(SearchIndex("search", sources=[report], search=["fulltext"]))
 
 Existing `SearchIndex` pipelines remain supported during the current `v0.x` migration window. New templates and docs use `SearchSurface + SynixSearch`, and any future deprecation will ship with an explicit migration note instead of a silent break.
 
-Search output selection rules:
-- if the build has one local search output, `synix search` uses it automatically
-- if several outputs exist, Synix prefers the one named `search`; if both `SynixSearch("search")` and `SearchIndex("search")` exist, `SynixSearch` wins
-- otherwise, if there is exactly one `SynixSearch` output, Synix uses it
-- otherwise, pass `--projection <name>`
-
-`SynixSearch.output_path` must stay under the build directory. `.projection_cache.json` is mutable build metadata used to discover local outputs; treat it as internal cache state, not a stable public schema.
+Projections are not materialized at build time. `synix build` records projection declarations in the manifest; `synix release HEAD --to <name>` materializes them into `.synix/releases/<name>/` (search.db, context.md). Search queries target a named release: `uvx synix search "query" --release local`.
 
 For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
 
@@ -181,17 +173,23 @@ Import from `synix.transforms`:
 | Command | What it does |
 |---------|-------------|
 | `uvx synix init <name>` | Scaffold a new project with sources, pipeline, and README |
-| `uvx synix build` | Run the pipeline. Only rebuilds what changed |
+| `uvx synix build` | Run the pipeline. Only rebuilds what changed. Produces immutable snapshot in `.synix/` |
 | `uvx synix plan` | Dry-run — show what would build without running transforms |
 | `uvx synix plan --explain-cache` | Plan with inline cache decision reasons |
+| `uvx synix release HEAD --to <name>` | Materialize projections from a snapshot to a named release target |
+| `uvx synix revert <ref> --to <name>` | Release an older snapshot to a release target |
+| `uvx synix releases list` | List all named releases with their snapshots |
+| `uvx synix releases show <name>` | Display release receipt details. `--json` for machine-readable |
+| `uvx synix refs list` | List all refs (build runs + releases) |
+| `uvx synix refs show <ref>` | Resolve a ref to snapshot details |
 | `uvx synix runs list` | List immutable build snapshots recorded under `.synix` |
-| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
+| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer. Reads from `.synix/` via SnapshotView |
 | `uvx synix show <id>` | Display an artifact. Resolves by label or ID prefix. `--raw` for JSON |
-| `uvx synix search <query>` | Full-text search. `--mode hybrid` for semantic, `--projection <name>` for multiple outputs |
+| `uvx synix search <query>` | Search a release target. `--release <name>` to pick target, `--mode hybrid` for semantic |
 | `uvx synix validate` | *(Experimental)* Run validators against build artifacts |
 | `uvx synix fix` | *(Experimental)* LLM-assisted repair of violations |
-| `uvx synix lineage <id>` | Show the full provenance chain for an artifact |
-| `uvx synix clean` | Delete the build directory |
+| `uvx synix lineage <id>` | Show the full provenance chain for an artifact. Reads from `.synix/` |
+| `uvx synix clean` | Remove release targets and transient work state from `.synix/` |
 | `uvx synix batch-build plan` | *(Experimental)* Dry-run showing which layers would batch vs sync |
 | `uvx synix batch-build run` | *(Experimental)* Submit a batch build via OpenAI Batch API. `--poll` to wait |
 | `uvx synix batch-build resume <id>` | *(Experimental)* Resume a previously submitted batch build |
@@ -307,7 +305,7 @@ See [docs/mesh.md](docs/mesh.md) for the full guide — configuration, server AP
 
 **Fingerprint-based caching** — Build fingerprints capture inputs, prompts, model config, and transform source code. Change any component and only affected artifacts rebuild. See [docs/cache-semantics.md](docs/cache-semantics.md).
 
-**Altitude-aware search** — Query across episode summaries, rollups, or core memory. Drill into provenance from any result.
+**Altitude-aware search** — Query across episode summaries, rollups, or core memory via named release targets. Drill into provenance from any result.
 
 **Architecture evolution** — Swap monthly rollups for topic-based clustering. Transcripts and episodes stay cached. No migration scripts.
 
@@ -328,7 +326,8 @@ Synix is not a memory store. It's the build system that produces one.
 | Doc | Contents |
 |-----|----------|
 | [Pipeline API](docs/pipeline-api.md) | Full Python API — ext transforms, built-in transforms, projections, validators, custom transforms |
-| [Search Surface RFC](docs/search-surface-rfc.md) | Proposed design for build-time search capabilities, default Synix search, and explicit release targets |
+| [Projection Release v2](docs/projection-release-v2-rfc.md) | Build/release separation, `.synix/` as single source of truth, adapter contract, release receipts |
+| [Search Surface RFC](docs/search-surface-rfc.md) | Build-time search capabilities and search surface declarations |
 | [Entity Model](docs/entity-model.md) | Artifact identity, storage format, cache logic |
 | [Cache Semantics](docs/cache-semantics.md) | Rebuild trigger matrix, fingerprint scheme |
 | [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API for 50% cost reduction |

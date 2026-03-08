@@ -145,12 +145,15 @@ def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
 
 
 def test_init_output_message(runner, tmp_path, monkeypatch):
-    """synix init prints helpful next-steps."""
+    """synix init prints helpful next-steps including release workflow."""
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(main, ["init", "my-project"])
     assert "cd my-project" in result.output
     assert ".env.example" in result.output
     assert "synix build" in result.output
+    assert "synix release HEAD --to local" in result.output
+    assert "synix search" in result.output
+    assert "--release local" in result.output
 
 
 # ---------------------------------------------------------------------------

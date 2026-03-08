@@ -52,11 +52,11 @@ Search results show provenance chains (artifact IDs), but there's no interactive
 
 ## Build System
 
-### Smarter `synix clean`
-Currently `synix clean` removes the entire build directory. Add granular options: `--layer <name>` to clean a single layer (and downstream), `--projections` to clean only projections, `--stale` to remove orphaned artifacts not referenced in the current pipeline. Could also add `--dry-run` to preview what would be deleted.
+### ~~Smarter `synix clean`~~ (Partially addressed)
+`synix clean` now removes `.synix/releases/` and `.synix/work/` (release targets and transient work state) while preserving snapshot history and objects. Per-release granularity is available via `synix clean --release <name>`. Further improvements (per-layer clean, stale artifact pruning, `--dry-run`) remain deferred.
 
-### Projections as first-class DAG nodes
-Layers can declare dependency on a projection (not just other layers). This enables patterns like: build episode search index, then have topical rollup query it. Currently this works via convention (runner materializes intermediate projections), but making it explicit in the DAG would be cleaner.
+### ~~Projections as first-class DAG nodes~~ (Implemented)
+Projections are now structured declarations in the manifest with explicit `input_artifacts` and adapter config. `SearchSurface` provides build-time retrieval via `uses=[surface]` on transforms. Release-time materialization is handled by the adapter contract (`plan/apply/verify`). See [docs/projection-release-v2-rfc.md](projection-release-v2-rfc.md).
 
 ### Composable projections
 Merge multiple search indexes into a unified query surface. Currently each projection is independent.

@@ -1,4 +1,6 @@
-# Build Phases
+# Build Phases (Historical)
+
+> **Note:** This document is historical — it describes the original v0.1 implementation plan. The current architecture separates build from release and uses `.synix/` as the single source of truth. See [docs/projection-release-v2-rfc.md](projection-release-v2-rfc.md) for the current design. Key differences: `ArtifactStore` and `ProvenanceTracker` (phases 1b–1c) have been replaced by `ObjectStore` and `SnapshotView`; projections (phase 4a–b) are now materialized via `synix release`, not at build time; the `build/` directory no longer exists.
 
 ## Phase 1: Foundation
 

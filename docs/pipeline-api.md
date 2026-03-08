@@ -9,7 +9,6 @@ from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("personal-memory")
 pipeline.source_dir = "./sources"
-pipeline.build_dir = "./build"
 pipeline.llm_config = {
     "model": "claude-sonnet-4-20250514",
     "temperature": 0.3,
@@ -34,7 +33,7 @@ pipeline.add(
     SynixSearch("search", surface=memory_search)
 )
 pipeline.add(
-    FlatFile("context-doc", sources=[core], output_path="./build/context.md")
+    FlatFile("context-doc", sources=[core])
 )
 ```
 
@@ -225,16 +224,18 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 
 ## Projections
 
+Projections are not materialized at build time. `synix build` records structured projection declarations in the manifest; `synix release HEAD --to <name>` materializes them into `.synix/releases/<name>/` via projection adapters.
+
 `SearchSurface` is the build-time searchable capability declaration. `SynixSearch` is the canonical local search output. `SearchIndex` remains compatibility sugar for older direct-layer pipelines.
 
 Import from `synix`:
 
-| Class | Output | Description |
-|-------|--------|-------------|
-| `SearchSurface` | local compatibility realization under `build/surfaces/` today | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
-| `SynixSearch` | `build/search.db` by default | Default Synix search output over a declared `SearchSurface`. Keeps the current local SQLite-backed experience as a compatibility target without making the file/schema the public contract |
-| `SearchIndex` | `build/search.db` | Legacy compatibility projection over direct source layers. This does not satisfy `uses=[...]`; prefer `SearchSurface + SynixSearch` for new pipelines |
-| `FlatFile` | `build/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
+| Class | Materialized by | Description |
+|-------|-----------------|-------------|
+| `SearchSurface` | Build-time surface under `.synix/work/surfaces/` | Named build-time search surface over selected layers. Use with `uses=[surface]` on transforms that need retrieval during the build. Treat the on-disk path as internal; the supported interface is `ctx.search(...)` |
+| `SynixSearch` | `synix release` → `.synix/releases/<name>/search.db` | Default Synix search output over a declared `SearchSurface`. Materialized at release time by the `synix_search` adapter |
+| `SearchIndex` | `synix release` → `.synix/releases/<name>/search.db` | Legacy compatibility projection over direct source layers. Does not satisfy `uses=[...]`; prefer `SearchSurface + SynixSearch` for new pipelines |
+| `FlatFile` | `synix release` → `.synix/releases/<name>/context.md` | Renders artifacts as markdown. Ready to paste into an LLM system prompt |
 
 ### Migrating from SearchIndex
 
@@ -259,16 +260,21 @@ pipeline.add(report_search, SynixSearch("search", surface=report_search))
 
 ### Search Output Selection
 
-`synix search` resolves local outputs with these rules:
+`synix search` queries a named release target. Use `--release <name>` to specify which release to query:
 
-1. If the build has exactly one local search output, use it.
-2. If multiple outputs exist, prefer the one named `search`. If both a `SynixSearch("search")` and a `SearchIndex("search")` exist, `SynixSearch` wins.
-3. Otherwise, if there is exactly one `SynixSearch` output, use it.
-4. Otherwise, re-run with `--projection <name>`.
+```bash
+uvx synix search "query" --release local
+```
 
-`synix info`, `synix status`, and `synix verify` enumerate all discovered local search outputs automatically. `--projection` only matters for commands like `synix search` that need one concrete target to query.
+If only one release exists, `synix search` uses it automatically. If multiple releases exist, you must specify `--release`.
 
-`.projection_cache.json` is mutable build metadata used for local output discovery. Treat it as an internal compatibility mechanism rather than a stable public schema; rebuild instead of scripting against its exact JSON shape.
+For ad-hoc queries against unreleased snapshots, use `--ref`:
+
+```bash
+uvx synix search "query" --ref HEAD    # scratch realization, not persisted
+```
+
+Scratch realizations build an ephemeral search.db under `.synix/work/`, query it, and discard it. They do not create release refs or receipts.
 
 ## Config Change Demo
 
