@@ -13,6 +13,16 @@ from synix.core.models import Artifact
 logger = logging.getLogger(__name__)
 
 
+class _ProvenanceShim:
+    """Minimal shim matching the provenance record interface for display code."""
+
+    __slots__ = ("label", "parent_labels")
+
+    def __init__(self, label: str, parent_labels: list[str]):
+        self.label = label
+        self.parent_labels = parent_labels
+
+
 class SnapshotView:
     """Ref-resolved read API over immutable snapshots."""
 
@@ -252,6 +262,16 @@ class SnapshotArtifactCache:
     def get_parents(self, label: str) -> list[str]:
         """Return direct parent labels for an artifact."""
         return list(self._parent_labels_map.get(label, []))
+
+    def get_record(self, label: str) -> _ProvenanceShim | None:
+        """Return a shim record with parent_labels for display compatibility.
+
+        Matches the interface expected by search provenance display code.
+        """
+        parents = self._parent_labels_map.get(label)
+        if parents is None:
+            return None
+        return _ProvenanceShim(label=label, parent_labels=list(parents))
 
     def get_chain(self, label: str) -> list[str]:
         """Walk parent_labels transitively, returning BFS-ordered labels."""

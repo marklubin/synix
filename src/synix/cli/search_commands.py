@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import logging
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -15,12 +18,140 @@ from rich.tree import Tree
 from synix.build.search_outputs import SearchOutputResolutionError, resolve_search_output
 from synix.cli.main import console, get_layer_style
 
+logger = logging.getLogger(__name__)
+
+
+class ReleaseProvenanceProvider:
+    """Read provenance chains from a released search.db.
+
+    Released search databases contain a ``provenance_chains`` table that
+    bakes in the full chain for every indexed artifact.  This provider
+    reads that table and exposes the same ``get_chain`` / ``get_record``
+    interface that :class:`ProvenanceTracker` provides so the search
+    display layer can use it interchangeably.
+    """
+
+    def __init__(self, db_path: str | Path):
+        self._chains: dict[str, list[str]] = {}
+        db = Path(db_path)
+        if not db.exists():
+            return
+        conn = sqlite3.connect(str(db))
+        try:
+            # Check if the table exists before querying
+            table_check = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='provenance_chains'"
+            ).fetchone()
+            if table_check is not None:
+                for row in conn.execute("SELECT label, chain FROM provenance_chains"):
+                    try:
+                        self._chains[row[0]] = json.loads(row[1])
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(
+                            "Failed to parse provenance chain for label %r",
+                            row[0],
+                            exc_info=True,
+                        )
+        finally:
+            conn.close()
+
+    def get_chain(self, label: str) -> list[_ProvenanceShim]:
+        """Return the provenance chain for a label as shim records.
+
+        Returns a list of shim objects with ``.label`` attribute, matching
+        the interface expected by SearchIndex.query and HybridRetriever.
+        """
+        chain_labels = self._chains.get(label, [label])
+        return [_ProvenanceShim(label=l, parent_labels=[]) for l in chain_labels]
+
+    def get_record(self, label: str) -> _ProvenanceShim | None:
+        """Return a shim record with parent_labels derived from the chain.
+
+        The chain stores the full lineage. The first entry is the artifact
+        itself; subsequent entries are its ancestors.  We reconstruct a
+        minimal parent_labels list from the stored chain.
+        """
+        chain = self._chains.get(label)
+        if chain is None:
+            return None
+        # Chain is ordered: [self, parent1, grandparent1, ...]
+        # parent_labels = everything except the label itself
+        parent_labels = [l for l in chain if l != label]
+        return _ProvenanceShim(label=label, parent_labels=parent_labels)
+
+
+class _ProvenanceShim:
+    """Minimal shim matching the ProvenanceRecord interface needed by display."""
+
+    __slots__ = ("label", "parent_labels")
+
+    def __init__(self, label: str, parent_labels: list[str]):
+        self.label = label
+        self.parent_labels = parent_labels
+
+
+def _resolve_synix_dir(build_dir: str, synix_dir: str | None) -> Path:
+    """Resolve the .synix directory from explicit option or build_dir convention."""
+    from synix.build.refs import synix_dir_for_build_dir
+
+    if synix_dir is not None:
+        return Path(synix_dir).resolve()
+    return synix_dir_for_build_dir(Path(build_dir).resolve())
+
+
+def _list_release_names(synix_dir: Path) -> list[str]:
+    """List available release names under .synix/releases/."""
+    releases_dir = synix_dir / "releases"
+    if not releases_dir.is_dir():
+        return []
+    return sorted(d.name for d in releases_dir.iterdir() if d.is_dir() and (d / "search.db").exists())
+
+
+def _resolve_release_db(synix_dir: Path, release_name: str | None) -> Path | None:
+    """Resolve a release search.db path.
+
+    If *release_name* is given, return that release's search.db.
+    If *release_name* is None, auto-detect when exactly one release exists.
+    Returns None when no release can be resolved.
+    """
+    if release_name is not None:
+        db_path = synix_dir / "releases" / release_name / "search.db"
+        if db_path.exists():
+            return db_path
+        console.print(f"[red]Error:[/red] No search.db in release {release_name!r} (looked at {db_path})")
+        raise SystemExit(1)
+
+    # Auto-detect: list releases that have a search.db
+    available = _list_release_names(synix_dir)
+    if len(available) == 1:
+        return synix_dir / "releases" / available[0] / "search.db"
+    if len(available) > 1:
+        names = ", ".join(available)
+        console.print(
+            f"[red]Error:[/red] Multiple releases found ({names}). Re-run with [bold]--release <name>[/bold]."
+        )
+        raise SystemExit(1)
+    return None
+
 
 @click.command()
 @click.argument("query")
 @click.option("--layers", default=None, help="Comma-separated layer names to search")
 @click.option("--step", default=None, help="Filter to a specific pipeline step/layer (alias for --layers)")
 @click.option("--build-dir", default="./build", help="Build directory")
+@click.option("--synix-dir", default=None, help="Path to .synix directory (auto-detected from build-dir by default)")
+@click.option(
+    "--release",
+    "release_name",
+    default=None,
+    help="Release target to query (searches .synix/releases/<name>/search.db)",
+)
+@click.option(
+    "--ref",
+    "ref",
+    default=None,
+    help="Snapshot ref for scratch realization (build ephemeral search.db, query, discard)",
+)
 @click.option(
     "--projection",
     default=None,
@@ -42,6 +173,9 @@ def search(
     layers: str | None,
     step: str | None,
     build_dir: str,
+    synix_dir: str | None,
+    release_name: str | None,
+    ref: str | None,
     projection: str | None,
     limit: int,
     mode: str,
@@ -52,6 +186,11 @@ def search(
     """Search across memory layers.
 
     QUERY is the search text.
+
+    Source resolution (in priority order):
+      --ref <ref>       scratch realization from a snapshot ref (ephemeral)
+      --release <name>  query a materialized release target
+      (auto)            single release auto-detected, or legacy build/ path
 
     Modes:
       keyword  — FTS5 full-text search (default, no embedding config needed)
@@ -67,34 +206,11 @@ def search(
                                     — use that one
       otherwise                     — re-run with --projection <name>
     """
-    from synix.build.refs import synix_dir_for_build_dir
-    from synix.build.snapshot_view import SnapshotArtifactCache
     from synix.search.indexer import SearchIndex, SearchIndexProjection
     from synix.search.retriever import HybridRetriever
 
     # top_k takes precedence over limit if both given
     effective_top_k = top_k if top_k is not None else limit
-
-    # Auto-detect mode when not explicitly set
-    if mode is None:
-        embeddings_dir = Path(build_dir) / "embeddings"
-        manifest_path = embeddings_dir / "manifest.json"
-        if manifest_path.exists():
-            mode = "hybrid"
-        else:
-            mode = "keyword"
-
-    try:
-        search_output = resolve_search_output(build_dir, projection_name=projection)
-    except SearchOutputResolutionError as exc:
-        console.print(f"[red]{exc}[/red]")
-        sys.exit(1)
-
-    if search_output is None or not search_output.db_path.exists():
-        console.print("[red]No local Synix search output found.[/red] Run [bold]synix build[/bold] first.")
-        sys.exit(1)
-
-    db_path = search_output.db_path
 
     # Combine --layers and --step: both specify layer names to filter
     layer_names: list[str] = []
@@ -104,8 +220,74 @@ def search(
         layer_names.extend(s.strip() for s in step.split(","))
     layer_filter = layer_names if layer_names else None
 
-    synix_dir = synix_dir_for_build_dir(Path(build_dir))
-    store = SnapshotArtifactCache(synix_dir)
+    # --- Source resolution ---
+    db_path: Path | None = None
+    provenance: object | None = None  # ProvenanceTracker or ReleaseProvenanceProvider
+    embeddings_base_dir: str | None = None  # directory containing embeddings/
+
+    if ref is not None:
+        # Scratch realization from a snapshot ref
+        db_path, provenance = _scratch_realize(build_dir, synix_dir, ref)
+        # Scratch realization doesn't support embeddings yet
+        embeddings_base_dir = None
+    elif release_name is not None:
+        # Explicit release target
+        resolved_synix_dir = _resolve_synix_dir(build_dir, synix_dir)
+        db_path = _resolve_release_db(resolved_synix_dir, release_name)
+        if db_path is not None:
+            provenance = ReleaseProvenanceProvider(db_path)
+            # Check for embeddings in the release directory
+            embeddings_base_dir = str(db_path.parent)
+    else:
+        # Auto-detect: try release first, fall back to build dir
+        resolved_synix_dir = _resolve_synix_dir(build_dir, synix_dir)
+        release_db = _resolve_release_db(resolved_synix_dir, None)
+        if release_db is not None:
+            db_path = release_db
+            provenance = ReleaseProvenanceProvider(db_path)
+            embeddings_base_dir = str(db_path.parent)
+        else:
+            # Fall back to legacy build/ path
+            try:
+                search_output = resolve_search_output(build_dir, projection_name=projection)
+            except SearchOutputResolutionError as exc:
+                console.print(f"[red]{exc}[/red]")
+                sys.exit(1)
+
+            if search_output is not None and search_output.db_path.exists():
+                db_path = search_output.db_path
+                embeddings_base_dir = build_dir
+            else:
+                db_path = None
+
+            from synix.build.refs import synix_dir_for_build_dir
+            from synix.build.snapshot_view import SnapshotArtifactCache
+
+            try:
+                sd = synix_dir_for_build_dir(Path(build_dir))
+                provenance = SnapshotArtifactCache(sd)
+            except (ValueError, OSError):
+                # No snapshot store — provenance display will be empty
+                provenance = None
+
+    if db_path is None or not db_path.exists():
+        console.print(
+            "[red]No search index found.[/red] Run [bold]synix build[/bold] first, "
+            "or specify [bold]--release <name>[/bold]."
+        )
+        sys.exit(1)
+
+    # Auto-detect mode when not explicitly set
+    if mode is None:
+        if embeddings_base_dir is not None:
+            embeddings_dir = Path(embeddings_base_dir) / "embeddings"
+            manifest_path = embeddings_dir / "manifest.json"
+            if manifest_path.exists():
+                mode = "hybrid"
+            else:
+                mode = "keyword"
+        else:
+            mode = "keyword"
 
     if mode == "keyword":
         # Fast path: use existing FTS5 query directly
@@ -113,28 +295,34 @@ def search(
         results = search_projection.query(
             query,
             layers=layer_filter,
-            provenance_tracker=store,
+            provenance_tracker=provenance,
         )
         search_projection.close()
         results = results[:effective_top_k]
     else:
         # Semantic, hybrid, or layered: need embedding provider
         embedding_provider = None
-        if mode in ("semantic", "hybrid", "layered"):
-            embedding_provider = _load_embedding_provider(build_dir)
+        if mode in ("semantic", "hybrid", "layered") and embeddings_base_dir is not None:
+            embedding_provider = _load_embedding_provider(embeddings_base_dir)
             if embedding_provider is None and mode == "semantic":
                 console.print(
                     "[red]Semantic search requires embeddings.[/red] "
                     "No embedding config found and no cached embeddings available."
                 )
                 sys.exit(1)
+        elif mode == "semantic":
+            console.print(
+                "[red]Semantic search requires embeddings.[/red] "
+                "No embedding config found and no cached embeddings available."
+            )
+            sys.exit(1)
 
         search_index = SearchIndex(db_path)
         try:
             retriever = HybridRetriever(
                 search_index=search_index,
                 embedding_provider=embedding_provider,
-                provenance_tracker=store,
+                provenance_tracker=provenance,
             )
             results = retriever.query(
                 query,
@@ -147,16 +335,7 @@ def search(
 
     # Filter by customer metadata if requested
     if customer is not None:
-        filtered = []
-        for result in results:
-            artifact = store.load_artifact(result.label)
-            if artifact is not None:
-                if artifact.metadata.get("customer_id") == customer:
-                    filtered.append(result)
-            else:
-                # Fall back to the metadata already on the search result
-                if result.metadata.get("customer_id") == customer:
-                    filtered.append(result)
+        filtered = _filter_by_customer(results, customer, build_dir)
         results = filtered
 
     if not results:
@@ -218,11 +397,12 @@ def search(
                 if aid in visited:
                     return
                 visited.add(aid)
-                parents = store.get_parents(aid)
-                for parent_label in sorted(parents):
-                    tree_label = f"[dim]{parent_label}[/dim]"
-                    child = node.add(tree_label)
-                    _build_trace_tree(child, parent_label, visited)
+                rec = provenance.get_record(aid)
+                if rec:
+                    for parent_label in sorted(rec.parent_labels):
+                        tree_label = f"[dim]{parent_label}[/dim]"
+                        child = node.add(tree_label)
+                        _build_trace_tree(child, parent_label, visited)
 
             _build_trace_tree(prov_tree, result.label)
             console.print(prov_tree)
@@ -236,15 +416,92 @@ def search(
                 if aid in visited:
                     return
                 visited.add(aid)
-                parents = store.get_parents(aid)
-                for parent_label in sorted(parents):
-                    child = node.add(f"[dim]{parent_label}[/dim]")
-                    _add_parents(child, parent_label, visited)
+                rec = provenance.get_record(aid)
+                if rec:
+                    for parent_label in sorted(rec.parent_labels):
+                        child = node.add(f"[dim]{parent_label}[/dim]")
+                        _add_parents(child, parent_label, visited)
 
             _add_parents(tree, result.label)
             console.print(tree)
 
         console.print()
+
+
+def _scratch_realize(build_dir: str, synix_dir_option: str | None, ref: str) -> tuple[Path, ReleaseProvenanceProvider]:
+    """Build an ephemeral search.db from a snapshot ref and return (db_path, provenance).
+
+    This requires the release adapter infrastructure (ReleaseClosure, get_adapter).
+    If those modules are not yet available, we fail with a clear error message.
+    """
+    import tempfile
+
+    resolved_synix_dir = _resolve_synix_dir(build_dir, synix_dir_option)
+
+    try:
+        from synix.build.adapters import get_adapter  # noqa: F811
+        from synix.build.release import ReleaseClosure  # noqa: F811
+    except ImportError as exc:
+        console.print(
+            "[red]Error:[/red] Scratch realization (--ref) requires the release adapter "
+            "infrastructure which is not yet available. Use [bold]--release <name>[/bold] "
+            "to query a materialized release, or omit --ref to use the build directory."
+        )
+        raise SystemExit(1) from exc
+
+    closure = ReleaseClosure.from_ref(resolved_synix_dir, ref=ref)
+
+    # Find the search projection
+    search_proj = None
+    for _name, proj in closure.projections.items():
+        if proj.adapter == "synix_search":
+            search_proj = proj
+            break
+
+    if search_proj is None:
+        console.print("[red]Error:[/red] No search projection in snapshot")
+        raise SystemExit(1)
+
+    # Build ephemeral search.db in a work directory
+    work_dir_path = resolved_synix_dir / "work"
+    work_dir_path.mkdir(parents=True, exist_ok=True)
+    work_dir = tempfile.mkdtemp(dir=str(work_dir_path), prefix="scratch_search_")
+
+    adapter = get_adapter("synix_search")
+    plan = adapter.plan(closure, search_proj, None)
+    adapter.apply(plan, work_dir)
+
+    db_path = Path(work_dir) / "search.db"
+    provenance = ReleaseProvenanceProvider(db_path)
+    return db_path, provenance
+
+
+def _filter_by_customer(results: list, customer: str, build_dir: str) -> list:
+    """Filter search results by customer_id metadata.
+
+    Tries the ArtifactStore first for full metadata, falls back to
+    the metadata already on the search result.
+    """
+    try:
+        from synix.build.artifacts import ArtifactStore
+
+        store = ArtifactStore(build_dir)
+    except Exception:
+        store = None
+        logger.debug("Could not load ArtifactStore for customer filtering", exc_info=True)
+
+    filtered = []
+    for result in results:
+        if store is not None:
+            artifact = store.load_artifact(result.label)
+            if artifact is not None:
+                if artifact.metadata.get("customer_id") == customer:
+                    filtered.append(result)
+                continue
+        # Fall back to the metadata already on the search result
+        if result.metadata.get("customer_id") == customer:
+            filtered.append(result)
+    return filtered
 
 
 def _build_snippet(content: str, query: str, head_lines: int = 4, context_lines: int = 2) -> Markdown:

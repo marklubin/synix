@@ -16,40 +16,95 @@ from rich.tree import Tree
 from synix.cli.main import console, get_layer_style
 
 
+def _resolve_synix_dir(build_dir: str, synix_dir: str | None) -> Path | None:
+    """Resolve the .synix directory from explicit option or build-dir fallback.
+
+    Returns the resolved Path, or None if no snapshot store can be found.
+    """
+    from synix.build.refs import synix_dir_for_build_dir
+
+    if synix_dir:
+        resolved = Path(synix_dir)
+        if resolved.exists():
+            return resolved
+        return None
+
+    build_path = Path(build_dir)
+    try:
+        resolved = synix_dir_for_build_dir(build_path)
+    except ValueError:
+        return None
+
+    if resolved.exists():
+        return resolved
+    return None
+
+
 @click.command()
 @click.argument("artifact_id")
 @click.option("--build-dir", default="./build", help="Build directory")
-def lineage(artifact_id: str, build_dir: str):
+@click.option("--synix-dir", default=None, help="Path to .synix directory")
+@click.option("--ref", default="HEAD", help="Snapshot ref to read (default: HEAD)")
+def lineage(artifact_id: str, build_dir: str, synix_dir: str | None, ref: str):
     """Show provenance chain for an artifact.
 
     ARTIFACT_ID is the artifact to trace.
     """
-    from synix.build.refs import synix_dir_for_build_dir
-    from synix.build.snapshot_view import SnapshotArtifactCache
+    from synix.build.snapshot_view import SnapshotView
 
-    synix_dir = synix_dir_for_build_dir(Path(build_dir))
-    store = SnapshotArtifactCache(synix_dir)
-
-    artifact = store.load_artifact(artifact_id)
-    if artifact is None:
+    resolved_synix_dir = _resolve_synix_dir(build_dir, synix_dir)
+    if resolved_synix_dir is None:
         console.print(f"[red]No provenance found for:[/red] {artifact_id}")
         sys.exit(1)
 
-    console.print(f"\n[bold]Lineage for:[/bold] {artifact_id}\n")
+    try:
+        view = SnapshotView.open(resolved_synix_dir, ref=ref)
+    except ValueError as e:
+        console.print(f"[red]Cannot open snapshot:[/red] {e}")
+        sys.exit(1)
 
-    tree = Tree(f"[bold]{artifact_id}[/bold]")
+    # Resolve prefix (git-like)
+    try:
+        resolved_label = view.resolve_prefix(artifact_id)
+    except ValueError as e:
+        console.print(f"[red]Ambiguous:[/red] {e}")
+        sys.exit(1)
 
-    def add_parents(node, aid):
-        parent_labels = store.get_parents(aid)
-        for parent_id in parent_labels:
-            artifact = store.load_artifact(parent_id)
-            label = parent_id
-            if artifact:
-                label += f" [dim]({artifact.artifact_type})[/dim]"
-            child_node = node.add(label)
-            add_parents(child_node, parent_id)
+    if resolved_label is None:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
 
-    add_parents(tree, artifact_id)
+    try:
+        chain = view.get_provenance(resolved_label)
+    except KeyError:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
+
+    if len(chain) <= 1:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
+
+    console.print(f"\n[bold]Lineage for:[/bold] {resolved_label}\n")
+
+    tree = Tree(f"[bold]{resolved_label}[/bold]")
+
+    def add_parents(node, label):
+        try:
+            art = view.get_artifact(label)
+        except KeyError:
+            return
+        parent_labels = art.get("parent_labels", [])
+        for parent_label in parent_labels:
+            display = parent_label
+            try:
+                parent_art = view.get_artifact(parent_label)
+                display += f" [dim]({parent_art.get('artifact_type', 'unknown')})[/dim]"
+            except KeyError:
+                pass
+            child_node = node.add(display)
+            add_parents(child_node, parent_label)
+
+    add_parents(tree, resolved_label)
     console.print(tree)
 
 

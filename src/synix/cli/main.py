@@ -85,6 +85,7 @@ from synix.cli.info_commands import info  # noqa: E402, F401
 from synix.cli.init_commands import init  # noqa: E402, F401
 from synix.cli.llms_commands import llms  # noqa: E402, F401
 from synix.cli.mesh_commands import mesh  # noqa: E402, F401
+from synix.cli.refs_commands import refs_group  # noqa: E402, F401
 from synix.cli.release_commands import release, releases_group, revert  # noqa: E402, F401
 from synix.cli.runs_commands import runs_group  # noqa: E402, F401
 from synix.cli.search_commands import search  # noqa: E402, F401
@@ -114,4 +115,5 @@ main.add_command(mesh)
 main.add_command(release)
 main.add_command(releases_group, name="releases")
 main.add_command(revert)
+main.add_command(refs_group, name="refs")
 main.add_command(runs_group, name="runs")
