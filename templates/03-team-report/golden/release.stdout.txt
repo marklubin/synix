@@ -1,0 +1,6 @@
+
+Released <SNAPSHOT_OID> → local
+  Pipeline: my-first-pipeline
+  Source:   HEAD
+
+  ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (<N> artifacts)

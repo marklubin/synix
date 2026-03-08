@@ -1,0 +1,7 @@
+
+Released <SNAPSHOT_OID> → local
+  Pipeline: sales-deal-room
+  Source:   HEAD
+
+  ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (16
+artifacts)

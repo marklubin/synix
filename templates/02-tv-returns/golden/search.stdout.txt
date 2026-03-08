@@ -57,11 +57,11 @@ Search results for: "return policy" (keyword mode)
 ╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
 cs-brief-DYS-V15-DETECT
 ├── idx-return_policy
-│   └── policy-return_policy
 ├── idx-shipping_policy
-│   └── policy-shipping_policy
 ├── idx-warranty_policy
-│   └── policy-warranty_policy
+├── policy-return_policy
+├── policy-shipping_policy
+├── policy-warranty_policy
 └── product-offer-DYS-V15-DETECT
 
 ╭─────────────────────────────────────────────── cs_product_brief (L2) ────────────────────────────────────────────────╮
@@ -128,11 +128,11 @@ cs-brief-DYS-V15-DETECT
 ╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
 cs-brief-SAM-OLED-65
 ├── idx-return_policy
-│   └── policy-return_policy
 ├── idx-shipping_policy
-│   └── policy-shipping_policy
 ├── idx-warranty_policy
-│   └── policy-warranty_policy
+├── policy-return_policy
+├── policy-shipping_policy
+├── policy-warranty_policy
 └── product-offer-SAM-OLED-65
 
 ╭─────────────────────────────────────────────── cs_product_brief (L2) ────────────────────────────────────────────────╮
@@ -191,9 +191,9 @@ cs-brief-SAM-OLED-65
 ╰────────────────────────────────────────────────────── Result 3 ──────────────────────────────────────────────────────╯
 cs-brief-KAI-PRO-KNIFE8
 ├── idx-return_policy
-│   └── policy-return_policy
 ├── idx-shipping_policy
-│   └── policy-shipping_policy
 ├── idx-warranty_policy
-│   └── policy-warranty_policy
+├── policy-return_policy
+├── policy-shipping_policy
+├── policy-warranty_policy
 └── product-offer-KAI-PRO-KNIFE8

@@ -1,0 +1,6 @@
+
+Released <SNAPSHOT_OID> → local
+  Pipeline: tv-returns-demo
+  Source:   HEAD
+
+  ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (<N> artifacts)

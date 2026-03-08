@@ -367,6 +367,10 @@ def _normalize_output(text: str, case_path: Path) -> str:
             "https://platform.openai.com/batches/<BATCH_ID>",
             line,
         )
+        # Normalize release output (snapshot oid, artifact counts, release paths)
+        line = re.sub(r"Released [0-9a-f]{12} →", "Released <SNAPSHOT_OID> →", line)
+        line = re.sub(r"\(\d+ artifacts?\)", "(<N> artifacts)", line)
+        line = re.sub(r"\.synix/releases/\S+", ".synix/releases/<RELEASE_PATH>", line)
         # Normalize OpenAI batch IDs (batch_<hex> from real API runs)
         line = re.sub(r"\bbatch_[A-Za-z0-9_]+\b", "batch_<OPENAI_ID>", line)
         # Strip trailing whitespace
