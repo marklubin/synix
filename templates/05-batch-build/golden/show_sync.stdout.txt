@@ -3,12 +3,12 @@ Layer: team_summary (L2)  Type: team_summary
 
                                                       Team Summary
 
-This team brings together complementary strengths that create a well-rounded collaborative unit. Alice's methodical
-backend expertise and problem-solving resilience provide a strong technical foundation, while Bob's user-centered design
-philosophy and creative hands-on approach ensure that solutions are both innovative and accessible. Carol's analytical
-rigor in complex systems thinking, combined with her mentorship orientation and commitment to inclusive collaboration,
-helps the team maintain focus on impact while fostering psychological safety and knowledge-sharing. Together, they
-naturally gravitate toward a collaborative model where Alice tackles technical architecture, Bob translates needs into
-intuitive experiences, and Carol ensures solutions are grounded in rigorous analysis and team cohesion. Their collective
-strength lies in balancing technical depth, user empathy, and inclusive problem-solving—enabling them to build products
-that are simultaneously robust, accessible, and thoughtfully designed.
+This team combines complementary analytical and creative strengths that position them well for complex, user-focused
+work. Alice and Carol both bring methodical, analytical approaches grounded in technical expertise—Alice in distributed
+systems and Carol in data-driven climate modeling—while Bob introduces a user-centric, creative perspective that ensures
+their solutions remain accessible and innovative. Their natural collaboration pattern likely centers on Carol and Alice
+driving technical problem-solving and deep analysis, while Bob advocates for user needs and practical implementation,
+with all three leveraging their communication skills to bridge technical and human-centered concerns. Collectively, they
+excel at tackling multifaceted challenges that require both rigorous analytical thinking and thoughtful design,
+supported by a shared commitment to collaboration, knowledge-sharing, and inclusive problem-solving that Carol actively
+models through her mentoring approach.

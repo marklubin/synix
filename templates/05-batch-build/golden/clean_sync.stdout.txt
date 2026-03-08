@@ -1,1 +1,2 @@
+Cleaned: work (<CASE_DIR>/.synix/work)
 Cleaned: legacy build (build)

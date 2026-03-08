@@ -42,11 +42,12 @@ def verify_demos() -> None:
         print("No demo cases found.")
         sys.exit(1)
 
-    # Clean stale build directories (e.g. left behind by pytest)
+    # Clean stale build/state directories (e.g. left behind by pytest)
     for case_dir in cases:
-        build_dir = case_dir / "build"
-        if build_dir.exists():
-            shutil.rmtree(build_dir)
+        for stale_dir in ("build", ".synix"):
+            d = case_dir / stale_dir
+            if d.exists():
+                shutil.rmtree(d)
 
     failed = []
     for case_dir in cases:

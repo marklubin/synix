@@ -1,1 +1,1 @@
-Cleaned: work (<CASE_DIR>/.synix/work)
+Nothing to clean.

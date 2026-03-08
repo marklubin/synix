@@ -216,4 +216,4 @@ class TestFixCommand:
             ],
         )
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "Build directory" in result.output
+        assert "not found" in result.output.lower() or "No snapshot store" in result.output

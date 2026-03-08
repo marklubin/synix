@@ -109,7 +109,7 @@ class TestValidateCommand:
             ],
         )
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "Build directory" in result.output
+        assert "not found" in result.output.lower() or "No snapshot store" in result.output
 
     def test_validate_no_violations(self, runner, simple_pipeline, build_dir):
         """Empty build dir -> no violations."""

@@ -74,8 +74,18 @@ def validate(pipeline_path: str, build_dir: str | None, output_json: bool):
         pipeline.build_dir = build_dir
 
     build_path = Path(pipeline.build_dir)
-    if not build_path.exists():
-        console.print(f"[red]Build directory not found:[/red] {build_path}\nRun [bold]synix build[/bold] first.")
+
+    # Check for .synix/ snapshot store (primary) or legacy build/ directory
+    from synix.build.refs import synix_dir_for_build_dir
+
+    try:
+        synix_dir = synix_dir_for_build_dir(build_path)
+        has_synix = synix_dir.exists()
+    except ValueError:
+        has_synix = False
+
+    if not has_synix and not build_path.exists():
+        console.print("[red]No snapshot store found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
     _run_validate_mode(pipeline, build_path, output_json)

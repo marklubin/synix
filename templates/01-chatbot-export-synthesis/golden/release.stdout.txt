@@ -5,5 +5,4 @@ Released <SNAPSHOT_OID> → local
 
   ● context-doc  flat_file  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>
 (<N> artifacts)
-  ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (12
-artifacts)
+  ● search  synix_search  →  <CASE_DIR>/.synix/releases/<RELEASE_PATH>  (<N> artifacts)

@@ -24,10 +24,11 @@ def synix_bin():
 
 def test_demo_run_replays_from_cassettes(tmp_path, synix_bin):
     """synix demo run replays the team_report case from cassettes and passes goldens."""
-    # Clean stale build dir (may be left by other tests)
-    build_dir = CASE_DIR / "build"
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
+    # Clean stale state dirs (may be left by other tests)
+    for stale_dir in ("build", ".synix"):
+        d = CASE_DIR / stale_dir
+        if d.exists():
+            shutil.rmtree(d)
 
     # Run in a subprocess so env vars are isolated
     result = subprocess.run(

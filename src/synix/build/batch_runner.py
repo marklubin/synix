@@ -29,8 +29,12 @@ from synix.build.runner import (
     _invoke_transform_execute,
     _invoke_transform_split,
     _layer_fully_cached,
+    _record_snapshot_artifact,
+    _record_snapshot_projections,
+    _snapshot_parent_labels,
 )
 from synix.build.snapshot_view import SnapshotArtifactCache
+from synix.build.snapshots import commit_build_snapshot, start_build_transaction
 from synix.core.config import LLMConfig
 from synix.core.models import Artifact, Pipeline, Source, Transform
 
@@ -135,21 +139,41 @@ def batch_run(
             )
 
     synix_dir = synix_dir_for_build_dir(build_dir)
+    synix_dir.mkdir(parents=True, exist_ok=True)
+    (synix_dir / "work").mkdir(parents=True, exist_ok=True)
     store = SnapshotArtifactCache(synix_dir)
+    snapshot_txn = start_build_transaction(pipeline, build_dir, build_id)
     layer_artifacts: dict[str, list] = {}
 
     result = BatchRunResult(status="collecting", build_id=build_id)
     result.layers_completed = list(manifest.layers_completed)
+
+    def _record_layer_artifacts(layer, inputs=None):
+        """Record all artifacts for a completed layer into the snapshot transaction."""
+        for art in layer_artifacts.get(layer.name, []):
+            if isinstance(layer, Source):
+                parent_labels = []
+            else:
+                parent_labels = _snapshot_parent_labels(art, inputs or [], store)
+            _record_snapshot_artifact(
+                snapshot_txn,
+                art,
+                layer_name=layer.name,
+                layer_level=layer._level,
+                parent_labels=parent_labels,
+            )
 
     # --- DAG walk ---
     for layer in build_order:
         if layer.name in manifest.layers_completed:
             # Already done in previous run — load artifacts from store
             layer_artifacts[layer.name] = store.list_artifacts(layer.name)
+            _record_layer_artifacts(layer)
             continue
 
         if isinstance(layer, Source):
             _run_source_layer(layer, pipeline, src_dir, store, layer_artifacts)
+            _record_layer_artifacts(layer)
             manifest.layers_completed.append(layer.name)
             manifest.current_layer = None
             batch_state.save_manifest(manifest)
@@ -163,6 +187,7 @@ def batch_run(
 
             if mode == "sync":
                 _run_sync_transform(layer, pipeline, src_dir, build_dir, inputs, store, layer_artifacts)
+                _record_layer_artifacts(layer, inputs)
                 manifest.layers_completed.append(layer.name)
                 manifest.current_layer = None
                 batch_state.save_manifest(manifest)
@@ -180,6 +205,7 @@ def batch_run(
                 )
 
                 if batch_result == "completed":
+                    _record_layer_artifacts(layer, inputs)
                     manifest.layers_completed.append(layer.name)
                     manifest.current_layer = None
                     batch_state.save_manifest(manifest)
@@ -202,6 +228,7 @@ def batch_run(
                             poll_interval,
                         )
                         if completed:
+                            _record_layer_artifacts(layer, inputs)
                             manifest.layers_completed.append(layer.name)
                             manifest.current_layer = None
                             batch_state.save_manifest(manifest)
@@ -228,6 +255,7 @@ def batch_run(
                             poll_interval,
                         )
                         if completed:
+                            _record_layer_artifacts(layer, inputs)
                             manifest.layers_completed.append(layer.name)
                             manifest.current_layer = None
                             batch_state.save_manifest(manifest)
@@ -240,7 +268,7 @@ def batch_run(
                         result.total_time = time.time() - start_time
                         return result
 
-    # All layers done
+    # All layers done — commit snapshot
     errors = batch_state.get_errors()
     if errors:
         result.status = "completed_with_errors"
@@ -250,6 +278,9 @@ def batch_run(
     else:
         result.status = "completed"
         manifest.status = "completed"
+
+    _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
+    commit_build_snapshot(snapshot_txn)
 
     result.layers_completed = list(manifest.layers_completed)
     result.batches_submitted = list(batch_state.get_batches().keys())

@@ -290,12 +290,14 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Drop LLM stats lines entirely (presence varies based on whether LLM calls occurred)
         if re.search(r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+", line):
             continue
-        # Normalize Python traceback file paths (vary between local and CI)
+        # Normalize Python traceback file paths and line numbers (vary between local and CI)
         line = re.sub(
             r'(File ")[^"]*/(src/synix/)',
             r"\1<PKG>/\2",
             line,
         )
+        # Normalize line numbers in traceback File references (shift with edits)
+        line = re.sub(r'(File "[^"]+", line )\d+', r"\1<N>", line)
         # Normalize cassette miss keys (hash varies by environment)
         line = re.sub(
             r"Cassette miss for key [0-9a-f]+\.\.\.",
@@ -371,11 +373,18 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"Released [0-9a-f]{12} →", "Released <SNAPSHOT_OID> →", line)
         line = re.sub(r"\(\d+ artifacts?\)", "(<N> artifacts)", line)
         line = re.sub(r"\.synix/releases/\S+", ".synix/releases/<RELEASE_PATH>", line)
+        # Normalize tempfile names (e.g. tmplg2345ms.tmp from atomic_write errors)
+        line = re.sub(r"\btmp[a-z0-9_]+\.tmp\b", "tmp<TEMPFILE>.tmp", line)
         # Normalize OpenAI batch IDs (batch_<hex> from real API runs)
         line = re.sub(r"\bbatch_[A-Za-z0-9_]+\b", "batch_<OPENAI_ID>", line)
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)
+    # Re-join and fix cross-line wrapping before final normalization passes
+    joined = "\n".join(normalized)
+    # Fix Rich line-wrapping that splits "(N\nartifacts)" across lines
+    joined = re.sub(r"\((\d+)\s*\n\s*artifacts?\)", r"(<N> artifacts)", joined)
+    normalized = joined.splitlines()
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
     # Collapse Python tracebacks to just File lines + exception (body varies by Python version)
