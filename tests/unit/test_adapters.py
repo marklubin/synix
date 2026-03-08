@@ -266,6 +266,115 @@ class TestSynixSearchAdapter:
 
         assert adapter.verify(receipt, tmp_path) is False
 
+    def test_search_surface_sources_filter_correctly(self, tmp_path):
+        """input_artifacts selects only the declared subset, not all closure artifacts."""
+        artifacts = {
+            "ep-1": _make_artifact("ep-1", content="Episode one", layer_name="episodes"),
+            "ep-2": _make_artifact("ep-2", content="Episode two", layer_name="episodes"),
+            "ep-3": _make_artifact("ep-3", content="Episode three", layer_name="episodes"),
+            "rollup-1": _make_artifact("rollup-1", content="Rollup one", layer_name="rollups", layer_level=2),
+            "core-1": _make_artifact("core-1", content="Core memory", layer_name="core", layer_level=3),
+        }
+        closure = _make_closure(artifacts=artifacts)
+        # Only surface 3 of 5 artifacts
+        declaration = _make_search_declaration(input_artifacts=["ep-1", "rollup-1", "core-1"])
+
+        adapter = SynixSearchAdapter()
+        plan = adapter.plan(closure, declaration)
+        assert plan.artifacts_count == 3
+
+        receipt = adapter.apply(plan, tmp_path)
+        assert receipt.artifacts_applied == 3
+
+        conn = sqlite3.connect(str(tmp_path / "search.db"))
+        rows = conn.execute("SELECT label FROM search_index ORDER BY label").fetchall()
+        conn.close()
+
+        indexed_labels = {row[0] for row in rows}
+        assert indexed_labels == {"ep-1", "rollup-1", "core-1"}
+        # ep-2 and ep-3 must NOT be indexed
+        assert "ep-2" not in indexed_labels
+        assert "ep-3" not in indexed_labels
+
+    def test_search_apply_nonempty_release_output(self, tmp_path):
+        """After apply(), search.db has non-empty FTS5 index, provenance, and metadata."""
+        artifacts = {
+            "ep-1": _make_artifact("ep-1", content="First episode content", provenance_chain=["ep-1", "tx-raw"]),
+            "ep-2": _make_artifact("ep-2", content="Second episode content", provenance_chain=["ep-2", "tx-raw"]),
+        }
+        closure = _make_closure(artifacts=artifacts)
+        declaration = _make_search_declaration(input_artifacts=["ep-1", "ep-2"])
+
+        adapter = SynixSearchAdapter()
+        plan = adapter.plan(closure, declaration)
+        receipt = adapter.apply(plan, tmp_path)
+
+        assert receipt.status == "success"
+
+        conn = sqlite3.connect(str(tmp_path / "search.db"))
+
+        # FTS5 index is non-empty and contains actual content
+        fts_count = conn.execute("SELECT COUNT(*) FROM search_index").fetchone()[0]
+        assert fts_count == 2
+        contents = conn.execute("SELECT content FROM search_index ORDER BY label").fetchall()
+        assert all(row[0] != "" for row in contents)
+
+        # Provenance chains are populated for every indexed artifact
+        prov_count = conn.execute("SELECT COUNT(*) FROM provenance_chains").fetchone()[0]
+        assert prov_count == 2
+        prov_rows = conn.execute("SELECT label, chain FROM provenance_chains ORDER BY label").fetchall()
+        for label, chain_json in prov_rows:
+            chain = json.loads(chain_json)
+            assert len(chain) >= 1, f"provenance chain for {label} should be non-empty"
+            assert chain[0] == label, f"provenance chain for {label} should start with itself"
+
+        # Release metadata is populated with all required keys
+        meta_rows = dict(conn.execute("SELECT key, value FROM release_metadata").fetchall())
+        assert len(meta_rows) >= 4
+        for required_key in ("snapshot_oid", "manifest_oid", "pipeline_name", "released_at"):
+            assert required_key in meta_rows, f"release_metadata missing key {required_key!r}"
+            assert meta_rows[required_key] != "", f"release_metadata[{required_key!r}] should not be empty"
+
+        conn.close()
+
+    def test_search_apply_empty_input_artifacts(self, tmp_path):
+        """Declaration with input_artifacts=[] produces a valid but empty index."""
+        artifacts = {
+            "ep-1": _make_artifact("ep-1", content="Should not be indexed"),
+        }
+        closure = _make_closure(artifacts=artifacts)
+        declaration = ProjectionDeclaration(
+            name="search",
+            adapter="synix_search",
+            input_artifacts=[],
+            config={"modes": ["fulltext"]},
+            config_fingerprint="sha256:cfg1",
+        )
+
+        adapter = SynixSearchAdapter()
+        plan = adapter.plan(closure, declaration)
+        assert plan.artifacts_count == 0
+
+        receipt = adapter.apply(plan, tmp_path)
+        assert receipt.status == "success"
+        assert receipt.artifacts_applied == 0
+
+        db_path = tmp_path / "search.db"
+        assert db_path.exists()
+
+        conn = sqlite3.connect(str(db_path))
+        fts_count = conn.execute("SELECT COUNT(*) FROM search_index").fetchone()[0]
+        assert fts_count == 0
+
+        prov_count = conn.execute("SELECT COUNT(*) FROM provenance_chains").fetchone()[0]
+        assert prov_count == 0
+
+        # Release metadata should still be populated even with no artifacts
+        meta_rows = dict(conn.execute("SELECT key, value FROM release_metadata").fetchall())
+        assert "snapshot_oid" in meta_rows
+        assert "pipeline_name" in meta_rows
+        conn.close()
+
     def test_search_apply_atomic_swap(self, tmp_path):
         """If shadow build succeeds, old db is replaced atomically."""
         closure = _make_closure()

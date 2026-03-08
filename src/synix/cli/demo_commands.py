@@ -384,6 +384,9 @@ def _normalize_output(text: str, case_path: Path) -> str:
     joined = "\n".join(normalized)
     # Fix Rich line-wrapping that splits "(N\nartifacts)" across lines
     joined = re.sub(r"\((\d+)\s*\n\s*artifacts?\)", r"(<N> artifacts)", joined)
+    # Fix Rich line-wrapping that splits release "→  path" across lines
+    # e.g., "● context-doc  flat_file  →\n<CASE_DIR>/..." → single line
+    joined = re.sub(r"→\s*\n\s*", "→  ", joined)
     normalized = joined.splitlines()
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
