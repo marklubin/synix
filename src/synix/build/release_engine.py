@@ -140,6 +140,18 @@ def execute_release(
     # 2. Build closure
     closure = ReleaseClosure.from_snapshot(synix_path, snapshot_oid)
 
+    # Warn if releasing a snapshot that had DLQ'd artifacts
+    if closure.dlq_entries:
+        count = len(closure.dlq_entries)
+        layers = {e.get("layer_name", "unknown") for e in closure.dlq_entries}
+        logger.warning(
+            "Releasing snapshot with %d DLQ'd artifact(s) in layer(s): %s. "
+            "Downstream artifacts were built from incomplete inputs. "
+            "Inspect the manifest or build log for details.",
+            count,
+            ", ".join(sorted(layers)),
+        )
+
     # 3. Resolve target directory
     release_dir = _release_dir(synix_path, release_name)
     target_path = Path(target) if target else release_dir

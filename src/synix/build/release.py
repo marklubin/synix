@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from synix.build.object_store import ObjectStore
@@ -73,6 +73,7 @@ class ReleaseClosure:
     created_at: str
     artifacts: dict[str, ResolvedArtifact]  # label -> resolved
     projections: dict[str, ProjectionDeclaration]
+    dlq_entries: list[dict[str, str]] = field(default_factory=list)
 
     @classmethod
     def from_snapshot(cls, synix_dir: str | Path, snapshot_oid: str) -> ReleaseClosure:
@@ -138,6 +139,7 @@ class ReleaseClosure:
             created_at=snapshot["created_at"],
             artifacts=resolved_artifacts,
             projections=projections,
+            dlq_entries=manifest.get("dlq", []),
         )
 
     @classmethod

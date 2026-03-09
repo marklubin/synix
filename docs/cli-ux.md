@@ -22,7 +22,7 @@ Every CLI command must show live interactive progress. The user must never stare
 
 ## Per-Command UX
 
-- **`synix build`**: Rich progress bars per layer. Show: layer name, artifact count, built/cached/skipped. Final summary table with timing. Report snapshot oid and suggest `synix release` as next step.
+- **`synix build`**: Rich progress bars per layer. Show: layer name, artifact count, built/cached/skipped. Final summary table with timing. Report snapshot oid and suggest `synix release` as next step. When `--dlq` is enabled and artifacts are skipped, show a DLQ column in the summary table and a DLQ total line.
 - **`synix release`**: Show each adapter's plan (new/removed/unchanged artifacts), then apply progress. Final receipt summary.
 - **`synix revert`**: Same output as `synix release` — it is a release of an older snapshot.
 - **`synix search`**: Results as Rich panels — layer label colored by level, content snippet, artifact label. Provenance chain as indented tree below each result. Requires `--release <name>` when multiple releases exist.
@@ -46,3 +46,41 @@ Every CLI command must show live interactive progress. The user must never stare
 - All errors through Rich console with clear messages
 - Never a raw Python traceback in normal operation
 - Every command and option has clear `--help` text
+
+## Dead Letter Queue (`--dlq`)
+
+By default, all LLM errors during `synix build` are fatal — the build aborts immediately. Pass `--dlq` to enable error classification:
+
+```bash
+synix build pipeline.py --dlq
+```
+
+When `--dlq` is enabled:
+- **Content filter** and **input too large** errors skip the failing artifact and continue
+- **Auth errors** and **unknown errors** remain fatal
+- Skipped artifacts are recorded in the DLQ and surfaced in:
+  - The CLI build summary (per-layer DLQ column + total line)
+  - The JSONL build log (`.synix/logs/{run_id}.jsonl`)
+  - The snapshot manifest (`dlq` key)
+- Downstream layers build from the remaining (non-DLQ'd) inputs
+
+When a build fails **without** `--dlq` on a recoverable error, the CLI prints a hint:
+
+```
+Hint: This error is recoverable. Re-run with --dlq to skip failing
+artifacts and continue building:
+  synix build pipeline.py --dlq
+```
+
+### Partial build semantics
+
+A build with DLQ entries produces a **valid snapshot** — all artifacts that were built have correct provenance and content-addressed hashes. However, downstream artifacts (e.g., monthly rollups, core memory) were built from a reduced input set. Their provenance accurately reflects the inputs they received, but does not indicate that other inputs were skipped.
+
+DLQ entries are persisted in the snapshot manifest. When releasing a snapshot with DLQ entries, `synix release` logs a warning:
+
+```
+WARNING: Releasing snapshot with N DLQ'd artifact(s) in layer(s): episodes.
+Downstream artifacts were built from incomplete inputs.
+```
+
+To inspect DLQ'd artifacts after a build, check the JSONL log or read the manifest directly.

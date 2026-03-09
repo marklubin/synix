@@ -35,6 +35,7 @@ src/synix/
 │   ├── refs.py            # RefStore — git-like refs (heads/main, runs/*, releases/*)
 │   ├── snapshots.py       # BuildTransaction + commit_build_snapshot
 │   ├── snapshot_view.py   # SnapshotView — ref-resolved reads from .synix/objects/
+│   ├── error_classifier.py # Error classification — DLQ vs fatal, DeadLetterQueue
 │   ├── fingerprint.py     # Build fingerprints — synix:transform:v2 scheme
 │   ├── llm_transforms.py  # Bundled memory transforms + shared LLM helper functions
 │   ├── parse_transform.py # Source parser — ChatGPT/Claude JSON → transcript artifacts
@@ -91,6 +92,7 @@ src/synix/
 
 ```bash
 synix build pipeline.py                          # Produce immutable snapshot in .synix/
+synix build pipeline.py --dlq                    # Build with dead letter queue (skip content-filter errors)
 synix plan pipeline.py                           # Dry-run — per-artifact rebuild/cached counts
 synix plan pipeline.py --explain-cache           # Plan with cache decision reasons
 synix release HEAD --to local                    # Materialize projections to a named release

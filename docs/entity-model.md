@@ -148,6 +148,32 @@ Each artifact is stored as two objects in `.synix/objects/`:
 
 Provenance is embedded in each artifact object via `parent_labels` and `input_ids`. There is no separate `provenance.json` file — provenance chains are walked by resolving `parent_labels` transitively through the object store.
 
+**Manifest object** — written per build, referenced by snapshot:
+
+```json
+{
+  "type": "manifest",
+  "schema_version": 1,
+  "pipeline_name": "my-pipeline",
+  "pipeline_fingerprint": "sha256:abc...",
+  "artifacts": [
+    {"label": "t-chatgpt-conv-001", "oid": "sha256:def..."},
+    ...
+  ],
+  "projections": { ... },
+  "dlq": [
+    {
+      "artifact_desc": "t-chatgpt-conv-042",
+      "error_type": "RuntimeError",
+      "error_message": "content_filter rejected prompt",
+      "layer_name": "episodes"
+    }
+  ]
+}
+```
+
+The `dlq` key is only present when artifacts were skipped during a `--dlq` build. Downstream artifacts built from incomplete inputs have correct provenance for the inputs they received, but the manifest's `dlq` array is the authoritative record of what was skipped and why.
+
 ## Cache/Rebuild Logic
 
 Cache decisions use the `SnapshotArtifactCache`, which reads from `.synix/objects/` via `SnapshotView`. The logic compares build fingerprints (inputs, prompt, model config, transform source) against what is stored in the current snapshot.
