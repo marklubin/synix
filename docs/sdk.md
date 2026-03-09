@@ -43,9 +43,11 @@ This creates the `.synix/` directory structure and (if a pipeline is provided) c
 ### 2. Open an Existing Project
 
 ```python
-project = synix.open("~/my-project")  # walks upward to find .synix/
-project = synix.open()                # uses current directory
+project = synix.open_project("~/my-project")  # walks upward to find .synix/
+project = synix.open_project()                 # uses current directory
 ```
+
+> **Note**: `synix.open()` is a deprecated alias for `synix.open_project()`. Prefer `open_project` to avoid shadowing Python's builtin `open`.
 
 ### 3. Manage Sources
 

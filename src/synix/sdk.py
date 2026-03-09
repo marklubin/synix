@@ -7,9 +7,11 @@ Wraps existing internals (never duplicates them).
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import shutil
+import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +50,10 @@ class EmbeddingRequiredError(SdkError):
     """embedding_config declared but embeddings missing at query time."""
 
 
+class ProjectionNotFoundError(SdkError):
+    """Named projection doesn't exist in the manifest."""
+
+
 class PipelineRequiredError(SdkError):
     """Operation needs a pipeline but none is available."""
 
@@ -82,21 +88,6 @@ class SdkArtifact:
             layer_level=art.layer_level,
             provenance=list(art.provenance_chain),
             metadata=dict(art.metadata),
-        )
-
-    @classmethod
-    def _from_snapshot_dict(cls, data: dict) -> SdkArtifact:
-        """Construct from a SnapshotView.get_artifact() dict."""
-        metadata = data.get("metadata", {})
-        return cls(
-            label=data["label"],
-            artifact_type=data["artifact_type"],
-            content=data.get("content", ""),
-            artifact_id=data["artifact_id"],
-            layer=metadata.get("layer_name", ""),
-            layer_level=metadata.get("layer_level", 0),
-            provenance=data.get("parent_labels", []),
-            metadata=metadata,
         )
 
 
@@ -163,12 +154,16 @@ def _discover_synix_dir(path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def open(path: str | Path = ".") -> Project:
+def open_project(path: str | Path = ".") -> Project:
     """Open an existing synix project. Walks upward to find .synix/."""
     p = Path(path).resolve()
     synix_dir = _discover_synix_dir(p)
     project_root = synix_dir.parent
     return Project(synix_dir, project_root)
+
+
+# Deprecated alias — shadows Python builtin, use open_project() instead
+open = open_project
 
 
 def init(path: str | Path, *, pipeline=None) -> Project:
@@ -322,7 +317,8 @@ class Release:
     def _release_dir(self) -> Path:
         if self._is_scratch:
             if self._scratch_dir is None:
-                self._scratch_dir = self._synix_dir / "work" / "scratch_release"
+                scratch_id = uuid.uuid4().hex[:12]
+                self._scratch_dir = self._synix_dir / "work" / f"scratch_{scratch_id}"
                 self._scratch_dir.mkdir(parents=True, exist_ok=True)
                 # Materialize scratch release
                 from synix.build.release_engine import execute_release
@@ -330,7 +326,7 @@ class Release:
                 execute_release(
                     self._synix_dir,
                     ref="HEAD",
-                    release_name="_scratch",
+                    release_name=f"_scratch_{scratch_id}",
                     target=self._scratch_dir,
                 )
             return self._scratch_dir
@@ -353,8 +349,13 @@ class Release:
                 # For scratch, resolve from HEAD
                 self._closure = ReleaseClosure.from_ref(self._synix_dir, "HEAD")
             else:
-                receipt_data = json.loads(receipt_path.read_text(encoding="utf-8"))
-                snapshot_oid = receipt_data["snapshot_oid"]
+                try:
+                    receipt_data = json.loads(receipt_path.read_text(encoding="utf-8"))
+                    snapshot_oid = receipt_data["snapshot_oid"]
+                except (KeyError, json.JSONDecodeError) as exc:
+                    raise ReleaseNotFoundError(
+                        f"Release {self._name!r} has a malformed receipt at {receipt_path}"
+                    ) from exc
                 self._closure = ReleaseClosure.from_snapshot(self._synix_dir, snapshot_oid)
         return self._closure
 
@@ -501,24 +502,8 @@ class Release:
                 result.append(SdkArtifact._from_resolved(chain_art))
         return result
 
-    def flat_file(self, name: str) -> str:
-        """Return the content of a flat file projection."""
-        release_dir = self._ensure_release_exists()
-        closure = self._get_closure()
-
-        # Find flat_file projection by name
-        for proj_name, decl in closure.projections.items():
-            if decl.adapter == "flat_file" and proj_name == name:
-                output_path = decl.config.get("output_path", "context.md")
-                file_path = release_dir / Path(output_path).name
-                if file_path.exists():
-                    return file_path.read_text(encoding="utf-8")
-                raise FileNotFoundError(f"Flat file {output_path!r} not found at {file_path}")
-
-        raise SearchNotAvailableError(f"Flat file projection {name!r} not found")
-
-    def flat_file_path(self, name: str) -> Path:
-        """Return the path to a flat file projection."""
+    def _resolve_flat_file_path(self, name: str) -> Path:
+        """Resolve a flat file projection to its output path on disk."""
         release_dir = self._ensure_release_exists()
         closure = self._get_closure()
 
@@ -528,9 +513,21 @@ class Release:
                 file_path = release_dir / Path(output_path).name
                 if file_path.exists():
                     return file_path
-                raise FileNotFoundError(f"Flat file {output_path!r} not found at {file_path}")
+                raise ArtifactNotFoundError(
+                    f"Flat file {output_path!r} not materialized at {file_path}. "
+                    f"Run release to materialize projections."
+                )
 
-        raise SearchNotAvailableError(f"Flat file projection {name!r} not found")
+        available = [n for n, d in closure.projections.items() if d.adapter == "flat_file"]
+        raise ProjectionNotFoundError(f"Flat file projection {name!r} not found. Available: {available}")
+
+    def flat_file(self, name: str) -> str:
+        """Return the content of a flat file projection."""
+        return self._resolve_flat_file_path(name).read_text(encoding="utf-8")
+
+    def flat_file_path(self, name: str) -> Path:
+        """Return the path to a flat file projection."""
+        return self._resolve_flat_file_path(name)
 
     def receipt(self) -> dict:
         """Return the release receipt as a dict."""
@@ -625,7 +622,11 @@ class Project:
     # -- Source management --
 
     def source(self, name: str) -> SdkSource:
-        """Get a source manager for a named pipeline source."""
+        """Get a source manager for a named pipeline source.
+
+        Raises PipelineRequiredError if no pipeline is set, or SdkError if the
+        named source doesn't exist in the pipeline definition.
+        """
         if self._pipeline is None:
             raise PipelineRequiredError(
                 "Pipeline required for source management. Call set_pipeline() or build() first."
@@ -642,9 +643,8 @@ class Project:
                     source_dir = self._project_root / self._pipeline.source_dir / name
                 return SdkSource(source_dir)
 
-        # Fallback: create source dir under pipeline.source_dir
-        source_dir = self._project_root / self._pipeline.source_dir / name
-        return SdkSource(source_dir)
+        declared = [l.name for l in self._pipeline.layers if isinstance(l, SourceLayer)]
+        raise SdkError(f"Source {name!r} not declared in pipeline. Declared sources: {declared}")
 
     # -- Build & release --
 
@@ -664,7 +664,10 @@ class Project:
             timeout: Per-request LLM timeout in seconds. Overrides pipeline llm_config.timeout.
             dry_run: If True, return plan counts without building.
         """
-        resolved = self._resolve_pipeline(pipeline)
+        original = self._resolve_pipeline(pipeline)
+
+        # Deep-copy to avoid mutating the caller's pipeline object
+        resolved = copy.deepcopy(original)
 
         # Apply timeout override to pipeline's LLM config
         if timeout is not None:
@@ -706,7 +709,6 @@ class Project:
         from synix.build.runner import run
 
         result = run(resolved, concurrency=concurrency)
-        self._pipeline = resolved
         return BuildResult(
             built=result.built,
             cached=result.cached,

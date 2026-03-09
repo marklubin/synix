@@ -19,6 +19,7 @@ from synix.sdk import (
     ArtifactNotFoundError,
     EmbeddingRequiredError,
     PipelineRequiredError,
+    ProjectionNotFoundError,
     Release,
     ReleaseNotFoundError,
     SdkArtifact,
@@ -682,7 +683,7 @@ class TestFlatFiles:
 
     def test_flat_file_not_found(self, sdk_project: Path):
         release = synix.open(sdk_project).release("local")
-        with pytest.raises(SearchNotAvailableError):
+        with pytest.raises(ProjectionNotFoundError):
             release.flat_file("nonexistent")
 
 

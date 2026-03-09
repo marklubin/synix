@@ -25,10 +25,12 @@ from synix.sdk import (  # noqa: F401
     SDK_VERSION,
     BuildResult,
     Project,
+    ProjectionNotFoundError,
     Release,
     SdkArtifact,
     SdkSearchResult,
     SearchHandle,
     init,
-    open,
+    open,  # deprecated alias — prefer open_project
+    open_project,
 )
