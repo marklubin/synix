@@ -144,7 +144,7 @@ def run(
         build_dir=synix_dir,
         progress=progress,
     )
-    result.dlq._slogger = slogger
+    result.dlq.slogger = slogger
     snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
     store = SnapshotArtifactCache(snapshot_txn.synix_dir)
 
@@ -198,6 +198,7 @@ def run(
             transform_fp = layer.compute_fingerprint(transform_config)
 
             layer_built: list[Artifact] = []
+            dlq_before = len(result.dlq)
 
             if _layer_fully_cached(layer, inputs, store, transform_fp):
                 # All cached — load existing artifacts
@@ -352,6 +353,7 @@ def run(
                                 raise
 
             layer_artifacts[layer.name] = layer_built
+            stats.dlq_count = len(result.dlq) - dlq_before
 
         stats.time_seconds = time.time() - layer_start
         result.layer_stats.append(stats)
@@ -381,6 +383,18 @@ def run(
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
     if result.validation is None or result.validation.passed:
+        # Persist DLQ entries in the manifest so post-build inspection
+        # can explain missing artifacts.
+        if len(result.dlq) > 0:
+            snapshot_txn.dlq_entries = [
+                {
+                    "artifact_desc": e.artifact_desc,
+                    "error_type": e.error_type,
+                    "error_message": e.error_message,
+                    "layer_name": e.layer_name,
+                }
+                for e in result.dlq.entries
+            ]
         snapshot_txn.assert_complete(layer_artifacts)
         snapshot_info = commit_build_snapshot(snapshot_txn)
         result.snapshot_oid = snapshot_info["snapshot_oid"]
@@ -395,15 +409,7 @@ def run(
     result.total_time = time.time() - start_time
     if len(result.dlq) > 0:
         logger.warning("Build completed with DLQ entries: %s", result.dlq.summary())
-        slogger.run_log.dlq_entries = [
-            {
-                "artifact_desc": e.artifact_desc,
-                "error_type": e.error_type,
-                "error_message": e.error_message,
-                "layer_name": e.layer_name,
-            }
-            for e in result.dlq.entries
-        ]
+        slogger.run_log.dlq_entries = snapshot_txn.dlq_entries
     slogger.run_finish(result.total_time)
     result.run_log = slogger.run_log.to_dict()
     return result

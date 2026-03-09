@@ -272,3 +272,133 @@ class TestContentFilterDLQ:
 
         assert len(result.dlq) == 1
         assert result.built > 0
+
+    def test_dlq_count_in_layer_stats(self, pipeline_obj, source_dir, build_dir, monkeypatch):
+        """LayerStats.dlq_count is correctly incremented for affected layers."""
+        filter_count = [0]
+
+        class MockResponse:
+            def __init__(self, text):
+                self.content = [MagicMock(text=text)]
+                self.model = "claude-sonnet-4-20250514"
+                self.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        def mock_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            content = messages[0].get("content", "") if messages else ""
+
+            if "episode summary" in content.lower() or "summarizing a conversation" in content.lower():
+                if filter_count[0] == 0:
+                    filter_count[0] += 1
+                    raise RuntimeError("Error code: 400 - content_filter rejected prompt")
+                return MockResponse("Episode summary.")
+            elif "monthly" in content.lower() or "monthly overview" in content.lower():
+                return MockResponse("Monthly overview.")
+            elif "core memory" in content.lower():
+                return MockResponse("## Identity\nEngineer.")
+            return MockResponse("Mock.")
+
+        mock_client = MagicMock()
+        mock_client.messages.create = mock_create
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
+
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
+
+        # Find episodes layer stats
+        episode_stats = next(s for s in result.layer_stats if s.name == "episodes")
+        assert episode_stats.dlq_count == 1
+
+        # Other layers should have 0 DLQ
+        for s in result.layer_stats:
+            if s.name != "episodes":
+                assert s.dlq_count == 0, f"layer {s.name} should have 0 dlq_count"
+
+    def test_dlq_persisted_in_manifest(self, pipeline_obj, source_dir, build_dir, monkeypatch):
+        """DLQ entries are persisted in the snapshot manifest for post-build inspection."""
+        filter_count = [0]
+
+        class MockResponse:
+            def __init__(self, text):
+                self.content = [MagicMock(text=text)]
+                self.model = "claude-sonnet-4-20250514"
+                self.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        def mock_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            content = messages[0].get("content", "") if messages else ""
+
+            if "episode summary" in content.lower() or "summarizing a conversation" in content.lower():
+                if filter_count[0] == 0:
+                    filter_count[0] += 1
+                    raise RuntimeError("Error code: 400 - content_filter rejected prompt")
+                return MockResponse("Episode summary.")
+            elif "monthly" in content.lower() or "monthly overview" in content.lower():
+                return MockResponse("Monthly overview.")
+            elif "core memory" in content.lower():
+                return MockResponse("## Identity\nEngineer.")
+            return MockResponse("Mock.")
+
+        mock_client = MagicMock()
+        mock_client.messages.create = mock_create
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
+
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
+
+        assert result.manifest_oid is not None
+
+        # Read the manifest from the object store
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import synix_dir_for_build_dir
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        store = ObjectStore(synix_dir)
+        manifest = store.get_json(result.manifest_oid)
+
+        # Manifest should contain DLQ entries
+        assert "dlq" in manifest, "Manifest should contain DLQ entries"
+        assert len(manifest["dlq"]) == 1
+        assert manifest["dlq"][0]["layer_name"] == "episodes"
+        assert "content_filter" in manifest["dlq"][0]["error_message"]
+
+    def test_downstream_layers_still_build_with_reduced_inputs(self, pipeline_obj, source_dir, build_dir, monkeypatch):
+        """Downstream layers proceed with available inputs when upstream artifacts are DLQ'd."""
+        filter_count = [0]
+
+        class MockResponse:
+            def __init__(self, text):
+                self.content = [MagicMock(text=text)]
+                self.model = "claude-sonnet-4-20250514"
+                self.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        def mock_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            content = messages[0].get("content", "") if messages else ""
+
+            if "episode summary" in content.lower() or "summarizing a conversation" in content.lower():
+                if filter_count[0] == 0:
+                    filter_count[0] += 1
+                    raise RuntimeError("Error code: 400 - content_filter rejected prompt")
+                return MockResponse("Episode summary.")
+            elif "monthly" in content.lower() or "monthly overview" in content.lower():
+                return MockResponse("Monthly overview of remaining episodes.")
+            elif "core memory" in content.lower():
+                return MockResponse("## Identity\nEngineer.\n\n## Focus\nSystems.")
+            return MockResponse("Mock.")
+
+        mock_client = MagicMock()
+        mock_client.messages.create = mock_create
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
+
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
+
+        # 1 episode DLQ'd, but monthly/core should still build
+        assert len(result.dlq) == 1
+
+        # Monthly and core layers should have built artifacts
+        monthly_stats = next(s for s in result.layer_stats if s.name == "monthly")
+        core_stats = next(s for s in result.layer_stats if s.name == "core")
+        assert monthly_stats.built > 0, "Monthly should build from available episodes"
+        assert core_stats.built > 0, "Core should build from available monthly rollups"
+
+        # Snapshot should be committed (build is considered successful)
+        assert result.snapshot_oid is not None

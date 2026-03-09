@@ -106,7 +106,7 @@ class TestDeadLetterQueue:
 
         fake = FakeLogger()
         dlq = DeadLetterQueue()
-        dlq._slogger = fake
+        dlq.slogger = fake
         dlq.add("ep-42", RuntimeError("content_filter hit"), layer_name="episodes")
 
         assert len(fake.calls) == 1

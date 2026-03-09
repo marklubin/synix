@@ -232,12 +232,16 @@ def build(
     proj_status = {ps.name: ps.status for ps in result.projection_stats}
 
     # Summary table
+    has_dlq = any(s.dlq_count > 0 for s in result.layer_stats)
+
     table = Table(title="Build Summary", box=box.ROUNDED)
     table.add_column("Layer", style="bold", no_wrap=True)
     table.add_column("Level", justify="center")
     table.add_column("Built", justify="right", style="green")
     table.add_column("Cached", justify="right", style="cyan")
     table.add_column("Skipped", justify="right", style="dim")
+    if has_dlq:
+        table.add_column("DLQ", justify="right", style="yellow")
 
     # Determine the last trigger layer for each projection (for showing final status)
     last_trigger_layer: dict[str, str] = {}
@@ -247,13 +251,16 @@ def build(
 
     for stats in result.layer_stats:
         style = get_layer_style(stats.level)
-        table.add_row(
+        row = [
             f"[{style}]{stats.name}[/{style}]",
             str(stats.level),
             str(stats.built),
             str(stats.cached),
             str(stats.skipped),
-        )
+        ]
+        if has_dlq:
+            row.append(str(stats.dlq_count) if stats.dlq_count > 0 else "")
+        table.add_row(*row)
 
         # Inline projection rows after this layer
         for proj_name, proj_type, trigger_type in proj_triggers.get(stats.name, []):
@@ -262,13 +269,16 @@ def build(
                 status_label = proj_status.get(proj_name, trigger_type)
             else:
                 status_label = trigger_type
-            table.add_row(
+            proj_row = [
                 f"  [dim]→[/dim] [magenta]{proj_name}[/magenta]",
                 f"[dim]{proj_type}[/dim]",
                 "",
                 "",
                 f"[dim]{status_label}[/dim]",
-            )
+            ]
+            if has_dlq:
+                proj_row.append("")
+            table.add_row(*proj_row)
 
     console.print()
     console.print(table)

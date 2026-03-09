@@ -55,7 +55,7 @@ class DeadLetterQueue:
     """
 
     entries: list[DeadLetterEntry] = field(default_factory=list)
-    _slogger: object | None = field(default=None, repr=False)
+    slogger: object | None = field(default=None, repr=False)
 
     def add(self, artifact_desc: str, exc: Exception, layer_name: str = "") -> None:
         """Record a skipped artifact."""
@@ -71,8 +71,8 @@ class DeadLetterQueue:
         logger.warning("DLQ: skipped %s — %s: %s", artifact_desc, error_type, exc)
 
         # Write to structured build log if available
-        if self._slogger is not None:
-            self._slogger.artifact_dlq(layer_name, artifact_desc, error_type, error_message)
+        if self.slogger is not None:
+            self.slogger.artifact_dlq(layer_name, artifact_desc, error_type, error_message)
 
     def __len__(self) -> int:
         return len(self.entries)
