@@ -332,6 +332,7 @@ Synix is not a memory store. It's the build system that produces one.
 | [Cache Semantics](docs/cache-semantics.md) | Rebuild trigger matrix, fingerprint scheme |
 | [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API for 50% cost reduction |
 | [Mesh](docs/mesh.md) | *(Experimental)* Distributed builds across machines via Tailscale |
+| [Python SDK](docs/sdk.md) | Programmatic access — init, build, release, search from Python |
 | [CLI UX](docs/cli-ux.md) | Output formatting, color scheme |
 
 ## Links

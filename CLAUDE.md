@@ -26,7 +26,7 @@ src/synix/
 ├── __init__.py            # Public API: Pipeline, Source, Transform, SearchIndex, FlatFile, Artifact
 ├── core/
 │   └── models.py          # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
-├── sdk.py                 # SDK — programmatic access (Project, Release, search, init/open)
+├── sdk.py                 # SDK — programmatic access (Project, Release, search, init/open_project)
 ├── build/
 │   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
 │   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions

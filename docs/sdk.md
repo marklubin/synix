@@ -56,6 +56,8 @@ project.source("exports").list()       # ["conversation.json", "note.txt"]
 project.source("exports").remove("note.txt")
 ```
 
+Source names must match a `Source` layer declared in the pipeline. File labels must be plain filenames — path traversal (`../`, absolute paths, nested paths) is rejected with `SdkError`.
+
 ### 4. Build
 
 ```python
@@ -67,6 +69,8 @@ print(f"Snapshot: {result.snapshot_oid}")
 plan = project.build(pipeline=pipeline, dry_run=True)
 print(f"Would build: {plan.built}, Already cached: {plan.cached}")
 ```
+
+`build()` deep-copies the pipeline before resolving paths, so the caller's pipeline object is never mutated.
 
 ### 5. Release
 
@@ -107,7 +111,7 @@ project.release_to("local")
 Or load from a file:
 
 ```python
-project = synix.open("./workspace")
+project = synix.open_project("./workspace")
 project.load_pipeline("pipeline.py")
 project.build()
 ```

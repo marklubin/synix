@@ -118,16 +118,15 @@ source.list()                               # → list of source files
 # Build
 result = project.build()                    # full pipeline build
 result = project.build(dry_run=True)        # plan only
-result.layers_built                         # 7
+result.built                                # 7
 result.cached                               # 1712
-result.rebuilt                              # 7
-result.cost_estimate                        # "$31.07" (plan mode)
+result.total_time                           # 42.3 (seconds)
+result.snapshot_oid                          # "abc123..." (None if dry_run)
 
 # Release
-receipt = project.release_to("local")       # materialize HEAD → named release
-receipt = project.release_to("staging", ref="heads/main")
-receipt.projections                         # list of adapter receipts
-receipt.artifacts_count
+receipt = project.release_to("local")       # materialize HEAD → named release (returns dict)
+receipt["adapters"]                         # per-projection adapter receipts
+receipt["snapshot_oid"]                     # released snapshot
 
 # Inspect
 project.releases()                          # → ["local", "staging"]
