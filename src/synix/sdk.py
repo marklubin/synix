@@ -658,7 +658,7 @@ class Project:
                     source_dir = self._project_root / self._pipeline.source_dir / name
                 return SdkSource(source_dir)
 
-        declared = [l.name for l in self._pipeline.layers if isinstance(l, SourceLayer)]
+        declared = [layer.name for layer in self._pipeline.layers if isinstance(layer, SourceLayer)]
         raise SdkError(f"Source {name!r} not declared in pipeline. Declared sources: {declared}")
 
     # -- Build & release --

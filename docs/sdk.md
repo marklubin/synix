@@ -47,8 +47,6 @@ project = synix.open_project("~/my-project")  # walks upward to find .synix/
 project = synix.open_project()                 # uses current directory
 ```
 
-> **Note**: `synix.open()` is a deprecated alias for `synix.open_project()`. Prefer `open_project` to avoid shadowing Python's builtin `open`.
-
 ### 3. Manage Sources
 
 ```python
@@ -261,13 +259,14 @@ results = release.search("query", mode="keyword")
 ## Error Handling
 
 ```python
-from synix.sdk import (
+from synix import (
     SdkError,               # Base class
     SynixNotFoundError,     # No .synix/ found
     ReleaseNotFoundError,   # Named release doesn't exist
     ArtifactNotFoundError,  # Label not in snapshot
     SearchNotAvailableError,# No search.db / wrong mode
     EmbeddingRequiredError, # Declared embeddings missing
+    ProjectionNotFoundError,# Named projection doesn't exist
     PipelineRequiredError,  # Operation needs pipeline
 )
 ```
