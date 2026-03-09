@@ -16,7 +16,6 @@ from synix import (
 from synix import (
     SearchSurfaceHandle as PublicSearchSurfaceHandle,
 )
-from synix.build.artifacts import ArtifactStore
 from synix.build.llm_transforms import (
     CoreSynthesis,
     EpisodeSummary,
@@ -26,6 +25,7 @@ from synix.build.llm_transforms import (
 from synix.build.parse_transform import ParseTransform
 from synix.build.plan import plan_build
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.search.indexer import SearchIndex
 
 
@@ -217,7 +217,8 @@ class TestLegacyCustomTransformCompatibility:
         result = run(pipeline)
 
         assert result.built == 2
-        artifacts = ArtifactStore(build_dir).list_artifacts("legacy")
+        synix_dir = build_dir.parent / ".synix"
+        artifacts = SnapshotArtifactCache(synix_dir).list_artifacts("legacy")
         assert len(artifacts) == 1
         assert "legacy=True" in artifacts[0].content
 

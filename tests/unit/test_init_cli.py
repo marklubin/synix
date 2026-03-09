@@ -112,7 +112,7 @@ def test_init_pipeline_loadable(runner, tmp_path, monkeypatch):
     assert "team_dynamics" in layer_names
     assert "final_report" in layer_names
     assert len(pipeline.projections) == 1
-    assert len(pipeline.validators) == 1
+    assert len(pipeline.validators) == 0
 
 
 def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
@@ -145,12 +145,15 @@ def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
 
 
 def test_init_output_message(runner, tmp_path, monkeypatch):
-    """synix init prints helpful next-steps."""
+    """synix init prints helpful next-steps including release workflow."""
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(main, ["init", "my-project"])
     assert "cd my-project" in result.output
     assert ".env.example" in result.output
     assert "synix build" in result.output
+    assert "synix release HEAD --to local" in result.output
+    assert "synix search" in result.output
+    assert "--release local" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +171,7 @@ def _make_mock_response(text):
 
 
 def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
-    """Full flow: init -> build -> validate -> search with mocked LLM."""
+    """Full flow: init -> build -> release -> search with mocked LLM."""
     monkeypatch.chdir(tmp_path)
 
     # 1. Init
@@ -240,19 +243,22 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     # Verify all 6 LLM calls: 3 work_style (Map) + 1 dynamics (Reduce) + 2 report (Fold)
     assert call_count == 6
 
-    # 3. Validate — should pass (mock responses are under 5000 chars)
+    # 2b. Release — materialize projections (search.db, context.md) into a release target
     result = runner.invoke(
         main,
         [
-            "validate",
-            pipeline_path,
+            "release",
+            "HEAD",
+            "--to",
+            "local",
             "--build-dir",
             str(project_dir / "build"),
         ],
     )
-    assert result.exit_code == 0, f"Validate failed: {result.output}"
+    assert result.exit_code == 0, f"Release failed: {result.output}"
 
-    # 4. Search — should find hiking (from bios and work_style artifacts)
+    # 3. Search — should find hiking (from bios and work_style artifacts)
+    #    Search uses the released search.db in .synix/releases/local/
     result = runner.invoke(
         main,
         [
@@ -260,48 +266,24 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
             "hiking",
             "--build-dir",
             str(project_dir / "build"),
+            "--release",
+            "local",
         ],
     )
     assert result.exit_code == 0, f"Search failed: {result.output}"
     assert "hiking" in result.output.lower()
 
 
-def test_init_validate_passes_with_valid_metadata(runner, tmp_path, monkeypatch):
-    """Validate passes when required metadata (input_count) is present."""
+def test_init_pipeline_has_no_validators(runner, tmp_path, monkeypatch):
+    """Init scaffold pipeline declares no validators (experimental feature)."""
     monkeypatch.chdir(tmp_path)
 
-    # Init
     runner.invoke(main, ["init", "valid-test"])
     project_dir = tmp_path / "valid-test"
     pipeline_path = str(project_dir / "pipeline.py")
-    monkeypatch.chdir(project_dir)
 
-    # Build with mocked LLM
-    short = _make_mock_response("Mock response.")
+    from synix.build.pipeline import load_pipeline
 
-    with patch("synix.build.llm_client.LLMClient.complete", return_value=short):
-        result = runner.invoke(
-            main,
-            [
-                "build",
-                pipeline_path,
-                "--source-dir",
-                str(project_dir / "sources"),
-                "--build-dir",
-                str(project_dir / "build"),
-            ],
-        )
-        assert result.exit_code == 0
-
-    # Validate should pass — FoldSynthesis always sets input_count
-    result = runner.invoke(
-        main,
-        [
-            "validate",
-            pipeline_path,
-            "--build-dir",
-            str(project_dir / "build"),
-        ],
-    )
-    assert result.exit_code == 0
-    assert "required_field" in result.output.lower()
+    pipeline = load_pipeline(pipeline_path)
+    assert pipeline.validators == []
+    assert pipeline.fixers == []

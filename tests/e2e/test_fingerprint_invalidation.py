@@ -14,7 +14,53 @@ import pytest
 from click.testing import CliRunner
 
 from synix.build.fingerprint import Fingerprint
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
+
+
+def _tamper_snapshot_artifacts(build_dir, mutate_fn):
+    """Walk snapshot objects, apply mutate_fn, and rebuild the snapshot chain.
+
+    mutate_fn(art_obj) -> bool: return True if modified.
+
+    Because the object store is content-addressed, modifying an artifact changes
+    its oid.  We must re-store the modified artifact as a new object, update the
+    manifest entry to point at the new oid, re-store the manifest, re-store the
+    snapshot, and advance the HEAD ref — otherwise ``put_json`` will skip
+    writing (path already exists) and the tampered content is lost.
+    """
+    from synix.build.object_store import ObjectStore
+    from synix.build.refs import RefStore
+
+    synix_dir = synix_dir_for_build_dir(build_dir)
+    obj_store = ObjectStore(synix_dir)
+    ref_store = RefStore(synix_dir)
+
+    head_oid = ref_store.read_ref("refs/heads/main")
+    snapshot_obj = obj_store.get_json(head_oid)
+    manifest_obj = obj_store.get_json(snapshot_obj["manifest_oid"])
+
+    modified = False
+    for entry in manifest_obj["artifacts"]:
+        art_obj = obj_store.get_json(entry["oid"])
+        if mutate_fn(art_obj):
+            # Store the modified artifact as a new content-addressed object
+            new_oid = obj_store.put_json(art_obj)
+            entry["oid"] = new_oid
+            modified = True
+
+    if modified:
+        # Re-store the manifest with updated artifact oids
+        new_manifest_oid = obj_store.put_json(manifest_obj)
+        snapshot_obj["manifest_oid"] = new_manifest_oid
+        # Re-store the snapshot with updated manifest oid
+        new_snapshot_oid = obj_store.put_json(snapshot_obj)
+        # Advance HEAD ref
+        ref_store.write_ref("refs/heads/main", new_snapshot_oid)
+
+    return modified
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -105,13 +151,11 @@ class TestFingerprintStoredOnBuild:
 
     def test_fingerprint_stored_on_build(self, runner, workspace, pipeline_file):
         """Build stores both build_fingerprint and transform_fingerprint in metadata."""
-        from synix.build.artifacts import ArtifactStore
-
         result = runner.invoke(main, ["build", str(pipeline_file)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-        store = ArtifactStore(workspace["build_dir"])
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
         # Check derived artifacts (not transcripts — level 0 doesn't use fingerprints)
         derived = {aid: info for aid, info in manifest.items() if info.get("layer") not in ("transcripts",)}
         assert len(derived) > 0, "No derived artifacts found"
@@ -140,32 +184,36 @@ class TestUpgradeForcesRebuild:
 
     def test_upgrade_forces_rebuild_without_fingerprint(self, runner, workspace, pipeline_file):
         """Artifacts without fingerprints trigger one-time rebuild."""
-        from synix.build.artifacts import ArtifactStore
-
         # First build — populates fingerprints
         result1 = runner.invoke(main, ["build", str(pipeline_file)])
         assert result1.exit_code == 0
 
         # Strip fingerprints from all stored artifacts (simulate pre-upgrade state)
         build_dir = workspace["build_dir"]
-        manifest = json.loads((build_dir / "manifest.json").read_text())
-        for aid, info in manifest.items():
-            if info.get("layer") == "transcripts":
-                continue
-            art_path = build_dir / info["path"]
-            if art_path.exists():
-                data = json.loads(art_path.read_text())
-                data.get("metadata", {}).pop("build_fingerprint", None)
-                data.get("metadata", {}).pop("transform_fingerprint", None)
-                art_path.write_text(json.dumps(data, indent=2))
+
+        def strip_fingerprints(art_obj):
+            meta = art_obj.get("metadata", {})
+            layer = meta.get("layer_name", "")
+            if layer == "transcripts":
+                return False
+            changed = False
+            if "build_fingerprint" in meta:
+                del meta["build_fingerprint"]
+                changed = True
+            if "transform_fingerprint" in meta:
+                del meta["transform_fingerprint"]
+                changed = True
+            return changed
+
+        _tamper_snapshot_artifacts(build_dir, strip_fingerprints)
 
         # Second build — should rebuild (no stored fingerprint)
         result2 = runner.invoke(main, ["build", str(pipeline_file)])
         assert result2.exit_code == 0
 
         # Verify fingerprints are now restored
-        store = ArtifactStore(build_dir)
-        manifest = json.loads((build_dir / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest = store.iter_entries()
         for aid, info in manifest.items():
             if info.get("layer") == "transcripts":
                 continue
@@ -220,24 +268,24 @@ class TestFingerprintSchemeMismatch:
         result1 = runner.invoke(main, ["build", str(pipeline_file)])
         assert result1.exit_code == 0
 
-        # Tamper with the fingerprint scheme on a derived artifact
+        # Tamper with the fingerprint scheme on a derived artifact in the snapshot
         build_dir = workspace["build_dir"]
-        manifest = json.loads((build_dir / "manifest.json").read_text())
-        tampered = False
-        for aid, info in manifest.items():
-            if not aid.startswith("ep-"):
-                continue
-            art_path = build_dir / info["path"]
-            if art_path.exists():
-                data = json.loads(art_path.read_text())
-                bf = data.get("metadata", {}).get("build_fingerprint")
-                if bf:
-                    bf["scheme"] = "synix:build:v0"  # Fake old scheme
-                    art_path.write_text(json.dumps(data, indent=2))
-                    tampered = True
-                    break
+        tampered = [False]
 
-        assert tampered, "No episode artifact found to tamper with"
+        def tamper_episode_scheme(art_obj):
+            if tampered[0]:
+                return False
+            if not art_obj.get("label", "").startswith("ep-"):
+                return False
+            bf = art_obj.get("metadata", {}).get("build_fingerprint")
+            if bf:
+                bf["scheme"] = "synix:build:v0"  # Fake old scheme
+                tampered[0] = True
+                return True
+            return False
+
+        _tamper_snapshot_artifacts(build_dir, tamper_episode_scheme)
+        assert tampered[0], "No episode artifact found to tamper with"
 
         # Second build — tampered artifact should be rebuilt
         result2 = runner.invoke(main, ["build", str(pipeline_file)])

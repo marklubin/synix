@@ -97,9 +97,7 @@ def resolve_search_output(build_dir: str | Path, *, projection_name: str | None 
             if output.name == projection_name:
                 return output
         available = ", ".join(output.name for output in outputs)
-        raise SearchOutputResolutionError(
-            f"Unknown search projection '{projection_name}'. Available: {available}."
-        )
+        raise SearchOutputResolutionError(f"Unknown search projection '{projection_name}'. Available: {available}.")
 
     if len(outputs) == 1:
         return outputs[0]

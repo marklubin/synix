@@ -9,11 +9,12 @@ The fundamental output: **system prompt + RAG**, built from raw conversations wi
 ## Core Concepts
 
 - **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — typed Python object in the build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchIndex`/`FlatFile` for projections. Dependencies are object references via `depends_on`.
-- **Pipeline** — declared in Python. `Pipeline.add(*layers)` routes Source/Transform to layers, SearchIndex/FlatFile to projections automatically.
-- **Projection** — materializes artifacts into usable outputs. `SearchIndex` (SQLite FTS5 + optional embeddings), `FlatFile` (markdown context doc).
-- **Provenance** — every artifact traces back to its inputs. Always included in search results.
-- **Cache/Rebuild** — hash comparison: if inputs or prompt changed, rebuild. Otherwise skip.
+- **Layer** — typed Python object in the build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchSurface`/`SynixSearch`/`FlatFile` for projections. Dependencies are object references via `depends_on`.
+- **Pipeline** — declared in Python. `Pipeline.add(*layers)` routes Source/Transform to layers, projection declarations to the manifest.
+- **Projection** — structured declaration in the manifest. Materialized at release time by adapters (`synix_search`, `flat_file`). Not built during `synix build`.
+- **Release** — `synix release HEAD --to <name>` materializes projections from a snapshot into `.synix/releases/<name>/`. Produces a receipt.
+- **Provenance** — every artifact traces back to its inputs via `parent_labels`. Always included in search results. No separate `provenance.json`.
+- **Cache/Rebuild** — hash comparison via `SnapshotArtifactCache`: if inputs or prompt changed, rebuild. Otherwise skip.
 
 Full entity model, storage format, and dataclass definitions: [docs/entity-model.md](docs/entity-model.md)
 Pipeline Python API and examples: [docs/pipeline-api.md](docs/pipeline-api.md)
@@ -30,8 +31,10 @@ src/synix/
 │   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions
 │   ├── dag.py             # DAG resolution — build order from depends_on references
 │   ├── pipeline.py        # Pipeline loader — import Python module, extract Pipeline object
-│   ├── artifacts.py       # Artifact storage — save/load/query (filesystem-backed)
-│   ├── provenance.py      # Provenance tracking — record and query lineage chains
+│   ├── object_store.py    # ObjectStore — single content-addressed write path (.synix/objects/)
+│   ├── refs.py            # RefStore — git-like refs (heads/main, runs/*, releases/*)
+│   ├── snapshots.py       # BuildTransaction + commit_build_snapshot
+│   ├── snapshot_view.py   # SnapshotView — ref-resolved reads from .synix/objects/
 │   ├── fingerprint.py     # Build fingerprints — synix:transform:v2 scheme
 │   ├── llm_transforms.py  # Bundled memory transforms + shared LLM helper functions
 │   ├── parse_transform.py # Source parser — ChatGPT/Claude JSON → transcript artifacts
@@ -73,25 +76,35 @@ src/synix/
 **Pipeline model** (`core/models.py`):
 - `Source(name)` — root layer, loads files from source_dir
 - `Transform(name, depends_on=[...])` — abstract, subclass with `execute()` + `split()`
-- `SearchIndex(name, sources=[...])` — FTS5 + optional embeddings projection
-- `FlatFile(name, sources=[...], output_path=...)` — markdown context doc projection
-- `Pipeline.add(*layers)` — routes Source/Transform to layers, SearchIndex/FlatFile to projections
+- `SearchSurface(name, sources=[...], modes=[...])` — build-time search capability declaration
+- `SynixSearch(name, surface=...)` — canonical search output, materialized at release time
+- `FlatFile(name, sources=[...])` — markdown context doc projection, materialized at release time
+- `Pipeline.add(*layers)` — routes Source/Transform to layers, projection declarations to manifest
 
 **build/runner.py** calls:
 - `isinstance(layer, Source)` → `layer.load(config)` for parsing
 - `isinstance(layer, Transform)` → `layer.compute_fingerprint()`, `layer.split()`, `layer.execute()`
-- Projection materialization via `SearchIndexProjection` / `FlatFileProjection`
+- Projection declarations recorded in manifest (not materialized at build time)
+- Single write path via `ObjectStore` → `.synix/objects/`
 
 ## CLI Commands
 
 ```bash
-synix build pipeline.py                          # Build pipeline + materialize projections
+synix build pipeline.py                          # Produce immutable snapshot in .synix/
 synix plan pipeline.py                           # Dry-run — per-artifact rebuild/cached counts
 synix plan pipeline.py --explain-cache           # Plan with cache decision reasons
-synix search "query" [--layers episodes,core]    # Search with provenance chains
-synix lineage <artifact-id>                      # Provenance tree view
-synix list                                       # All artifacts, grouped by layer
+synix release HEAD --to local                    # Materialize projections to a named release
+synix revert <ref> --to <name>                   # Release an older snapshot
+synix search "query" --release local             # Search a release target
+synix search "query" --ref HEAD                  # Scratch realization (ephemeral)
+synix lineage <artifact-id>                      # Provenance tree (reads from .synix/)
+synix list                                       # All artifacts via SnapshotView
 synix show <id>                                  # Render artifact (markdown)
+synix releases list                              # All named releases
+synix releases show <name>                       # Release receipt details
+synix refs list                                  # All refs (build + release)
+synix refs show <ref>                            # Resolve ref to snapshot
+synix clean                                      # Remove .synix/releases/ and .synix/work/
 ```
 
 CLI UX requirements (Rich formatting, colors, progress): [docs/cli-ux.md](docs/cli-ux.md)
@@ -168,6 +181,7 @@ Every PR must link to the GitHub issues it addresses:
 | [docs/cli-ux.md](docs/cli-ux.md) | CLI UX requirements, color scheme, per-command formatting |
 | [docs/prompt-templates.md](docs/prompt-templates.md) | All prompt template contents (episode, rollup, core) |
 | [docs/test-plan.md](docs/test-plan.md) | Test structure, fixtures, all unit/integration/E2E test specs |
-| [docs/build-phases.md](docs/build-phases.md) | Phase 1-5 implementation breakdown |
+| [docs/projection-release-v2-rfc.md](docs/projection-release-v2-rfc.md) | Build/release separation, `.synix/` layout, adapter contract, release receipts |
+| [docs/build-phases.md](docs/build-phases.md) | Phase 1-5 implementation breakdown (historical) |
 | [docs/DESIGN.md](docs/DESIGN.md) | Vision, origin story, full design narrative |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Deferred items from v0.9 development |

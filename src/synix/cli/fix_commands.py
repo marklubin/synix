@@ -40,8 +40,18 @@ def fix(pipeline_path: str, build_dir: str | None, output_json: bool, dry_run: b
         pipeline.build_dir = build_dir
 
     build_path = Path(pipeline.build_dir)
-    if not build_path.exists():
-        console.print(f"[red]Build directory not found:[/red] {build_path}\nRun [bold]synix build[/bold] first.")
+
+    # Check for .synix/ snapshot store (primary) or legacy build/ directory
+    from synix.build.refs import synix_dir_for_build_dir
+
+    try:
+        synix_dir = synix_dir_for_build_dir(build_path)
+        has_synix = synix_dir.exists()
+    except ValueError:
+        has_synix = False
+
+    if not has_synix and not build_path.exists():
+        console.print("[red]No snapshot store found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
     _run_fix_mode(pipeline, build_path, output_json, dry_run, pipeline_path)
@@ -49,17 +59,17 @@ def fix(pipeline_path: str, build_dir: str | None, output_json: bool, dry_run: b
 
 def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, pipeline_path: str = "pipeline.py"):
     """Load persisted violations from queue and propose/apply fixes."""
-    from synix.build.artifacts import ArtifactStore
     from synix.build.fixers import apply_fix, run_fixers
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
     from synix.build.validators import (
         ValidationResult,
         Violation,
         ViolationQueue,
     )
 
-    store = ArtifactStore(build_path)
-    provenance = ProvenanceTracker(build_path)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
 
     mode_label = "dry-run" if dry_run else "fix"
 
@@ -149,7 +159,6 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, 
             result,
             pipeline,
             store,
-            provenance,
             search_index=search_index,
             llm_client=llm_client,
             on_progress=_on_progress,
@@ -160,7 +169,6 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, 
             result,
             pipeline,
             store,
-            provenance,
             search_index=search_index,
             llm_client=llm_client,
         )
@@ -209,9 +217,9 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, 
         label_violations = violations_by_label.get(action.label, [])
         first_violation = label_violations[0] if label_violations else None
         if action.action == "rewrite":
-            _display_rewrite_proposal(action, first_violation, store, provenance)
+            _display_rewrite_proposal(action, first_violation, store)
         elif action.action == "unresolved":
-            _display_unresolved(action, first_violation, store, provenance)
+            _display_unresolved(action, first_violation, store)
 
         if dry_run:
             console.print("[dim](dry-run: no changes applied)[/dim]")
@@ -223,7 +231,7 @@ def _run_fix_mode(pipeline, build_path: Path, output_json: bool, dry_run: bool, 
 
         if choice == "a":
             if action.action == "rewrite":
-                apply_fix(action, store, provenance)
+                apply_fix(action, store)
                 for v in label_violations:
                     queue.resolve(v.violation_id, fix_action="rewrite")
             else:

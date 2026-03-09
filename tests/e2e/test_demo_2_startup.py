@@ -7,7 +7,6 @@ Tests requiring parallel pipeline paths or model-per-step are marked as skipped.
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -15,6 +14,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -176,11 +177,13 @@ class TestDT2FreshBuild:
         assert result.exit_code == 0, f"Build failed: {result.output}"
         assert "Build Summary" in result.output
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        build_dir = workspace["build_dir"]
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest = store.iter_entries()
 
         # Count by layer
         layers: dict[str, int] = {}
-        for _aid, info in manifest.items():
+        for _label, info in manifest.items():
             layer = info.get("layer", "unknown")
             layers[layer] = layers.get(layer, 0) + 1
 
@@ -206,17 +209,31 @@ class TestDT2FreshBuild:
         """Search returns results for financial content."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
+        # Release to materialize projections
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, ["search", "investment", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "investment", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_context_doc_created(self, runner, workspace, financial_pipeline_file):
         """Context doc contains the core memory synthesis."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        context_doc = workspace["build_dir"] / "context.md"
+        # Release to materialize projections
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()
         content = context_doc.read_text()
         assert len(content) > 0
@@ -225,13 +242,14 @@ class TestDT2FreshBuild:
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(financial_pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
+        build_dir = workspace["build_dir"]
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        assert (synix_dir / "refs" / "heads" / "main").exists(), "Snapshot store should exist after build"
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        missing = [aid for aid in derived if aid not in provenance]
+        store = SnapshotArtifactCache(synix_dir)
+        manifest = store.iter_entries()
+        derived = {label for label, info in manifest.items() if info.get("layer") != "transcripts"}
+        missing = [label for label in derived if not store.get_parents(label)]
         assert not missing, f"Missing provenance for: {missing}"
 
 
@@ -252,20 +270,23 @@ class TestDT2ConfigChange:
         assert result1.exit_code == 0
         calls_after_first = mock_anthropic["n"]
 
-        manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
-        episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
+        build_dir = workspace["build_dir"]
+        store1 = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest1 = store1.iter_entries()
+        transcript_labels = {label for label, info in manifest1.items() if info["layer"] == "transcripts"}
+        episode_labels = {label for label, info in manifest1.items() if info["layer"] == "episodes"}
 
         # Second build: topical
         result2 = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
         assert result2.exit_code == 0
 
-        manifest2 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store2 = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest2 = store2.iter_entries()
 
         # Transcripts and episodes should be preserved
-        for tid in transcript_ids:
+        for tid in transcript_labels:
             assert tid in manifest2, f"Transcript {tid} missing after topical build"
-        for eid in episode_ids:
+        for eid in episode_labels:
             assert eid in manifest2, f"Episode {eid} missing after topical build"
 
         # Topics layer should exist now
@@ -306,24 +327,27 @@ class TestDT2ParallelPaths:
         result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
         assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
 
-        manifest_a = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_a = {aid for aid, info in manifest_a.items() if info["layer"] == "transcripts"}
-        episode_ids_a = {aid for aid, info in manifest_a.items() if info["layer"] == "episodes"}
-        assert len(transcript_ids_a) == 50, "Path A should have 50 transcripts"
-        assert len(episode_ids_a) == 50, "Path A should have 50 episodes"
+        build_dir = workspace["build_dir"]
+        store_a = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest_a = store_a.iter_entries()
+        transcript_labels_a = {label for label, info in manifest_a.items() if info["layer"] == "transcripts"}
+        episode_labels_a = {label for label, info in manifest_a.items() if info["layer"] == "episodes"}
+        assert len(transcript_labels_a) == 50, "Path A should have 50 transcripts"
+        assert len(episode_labels_a) == 50, "Path A should have 50 episodes"
 
         # Build path B (topical rollups) — shares same build_dir and source_dir
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
         assert result_b.exit_code == 0, f"Path B build failed: {result_b.output}"
 
-        manifest_b = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids_b = {aid for aid, info in manifest_b.items() if info["layer"] == "transcripts"}
-        episode_ids_b = {aid for aid, info in manifest_b.items() if info["layer"] == "episodes"}
+        store_b = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest_b = store_b.iter_entries()
+        transcript_labels_b = {label for label, info in manifest_b.items() if info["layer"] == "transcripts"}
+        episode_labels_b = {label for label, info in manifest_b.items() if info["layer"] == "episodes"}
 
-        # All transcript and episode IDs from path A must still exist in path B's manifest
-        for tid in transcript_ids_a:
+        # All transcript and episode labels from path A must still exist in path B's manifest
+        for tid in transcript_labels_a:
             assert tid in manifest_b, f"Transcript {tid} from path A missing after path B build"
-        for eid in episode_ids_a:
+        for eid in episode_labels_a:
             assert eid in manifest_b, f"Episode {eid} from path A missing after path B build"
 
         # Path B should have "topics" layer artifacts
@@ -331,23 +355,28 @@ class TestDT2ParallelPaths:
         assert "topics" in layers_b, "Path B should have 'topics' layer"
 
         # Source layers (transcripts + episodes) are identical across paths
-        assert transcript_ids_a == transcript_ids_b, "Transcript IDs should be identical across paths"
-        assert episode_ids_a == episode_ids_b, "Episode IDs should be identical across paths"
+        assert transcript_labels_a == transcript_labels_b, "Transcript labels should be identical across paths"
+        assert episode_labels_a == episode_labels_b, "Episode labels should be identical across paths"
 
     def test_independent_search_indexes(self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file):
         """Each pipeline config produces a search index reflecting its own layer structure."""
-        # Build path A (monthly rollups) and search
+        from synix.build.release_engine import execute_release
+        from synix.search.indexer import SearchIndexProjection
+
+        build_dir = workspace["build_dir"]
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+
+        # Build path A (monthly rollups) and release
         result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
         assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
-
-        from synix.build.provenance import ProvenanceTracker
-        from synix.search.indexer import SearchIndexProjection
+        execute_release(synix_dir, release_name="local")
 
         # Query path A search index — should contain "monthly" layer results.
         # Use "portfolio" which appears in the monthly mock response:
         # "portfolio diversification, market volatility response..."
-        proj_a = SearchIndexProjection(workspace["build_dir"])
-        prov_a = ProvenanceTracker(workspace["build_dir"])
+        proj_a = SearchIndexProjection(str(release_dir), release_dir / "search.db")
+        prov_a = SnapshotArtifactCache(synix_dir)
         results_a = proj_a.query("portfolio", provenance_tracker=prov_a)
         proj_a.close()
 
@@ -360,12 +389,13 @@ class TestDT2ParallelPaths:
         # Build path B (topical rollups) — rebuilds search index with topics instead of monthly
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
         assert result_b.exit_code == 0, f"Path B build failed: {result_b.output}"
+        execute_release(synix_dir, release_name="local")
 
         # Query path B search index — should contain "topics" layer results, not "monthly".
         # Use "tolerances" which appears in the topical mock response:
         # "clients showed varied risk tolerances and investment strategies"
-        proj_b = SearchIndexProjection(workspace["build_dir"])
-        prov_b = ProvenanceTracker(workspace["build_dir"])
+        proj_b = SearchIndexProjection(str(release_dir), release_dir / "search.db")
+        prov_b = SnapshotArtifactCache(synix_dir)
         results_b = proj_b.query("tolerances", provenance_tracker=prov_b)
         proj_b.close()
 
@@ -377,27 +407,33 @@ class TestDT2ParallelPaths:
 
     def test_cross_path_artifact_diffing(self, runner, workspace, financial_pipeline_file, financial_pipeline_v2_file):
         """Core memory artifacts differ between monthly and topical pipeline paths."""
-        from synix.build.artifacts import ArtifactStore
         from synix.build.diff import diff_artifact
+
+        build_dir = workspace["build_dir"]
 
         # Build path A (monthly rollups) — save core memory content
         result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
         assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
 
-        store_a = ArtifactStore(workspace["build_dir"])
+        store_a = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
         core_artifacts_a = store_a.list_artifacts("core")
         assert len(core_artifacts_a) == 1, "Path A should have exactly 1 core artifact"
         core_a = core_artifacts_a[0]
         core_a_content = core_a.content
 
-        # Also snapshot the context.md
-        context_a = (workspace["build_dir"] / "context.md").read_text()
+        # Release to get context.md
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+        execute_release(synix_dir, release_name="local")
+        context_a = (release_dir / "context.md").read_text()
 
         # Build path B (topical rollups) — core memory is rebuilt with different inputs
         result_b = runner.invoke(main, ["build", str(financial_pipeline_v2_file)])
         assert result_b.exit_code == 0, f"Path B build failed: {result_b.output}"
 
-        store_b = ArtifactStore(workspace["build_dir"])
+        store_b = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
         core_artifacts_b = store_b.list_artifacts("core")
         assert len(core_artifacts_b) == 1, "Path B should have exactly 1 core artifact"
         core_b = core_artifacts_b[0]
@@ -412,7 +448,8 @@ class TestDT2ParallelPaths:
 
         # Context doc should also reflect the rebuild (content may or may not differ
         # with mocked LLM, but the file was rewritten)
-        context_b = (workspace["build_dir"] / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        context_b = (release_dir / "context.md").read_text()
         assert len(context_b) > 0, "Path B context.md should have content"
 
     def test_incremental_update_both_paths(
@@ -423,9 +460,11 @@ class TestDT2ParallelPaths:
         result_a = runner.invoke(main, ["build", str(financial_pipeline_file)])
         assert result_a.exit_code == 0, f"Path A build failed: {result_a.output}"
 
-        manifest_a = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        build_dir = workspace["build_dir"]
+        store_a = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest_a = store_a.iter_entries()
         layers_a: dict[str, int] = {}
-        for _aid, info in manifest_a.items():
+        for _label, info in manifest_a.items():
             layer = info.get("layer", "unknown")
             layers_a[layer] = layers_a.get(layer, 0) + 1
 
@@ -443,9 +482,10 @@ class TestDT2ParallelPaths:
 
         calls_after_b = mock_anthropic["n"]
 
-        manifest_b = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store_b = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest_b = store_b.iter_entries()
         layers_b: dict[str, int] = {}
-        for _aid, info in manifest_b.items():
+        for _label, info in manifest_b.items():
             layer = info.get("layer", "unknown")
             layers_b[layer] = layers_b.get(layer, 0) + 1
 

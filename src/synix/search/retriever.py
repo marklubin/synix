@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 
-from synix.build.provenance import ProvenanceTracker
 from synix.search.embeddings import EmbeddingProvider
 from synix.search.indexer import SearchIndex
 from synix.search.results import SearchResult
@@ -50,7 +49,7 @@ class HybridRetriever:
         self,
         search_index: SearchIndex,
         embedding_provider: EmbeddingProvider | None = None,
-        provenance_tracker: ProvenanceTracker | None = None,
+        provenance_tracker: object | None = None,
     ):
         self.search_index = search_index
         self.embedding_provider = embedding_provider
@@ -191,8 +190,8 @@ class HybridRetriever:
         for sim, row in scored[:top_k]:
             chain: list[str] = []
             if self.provenance_tracker is not None:
-                records = self.provenance_tracker.get_chain(row["label"])
-                chain = [r.label for r in records]
+                raw_chain = self.provenance_tracker.get_chain(row["label"])
+                chain = [getattr(r, "label", r) for r in raw_chain]
 
             results.append(
                 SearchResult(
@@ -328,8 +327,8 @@ class HybridRetriever:
         for weighted, raw_sim, row in scored[: top_k * 2]:
             chain: list[str] = []
             if self.provenance_tracker is not None:
-                records = self.provenance_tracker.get_chain(row["label"])
-                chain = [r.label for r in records]
+                raw_chain = self.provenance_tracker.get_chain(row["label"])
+                chain = [getattr(r, "label", r) for r in raw_chain]
 
             semantic_results.append(
                 SearchResult(

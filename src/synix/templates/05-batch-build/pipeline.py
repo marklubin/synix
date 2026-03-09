@@ -142,6 +142,4 @@ team_search = SearchSurface(
 pipeline.add(bios, work_styles, team_summary, team_search)
 
 # SynixSearch — searchable local output across all layers
-pipeline.add(
-    SynixSearch("search", surface=team_search)
-)
+pipeline.add(SynixSearch("search", surface=team_search))

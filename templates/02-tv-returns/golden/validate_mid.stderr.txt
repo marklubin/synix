@@ -1,6 +1,0 @@
-semantic_conflict: error checking cs-brief-SAM-OLED-65, skipping
-Traceback (most recent call last):
-  File "<PKG>/src/synix/build/validators.py", line 668, in validate
-  File "<PKG>/src/synix/build/cassette.py", line 193, in complete
-synix.build.cassette.CassetteMiss: Cassette miss for key <HASH>... (prompt: You are analyzing a customer service reference document for contradictions in re)
-Run with SYNIX_CASSETTE_MODE=record to capture this call.

@@ -92,38 +92,53 @@ The fundamental output of Synix is: **system prompt + RAG.** Context doc = syste
 
 ---
 
-## Artifact Storage (Filesystem)
+## Artifact Storage (`.synix/`)
+
+All build state lives under `.synix/`. There is no `build/` directory. The `ObjectStore` is the single write path for all content-addressed objects; the legacy `ArtifactStore` and `ProvenanceTracker` have been removed.
 
 ```
-build/
-├── manifest.json           # maps label → file path + metadata
-├── provenance.json         # all provenance records
-├── layer0-transcripts/
-│   ├── abc123.json
-│   └── def456.json
-├── layer1-episodes/
-│   ├── ep-abc123.json
-│   └── ep-def456.json
-├── layer2-monthly/
-│   ├── 2025-01.json
-│   └── 2025-02.json
-├── layer3-core/
-│   └── core-memory.json
-└── search.db               # SQLite FTS5 database
+.synix/
+├── HEAD                    # symbolic ref → refs/heads/main
+├── .lock                   # build concurrency lock
+├── objects/                # content-addressed blobs (artifacts, manifests, snapshots)
+│   ├── aa/bbccdd...
+│   ├── 12/345678...
+│   └── ff/eeddcc...
+├── refs/                   # git-like refs
+│   ├── heads/
+│   │   └── main            # oid of latest snapshot
+│   ├── runs/
+│   │   ├── 20260306T...Z   # oid of run 1 snapshot
+│   │   └── 20260307T...Z   # oid of run 2 snapshot
+│   └── releases/
+│       └── local           # oid of snapshot powering local release
+├── work/                   # build-time transient data
+│   ├── surfaces/           # FTS5 search surfaces for build-time transform queries
+│   └── logs/               # build logs (JSONL)
+└── releases/               # materialized projection outputs (one dir per release name)
+    └── local/
+        ├── receipt.json    # what was released, when, which adapters
+        ├── search.db       # materialized by synix_search adapter
+        └── context.md      # materialized by flat_file adapter
 ```
 
-Each artifact JSON file:
+Each artifact is stored as two objects in `.synix/objects/`:
+
+**Content blob** — raw text bytes, content-addressed.
+
+**Artifact object:**
 ```json
 {
+  "type": "artifact",
   "label": "ep-abc123",
   "artifact_type": "episode",
   "artifact_id": "sha256:...",
+  "content_oid": "aabb...",
   "input_ids": ["sha256:..."],
-  "prompt_id": "episode_summary_v1",
-  "model_config": {"model": "claude-sonnet-4-20250514", "temperature": 0.3},
-  "created_at": "2025-02-07T10:30:00Z",
-  "content": "In this conversation, Mark discussed...",
+  "parent_labels": ["tx-abc123"],
   "metadata": {
+    "layer_name": "episodes",
+    "layer_level": 1,
     "source_conversation_id": "abc123",
     "date": "2025-01-15",
     "message_count": 24
@@ -131,11 +146,15 @@ Each artifact JSON file:
 }
 ```
 
+Provenance is embedded in each artifact object via `parent_labels` and `input_ids`. There is no separate `provenance.json` file — provenance chains are walked by resolving `parent_labels` transitively through the object store.
+
 ## Cache/Rebuild Logic
+
+Cache decisions use the `SnapshotArtifactCache`, which reads from `.synix/objects/` via `SnapshotView`. The logic compares build fingerprints (inputs, prompt, model config, transform source) against what is stored in the current snapshot.
 
 ```python
 def needs_rebuild(label, current_input_ids, current_prompt_id):
-    existing = store.load_artifact(label)
+    existing = cache.load_artifact(label)
     if existing is None:
         return True
     if existing.input_ids != current_input_ids:
@@ -167,23 +186,19 @@ AND layer_level >= ?
 ORDER BY rank;
 ```
 
-Provenance drill-down: Given a search result's `label`, walk `provenance.json` recursively to get the full chain back to raw transcript.
+Provenance drill-down: Given a search result's `label`, walk `parent_labels` transitively through artifact objects in `.synix/objects/` to get the full chain back to raw transcript. Released search.db files also include a `provenance_chains` table with pre-baked lineage for standalone queries.
 
 ---
 
-## Architecture North Star (post-demo, do NOT build)
+## Architecture North Star
 
-> Note: This forward-looking section predates the current search-surface design work.
-> The active direction is in [docs/search-surface-rfc.md](docs/search-surface-rfc.md): searchable capability declarations plus explicit release targets, not projections as recursive live DAG inputs.
+> Note: The projection release v2 design ([docs/projection-release-v2-rfc.md](../docs/projection-release-v2-rfc.md)) is now the current architecture. Build and release are fully separated: `synix build` produces immutable snapshots, `synix release` materializes projections to named targets via adapters.
 
-**Projections as build infrastructure.** The same search index that serves user queries can also serve downstream transforms. A topical rollup queries the episode search index for relevant episodes. At scale, this is essential.
+**Projections as build infrastructure.** `SearchSurface` declarations enable build-time retrieval. Transforms declare `uses=[surface]` to access search during execution. At release time, the `synix_search` adapter materializes a self-contained search.db from the snapshot's `ReleaseClosure`.
 
-**The full vision:** Transforms can declare explicit use of searchable capabilities during the build. Search surfaces and release targets are first-class pipeline concepts, but disposable local realizations are not recursive artifact dependencies in the DAG.
-
-**For this weekend:** The runner builds layers in order. By the time topical rollup runs, the episode search index already exists. The transform just queries it. No new DAG concepts needed.
+**The adapter contract:** Every projection adapter receives a fully resolved `ReleaseClosure` — artifacts with content and provenance already walked. Adapters implement `plan/apply/verify`. The platform does not privilege any adapter; `synix_search` follows the same contract as any external adapter.
 
 **Future work:**
-- Search surfaces as first-class build capabilities
-- Explicit build-time query access for downstream transforms
-- Release targets over canonical surface state
-- Proprietary clustering for auto-topic discovery
+- External database adapters (Postgres, Qdrant) following the same adapter contract
+- Checkpoint banks (builds on top of release receipts)
+- Runtime tool API (builds on top of portable release directories)

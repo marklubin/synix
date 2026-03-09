@@ -109,7 +109,7 @@ class TestValidateCommand:
             ],
         )
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "Build directory" in result.output
+        assert "not found" in result.output.lower() or "No snapshot store" in result.output
 
     def test_validate_no_violations(self, runner, simple_pipeline, build_dir):
         """Empty build dir -> no violations."""
@@ -119,17 +119,16 @@ class TestValidateCommand:
 
     def test_validate_with_pii(self, runner, simple_pipeline, build_dir):
         """PII in artifacts -> violations reported."""
-        from synix.build.artifacts import ArtifactStore
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
         art = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="Email me at user@example.com for details.",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art, "episodes", 1)
+        create_test_snapshot(build_dir, {"episodes": [art]})
 
         result = runner.invoke(main, ["validate", str(simple_pipeline)])
         assert "pii" in result.output.lower() or "PII" in result.output
@@ -152,17 +151,16 @@ class TestValidateCommand:
 
     def test_validate_json_with_violations(self, runner, simple_pipeline, build_dir):
         """--json includes violation_ids."""
-        from synix.build.artifacts import ArtifactStore
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
         art = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="SSN: 123-45-6789",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art, "episodes", 1)
+        create_test_snapshot(build_dir, {"episodes": [art]})
 
         result = runner.invoke(
             main,
@@ -178,34 +176,32 @@ class TestValidateCommand:
 
     def test_validate_writes_state_file(self, runner, simple_pipeline, build_dir):
         """Validate creates violations_state.json."""
-        from synix.build.artifacts import ArtifactStore
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
         art = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="Credit card: 4111-1111-1111-1111",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art, "episodes", 1)
+        create_test_snapshot(build_dir, {"episodes": [art]})
 
         runner.invoke(main, ["validate", str(simple_pipeline)])
         assert (build_dir / "violations_state.json").exists()
 
     def test_validate_writes_audit_log(self, runner, simple_pipeline, build_dir):
         """Validate appends to violations.jsonl."""
-        from synix.build.artifacts import ArtifactStore
         from synix.core.models import Artifact
+        from tests.helpers.snapshot_factory import create_test_snapshot
 
-        store = ArtifactStore(build_dir)
         art = Artifact(
             label="ep-1",
             artifact_type="episode",
             content="Phone: (555) 123-4567",
             metadata={"layer_name": "episodes"},
         )
-        store.save_artifact(art, "episodes", 1)
+        create_test_snapshot(build_dir, {"episodes": [art]})
 
         runner.invoke(main, ["validate", str(simple_pipeline)])
         assert (build_dir / "violations.jsonl").exists()

@@ -6,14 +6,14 @@ import json
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.fixers import (
     CitationEnrichment,
     FixContext,
 )
-from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.build.validators import Violation
 from synix.core.models import Artifact, Pipeline
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -25,16 +25,6 @@ def build_dir(tmp_path):
     d = tmp_path / "build"
     d.mkdir()
     return d
-
-
-@pytest.fixture
-def store(build_dir):
-    return ArtifactStore(build_dir)
-
-
-@pytest.fixture
-def provenance(build_dir):
-    return ProvenanceTracker(build_dir)
 
 
 def _make_artifact(aid, atype="episode", content="test content", **meta):
@@ -111,7 +101,13 @@ def _make_violation(label="core-1"):
 
 
 class TestCitationEnrichmentFixer:
-    def test_resolved_adds_citation(self, store, provenance):
+    def _store_with(self, build_dir, art):
+        """Create a snapshot store containing a single artifact."""
+        layer = art.metadata.get("layer_name", "core")
+        synix_dir = create_test_snapshot(build_dir, {layer: [art]})
+        return SnapshotArtifactCache(synix_dir)
+
+    def test_resolved_adds_citation(self, build_dir):
         """Fixer resolves ungrounded claim by adding citation."""
         art = _make_artifact(
             "core-1",
@@ -120,7 +116,7 @@ class TestCitationEnrichmentFixer:
             layer_name="core",
             layer_level=3,
         )
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
         new_content = "Mark is an expert in quantum computing [ep-42](synix://ep-42)."
         response = json.dumps(
@@ -134,7 +130,7 @@ class TestCitationEnrichmentFixer:
         mock_llm = _MockLLMClient(response)
         mock_search = _MockSearchIndex([_MockSearchResult("ep-42", "User discussed quantum computing background")])
 
-        ctx = FixContext(store, provenance, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), search_index=mock_search, llm_client=mock_llm)
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
@@ -146,7 +142,7 @@ class TestCitationEnrichmentFixer:
         assert action.evidence_source_ids == ["ep-42"]
         assert action.llm_explanation == "Added citation to source conversation"
 
-    def test_unresolved_when_llm_cannot_find_source(self, store, provenance):
+    def test_unresolved_when_llm_cannot_find_source(self, build_dir):
         """Fixer marks unresolved when LLM can't find a source."""
         art = _make_artifact(
             "core-1",
@@ -155,7 +151,7 @@ class TestCitationEnrichmentFixer:
             layer_name="core",
             layer_level=3,
         )
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
         response = json.dumps(
             {
@@ -166,7 +162,7 @@ class TestCitationEnrichmentFixer:
         )
         mock_llm = _MockLLMClient(response)
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), llm_client=mock_llm)
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
@@ -175,9 +171,11 @@ class TestCitationEnrichmentFixer:
         assert action.new_content == ""
         assert "No source evidence" in action.llm_explanation
 
-    def test_missing_artifact_skip(self, store, provenance):
+    def test_missing_artifact_skip(self, build_dir):
         """Fixer skips when artifact is not found in store."""
-        ctx = FixContext(store, provenance, Pipeline("test"))
+        synix_dir = create_test_snapshot(build_dir, {})
+        store = SnapshotArtifactCache(synix_dir)
+        ctx = FixContext(store, Pipeline("test"))
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation("nonexistent"), ctx)
@@ -185,12 +183,12 @@ class TestCitationEnrichmentFixer:
         assert action.action == "skip"
         assert "not found" in action.description.lower()
 
-    def test_no_llm_client_skip(self, store, provenance):
+    def test_no_llm_client_skip(self, build_dir):
         """Fixer skips when no LLM client is available."""
         art = _make_artifact("core-1", "core_memory", "Some content.", layer_name="core", layer_level=3)
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=None)
+        ctx = FixContext(store, Pipeline("test"), llm_client=None)
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
@@ -198,14 +196,14 @@ class TestCitationEnrichmentFixer:
         assert action.action == "skip"
         assert "no llm client" in action.description.lower()
 
-    def test_llm_error_skip(self, store, provenance):
+    def test_llm_error_skip(self, build_dir):
         """Fixer skips when LLM raises an exception."""
         art = _make_artifact("core-1", "core_memory", "Some content.", layer_name="core", layer_level=3)
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
         mock_llm = _MockLLMClient(RuntimeError("API error"))
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), llm_client=mock_llm)
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
@@ -213,14 +211,14 @@ class TestCitationEnrichmentFixer:
         assert action.action == "skip"
         assert "LLM error" in action.description
 
-    def test_invalid_json_response_unresolved(self, store, provenance):
+    def test_invalid_json_response_unresolved(self, build_dir):
         """Fixer returns unresolved when LLM response is not valid JSON."""
         art = _make_artifact("core-1", "core_memory", "Some content.", layer_name="core", layer_level=3)
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
         mock_llm = _MockLLMClient("not json at all")
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), llm_client=mock_llm)
 
         fixer = CitationEnrichment()
         action = fixer.fix(_make_violation(), ctx)
@@ -228,16 +226,16 @@ class TestCitationEnrichmentFixer:
         assert action.action == "unresolved"
         assert "parse" in action.description.lower()
 
-    def test_missing_prompt_file_skip(self, store, provenance, tmp_path):
+    def test_missing_prompt_file_skip(self, build_dir, tmp_path):
         """Fixer skips when prompt file is missing."""
         import synix.build.fixers as fmod
 
         art = _make_artifact("core-1", "core_memory", "Some content.", layer_name="core", layer_level=3)
-        store.save_artifact(art, "core", 3)
+        store = self._store_with(build_dir, art)
 
         mock_llm = _MockLLMClient('{"status": "resolved", "content": "x", "explanation": "y"}')
 
-        ctx = FixContext(store, provenance, Pipeline("test"), llm_client=mock_llm)
+        ctx = FixContext(store, Pipeline("test"), llm_client=mock_llm)
 
         # Point prompts to non-existent directory
         orig_file = fmod.__file__

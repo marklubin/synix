@@ -16,42 +16,95 @@ from rich.tree import Tree
 from synix.cli.main import console, get_layer_style
 
 
+def _resolve_synix_dir(build_dir: str, synix_dir: str | None) -> Path | None:
+    """Resolve the .synix directory from explicit option or build-dir fallback.
+
+    Returns the resolved Path, or None if no snapshot store can be found.
+    """
+    from synix.build.refs import synix_dir_for_build_dir
+
+    if synix_dir:
+        resolved = Path(synix_dir)
+        if resolved.exists():
+            return resolved
+        return None
+
+    build_path = Path(build_dir)
+    try:
+        resolved = synix_dir_for_build_dir(build_path)
+    except ValueError:
+        return None
+
+    if resolved.exists():
+        return resolved
+    return None
+
+
 @click.command()
 @click.argument("artifact_id")
 @click.option("--build-dir", default="./build", help="Build directory")
-def lineage(artifact_id: str, build_dir: str):
+@click.option("--synix-dir", default=None, help="Path to .synix directory")
+@click.option("--ref", default="HEAD", help="Snapshot ref to read (default: HEAD)")
+def lineage(artifact_id: str, build_dir: str, synix_dir: str | None, ref: str):
     """Show provenance chain for an artifact.
 
     ARTIFACT_ID is the artifact to trace.
     """
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.snapshot_view import SnapshotView
 
-    provenance = ProvenanceTracker(build_dir)
-    store = ArtifactStore(build_dir)
-
-    chain = provenance.get_chain(artifact_id)
-
-    if not chain:
+    resolved_synix_dir = _resolve_synix_dir(build_dir, synix_dir)
+    if resolved_synix_dir is None:
         console.print(f"[red]No provenance found for:[/red] {artifact_id}")
         sys.exit(1)
 
-    console.print(f"\n[bold]Lineage for:[/bold] {artifact_id}\n")
+    try:
+        view = SnapshotView.open(resolved_synix_dir, ref=ref)
+    except ValueError as e:
+        console.print(f"[red]Cannot open snapshot:[/red] {e}")
+        sys.exit(1)
 
-    tree = Tree(f"[bold]{artifact_id}[/bold]")
+    # Resolve prefix (git-like)
+    try:
+        resolved_label = view.resolve_prefix(artifact_id)
+    except ValueError as e:
+        console.print(f"[red]Ambiguous:[/red] {e}")
+        sys.exit(1)
 
-    def add_parents(node, aid):
-        record = next((r for r in chain if r.label == aid), None)
-        if record:
-            for parent_id in record.parent_labels:
-                artifact = store.load_artifact(parent_id)
-                label = parent_id
-                if artifact:
-                    label += f" [dim]({artifact.artifact_type})[/dim]"
-                child_node = node.add(label)
-                add_parents(child_node, parent_id)
+    if resolved_label is None:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
 
-    add_parents(tree, artifact_id)
+    try:
+        chain = view.get_provenance(resolved_label)
+    except KeyError:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
+
+    if len(chain) <= 1:
+        console.print(f"[red]No provenance found for:[/red] {artifact_id}")
+        sys.exit(1)
+
+    console.print(f"\n[bold]Lineage for:[/bold] {resolved_label}\n")
+
+    tree = Tree(f"[bold]{resolved_label}[/bold]")
+
+    def add_parents(node, label):
+        try:
+            art = view.get_artifact(label)
+        except KeyError:
+            return
+        parent_labels = art.get("parent_labels", [])
+        for parent_label in parent_labels:
+            display = parent_label
+            try:
+                parent_art = view.get_artifact(parent_label)
+                display += f" [dim]({parent_art.get('artifact_type', 'unknown')})[/dim]"
+            except KeyError:
+                pass
+            child_node = node.add(display)
+            add_parents(child_node, parent_label)
+
+    add_parents(tree, resolved_label)
     console.print(tree)
 
 
@@ -65,17 +118,21 @@ def status(build_dir: str, resolved: bool):
 
     from rich.tree import Tree
 
-    from synix.build.artifacts import ArtifactStore
-    from synix.build.provenance import ProvenanceTracker
+    from synix.build.refs import synix_dir_for_build_dir
     from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
-    if not build_path.exists():
+    try:
+        synix_dir = synix_dir_for_build_dir(build_path)
+    except (ValueError, OSError):
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
+    if not synix_dir.exists():
+        console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
+        sys.exit(1)
+    store = SnapshotArtifactCache(synix_dir)
 
     # ── Build layers table ──────────────────────────────────────────────
     table = Table(title="Build Status", box=box.ROUNDED)
@@ -84,7 +141,7 @@ def status(build_dir: str, resolved: bool):
     table.add_column("Last Built", justify="center")
 
     # Group artifacts by layer, track newest created_at per layer
-    manifest = store._manifest
+    manifest = store.iter_entries()
     layers: dict[str, dict] = {}
     for aid, info in manifest.items():
         layer = info.get("layer", "unknown")
@@ -143,7 +200,7 @@ def status(build_dir: str, resolved: bool):
         console.print(f"\n[bold]Projections:[/bold] {', '.join(proj_parts)}")
 
     # ── Stale artifacts ─────────────────────────────────────────────────
-    stale = _find_stale_artifacts(store, provenance)
+    stale = _find_stale_artifacts(store)
     if stale:
         stale_tree = Tree(f"[yellow bold]Stale Artifacts: {len(stale)} artifact(s) need rebuild[/yellow bold]")
         for label, changed_parents in sorted(stale.items()):
@@ -210,7 +267,7 @@ def status(build_dir: str, resolved: bool):
     _print_next_steps(active_count, stale_count)
 
 
-def _find_stale_artifacts(store, provenance) -> dict[str, list[str]]:
+def _find_stale_artifacts(store) -> dict[str, list[str]]:
     """Find artifacts whose parents have changed since they were built.
 
     Returns a dict mapping stale artifact labels to the list of parent labels
@@ -218,8 +275,8 @@ def _find_stale_artifacts(store, provenance) -> dict[str, list[str]]:
     """
     stale: dict[str, list[str]] = {}
 
-    for label in store._manifest:
-        parent_labels = provenance.get_parents(label)
+    for label in store.iter_entries():
+        parent_labels = store.get_parents(label)
         if not parent_labels:
             continue
 
@@ -330,9 +387,9 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_
     validation_result = None
     if pipeline_path:
         try:
-            from synix.build.artifacts import ArtifactStore
             from synix.build.pipeline import load_pipeline
-            from synix.build.provenance import ProvenanceTracker
+            from synix.build.refs import synix_dir_for_build_dir
+            from synix.build.snapshot_view import SnapshotArtifactCache
             from synix.build.validators import run_validators
 
             pipeline = load_pipeline(pipeline_path)
@@ -340,9 +397,9 @@ def verify(build_dir: str, checks: tuple[str, ...], output_json: bool, pipeline_
                 pipeline.build_dir = build_dir
 
             if pipeline.validators:
-                store = ArtifactStore(pipeline.build_dir)
-                provenance = ProvenanceTracker(pipeline.build_dir)
-                validation_result = run_validators(pipeline, store, provenance)
+                v_synix_dir = synix_dir_for_build_dir(Path(pipeline.build_dir))
+                v_store = SnapshotArtifactCache(v_synix_dir)
+                validation_result = run_validators(pipeline, v_store)
         except Exception as e:
             console.print(f"[yellow]Warning: could not run pipeline validators:[/yellow] {e}")
 

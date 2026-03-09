@@ -76,6 +76,7 @@ def _logged_complete(
 
     return response
 
+
 class EpisodeSummary(Transform):
     """One transcript -> one episode summary."""
 

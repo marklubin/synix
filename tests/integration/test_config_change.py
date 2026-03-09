@@ -115,18 +115,26 @@ class TestConfigChange:
 
     def test_search_results_differ(self, source_dir, build_dir, mock_llm):
         """Same query returns different results after config change."""
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
+        execute_release(synix_dir, release_name="local")
 
-        index1 = SearchIdx(build_dir / "search.db")
+        index1 = SearchIdx(release_dir / "search.db")
         results1 = index1.query("programming")
         ids1 = {r.label for r in results1}
         index1.close()
 
         topical = _topical_pipeline(build_dir)
         run(topical, source_dir=str(source_dir))
+        execute_release(synix_dir, release_name="local")
 
-        index2 = SearchIdx(build_dir / "search.db")
+        index2 = SearchIdx(release_dir / "search.db")
         results2 = index2.query("programming")
         ids2 = {r.label for r in results2}
         index2.close()
@@ -138,13 +146,21 @@ class TestConfigChange:
 
     def test_context_doc_differs(self, source_dir, build_dir, mock_llm):
         """context.md content changes after config change."""
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        release_dir = synix_dir / "releases" / "local"
+
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
-        content1 = (build_dir / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        content1 = (release_dir / "context.md").read_text()
 
         topical = _topical_pipeline(build_dir)
         run(topical, source_dir=str(source_dir))
-        content2 = (build_dir / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        content2 = (release_dir / "context.md").read_text()
 
         # The core memory is rebuilt with different inputs, so content
         # is the same mock text. What matters is both exist and the file is rewritten.
@@ -152,11 +168,14 @@ class TestConfigChange:
         assert len(content2) > 0
 
     def test_topical_rollup_uses_named_search_surface(self, source_dir, build_dir, mock_llm):
-        """Named search surfaces materialize locally without the legacy root search DB."""
+        """Named search surfaces materialize to .synix/work/surfaces/."""
+        from synix.build.refs import synix_dir_for_build_dir
+
         pipeline = _surface_topical_pipeline(build_dir)
         run(pipeline, source_dir=str(source_dir))
 
-        surface_db = build_dir / "surfaces" / "episode-search.db"
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        surface_db = synix_dir / "work" / "surfaces" / "episode-search.db"
         assert surface_db.exists()
         assert not (build_dir / "search.db").exists()
 

@@ -68,16 +68,16 @@ def assert_artifact_rebuilt(run_log: dict, step: str, record_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def assert_provenance_chain(provenance_tracker, artifact_id: str, expected_chain: list[str]) -> None:
+def assert_provenance_chain(store, artifact_id: str, expected_chain: list[str]) -> None:
     """Assert that the provenance chain for an artifact matches expectations.
 
     Args:
-        provenance_tracker: ProvenanceTracker instance.
+        store: SnapshotArtifactCache (or any object with get_chain()) instance.
         artifact_id: The artifact to trace.
         expected_chain: List of artifact IDs expected in the chain (in any order).
     """
-    chain = provenance_tracker.get_chain(artifact_id)
-    chain_ids = [r.label for r in chain]
+    chain = store.get_chain(artifact_id)
+    chain_ids = [getattr(r, "label", r) for r in chain]
     for expected_id in expected_chain:
         assert any(expected_id in cid for cid in chain_ids), (
             f"Expected '{expected_id}' in provenance chain for '{artifact_id}'. Actual chain: {chain_ids}"

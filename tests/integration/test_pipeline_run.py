@@ -8,9 +8,8 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.artifacts.provenance import ProvenanceTracker
-from synix.artifacts.store import ArtifactStore
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 from synix.search.index import SearchIndex as SearchIdx
 
@@ -70,7 +69,8 @@ class TestFullPipelineRun:
     def test_artifact_count_matches_expectations(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Correct number of artifacts per layer."""
         run(pipeline_obj, source_dir=str(source_dir))
-        store = ArtifactStore(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # 3 ChatGPT + 5 Claude = 8 transcripts
         transcripts = store.list_artifacts("transcripts")
@@ -91,36 +91,48 @@ class TestFullPipelineRun:
     def test_all_artifacts_have_provenance(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Every non-root artifact has provenance records."""
         run(pipeline_obj, source_dir=str(source_dir))
-        store = ArtifactStore(build_dir)
-        provenance = ProvenanceTracker(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # Episodes should have provenance pointing to transcripts
         episodes = store.list_artifacts("episodes")
         for ep in episodes:
-            parents = provenance.get_parents(ep.label)
+            parents = store.get_parents(ep.label)
             assert len(parents) > 0, f"Episode {ep.label} has no provenance parents"
 
         # Core should have provenance
         core = store.list_artifacts("core")
         for c in core:
-            parents = provenance.get_parents(c.label)
+            parents = store.get_parents(c.label)
             assert len(parents) > 0, f"Core {c.label} has no provenance parents"
 
     def test_search_returns_results_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Pipeline run → search works."""
+        """Pipeline run → release → search works."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        index = SearchIdx(build_dir / "search.db")
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        index = SearchIdx(release_dir / "search.db")
         results = index.query("programming")
         # Should find results from mock LLM responses
         assert len(results) > 0
         index.close()
 
     def test_context_doc_exists_after_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Pipeline run → context.md exists."""
+        """Pipeline run → release → context.md exists."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        context_path = build_dir / "context.md"
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        context_path = release_dir / "context.md"
         assert context_path.exists()
         content = context_path.read_text()
         assert len(content) > 0

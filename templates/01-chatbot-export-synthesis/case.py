@@ -3,15 +3,17 @@
 Flow:
   1. Plan    — show the DAG and what will be built
   2. Build   — parse exports, summarize episodes, roll up monthly, synthesize core
-  3. Search  — query across all layers
-  4. Rebuild — second run, everything cached
-  5. Explain — show why everything is cached (fingerprint breakdown)
+  3. Release — materialize search index + context doc to a release target
+  4. Search  — query across all layers via release
+  5. Rebuild — second run, everything cached
+  6. Explain — show why everything is cached (fingerprint breakdown)
 
 This demonstrates:
   - ChatGPT/Claude export parsing into transcripts (6 conversations)
   - Episode summarization (1:1 per conversation)
   - Monthly rollup aggregation (groups by calendar month)
   - Core memory synthesis
+  - Release workflow: build → release → query
   - Hierarchical search with provenance
   - Incremental rebuild (second run is instant)
   - Cache decision visibility via --explain-cache
@@ -22,7 +24,7 @@ case = {
     "pipeline": "pipeline_monthly.py",
     "steps": [
         # Step 1: Plan
-        {"name": "note_plan", "command": ["synix", "demo", "note", "1/5 Planning build..."]},
+        {"name": "note_plan", "command": ["synix", "demo", "note", "1/6 Planning build..."]},
         {"name": "plan", "command": ["synix", "plan", "PIPELINE"]},
         # Step 2: Build
         {
@@ -31,23 +33,29 @@ case = {
                 "synix",
                 "demo",
                 "note",
-                "2/5 Building: transcripts \u2192 episodes \u2192 monthly rollups \u2192 core memory...",
+                "2/6 Building: transcripts \u2192 episodes \u2192 monthly rollups \u2192 core memory...",
             ],
         },
         {"name": "build", "command": ["synix", "build", "PIPELINE"]},
-        # Step 3: Search
-        {"name": "note_search", "command": ["synix", "demo", "note", "3/5 Searching across all layers..."]},
+        # Step 3: Release — materialize projections to a named release target
+        {
+            "name": "note_release",
+            "command": ["synix", "demo", "note", "3/6 Releasing: materializing search index + context doc..."],
+        },
+        {"name": "release", "command": ["synix", "release", "HEAD", "--to", "local"]},
+        # Step 4: Search
+        {"name": "note_search", "command": ["synix", "demo", "note", "4/6 Searching across all layers..."]},
         {"name": "search", "command": ["synix", "search", "docker containers", "--mode", "keyword", "--limit", "3"]},
-        # Step 4: Rebuild — everything cached
+        # Step 5: Rebuild — everything cached
         {
             "name": "note_rebuild",
-            "command": ["synix", "demo", "note", "4/5 Rebuilding (nothing changed \u2192 all cached)..."],
+            "command": ["synix", "demo", "note", "5/6 Rebuilding (nothing changed \u2192 all cached)..."],
         },
         {"name": "rebuild", "command": ["synix", "build", "PIPELINE"]},
-        # Step 5: Explain cache — show why everything is cached
+        # Step 6: Explain cache — show why everything is cached
         {
             "name": "note_explain",
-            "command": ["synix", "demo", "note", "5/5 Explaining cache decisions..."],
+            "command": ["synix", "demo", "note", "6/6 Explaining cache decisions..."],
         },
         {"name": "explain", "command": ["synix", "plan", "PIPELINE", "--explain-cache"]},
     ],

@@ -5,7 +5,6 @@ Run → search → run again (cached) → config change → run (partial rebuild
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -13,6 +12,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -155,8 +156,10 @@ class TestDemoFlow:
     """The exact demo recording sequence, automated."""
 
     def test_full_demo_sequence(self, runner, workspace, pipeline_file, topical_pipeline_file, mock_anthropic):
-        """Run the entire demo: run → search → run (cached) → config change → run → search."""
+        """Run the entire demo: run → release → search → run (cached) → config change → run → search."""
         build_dir = str(workspace["build_dir"])
+
+        from synix.build.release_engine import execute_release
 
         # ---- Step 1: First run — full build ----
         result1 = runner.invoke(main, ["run", str(pipeline_file)])
@@ -165,21 +168,25 @@ class TestDemoFlow:
         )
         assert "Build Summary" in result1.output
 
-        # Verify artifacts were built
-        assert workspace["build_dir"].exists()
-        manifest_path = workspace["build_dir"] / "manifest.json"
-        assert manifest_path.exists()
-        manifest = json.loads(manifest_path.read_text())
+        # Verify artifacts were built via snapshot store
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        assert synix_dir.exists(), "Synix snapshot dir should exist after build"
+        store = SnapshotArtifactCache(synix_dir)
+        manifest = store.iter_entries()
         assert len(manifest) > 0, "No artifacts were built"
 
+        # Release to materialize projections
+        execute_release(synix_dir, release_name="local")
+        releases_dir = synix_dir / "releases" / "local"
+
         # ---- Step 2: Search ----
-        result2 = runner.invoke(main, ["search", "machine learning", "--build-dir", build_dir])
+        result2 = runner.invoke(main, ["search", "machine learning", "--build-dir", build_dir, "--release", "local"])
         assert result2.exit_code == 0, f"Search failed: {result2.output}"
         # Should find results (our fixtures contain ML content)
         assert "No results" not in result2.output or "machine learning" in result2.output.lower()
 
         # ---- Step 3: Context doc exists ----
-        context_doc = workspace["build_dir"] / "context.md"
+        context_doc = releases_dir / "context.md"
         assert context_doc.exists(), "Context doc was not created"
         context_content1 = context_doc.read_text()
         assert len(context_content1) > 0
@@ -197,8 +204,11 @@ class TestDemoFlow:
         assert result4.exit_code == 0, f"Run 3 (topical) failed: {result4.output}"
         assert "Build Summary" in result4.output
 
+        # Release after topical build
+        execute_release(synix_dir, release_name="local")
+
         # ---- Step 6: Search again — results may differ ----
-        result5 = runner.invoke(main, ["search", "programming", "--build-dir", build_dir])
+        result5 = runner.invoke(main, ["search", "programming", "--build-dir", build_dir, "--release", "local"])
         assert result5.exit_code == 0, f"Search 2 failed: {result5.output}"
 
         # ---- Step 7: Status command ----
@@ -211,11 +221,12 @@ class TestDemoFlow:
         result = runner.invoke(main, ["run", str(pipeline_file)], catch_exceptions=False)
         assert result.exit_code == 0, f"Run failed:\n{result.output}"
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Group by layer
         layers: dict[str, int] = {}
-        for _aid, info in manifest.items():
+        for _label, info in manifest.items():
             layer = info.get("layer", "unknown")
             layers[layer] = layers.get(layer, 0) + 1
 
@@ -229,21 +240,33 @@ class TestDemoFlow:
         assert layers.get("core", 0) == 1
 
     def test_search_index_populated(self, runner, workspace, pipeline_file):
-        """Search index should be populated after a run."""
+        """Search index should be populated after a run and release."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
-        assert search_db.exists(), "Search DB should exist after run"
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
+        assert search_db.exists(), "Search DB should exist after release"
 
         # Query should return results
-        result = runner.invoke(main, ["search", "programming", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "programming", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_context_doc_created(self, runner, workspace, pipeline_file):
-        """Context doc should be created after a run."""
+        """Context doc should be created after a run and release."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        context_doc = workspace["build_dir"] / "context.md"
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()
         content = context_doc.read_text()
         assert len(content) > 0
@@ -254,15 +277,15 @@ class TestDemoFlow:
         """All derived artifacts should have provenance records."""
         runner.invoke(main, ["run", str(pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Every episode, monthly, and core artifact should have provenance
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        for aid in derived:
-            assert aid in provenance, f"Missing provenance for {aid}"
+        derived = {label for label, info in manifest.items() if info.get("layer") != "transcripts"}
+        for label in derived:
+            parents = store.get_parents(label)
+            assert parents is not None, f"Missing provenance for {label}"
+            assert len(parents) > 0, f"No parents for derived artifact {label}"
 
     def test_lineage_command(self, runner, workspace, pipeline_file):
         """Lineage command should show provenance tree."""
@@ -281,28 +304,34 @@ class TestDemoFlow:
         assert result1.exit_code == 0
 
         # Capture manifest after first run
-        manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
-        transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
-        episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
+        store1 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest1 = store1.iter_entries()
+        transcript_labels = {label for label, info in manifest1.items() if info["layer"] == "transcripts"}
+        episode_labels = {label for label, info in manifest1.items() if info["layer"] == "episodes"}
 
         # Second run with topical pipeline
         result2 = runner.invoke(main, ["run", str(topical_pipeline_file)])
         assert result2.exit_code == 0
 
         # Verify the manifest now has topic artifacts instead of monthly
-        manifest2 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store2 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest2 = store2.iter_entries()
         layers2 = {info["layer"] for info in manifest2.values()}
         assert "topics" in layers2, "Topical pipeline should produce 'topics' layer"
 
         # Transcripts and episodes should still be present (cached, not deleted)
-        for tid in transcript_ids:
-            assert tid in manifest2, f"Transcript {tid} should still be in manifest"
-        for eid in episode_ids:
-            assert eid in manifest2, f"Episode {eid} should still be in manifest"
+        for tlabel in transcript_labels:
+            assert tlabel in manifest2, f"Transcript {tlabel} should still be in manifest"
+        for elabel in episode_labels:
+            assert elabel in manifest2, f"Episode {elabel} should still be in manifest"
 
         # Core memory should be rebuilt (new dependency on topics)
         assert "core-memory" in manifest2
 
-        # Context doc should be updated
-        context_doc = workspace["build_dir"] / "context.md"
+        # Context doc should be updated after release
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()

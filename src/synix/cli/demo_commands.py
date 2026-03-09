@@ -290,12 +290,14 @@ def _normalize_output(text: str, case_path: Path) -> str:
         # Drop LLM stats lines entirely (presence varies based on whether LLM calls occurred)
         if re.search(r"LLM calls: \d+, Tokens: [\d,]+, Est\. cost: \$[\d.]+", line):
             continue
-        # Normalize Python traceback file paths (vary between local and CI)
+        # Normalize Python traceback file paths and line numbers (vary between local and CI)
         line = re.sub(
             r'(File ")[^"]*/(src/synix/)',
             r"\1<PKG>/\2",
             line,
         )
+        # Normalize line numbers in traceback File references (shift with edits)
+        line = re.sub(r'(File "[^"]+", line )\d+', r"\1<N>", line)
         # Normalize cassette miss keys (hash varies by environment)
         line = re.sub(
             r"Cassette miss for key [0-9a-f]+\.\.\.",
@@ -318,14 +320,14 @@ def _normalize_output(text: str, case_path: Path) -> str:
         )
         # Normalize search projection status + index count (e.g., "cached  9 indexed" or "new  14 indexed")
         line = re.sub(
-            r"\b(?:cached|new|rebuild|materialized|materializing\.\.\.|progressive)\s+\d+ indexed\b",
+            r"\b(?:cached|new|rebuild|materialized|materializing\.\.\.|progressive|declared)\s+\d+ indexed\b",
             "<MATERIALIZED>  <N> indexed",
             line,
         )
         # Normalize materialization and cache status
         line = re.sub(r"\bmaterializ(?:ed|ing\.\.\.)", "<MATERIALIZED>", line)
-        # Normalize standalone "cached", "built", or "progressive" (e.g. "└─ search  cached", "│ progressive │")
-        line = re.sub(r"(?<!\d )\b(?:cached|built|progressive)\b", "<MATERIALIZED>", line)
+        # Normalize standalone "cached", "built", "progressive", or "declared"
+        line = re.sub(r"(?<!\d )\b(?:cached|built|progressive|declared)\b", "<MATERIALIZED>", line)
         # Normalize remaining "N indexed" counts
         line = re.sub(r"\b\d+ indexed\b", "<N> indexed", line)
         # Normalize the build Total line entirely
@@ -339,7 +341,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
             line = re.sub(r"│\s+<MATERIALIZED>\s+│", "│ <MATERIALIZED> │", line)
         # Replace verify output counts (artifact/provenance/hash counts grow across runs)
         line = re.sub(r"(\bManifest valid with )\d+( artifacts\b)", r"\g<1><N>\2", line)
-        line = re.sub(r"(\bAll )\d+( artifact files\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bAll )\d+( artifact (?:files|objects)\b)", r"\g<1><N>\2", line)
+        line = re.sub(r"(\bSnapshot store exists with )\d+( artifacts\b)", r"\g<1><N>\2", line)
         line = re.sub(r"\b\d+( non-root artifacts lack provenance\b)", r"<N>\1", line)
         line = re.sub(r"(\bAll )\d+( content hashes\b)", r"\g<1><N>\2", line)
         line = re.sub(
@@ -366,11 +369,27 @@ def _normalize_output(text: str, case_path: Path) -> str:
             "https://platform.openai.com/batches/<BATCH_ID>",
             line,
         )
+        # Normalize release output (snapshot oid, artifact counts, release paths)
+        line = re.sub(r"Released [0-9a-f]{12} →", "Released <SNAPSHOT_OID> →", line)
+        line = re.sub(r"\(\d+ artifacts?\)", "(<N> artifacts)", line)
+        line = re.sub(r"\.synix/releases/\S+", ".synix/releases/<RELEASE_PATH>", line)
+        # Normalize tempfile names (e.g. tmplg2345ms.tmp from atomic_write errors)
+        line = re.sub(r"\btmp[a-z0-9_]+\.tmp\b", "tmp<TEMPFILE>.tmp", line)
         # Normalize OpenAI batch IDs (batch_<hex> from real API runs)
         line = re.sub(r"\bbatch_[A-Za-z0-9_]+\b", "batch_<OPENAI_ID>", line)
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)
+    # Re-join and fix cross-line wrapping before final normalization passes
+    joined = "\n".join(normalized)
+    # Fix Rich line-wrapping that splits "(N\nartifacts)" across lines
+    joined = re.sub(r"\((\d+)\s*\n\s*artifacts?\)", r"(<N> artifacts)", joined)
+    # Fix Rich line-wrapping that splits release "→  path" across lines
+    # e.g., "● context-doc  flat_file  →\n<CASE_DIR>/..." → single line
+    joined = re.sub(r"→\s*\n\s*", "→  ", joined)
+    # Join release path with artifact count that wrapped to next line
+    joined = re.sub(r"(<RELEASE_PATH>)\s*\n\s*(\(<N> artifacts\))", r"\1  \2", joined)
+    normalized = joined.splitlines()
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
     # Collapse Python tracebacks to just File lines + exception (body varies by Python version)

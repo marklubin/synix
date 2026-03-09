@@ -24,10 +24,11 @@ def synix_bin():
 
 def test_demo_run_replays_from_cassettes(tmp_path, synix_bin):
     """synix demo run replays the team_report case from cassettes and passes goldens."""
-    # Clean stale build dir (may be left by other tests)
-    build_dir = CASE_DIR / "build"
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
+    # Clean stale state dirs (may be left by other tests)
+    for stale_dir in ("build", ".synix"):
+        d = CASE_DIR / stale_dir
+        if d.exists():
+            shutil.rmtree(d)
 
     # Run in a subprocess so env vars are isolated
     result = subprocess.run(
@@ -56,5 +57,8 @@ def test_cassette_files_exist():
 
 def test_golden_files_exist():
     """Golden directory has the expected output files."""
-    golden_file = CASE_DIR / "golden" / "validate.json"
-    assert golden_file.exists(), f"Missing golden file: {golden_file}"
+    golden_dir = CASE_DIR / "golden"
+    assert golden_dir.exists(), f"Missing golden directory: {golden_dir}"
+    # At minimum, build and plan goldens should exist
+    assert (golden_dir / "build.stdout.txt").exists(), "Missing golden: build.stdout.txt"
+    assert (golden_dir / "plan.stdout.txt").exists(), "Missing golden: plan.stdout.txt"

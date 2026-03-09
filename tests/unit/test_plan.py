@@ -10,8 +10,8 @@ import pytest
 from click.testing import CliRunner
 
 from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
-from synix.build.artifacts import ArtifactStore
 from synix.build.plan import BuildPlan, StepPlan, _compute_source_info, plan_build
+from synix.build.refs import synix_dir_for_build_dir
 from synix.cli import main
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
 
@@ -614,15 +614,33 @@ pipeline.add(transcripts, episodes)
 
         result = runner.invoke(main, ["plan", str(pipeline_file), "--save"])
         assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Plan saved as artifact" in result.output
 
-        # Check artifact was saved
-        store = ArtifactStore(build_dir)
-        artifact = store.load_artifact("build-plan")
-        assert artifact is not None
-        assert artifact.artifact_type == "build_plan"
+        # Check artifact was saved under refs/plans/latest (not refs/heads/main)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        assert synix_dir.exists(), f"Expected .synix dir at {synix_dir}"
+
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import RefStore
+
+        ref_store = RefStore(synix_dir)
+        object_store = ObjectStore(synix_dir)
+
+        snapshot_oid = ref_store.read_ref("refs/plans/latest")
+        assert snapshot_oid is not None, "Expected refs/plans/latest to be set"
+
+        snapshot = object_store.get_json(snapshot_oid)
+        manifest = object_store.get_json(snapshot["manifest_oid"])
+        assert len(manifest["artifacts"]) == 1
+        art_entry = manifest["artifacts"][0]
+        assert art_entry["label"] == "build-plan"
+
+        art_obj = object_store.get_json(art_entry["oid"])
+        assert art_obj["artifact_type"] == "build_plan"
 
         # Content should be valid JSON
-        parsed = json.loads(artifact.content)
+        content = object_store.get_bytes(art_obj["content_oid"]).decode("utf-8")
+        parsed = json.loads(content)
         assert parsed["pipeline_name"] == "test-save"
 
 

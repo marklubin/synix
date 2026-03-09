@@ -12,19 +12,24 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
-from synix.build.projections import FlatFileProjection, get_projection
-from synix.build.provenance import ProvenanceTracker
-from synix.build.search_outputs import PROJECTION_CACHE_FILE
+from synix.build.projections import get_projection
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.search_surfaces import (
     search_surface_ready,
     surface_local_path,
     transform_runtime_search_updates,
     validate_search_surface_uses,
 )
-from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
+from synix.build.snapshot_view import SnapshotArtifactCache
+from synix.build.snapshots import (
+    BuildTransaction,
+    clear_checkpoints,
+    commit_build_snapshot,
+    start_build_transaction,
+    write_layer_checkpoint,
+)
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
     Artifact,
@@ -81,46 +86,9 @@ class RunResult:
     synix_dir: str | None = None
 
 
-def _is_search_output_projection(proj: Layer) -> bool:
-    return isinstance(proj, (SearchIndex, SynixSearch))
-
-
-def _search_projection_type(proj: Layer) -> str:
-    if isinstance(proj, SynixSearch):
-        return "synix_search"
-    if isinstance(proj, SearchIndex):
-        return "search_index"
-    if isinstance(proj, SearchSurface):
-        return "search_surface"
-    if isinstance(proj, FlatFile):
-        return "flat_file"
-    return "unknown"
-
-
-def _search_projection_db_path(proj: Layer, build_dir: Path) -> Path:
-    if isinstance(proj, SearchSurface):
-        return surface_local_path(build_dir, proj)
-    if isinstance(proj, SynixSearch):
-        output_path = Path(proj.output_path) if proj.output_path else build_dir / "search.db"
-        resolved_build_dir = build_dir.resolve(strict=False)
-        resolved_output_path = output_path.resolve(strict=False)
-        if not resolved_output_path.is_relative_to(resolved_build_dir):
-            raise ValueError(
-                f"SynixSearch output_path for {proj.name!r} must stay inside the build directory {resolved_build_dir}"
-            )
-        return resolved_output_path
-    return build_dir / "search.db"
-
-
-def _search_output_cache_metadata(proj: Layer, build_dir: Path) -> dict:
-    if not _is_search_output_projection(proj):
-        return {}
-
-    db_path = _search_projection_db_path(proj, build_dir)
-    return {
-        "projection_type": _search_projection_type(proj),
-        "db_path": str(db_path.relative_to(build_dir.resolve(strict=False))),
-    }
+def _surface_db_path(surface: SearchSurface, work_dir: Path) -> Path:
+    """Return the local DB path for a build-time search surface."""
+    return surface_local_path(work_dir, surface)
 
 
 def run(
@@ -147,10 +115,11 @@ def run(
     start_time = time.time()
     src_dir = source_dir or pipeline.source_dir
     build_dir = Path(pipeline.build_dir)
-    build_dir.mkdir(parents=True, exist_ok=True)
+    synix_dir = synix_dir_for_build_dir(build_dir, configured_synix_dir=pipeline.synix_dir)
+    synix_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = synix_dir / "work"
+    work_dir.mkdir(parents=True, exist_ok=True)
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
     result = RunResult()
 
     # Compute levels from DAG structure
@@ -160,10 +129,11 @@ def run(
     # Create structured logger
     slogger = SynixLogger(
         verbosity=Verbosity(min(verbosity, Verbosity.DEBUG)),
-        build_dir=build_dir,
+        build_dir=synix_dir,
         progress=progress,
     )
     snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
+    store = SnapshotArtifactCache(snapshot_txn.synix_dir)
 
     # Resolve build order
     build_order = resolve_build_order(pipeline)
@@ -189,12 +159,10 @@ def run(
                 logger.warning("Source %s failed to load", layer.name, exc_info=True)
                 artifacts = []
 
-            # Save source artifacts
+            # Record source artifacts in snapshot
             for artifact in artifacts:
                 artifact.metadata["layer_name"] = layer.name
                 artifact.metadata["layer_level"] = layer._level
-                store.save_artifact(artifact, layer.name, layer._level)
-                provenance.record(artifact.label, parent_labels=[], prompt_id=None, model_config=None)
                 _record_snapshot_artifact(
                     snapshot_txn,
                     artifact,
@@ -210,8 +178,8 @@ def run(
         elif isinstance(layer, Transform):
             # Transform layer — gather inputs, split, execute
             inputs = _gather_inputs(layer, layer_artifacts, store)
-            transform_config = _build_transform_config(pipeline, layer, src_dir, build_dir)
-            transform_ctx = _build_transform_context(pipeline, layer, src_dir, build_dir, transform_config)
+            transform_config = _build_transform_config(pipeline, layer, src_dir, work_dir)
+            transform_ctx = _build_transform_context(pipeline, layer, src_dir, work_dir, transform_config)
 
             # Compute transform fingerprint
             transform_fp = layer.compute_fingerprint(transform_config)
@@ -230,7 +198,7 @@ def run(
                         art,
                         layer_name=layer.name,
                         layer_level=layer._level,
-                        parent_labels=_snapshot_parent_labels(art, inputs, provenance),
+                        parent_labels=_snapshot_parent_labels(art, inputs, store),
                     )
                     stats.cached += 1
                     slogger.artifact_cached(layer.name, art.label)
@@ -261,14 +229,9 @@ def run(
                         artifact.metadata["layer_level"] = _layer._level
                         artifact.metadata["build_fingerprint"] = build_fp.to_dict()
                         artifact.metadata["transform_fingerprint"] = _transform_fp.to_dict()
-                        store.save_artifact(artifact, _layer.name, _layer._level)
-                        parent_labels = _provenance_parent_labels(artifact, effective_inputs, provenance)
-                        provenance.record(
-                            artifact.label,
-                            parent_labels=parent_labels,
-                            prompt_id=artifact.prompt_id,
-                            model_config=artifact.model_config,
-                        )
+                        parent_labels = _get_parent_labels(artifact, effective_inputs)
+                        if not parent_labels:
+                            parent_labels = [inp.label for inp in effective_inputs]
                         _record_snapshot_artifact(
                             snapshot_txn,
                             artifact,
@@ -290,7 +253,7 @@ def run(
                                 cached,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, provenance),
+                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, store),
                             )
                         else:
                             layer_built.append(artifact)
@@ -299,7 +262,7 @@ def run(
                                 artifact,
                                 layer_name=_layer.name,
                                 layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, provenance),
+                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, store),
                             )
                         stats.cached += 1
                         slogger.artifact_cached(_layer.name, artifact.label)
@@ -329,7 +292,7 @@ def run(
                             cached_art,
                             layer_name=layer.name,
                             layer_level=layer._level,
-                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, provenance),
+                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, store),
                         )
                         stats.cached += 1
                         slogger.artifact_cached(layer.name, cached_art.label)
@@ -370,20 +333,23 @@ def run(
         result.skipped += stats.skipped
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
-        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+        # Checkpoint after each layer so interrupted builds can recover
+        write_layer_checkpoint(snapshot_txn, layer.name)
 
-        # Materialize intermediate projections for this layer
-        _materialize_layer_projections(pipeline, layer.name, layer_artifacts, store, build_dir, logger=slogger)
+        _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, work_dir, logger=slogger)
 
-    # Materialize all final projections (with caching)
-    result.projection_stats = _materialize_all_projections(pipeline, layer_artifacts, store, build_dir, logger=slogger)
-    _refresh_surface_cache(pipeline, layer_artifacts, build_dir)
+    # Record projection declarations in the snapshot transaction
+    _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
+
+    # Refresh the in-memory cache with the current build's artifacts so
+    # downstream consumers (validators, fixers) see newly built data.
+    store.update_from_build(layer_artifacts)
 
     # Run domain validators if requested and declared
     if validate and pipeline.validators:
         from synix.build.validators import run_validators
 
-        result.validation = run_validators(pipeline, store, provenance)
+        result.validation = run_validators(pipeline, store)
 
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
@@ -395,6 +361,9 @@ def run(
         result.head_ref = snapshot_info["head_ref"]
         result.run_ref = snapshot_info["run_ref"]
         result.synix_dir = snapshot_info["synix_dir"]
+
+        # Successful commit supersedes all prior checkpoints
+        clear_checkpoints(snapshot_txn.synix_dir)
 
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)
@@ -427,10 +396,56 @@ def _record_snapshot_artifact(
     )
 
 
+def _projection_config_fingerprint(config: dict) -> str:
+    """Compute a sha256 fingerprint of canonical JSON projection config."""
+    encoded = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _record_snapshot_projections(
+    snapshot_txn: BuildTransaction,
+    pipeline: Pipeline,
+    layer_artifacts: dict[str, list[Artifact]],
+) -> None:
+    """Record structured projection declarations into the snapshot transaction."""
+    for proj in pipeline.projections:
+        source_layer_names = [s.name for s in proj.sources]
+        input_labels = sorted(a.label for layer_name in source_layer_names for a in layer_artifacts.get(layer_name, []))
+
+        if isinstance(proj, SynixSearch):
+            adapter = "synix_search"
+            config: dict = {
+                "modes": list(proj.search),
+                "embedding_config": dict(proj.embedding_config) if proj.embedding_config else {},
+            }
+        elif isinstance(proj, SearchIndex):
+            adapter = "synix_search"
+            config = {
+                "modes": list(proj.search),
+                "embedding_config": dict(proj.embedding_config) if proj.embedding_config else {},
+            }
+        elif isinstance(proj, FlatFile):
+            adapter = "flat_file"
+            config = {
+                "output_path": proj.output_path,
+            }
+        else:
+            adapter = type(proj).__name__.lower()
+            config = dict(proj.config) if proj.config else {}
+
+        snapshot_txn.record_projection(
+            proj.name,
+            adapter=adapter,
+            input_artifact_labels=input_labels,
+            config=config,
+            config_fingerprint=_projection_config_fingerprint(config),
+        )
+
+
 def _snapshot_parent_labels(
     artifact: Artifact,
     inputs: list[Artifact],
-    provenance: ProvenanceTracker,
+    cache: SnapshotArtifactCache,
 ) -> list[str]:
     """Parent labels for immutable snapshots.
 
@@ -440,31 +455,11 @@ def _snapshot_parent_labels(
     derived = _get_parent_labels(artifact, inputs)
     if derived:
         return derived
-    stored = provenance.get_parents(artifact.label)
+    stored = cache.get_parents(artifact.label)
     if stored:
         return stored
     if artifact.input_ids:
         return []
-    return [inp.label for inp in inputs]
-
-
-def _provenance_parent_labels(
-    artifact: Artifact,
-    inputs: list[Artifact],
-    provenance: ProvenanceTracker,
-) -> list[str]:
-    """Parent labels for the legacy provenance surface.
-
-    Provenance records keep the pre-snapshot best-effort behavior so existing
-    lineage commands remain informative even when transforms omit explicit
-    input_ids for aggregate artifacts.
-    """
-    derived = _get_parent_labels(artifact, inputs)
-    if derived:
-        return derived
-    stored = provenance.get_parents(artifact.label)
-    if stored:
-        return stored
     return [inp.label for inp in inputs]
 
 
@@ -532,8 +527,8 @@ def _transform_prefers_legacy_config_dict(method) -> bool:
         if isinstance(annotation, str):
             annotation_text = annotation
         else:
-            annotation_text = getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(
-                annotation
+            annotation_text = (
+                getattr(annotation, "__qualname__", "") or getattr(annotation, "__name__", "") or str(annotation)
             )
 
     if annotation is dict or annotation_text == "dict" or annotation_text.startswith("dict["):
@@ -573,14 +568,13 @@ def _materialize_layer_search_surfaces(
     pipeline: Pipeline,
     layer_name: str,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
-    build_dir: Path,
+    work_dir: Path,
     logger: SynixLogger | None = None,
 ) -> None:
-    """Materialize search surfaces that source from this layer.
+    """Materialize search surfaces to .synix/work/ for build-time use.
 
     Search surfaces only materialize once their full source closure is
-    available, so the on-disk compatibility DB always matches cache state.
+    available, so the on-disk DB always matches cache state.
     """
     for surface in pipeline.surfaces:
         source_layer_names = [s.name for s in surface.sources]
@@ -591,10 +585,10 @@ def _materialize_layer_search_surfaces(
         if not search_surface_ready(surface, available_names):
             continue
 
-        _materialize_projection(
+        _materialize_search_surface(
             surface,
             layer_artifacts,
-            build_dir,
+            work_dir,
             logger=logger,
             triggered_by=layer_name,
         )
@@ -603,14 +597,14 @@ def _materialize_layer_search_surfaces(
 def _gather_inputs(
     layer: Layer,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
+    store: SnapshotArtifactCache,
 ) -> list[Artifact]:
     """Gather inputs from dependent layers."""
     inputs: list[Artifact] = []
     for dep in layer.depends_on:
         dep_artifacts = layer_artifacts.get(dep.name)
         if dep_artifacts is None:
-            # Load from store if not in memory (e.g., cached from previous run)
+            # Load from snapshot cache if not in memory (e.g., cached from previous run)
             dep_artifacts = store.list_artifacts(dep.name)
         inputs.extend(dep_artifacts)
     return inputs
@@ -619,7 +613,7 @@ def _gather_inputs(
 def _layer_fully_cached(
     layer: Layer,
     inputs: list[Artifact],
-    store: ArtifactStore,
+    store: SnapshotArtifactCache,
     transform_fp: Fingerprint | None = None,
 ) -> bool:
     """Check if a layer can be entirely skipped (all artifacts cached)."""
@@ -776,10 +770,18 @@ def _execute_transform_concurrent(
         for future in as_completed(futures):
             idx = futures[future]
             try:
-                _, artifacts = future.result()
+                _, artifacts = future.result(timeout=600)  # 10 min hard ceiling per work unit
                 results[idx] = artifacts
                 _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
                 _invoke_callback(on_complete, artifacts, unit_inputs)
+            except TimeoutError:
+                _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
+                labels = [a.label for a in unit_inputs[:3]]
+                err = RuntimeError(f"Transform work unit timed out after 600s (inputs: {labels})")
+                results[idx] = err
+                if first_error is None:
+                    first_error = err
+                logger.warning("Work unit %d timed out (inputs: %s)", idx, labels)
             except Exception as exc:
                 results[idx] = exc
                 if first_error is None:
@@ -798,200 +800,15 @@ def _execute_transform_concurrent(
     return all_artifacts
 
 
-def _materialize_layer_projections(
-    pipeline: Pipeline,
-    layer_name: str,
+def _materialize_search_surface(
+    surface: SearchSurface,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
-    build_dir: Path,
-    logger: SynixLogger | None = None,
-) -> None:
-    """Materialize projections that source from this layer.
-
-    SearchIndex compatibility projections materialize progressively.
-    SynixSearch and FlatFile projections wait for their full source closure.
-    """
-    for proj in pipeline.projections:
-        source_layer_names = [s.name for s in proj.sources]
-        if layer_name not in source_layer_names:
-            continue
-
-        if isinstance(proj, FlatFile):
-            # Flat file only makes sense with all sources (e.g., core layer)
-            if not all(ln in layer_artifacts for ln in source_layer_names):
-                continue
-            _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
-        elif isinstance(proj, SearchIndex):
-            # Progressive: materialize with whatever sources are available
-            available_names = [ln for ln in source_layer_names if ln in layer_artifacts]
-            if available_names:
-                _materialize_projection(
-                    proj,
-                    layer_artifacts,
-                    build_dir,
-                    source_layer_override=available_names,
-                    logger=logger,
-                    triggered_by=layer_name,
-                )
-        elif isinstance(proj, SynixSearch):
-            if not all(ln in layer_artifacts for ln in source_layer_names):
-                continue
-            _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
-        else:
-            # Unknown projection type — require all sources
-            if not all(ln in layer_artifacts for ln in source_layer_names):
-                continue
-            _materialize_projection(proj, layer_artifacts, build_dir, logger=logger, triggered_by=layer_name)
-
-
-def _materialize_all_projections(
-    pipeline: Pipeline,
-    layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore,
-    build_dir: Path,
-    logger: SynixLogger | None = None,
-) -> list[ProjectionStats]:
-    """Materialize all projections after the full build (with caching).
-
-    Uses split hashing: content hash (artifact IDs) and embedding config
-    hash are tracked independently. When only the embedding config changes,
-    FTS5 is preserved and only embeddings are regenerated.
-    """
-    cache = _load_projection_cache(build_dir)
-    stats: list[ProjectionStats] = []
-
-    # Determine the last source layer for each projection (for triggered_by)
-    build_order = resolve_build_order(pipeline)
-    layer_order = {layer.name: i for i, layer in enumerate(build_order)}
-
-    for proj in pipeline.projections:
-        # Gather all artifacts for this projection
-        all_artifacts: list[Artifact] = []
-        source_layer_names = [s.name for s in proj.sources]
-        for layer_name in source_layer_names:
-            all_artifacts.extend(layer_artifacts.get(layer_name, []))
-
-        # Determine the last source layer (by build order) for triggered_by
-        last_layer = max(source_layer_names, key=lambda ln: layer_order.get(ln, 0)) if source_layer_names else None
-
-        # Compute separate hashes for content and embedding config
-        content_hash = _compute_content_only_hash(all_artifacts)
-        embedding_hash = _compute_embedding_config_hash(proj) if _is_search_output_projection(proj) else None
-
-        cached_entry = cache.get(proj.name)
-        content_cached = (
-            cached_entry is not None
-            and cached_entry.get("content_hash") == content_hash
-            and cached_entry.get("artifact_count") == len(all_artifacts)
-        )
-        embedding_cached = cached_entry is not None and cached_entry.get("embedding_hash") == embedding_hash
-
-        if content_cached and embedding_cached:
-            # Fully cached — skip everything
-            if logger:
-                logger.projection_cached(proj.name, triggered_by=last_layer)
-            stats.append(ProjectionStats(name=proj.name, status="cached"))
-        elif content_cached and not embedding_cached and _is_search_output_projection(proj):
-            # FTS5 is fine, only re-embed
-            if logger:
-                logger.projection_start(proj.name, _search_projection_type(proj), triggered_by=last_layer)
-            _regenerate_embeddings_only(proj, all_artifacts, build_dir, logger=logger)
-            if logger:
-                logger.projection_finish(proj.name, triggered_by=last_layer)
-            stats.append(ProjectionStats(name=proj.name, status="built"))
-        else:
-            # Full rebuild
-            cached = _materialize_projection(
-                proj,
-                layer_artifacts,
-                build_dir,
-                logger=logger,
-                triggered_by=last_layer,
-            )
-            status = "cached" if cached else "built"
-            stats.append(ProjectionStats(name=proj.name, status=status))
-
-        # Update cache with split hashes
-        cache[proj.name] = {
-            "content_hash": content_hash,
-            "embedding_hash": embedding_hash,
-            "source_layers": source_layer_names,
-            "artifact_count": len(all_artifacts),
-            **_search_output_cache_metadata(proj, build_dir),
-        }
-
-    _save_projection_cache(build_dir, cache)
-    return stats
-
-
-def _refresh_surface_cache(
-    pipeline: Pipeline,
-    layer_artifacts: dict[str, list[Artifact]],
-    build_dir: Path,
-) -> None:
-    """Persist final cache metadata for build-time search surfaces."""
-    cache = _load_projection_cache(build_dir)
-
-    for surface in pipeline.surfaces:
-        all_artifacts: list[Artifact] = []
-        source_layer_names = [s.name for s in surface.sources]
-        for layer_name in source_layer_names:
-            all_artifacts.extend(layer_artifacts.get(layer_name, []))
-
-        cache[surface.name] = {
-            "content_hash": _compute_content_only_hash(all_artifacts),
-            "embedding_hash": _compute_embedding_config_hash(surface),
-            "source_layers": source_layer_names,
-            "artifact_count": len(all_artifacts),
-        }
-
-    _save_projection_cache(build_dir, cache)
-
-
-def _get_projection_config(proj: Layer) -> dict:
-    """Extract cache-relevant config from a projection or search surface."""
-    if isinstance(proj, SearchIndex):
-        return {
-            "search": proj.search,
-            "embedding_config": proj.embedding_config,
-        }
-    elif isinstance(proj, SynixSearch):
-        return {
-            "surface": proj.surface.name,
-            "search": proj.search,
-            "embedding_config": proj.embedding_config,
-            "output_path": proj.output_path,
-        }
-    elif isinstance(proj, SearchSurface):
-        return {
-            "modes": proj.modes,
-            "embedding_config": proj.embedding_config,
-        }
-    elif isinstance(proj, FlatFile):
-        return {"output_path": proj.output_path}
-    return proj.config
-
-
-def _materialize_projection(
-    proj: Layer,
-    layer_artifacts: dict[str, list[Artifact]],
-    build_dir: Path,
-    source_layer_override: list[str] | None = None,
+    work_dir: Path,
     logger: SynixLogger | None = None,
     triggered_by: str | None = None,
-) -> bool:
-    """Materialize a single projection.
-
-    Args:
-        source_layer_override: If provided, use these layer names instead of proj.sources.
-            Used for progressive (intermediate) materialization.
-        logger: Optional logger for projection events.
-        triggered_by: Name of the layer that triggered this materialization.
-
-    Returns:
-        True if materialization was skipped (no-op), False if work was done.
-    """
-    source_layer_names = source_layer_override if source_layer_override is not None else [s.name for s in proj.sources]
+) -> None:
+    """Materialize a build-time search surface to .synix/work/surfaces/."""
+    source_layer_names = [s.name for s in surface.sources]
 
     all_artifacts: list[Artifact] = []
     sources_config: list[dict] = []
@@ -1004,101 +821,22 @@ def _materialize_projection(
             sources_config.append({"layer": layer_name, "level": level})
             break
 
-    proj_type = _search_projection_type(proj)
-
     if logger:
-        logger.projection_start(proj.name, proj_type, triggered_by=triggered_by)
+        logger.projection_start(surface.name, "search_surface", triggered_by=triggered_by)
 
-    if _is_search_output_projection(proj) or isinstance(proj, SearchSurface):
-        # Use projection registry to avoid direct search import
-        db_path = _search_projection_db_path(proj, build_dir)
-        try:
-            adapter_name = "synix_search" if isinstance(proj, SynixSearch) else "search_index"
-            projection = get_projection(adapter_name, build_dir, db_path)
-        except ValueError as exc:
-            logger.warning("Projection %r unavailable: %s", proj.name, exc)
-            return True
-        config = dict(proj.config)
-        config["embedding_config"] = proj.embedding_config
-        config["sources"] = sources_config
-        if logger:
-            config["_synix_logger"] = logger
-        projection.materialize(all_artifacts, config)
-        projection.close()
-    elif isinstance(proj, FlatFile):
-        projection = FlatFileProjection()
-        config = {"output_path": proj.output_path}
-        projection.materialize(all_artifacts, config)
-
-    if logger:
-        logger.projection_finish(proj.name, triggered_by=triggered_by)
-
-    return False
-
-def _compute_projection_hash(artifacts: list[Artifact], proj_config: dict | None = None) -> str:
-    """Compute a hash over sorted artifact IDs (hashes) and projection config."""
-    hashes = sorted(a.artifact_id for a in artifacts if a.artifact_id)
-    parts = "|".join(hashes)
-    if proj_config:
-        config_str = json.dumps(proj_config, sort_keys=True, default=str)
-        parts += "|config:" + config_str
-    return hashlib.sha256(parts.encode()).hexdigest()
-
-
-def _compute_content_only_hash(artifacts: list[Artifact]) -> str:
-    """Compute a hash over sorted artifact IDs only (no config)."""
-    hashes = sorted(a.artifact_id for a in artifacts if a.artifact_id)
-    return hashlib.sha256("|".join(hashes).encode()).hexdigest()
-
-
-def _compute_embedding_config_hash(proj) -> str | None:
-    """Compute a hash over embedding identity fields only."""
-    if not isinstance(proj, (SearchIndex, SynixSearch, SearchSurface)):
-        return None
-    if not proj.embedding_config:
-        return None
-    # Only identity fields: provider, model, dimensions
-    identity = {
-        "provider": proj.embedding_config.get("provider", "fastembed"),
-        "model": proj.embedding_config.get("model", "BAAI/bge-small-en-v1.5"),
-        "dimensions": proj.embedding_config.get("dimensions"),
-    }
-    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-
-
-def _regenerate_embeddings_only(
-    proj,
-    artifacts: list[Artifact],
-    build_dir: Path,
-    logger=None,
-) -> None:
-    """Re-generate embeddings without rebuilding FTS5."""
-    embedding_config = proj.embedding_config
-    if not embedding_config or not artifacts:
-        return
-    db_path = _search_projection_db_path(proj, build_dir)
+    db_path = _surface_db_path(surface, work_dir)
     try:
-        adapter_name = "synix_search" if isinstance(proj, SynixSearch) else "search_index"
-        projection = get_projection(adapter_name, build_dir, db_path)
-    except ValueError:
-        logger.warning("Cannot regenerate embeddings: Synix search projection unavailable")
+        projection = get_projection("search_index", work_dir, db_path)
+    except ValueError as exc:
+        logger.warning("Surface %r unavailable: %s", surface.name, exc)
         return
-    synix_logger = logger if logger else None
-    projection._generate_embeddings(embedding_config, artifacts, synix_logger)
+    config = dict(surface.config)
+    config["embedding_config"] = surface.embedding_config
+    config["sources"] = sources_config
+    if logger:
+        config["_synix_logger"] = logger
+    projection.materialize(all_artifacts, config)
+    projection.close()
 
-
-def _load_projection_cache(build_dir: Path) -> dict:
-    """Load projection cache from build_dir/.projection_cache.json."""
-    cache_path = build_dir / PROJECTION_CACHE_FILE
-    if cache_path.exists():
-        try:
-            return json.loads(cache_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
-
-
-def _save_projection_cache(build_dir: Path, cache: dict) -> None:
-    """Save projection cache to build_dir/.projection_cache.json."""
-    cache_path = build_dir / PROJECTION_CACHE_FILE
-    cache_path.write_text(json.dumps(cache, indent=2))
+    if logger:
+        logger.projection_finish(surface.name, triggered_by=triggered_by)

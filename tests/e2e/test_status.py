@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 from synix.build.validators import Violation, ViolationQueue, compute_violation_id
 from synix.core.models import Artifact
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 SYNIX_BIN = str(Path(sys.executable).parent / "synix")
 
@@ -45,27 +44,35 @@ def built_dir(tmp_path):
     """Build dir with artifacts across two layers."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
-    store = ArtifactStore(build_dir)
 
-    # Layer 0: sources
+    sources = []
     for i in range(3):
-        art = _make_artifact(
-            f"src-{i}",
-            f"Source content {i}",
-            atype="transcript",
-            layer_name="sources",
+        sources.append(
+            _make_artifact(
+                f"src-{i}",
+                f"Source content {i}",
+                atype="transcript",
+                layer_name="sources",
+                layer_level=0,
+            )
         )
-        store.save_artifact(art, "sources", 0)
 
-    # Layer 1: summaries
+    summaries = []
     for i in range(2):
-        art = _make_artifact(
-            f"sum-{i}",
-            f"Summary content {i}",
-            atype="episode",
-            layer_name="summaries",
+        summaries.append(
+            _make_artifact(
+                f"sum-{i}",
+                f"Summary content {i}",
+                atype="episode",
+                layer_name="summaries",
+                layer_level=1,
+            )
         )
-        store.save_artifact(art, "summaries", 1)
+
+    create_test_snapshot(
+        tmp_path,
+        {"sources": sources, "summaries": summaries},
+    )
 
     return build_dir
 
@@ -99,12 +106,13 @@ class TestStatusLayers:
             assert "│     -      │" not in line, f"Missing timestamp in: {line}"
 
     def test_empty_build_dir(self, tmp_path):
-        """Status with empty build shows empty table."""
+        """Status with empty build dir (no .synix) shows 'no build' error."""
         build_dir = tmp_path / "build"
         build_dir.mkdir()
         result = _run("status", "--build-dir", str(build_dir))
-        assert result.returncode == 0
-        assert "Build Status" in result.stdout
+        # After Phase 12, build/ alone is not enough — .synix/ must exist
+        assert result.returncode != 0
+        assert "No build directory" in result.stdout
 
     def test_missing_build_dir(self, tmp_path):
         """Status with nonexistent build dir shows error."""
@@ -226,18 +234,27 @@ class TestStatusViolations:
         assert "PII: email found" in result.stdout
         assert "PII: SSN found" not in result.stdout
 
-    def test_traces_excluded_from_layers(self, built_dir):
+    def test_traces_excluded_from_layers(self, tmp_path):
         """Trace artifacts should not appear in the layer table."""
-        store = ArtifactStore(built_dir)
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+
+        sources = [
+            _make_artifact("src-0", "Source content 0", atype="transcript", layer_name="sources", layer_level=0),
+        ]
         trace = Artifact(
             label="trace-check-sum-0-abc123",
             artifact_type="llm_trace",
             content="{}",
-            metadata={"trace_type": "citation_check", "layer_name": "traces"},
+            metadata={"trace_type": "citation_check", "layer_name": "traces", "layer_level": 99},
         )
-        store.save_artifact(trace, "traces", 99)
 
-        result = _run("status", "--build-dir", str(built_dir))
+        create_test_snapshot(
+            tmp_path,
+            {"sources": sources, "traces": [trace]},
+        )
+
+        result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
         assert (
             "traces" not in result.stdout.lower().split("violations")[0]
@@ -254,37 +271,66 @@ class TestStatusViolations:
 class TestStatusStale:
     def _build_with_provenance(self, tmp_path):
         """Helper: build dir with parent→child provenance and matching input_ids."""
+        import hashlib
+
         build_dir = tmp_path / "build"
         build_dir.mkdir()
-        store = ArtifactStore(build_dir)
-        provenance = ProvenanceTracker(build_dir)
 
         # Parent artifact
-        parent = _make_artifact("strategy", "Strategy content v1", atype="episode", layer_name="episodes")
-        store.save_artifact(parent, "episodes", 1)
-        provenance.record("strategy", [])
+        parent = _make_artifact(
+            "strategy", "Strategy content v1", atype="episode", layer_name="episodes", layer_level=1
+        )
+
+        # Compute parent's content hash to set as input_ids on child
+        parent_hash = f"sha256:{hashlib.sha256(b'Strategy content v1').hexdigest()}"
+        parent.artifact_id = parent_hash
 
         # Child artifact with parent's hash in input_ids
-        parent_hash = store.get_artifact_id("strategy")
         child = Artifact(
             label="call-prep",
             artifact_type="core_memory",
             content="Call prep based on strategy",
             input_ids=[parent_hash],
-            metadata={"layer_name": "core"},
+            metadata={"layer_name": "core", "layer_level": 2},
         )
-        store.save_artifact(child, "core", 2)
-        provenance.record("call-prep", ["strategy"])
 
-        return build_dir, store, provenance
+        create_test_snapshot(
+            tmp_path,
+            {"episodes": [parent], "core": [child]},
+            parent_labels_map={"call-prep": ["strategy"]},
+        )
+
+        return build_dir
 
     def test_stale_artifacts_detected(self, tmp_path):
-        """Rewriting a parent makes the child stale."""
-        build_dir, store, provenance = self._build_with_provenance(tmp_path)
+        """Parent with changed content makes the child stale."""
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
 
-        # Rewrite the parent with new content (changes its hash)
-        new_parent = _make_artifact("strategy", "Strategy content v2 UPDATED", atype="episode", layer_name="episodes")
-        store.save_artifact(new_parent, "episodes", 1)
+        # Parent artifact with V2 content (hash differs from child's input_ids)
+        new_parent = _make_artifact(
+            "strategy",
+            "Strategy content v2 UPDATED",
+            atype="episode",
+            layer_name="episodes",
+            layer_level=1,
+        )
+        # Child still references the OLD parent hash in input_ids
+        old_parent_hash = "sha256:old_hash_that_no_longer_matches"
+        child = Artifact(
+            label="call-prep",
+            artifact_type="core_memory",
+            content="Call prep based on strategy",
+            input_ids=[old_parent_hash],
+            metadata={"layer_name": "core", "layer_level": 2},
+        )
+
+        # Create snapshot where parent hash != child's input_ids (stale)
+        create_test_snapshot(
+            tmp_path,
+            {"episodes": [new_parent], "core": [child]},
+            parent_labels_map={"call-prep": ["strategy"]},
+        )
 
         result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
@@ -294,7 +340,7 @@ class TestStatusStale:
 
     def test_no_stale_when_fresh(self, tmp_path):
         """Consistent hashes produce no stale section."""
-        build_dir, _, _ = self._build_with_provenance(tmp_path)
+        build_dir = self._build_with_provenance(tmp_path)
 
         result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0
@@ -386,13 +432,9 @@ class TestStatusNextSteps:
         """Stale artifacts only → guidance says build."""
         build_dir = tmp_path / "build"
         build_dir.mkdir()
-        store = ArtifactStore(build_dir)
-        provenance = ProvenanceTracker(build_dir)
 
         # Parent
-        parent = _make_artifact("monthly-dec", "December rollup", atype="rollup", layer_name="rollups")
-        store.save_artifact(parent, "rollups", 1)
-        provenance.record("monthly-dec", [])
+        parent = _make_artifact("monthly-dec", "December rollup", atype="rollup", layer_name="rollups", layer_level=1)
 
         # Child with old parent hash
         child = Artifact(
@@ -400,10 +442,14 @@ class TestStatusNextSteps:
             artifact_type="core_memory",
             content="Core synthesis",
             input_ids=["sha256:old_hash_that_doesnt_match"],
-            metadata={"layer_name": "core"},
+            metadata={"layer_name": "core", "layer_level": 2},
         )
-        store.save_artifact(child, "core", 2)
-        provenance.record("core-1", ["monthly-dec"])
+
+        create_test_snapshot(
+            tmp_path,
+            {"rollups": [parent], "core": [child]},
+            parent_labels_map={"core-1": ["monthly-dec"]},
+        )
 
         result = _run("status", "--build-dir", str(build_dir))
         assert result.returncode == 0

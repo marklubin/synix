@@ -88,8 +88,8 @@ def init(project_name: str, template: str, list_templates: bool):
         f"[dim](template: {template})[/dim]\n"
         f"\n"
         f"  cd {project_name}\n"
-        f"  cp .env.example .env   [dim]# add your API key[/dim]\n"
-        f"  uvx synix build\n"
-        f"  uvx synix validate\n"
-        f"  uvx synix search 'hiking'"
+        f"  cp .env.example .env          [dim]# add your API key[/dim]\n"
+        f"  uvx synix build pipeline.py\n"
+        f"  uvx synix release HEAD --to local\n"
+        f"  uvx synix search 'hiking' --release local"
     )

@@ -76,9 +76,7 @@ pipeline.add(transcripts, episodes, episode_search, topics, core, memory_search)
 
 # --- Projections ---
 
-pipeline.add(
-    SynixSearch("search", surface=memory_search)
-)
+pipeline.add(SynixSearch("search", surface=memory_search))
 
 pipeline.add(
     FlatFile(

@@ -106,18 +106,19 @@ Synix gives you: edit the pipeline definition, run it again, and your same raw d
 
 The name "Synix" comes from **synthesis** — the core action of transforming raw information into processed understanding. In chip design, synthesis turns high-level descriptions into gate-level implementations. In software, build systems turn source files into artifacts. Synix does the same for agent memory: sources become artifacts through declared build rules, with full lineage tracking and incremental rebuilds.
 
-### 1.5 Immutable Build History
+### 1.5 Build/Release Separation
 
-As of the snapshotting work in `v0.15.x`, Synix distinguishes between:
+Synix separates build from release absolutely:
 
-- the **mutable local build surface** (`build/`), which current commands and demos still use as a compatibility materialization target
-- the **immutable canonical history** (`.synix/`), which stores content-addressed objects, manifests, snapshots, and refs
+- **`.synix/`** is the single source of truth — content-addressed objects, manifests, snapshots, refs, and releases all live here. There is no `build/` directory.
+- **`synix build`** produces immutable snapshots. It writes artifact objects and snapshot refs but creates no user-facing files.
+- **`synix release`** materializes a snapshot to a named release target. It dispatches to projection adapters (`synix_search`, `flat_file`), writes outputs to `.synix/releases/<name>/`, records a receipt, and advances the release ref.
 
-This split is intentional. Build history should survive `synix clean`, and future release targets should be materialized from immutable snapshot state rather than treated as the source of truth.
+The legacy `ArtifactStore` (which wrote to `build/manifest.json` + `.md` files) and `ProvenanceTracker` (which maintained `build/provenance.json`) have been removed. The `ObjectStore` is the single write path; provenance is embedded in artifact objects via `parent_labels`.
 
-The first shipped slice records **artifact snapshots only**. Projection/release state is still materialized into the local build surface until the explicit release/adapter layer lands.
+`SearchSurface` is the build-time retrieval capability (materialized transiently under `.synix/work/surfaces/`). `SynixSearch` is the canonical search output, materialized at release time by the `synix_search` adapter into a self-contained `search.db` with provenance baked in.
 
-Within that mutable local surface, `SearchSurface` is the build-time retrieval capability and `SynixSearch` is the default local search output. Files like `build/search.db` and `.projection_cache.json` are operational compatibility state, not stable public schemas.
+See [docs/projection-release-v2-rfc.md](projection-release-v2-rfc.md) for the full design.
 
 ---
 

@@ -6,12 +6,13 @@ with mocked LLM.
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -120,10 +121,10 @@ class TestExtPipelineBuild:
         assert result.exit_code == 0, f"Build failed: {result.output}"
         assert "Build Summary" in result.output
 
-        # Check manifest
-        manifest_path = workspace["root"] / "build" / "manifest.json"
-        assert manifest_path.exists()
-        manifest = json.loads(manifest_path.read_text())
+        # Check manifest via snapshot
+        build_dir = workspace["root"] / "build"
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest = store.iter_entries()
 
         labels = set(manifest.keys())
         # 3 bios (source) + 1 brief (source) + 3 work_styles (map) + 1 team-dynamics (reduce) + 1 final-report (fold)
@@ -151,12 +152,17 @@ class TestExtPipelineBuild:
         assert "final_report" in result.output
 
     def test_search_after_build(self, runner, workspace, ext_pipeline_file):
-        """Search works after building with ext transforms."""
+        """Search works after building and releasing with ext transforms."""
         result1 = runner.invoke(main, ["run", str(ext_pipeline_file)])
         assert result1.exit_code == 0
 
-        build_dir = str(workspace["root"] / "build")
-        result2 = runner.invoke(main, ["search", "mock", "--build-dir", build_dir])
+        from synix.build.release_engine import execute_release
+
+        build_dir = workspace["root"] / "build"
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        execute_release(synix_dir, release_name="local")
+
+        result2 = runner.invoke(main, ["search", "mock", "--build-dir", str(build_dir), "--release", "local"])
         assert result2.exit_code == 0
 
     def test_list_shows_artifacts(self, runner, workspace, ext_pipeline_file):
@@ -230,8 +236,9 @@ pipeline.add(sources, tagged, by_team)
         result = runner.invoke(main, ["run", str(path)])
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-        manifest_path = workspace["root"] / "build" / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        build_dir = workspace["root"] / "build"
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(build_dir))
+        manifest = store.iter_entries()
         labels = set(manifest.keys())
 
         # Should have team-design and team-engineering groups

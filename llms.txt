@@ -20,7 +20,6 @@ Synix transforms raw conversations into searchable, hierarchical memory with ful
 ## Installation and quick start
 
 ```bash
-# Install with mesh support
 uvx synix init my-project
 cd my-project
 
@@ -28,8 +27,11 @@ cd my-project
 export ANTHROPIC_API_KEY=your-key
 uvx synix build
 
+# Release to materialize search index + context document
+uvx synix release HEAD --to local
+
 # Search with provenance
-uvx synix search "database migration"
+uvx synix search "database migration" --release local
 uvx synix show final-report
 uvx synix lineage artifact-id
 ```
@@ -37,34 +39,43 @@ uvx synix lineage artifact-id
 ## CLI commands
 
 - `synix init <name>` - Create new pipeline with sources and config
-- `synix build` - Run pipeline, rebuild only changed artifacts  
+- `synix build` - Run pipeline, rebuild only changed artifacts
+- `synix release <ref> --to <name>` - Materialize projections from a build snapshot
+- `synix revert <ref> --to <name>` - Release an older snapshot (rollback)
 - `synix plan` - Show what would build without executing
-- `synix search <query>` - Search artifacts with provenance chains
+- `synix search <query> --release <name>` - Search released artifacts with provenance
 - `synix show <id>` - Display artifact content by label/ID prefix
 - `synix lineage <id>` - Show full provenance tree for artifact
 - `synix list [layer]` - List artifacts, optionally filtered by layer
-- `synix verify` - Run validation checks on build outputs
-- `synix clean` - Remove build directory
+- `synix validate` - Run domain validators on build outputs
+- `synix clean` - Remove release targets and work files
+- `synix releases list` - Show all releases with receipt info
+- `synix refs list` - Show all refs (build runs + releases)
 - `synix runs list` - Show immutable build snapshots
 - `synix batch-build run` - Submit pipeline to OpenAI Batch API (50% cost)
 - `synix mesh create` - Create distributed build mesh over Tailscale
 
 ## Architecture overview
 
+All state lives in `.synix/` — no `build/` directory is created. Build produces immutable snapshots; `synix release` materializes them into usable outputs.
+
 ```
 src/synix/
 ├── core/models.py          # Pipeline, Layer, Transform, Artifact models
 ├── build/
-│   ├── runner.py          # Execute pipeline, walk DAG, cache artifacts  
-│   ├── artifacts.py       # Content-addressed artifact storage
-│   ├── provenance.py      # Track lineage chains
+│   ├── runner.py          # Execute pipeline, walk DAG, cache artifacts
+│   ├── object_store.py    # Content-addressed object storage
+│   ├── snapshots.py       # Immutable build snapshots + transactions
+│   ├── snapshot_view.py   # Ref-resolved read API over snapshots
+│   ├── release_engine.py  # Release orchestration (lock, dispatch, receipt)
+│   ├── release.py         # ReleaseClosure — resolved artifact set
+│   ├── adapters.py        # Projection adapter contract + registry
 │   └── llm_transforms.py  # Built-in episode/rollup/core transforms
 ├── ext/                   # Generic transform patterns (Map, Reduce, etc)
-├── transforms/            # Platform transforms library
 ├── search/
 │   ├── indexer.py         # SQLite FTS5 + embedding search
-│   └── retriever.py       # Hybrid keyword + semantic retrieval
-├── adapters/              # ChatGPT/Claude/text parsers
+│   ├── retriever.py       # Hybrid keyword + semantic retrieval
+│   └── adapter.py         # synix_search release adapter
 ├── cli/                   # Click commands with Rich formatting
 └── templates/             # Demo pipelines for common patterns
 ```

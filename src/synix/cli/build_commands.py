@@ -251,6 +251,8 @@ def build(
         console.print(f"[bold]Artifact Snapshot:[/bold] {result.snapshot_oid[:12]}")
         console.print(f"[bold]Run ID:[/bold] {run_id}")
         console.print(f"[bold]Run Ref:[/bold] {result.run_ref}")
+        console.print()
+        console.print("[dim]Next: synix release HEAD --to local[/dim]")
 
     # Show run log summary when verbose
     run_log = result.run_log
@@ -620,13 +622,15 @@ def _display_source_change_warnings(build_plan, pipeline):
 
     from pathlib import Path
 
-    from synix.build.artifacts import ArtifactStore
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
     if not build_path.exists():
         return
 
-    store = ArtifactStore(build_path)
+    synix_dir = synix_dir_for_build_dir(build_path)
+    store = SnapshotArtifactCache(synix_dir)
     layer_lookup = {layer.name: layer for layer in pipeline.layers}
 
     for step in build_plan.steps:
@@ -738,28 +742,73 @@ def _display_llm_config(build_plan):
 
 
 def _save_plan_artifact(build_plan, pipeline):
-    """Save the build plan as an artifact in the build directory."""
+    """Save the build plan as a snapshot in the .synix object store."""
+    import hashlib
+    from datetime import UTC, datetime
     from pathlib import Path
 
-    from synix.build.artifacts import ArtifactStore
-    from synix.core.models import Artifact
+    from synix.build.object_store import SCHEMA_VERSION, ObjectStore
+    from synix.build.refs import RefStore, synix_dir_for_build_dir
 
     build_dir = Path(pipeline.build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
-    store = ArtifactStore(build_dir)
+
+    synix_dir = synix_dir_for_build_dir(build_dir, configured_synix_dir=pipeline.synix_dir)
+    synix_dir.mkdir(parents=True, exist_ok=True)
+    object_store = ObjectStore(synix_dir)
+    ref_store = RefStore(synix_dir)
 
     content = build_plan.to_json()
-    artifact = Artifact(
-        label="build-plan",
-        artifact_type="build_plan",
-        content=content,
-        metadata={
+    content_oid, _ = object_store.put_text(content)
+    content_hash = f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+
+    artifact_payload = {
+        "type": "artifact",
+        "schema_version": SCHEMA_VERSION,
+        "label": "build-plan",
+        "artifact_type": "build_plan",
+        "artifact_id": content_hash,
+        "content_oid": content_oid,
+        "input_ids": [],
+        "prompt_id": None,
+        "model_config": None,
+        "metadata": {
             "pipeline_name": build_plan.pipeline_name,
             "total_rebuild": build_plan.total_rebuild,
             "total_cached": build_plan.total_cached,
             "total_estimated_llm_calls": build_plan.total_estimated_llm_calls,
             "total_estimated_cost": build_plan.total_estimated_cost,
+            "layer_name": "plans",
+            "layer_level": 99,
         },
-    )
-    store.save_artifact(artifact, layer_name="plans", layer_level=99)
-    console.print(f"\n[dim]Plan saved as artifact 'build-plan' in {build_dir}[/dim]")
+        "parent_labels": [],
+    }
+    artifact_oid = object_store.put_json(artifact_payload)
+
+    # Build manifest and snapshot so SnapshotArtifactCache can read it back
+    manifest_payload = {
+        "type": "manifest",
+        "schema_version": SCHEMA_VERSION,
+        "pipeline_name": build_plan.pipeline_name,
+        "pipeline_fingerprint": "sha256:plan-save",
+        "artifacts": [{"label": "build-plan", "oid": artifact_oid}],
+        "projections": {},
+    }
+    manifest_oid = object_store.put_json(manifest_payload)
+
+    snapshot_payload = {
+        "type": "snapshot",
+        "schema_version": SCHEMA_VERSION,
+        "manifest_oid": manifest_oid,
+        "parent_snapshot_oids": [],
+        "created_at": datetime.now(UTC).isoformat(),
+        "pipeline_name": build_plan.pipeline_name,
+        "run_id": "plan-save",
+    }
+    snapshot_oid = object_store.put_json(snapshot_payload)
+
+    # Write to a separate plans ref — never clobber refs/heads/main which
+    # holds the real build HEAD. This avoids destroying build history.
+    ref_store.write_ref("refs/plans/latest", snapshot_oid)
+
+    console.print(f"\n[dim]Plan saved as artifact 'build-plan' ({artifact_oid[:12]}) in {synix_dir}[/dim]")

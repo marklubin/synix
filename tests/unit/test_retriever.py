@@ -7,10 +7,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from synix import Artifact
-from synix.build.provenance import ProvenanceTracker
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.search.indexer import SearchIndex
 from synix.search.results import SearchResult
 from synix.search.retriever import HybridRetriever, _cosine_similarity
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -199,13 +200,18 @@ class TestKeywordRetrieval:
 
     def test_keyword_with_provenance(self, populated_index, tmp_build_dir):
         """Keyword mode includes provenance when tracker provided."""
-        tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_labels=[])
+        ep_art = Artifact(label="ep-001", artifact_type="episode", content="placeholder")
+        t_art = Artifact(label="t-001", artifact_type="transcript", content="placeholder")
+        create_test_snapshot(
+            tmp_build_dir,
+            {"episodes": [ep_art], "transcripts": [t_art]},
+            parent_labels_map={"ep-001": ["t-001"]},
+        )
+        store = SnapshotArtifactCache(tmp_build_dir / ".synix")
 
         retriever = HybridRetriever(
             search_index=populated_index,
-            provenance_tracker=tracker,
+            provenance_tracker=store,
         )
         results = retriever.query("machine learning", mode="keyword")
 
@@ -370,15 +376,20 @@ class TestHybridRetrieval:
 
     def test_hybrid_with_provenance(self, populated_index, sample_embedding_map, tmp_build_dir):
         """Hybrid mode includes provenance chains."""
-        tracker = ProvenanceTracker(tmp_build_dir)
-        tracker.record("ep-001", parent_labels=["t-001"], prompt_id="ep_v1")
-        tracker.record("t-001", parent_labels=[])
+        ep_art = Artifact(label="ep-001", artifact_type="episode", content="placeholder")
+        t_art = Artifact(label="t-001", artifact_type="transcript", content="placeholder")
+        create_test_snapshot(
+            tmp_build_dir,
+            {"episodes": [ep_art], "transcripts": [t_art]},
+            parent_labels_map={"ep-001": ["t-001"]},
+        )
+        store = SnapshotArtifactCache(tmp_build_dir / ".synix")
 
         provider = _make_mock_embedding_provider(sample_embedding_map)
         retriever = HybridRetriever(
             search_index=populated_index,
             embedding_provider=provider,
-            provenance_tracker=tracker,
+            provenance_tracker=store,
         )
         results = retriever.query("machine learning", mode="hybrid")
 

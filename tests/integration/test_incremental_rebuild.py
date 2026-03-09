@@ -133,6 +133,44 @@ class TestIncrementalRebuild:
             # Restore original prompt
             prompt_path.write_text(original)
 
+    def test_cached_artifacts_content_identical(self, pipeline_obj, source_dir, build_dir, mock_llm):
+        """Second build produces artifacts with identical content and artifact_ids."""
+        from synix.build.snapshot_view import SnapshotView
+
+        result1 = run(pipeline_obj, source_dir=str(source_dir))
+        assert result1.built > 0
+
+        synix_dir = Path(result1.synix_dir)
+        view1 = SnapshotView.open(synix_dir)
+        arts1 = {
+            entry["label"]: (
+                view1._object_store.get_json(entry["oid"])["artifact_id"],
+                view1._object_store.get_bytes(view1._object_store.get_json(entry["oid"])["content_oid"]).decode(
+                    "utf-8"
+                ),
+            )
+            for entry in view1._manifest["artifacts"]
+        }
+
+        result2 = run(pipeline_obj, source_dir=str(source_dir))
+
+        view2 = SnapshotView.open(synix_dir)
+        arts2 = {
+            entry["label"]: (
+                view2._object_store.get_json(entry["oid"])["artifact_id"],
+                view2._object_store.get_bytes(view2._object_store.get_json(entry["oid"])["content_oid"]).decode(
+                    "utf-8"
+                ),
+            )
+            for entry in view2._manifest["artifacts"]
+        }
+
+        # Every artifact from build 1 should have identical hash and content in build 2
+        for label in arts1:
+            assert label in arts2, f"artifact {label} missing from second build"
+            assert arts1[label][0] == arts2[label][0], f"artifact_id mismatch for {label}"
+            assert arts1[label][1] == arts2[label][1], f"content mismatch for {label}"
+
     def test_cache_metrics_accurate(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """RunResult reports correct built/cached/skipped counts."""
         result1 = run(pipeline_obj, source_dir=str(source_dir))

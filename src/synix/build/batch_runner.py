@@ -11,7 +11,6 @@ from pathlib import Path
 
 import click
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.batch_client import (
     BatchCollecting,
     BatchInProgress,
@@ -21,17 +20,21 @@ from synix.build.batch_client import (
 from synix.build.batch_state import BatchState, BuildInstance
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.fingerprint import compute_build_fingerprint
-from synix.build.provenance import ProvenanceTracker
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.runner import (
     _build_source_config,
     _build_transform_config,
     _build_transform_context,
     _gather_inputs,
-    _get_parent_labels,
     _invoke_transform_execute,
     _invoke_transform_split,
     _layer_fully_cached,
+    _record_snapshot_artifact,
+    _record_snapshot_projections,
+    _snapshot_parent_labels,
 )
+from synix.build.snapshot_view import SnapshotArtifactCache
+from synix.build.snapshots import commit_build_snapshot, start_build_transaction
 from synix.core.config import LLMConfig
 from synix.core.models import Artifact, Pipeline, Source, Transform
 
@@ -135,22 +138,42 @@ def batch_run(
                 f"Use --allow-pipeline-mismatch to resume anyway."
             )
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
+    synix_dir = synix_dir_for_build_dir(build_dir)
+    synix_dir.mkdir(parents=True, exist_ok=True)
+    (synix_dir / "work").mkdir(parents=True, exist_ok=True)
+    store = SnapshotArtifactCache(synix_dir)
+    snapshot_txn = start_build_transaction(pipeline, build_dir, build_id)
     layer_artifacts: dict[str, list] = {}
 
     result = BatchRunResult(status="collecting", build_id=build_id)
     result.layers_completed = list(manifest.layers_completed)
+
+    def _record_layer_artifacts(layer, inputs=None):
+        """Record all artifacts for a completed layer into the snapshot transaction."""
+        for art in layer_artifacts.get(layer.name, []):
+            if isinstance(layer, Source):
+                parent_labels = []
+            else:
+                parent_labels = _snapshot_parent_labels(art, inputs or [], store)
+            _record_snapshot_artifact(
+                snapshot_txn,
+                art,
+                layer_name=layer.name,
+                layer_level=layer._level,
+                parent_labels=parent_labels,
+            )
 
     # --- DAG walk ---
     for layer in build_order:
         if layer.name in manifest.layers_completed:
             # Already done in previous run — load artifacts from store
             layer_artifacts[layer.name] = store.list_artifacts(layer.name)
+            _record_layer_artifacts(layer)
             continue
 
         if isinstance(layer, Source):
-            _run_source_layer(layer, pipeline, src_dir, store, provenance, layer_artifacts)
+            _run_source_layer(layer, pipeline, src_dir, store, layer_artifacts)
+            _record_layer_artifacts(layer)
             manifest.layers_completed.append(layer.name)
             manifest.current_layer = None
             batch_state.save_manifest(manifest)
@@ -163,7 +186,8 @@ def batch_run(
             inputs = _gather_inputs(layer, layer_artifacts, store)
 
             if mode == "sync":
-                _run_sync_transform(layer, pipeline, src_dir, build_dir, inputs, store, provenance, layer_artifacts)
+                _run_sync_transform(layer, pipeline, src_dir, build_dir, inputs, store, layer_artifacts)
+                _record_layer_artifacts(layer, inputs)
                 manifest.layers_completed.append(layer.name)
                 manifest.current_layer = None
                 batch_state.save_manifest(manifest)
@@ -176,12 +200,12 @@ def batch_run(
                     build_dir,
                     inputs,
                     store,
-                    provenance,
                     layer_artifacts,
                     batch_state,
                 )
 
                 if batch_result == "completed":
+                    _record_layer_artifacts(layer, inputs)
                     manifest.layers_completed.append(layer.name)
                     manifest.current_layer = None
                     batch_state.save_manifest(manifest)
@@ -199,12 +223,12 @@ def batch_run(
                             build_dir,
                             inputs,
                             store,
-                            provenance,
                             layer_artifacts,
                             batch_state,
                             poll_interval,
                         )
                         if completed:
+                            _record_layer_artifacts(layer, inputs)
                             manifest.layers_completed.append(layer.name)
                             manifest.current_layer = None
                             batch_state.save_manifest(manifest)
@@ -226,12 +250,12 @@ def batch_run(
                             build_dir,
                             inputs,
                             store,
-                            provenance,
                             layer_artifacts,
                             batch_state,
                             poll_interval,
                         )
                         if completed:
+                            _record_layer_artifacts(layer, inputs)
                             manifest.layers_completed.append(layer.name)
                             manifest.current_layer = None
                             batch_state.save_manifest(manifest)
@@ -244,7 +268,7 @@ def batch_run(
                         result.total_time = time.time() - start_time
                         return result
 
-    # All layers done
+    # All layers done — commit snapshot
     errors = batch_state.get_errors()
     if errors:
         result.status = "completed_with_errors"
@@ -254,6 +278,9 @@ def batch_run(
     else:
         result.status = "completed"
         manifest.status = "completed"
+
+    _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
+    commit_build_snapshot(snapshot_txn)
 
     result.layers_completed = list(manifest.layers_completed)
     result.batches_submitted = list(batch_state.get_batches().keys())
@@ -321,8 +348,7 @@ def _run_source_layer(
     layer: Source,
     pipeline: Pipeline,
     src_dir: str,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: SnapshotArtifactCache,
     layer_artifacts: dict,
 ) -> None:
     """Run a source layer synchronously."""
@@ -334,8 +360,6 @@ def _run_source_layer(
     for artifact in artifacts:
         artifact.metadata["layer_name"] = layer.name
         artifact.metadata["layer_level"] = layer._level
-        store.save_artifact(artifact, layer.name, layer._level)
-        provenance.record(artifact.label, parent_labels=[], prompt_id=None, model_config=None)
 
     layer_artifacts[layer.name] = artifacts
 
@@ -344,11 +368,10 @@ def _save_or_cache_artifact(
     artifact,
     layer: Transform,
     inputs: list,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: SnapshotArtifactCache,
     transform_fp,
 ) -> Artifact:
-    """Check cache, save if needed, record provenance. Returns the final artifact."""
+    """Check cache and return the final artifact (cached or newly built)."""
 
     build_fp = compute_build_fingerprint(transform_fp, artifact.input_ids)
     rebuild, _reasons = needs_rebuild(
@@ -362,14 +385,6 @@ def _save_or_cache_artifact(
         artifact.metadata["layer_level"] = layer._level
         artifact.metadata["build_fingerprint"] = build_fp.to_dict()
         artifact.metadata["transform_fingerprint"] = transform_fp.to_dict()
-        store.save_artifact(artifact, layer.name, layer._level)
-        parent_labels = _get_parent_labels(artifact, inputs)
-        provenance.record(
-            artifact.label,
-            parent_labels=parent_labels,
-            prompt_id=artifact.prompt_id,
-            model_config=artifact.model_config,
-        )
         return artifact
     else:
         cached = store.load_artifact(artifact.label)
@@ -386,8 +401,7 @@ def _run_sync_transform(
     src_dir: str,
     build_dir: Path,
     inputs: list,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: SnapshotArtifactCache,
     layer_artifacts: dict,
 ) -> None:
     """Run a transform layer synchronously (same as regular build)."""
@@ -410,7 +424,7 @@ def _run_sync_transform(
             unit_ctx = transform_ctx.with_updates(config_extras)
             new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             for artifact in new_artifacts:
-                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
+                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, transform_fp))
 
     layer_artifacts[layer.name] = layer_built
 
@@ -421,8 +435,7 @@ def _run_batch_transform(
     src_dir: str,
     build_dir: Path,
     inputs: list,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: SnapshotArtifactCache,
     layer_artifacts: dict,
     batch_state: BatchState,
 ) -> str:
@@ -471,7 +484,7 @@ def _run_batch_transform(
             new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
             # Result was available — save artifacts
             for artifact in new_artifacts:
-                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, provenance, transform_fp))
+                layer_built.append(_save_or_cache_artifact(artifact, layer, inputs, store, transform_fp))
         except BatchCollecting:
             collecting = True
         except BatchInProgress:
@@ -517,8 +530,7 @@ def _poll_and_resume(
     src_dir: str,
     build_dir: Path,
     inputs: list,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: SnapshotArtifactCache,
     layer_artifacts: dict,
     batch_state: BatchState,
     poll_interval: int,
@@ -562,7 +574,6 @@ def _poll_and_resume(
                 build_dir,
                 inputs,
                 store,
-                provenance,
                 layer_artifacts,
                 batch_state,
             )

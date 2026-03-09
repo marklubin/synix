@@ -6,7 +6,6 @@ Exercises: build, plan, search, verify, diff, config change (monthly→topical),
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -14,6 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 
+from synix.build.refs import synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.cli import main
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,8 @@ class TestDT1FreshBuild:
         assert result.exit_code == 0, f"Build failed: {result.output}"
         assert "Build Summary" in result.output
 
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
 
         # Count by layer
         layers: dict[str, int] = {}
@@ -204,17 +206,31 @@ class TestDT1FreshBuild:
         """Search returns results for content present in the corpus."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        search_db = workspace["build_dir"] / "search.db"
+        # Release to materialize projections (search.db, context.md)
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        search_db = synix_dir / "releases" / "local" / "search.db"
         assert search_db.exists()
 
-        result = runner.invoke(main, ["search", "programming", "--build-dir", str(workspace["build_dir"])])
+        result = runner.invoke(
+            main, ["search", "programming", "--build-dir", str(workspace["build_dir"]), "--release", "local"]
+        )
         assert result.exit_code == 0
 
     def test_context_doc_created_with_core_content(self, runner, workspace, monthly_pipeline_file):
         """Context doc contains the core memory synthesis."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        context_doc = workspace["build_dir"] / "context.md"
+        # Release to materialize projections
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
+        context_doc = synix_dir / "releases" / "local" / "context.md"
         assert context_doc.exists()
         content = context_doc.read_text()
         assert "Identity" in content
@@ -224,13 +240,10 @@ class TestDT1FreshBuild:
         """Every non-transcript artifact has provenance records."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
-        provenance_path = workspace["build_dir"] / "provenance.json"
-        assert provenance_path.exists()
-        provenance = json.loads(provenance_path.read_text())
-
-        manifest = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest = store.iter_entries()
         derived = {aid for aid, info in manifest.items() if info.get("layer") != "transcripts"}
-        missing = [aid for aid in derived if aid not in provenance]
+        missing = [aid for aid in derived if not store.get_parents(aid)]
         assert not missing, f"Missing provenance for: {missing}"
 
 
@@ -246,8 +259,24 @@ class TestDT1Search:
         """Search filtered to episodes layer returns only episode results."""
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
 
+        # Release to materialize search.db
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        execute_release(synix_dir, release_name="local")
+
         result = runner.invoke(
-            main, ["search", "programming", "--layers", "episodes", "--build-dir", str(workspace["build_dir"])]
+            main,
+            [
+                "search",
+                "programming",
+                "--layers",
+                "episodes",
+                "--build-dir",
+                str(workspace["build_dir"]),
+                "--release",
+                "local",
+            ],
         )
         assert result.exit_code == 0
         # Should have results from episodes layer
@@ -272,7 +301,8 @@ class TestDT1ConfigChange:
         assert result1.exit_code == 0
         calls_after_first = mock_anthropic["n"]
 
-        manifest1 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store1 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest1 = store1.iter_entries()
         transcript_ids = {aid for aid, info in manifest1.items() if info["layer"] == "transcripts"}
         episode_ids = {aid for aid, info in manifest1.items() if info["layer"] == "episodes"}
 
@@ -280,7 +310,8 @@ class TestDT1ConfigChange:
         result2 = runner.invoke(main, ["build", str(topical_pipeline_file)])
         assert result2.exit_code == 0
 
-        manifest2 = json.loads((workspace["build_dir"] / "manifest.json").read_text())
+        store2 = SnapshotArtifactCache(synix_dir_for_build_dir(workspace["build_dir"]))
+        manifest2 = store2.iter_entries()
 
         # Transcripts and episodes should be preserved
         for tid in transcript_ids:
@@ -299,13 +330,20 @@ class TestDT1ConfigChange:
         self, runner, workspace, monthly_pipeline_file, topical_pipeline_file
     ):
         """Context doc is updated after config change."""
+        from synix.build.release_engine import execute_release
+
+        synix_dir = synix_dir_for_build_dir(workspace["build_dir"])
+        releases_dir = synix_dir / "releases" / "local"
+
         # Build monthly
         runner.invoke(main, ["build", str(monthly_pipeline_file)])
-        context1 = (workspace["build_dir"] / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        context1 = (releases_dir / "context.md").read_text()
 
         # Build topical
         runner.invoke(main, ["build", str(topical_pipeline_file)])
-        context2 = (workspace["build_dir"] / "context.md").read_text()
+        execute_release(synix_dir, release_name="local")
+        context2 = (releases_dir / "context.md").read_text()
 
         # Context should still contain core memory (both builds produce it)
         assert len(context1) > 0

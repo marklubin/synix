@@ -18,8 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 from synix.core.citations import extract_citations
 from synix.core.errors import atomic_write
 from synix.core.models import Artifact, Layer, Pipeline
@@ -56,10 +54,14 @@ class Violation:
 
 @dataclass
 class ValidationContext:
-    """Context passed to validators — provides access to store, provenance, pipeline."""
+    """Context passed to validators — provides access to store and pipeline.
 
-    store: ArtifactStore
-    provenance: ProvenanceTracker
+    The store object must provide load_artifact(), list_artifacts(),
+    get_parents(), and get_chain() (duck-typed, works with both
+    ArtifactStore+ProvenanceTracker and SnapshotArtifactCache).
+    """
+
+    store: object  # SnapshotArtifactCache or any duck-typed equivalent
     pipeline: Pipeline | None = None
 
     def trace_field_origin(self, label: str, field_name: str) -> list[ProvenanceStep]:
@@ -96,7 +98,7 @@ class ValidationContext:
             )
 
             # Walk to parents
-            parent_ids = self.provenance.get_parents(current_id)
+            parent_ids = self.store.get_parents(current_id)
             for pid in parent_ids:
                 if pid not in visited:
                     queue.append(pid)
@@ -222,8 +224,15 @@ def _violation_sort_key(violation: Violation) -> tuple[str, str, str, str, str, 
     )
 
 
-def _store_llm_trace(store: ArtifactStore, label: str, prompt: str, response: str, trace_type: str) -> None:
-    """Save an LLM interaction as a system artifact for auditability."""
+def _store_llm_trace(store: object, label: str, prompt: str, response: str, trace_type: str) -> None:
+    """Save an LLM interaction as a system artifact for auditability.
+
+    No-op when the store is read-only (e.g. SnapshotArtifactCache).
+    """
+    save_fn = getattr(store, "save_artifact", None)
+    if save_fn is None:
+        logger.debug("_store_llm_trace: store has no save_artifact, skipping trace for %s", label)
+        return
     trace = Artifact(
         label=f"trace-{trace_type}-{label}-{uuid4().hex[:8]}",
         artifact_type="llm_trace",
@@ -238,7 +247,7 @@ def _store_llm_trace(store: ArtifactStore, label: str, prompt: str, response: st
         ),
         metadata={"trace_type": trace_type, "target_artifact": label},
     )
-    store.save_artifact(trace, layer_name="traces", layer_level=99)
+    save_fn(trace, layer_name="traces", layer_level=99)
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +356,7 @@ class ViolationQueue:
         # If content changed, ignore is invalidated
         return entry.get("last_seen_hash") == content_hash
 
-    def active(self, store: ArtifactStore | None = None) -> list[dict]:
+    def active(self, store: object | None = None) -> list[dict]:
         result = []
         for entry in self._state.values():
             if entry.get("status") != "active":
@@ -433,7 +442,7 @@ class MutualExclusion(BaseValidator):
         violations: list[Violation] = []
 
         for artifact in artifacts:
-            parent_ids = ctx.provenance.get_parents(artifact.label)
+            parent_ids = ctx.store.get_parents(artifact.label)
             values: set[str] = set()
 
             for pid in parent_ids:
@@ -672,8 +681,9 @@ class SemanticConflict(BaseValidator):
             import importlib
 
             _indexer = importlib.import_module("synix.search.indexer")
-            search_db = ctx.store.build_dir / "search.db"
-            if search_db.exists():
+            build_dir = getattr(ctx.store, "build_dir", None)
+            search_db = build_dir / "search.db" if build_dir else None
+            if search_db is not None and search_db.exists():
                 search_index = _indexer.SearchIndex(search_db)
         except Exception:
             logger.warning("semantic_conflict: could not load search index for claim tracing")
@@ -963,8 +973,9 @@ class Citation(BaseValidator):
 # ---------------------------------------------------------------------------
 
 
-def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
+def _gather_artifacts(store: object, config: dict) -> list[Artifact]:
     """Gather artifacts matching the validator config's scope/layers filters."""
+
     def _artifact_sort_key(artifact: Artifact) -> tuple[str, str]:
         return (artifact.label, artifact.artifact_id)
 
@@ -988,10 +999,12 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
             artifacts.extend(sorted(store.list_artifacts(layer_name), key=_artifact_sort_key))
         return artifacts
 
+    entries = store.iter_entries()
+
     if scope:
         # Gather artifacts whose label starts with scope prefix or artifact_type matches
         all_artifacts: list[Artifact] = []
-        for aid in store._manifest:
+        for aid in entries:
             art = store.load_artifact(aid)
             if art is not None:
                 if art.label.startswith(scope + "-") or art.artifact_type == scope:
@@ -1007,7 +1020,7 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
 
     # No filter — return all artifacts
     all_artifacts = []
-    for aid in store._manifest:
+    for aid in entries:
         art = store.load_artifact(aid)
         if art is not None:
             all_artifacts.append(art)
@@ -1023,8 +1036,7 @@ def _gather_artifacts(store: ArtifactStore, config: dict) -> list[Artifact]:
 
 def run_validators(
     pipeline: Pipeline,
-    store: ArtifactStore,
-    provenance: ProvenanceTracker,
+    store: object,
 ) -> ValidationResult:
     """Run all validators declared in the pipeline.
 
@@ -1034,9 +1046,13 @@ def run_validators(
     3. Run validation
     4. Auto-resolve provenance traces for violations that lack them
 
+    The store must provide load_artifact(), list_artifacts(),
+    get_parents(), get_chain(), and iter_entries() — works with
+    both ArtifactStore+ProvenanceTracker and SnapshotArtifactCache.
+
     Returns aggregated ValidationResult.
     """
-    ctx = ValidationContext(store, provenance, pipeline)
+    ctx = ValidationContext(store, pipeline)
     result = ValidationResult()
 
     for validator in pipeline.validators:

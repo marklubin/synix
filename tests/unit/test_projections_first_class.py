@@ -1,8 +1,14 @@
 """Tests for projections as first-class build steps.
 
-Covers: layer→projection dependency chain, progressive materialization,
-projection caching, plan visibility, build stats, defensive fallback,
-and logger events.
+Covers: search surface materialization, plan visibility, build-time search
+via surfaces, progressive projection progress tracking, topical rollup
+surface requirements, and logger events.
+
+Phase 12 changes: projections (SynixSearch, FlatFile, SearchIndex) are no
+longer materialized during build — they are recorded as declarations in the
+manifest only, materialized via ``synix release``.  Search surfaces ARE still
+materialized at build time, but to ``.synix/work/surfaces/`` instead of
+``build/surfaces/``.
 """
 
 from __future__ import annotations
@@ -16,15 +22,14 @@ import pytest
 
 from synix import Artifact, FlatFile, Pipeline, SearchSurface, SearchSurfaceUnavailableError, Source, SynixSearch
 from synix import SearchIndex as SearchIndexLayer
-from synix.build.artifacts import ArtifactStore
 from synix.build.plan import ProjectionPlan, plan_build
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.runner import (
-    _materialize_layer_projections,
     _materialize_layer_search_surfaces,
     run,
 )
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup, TopicalRollup
-from synix.search.indexer import SearchIndex
 
 FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 
@@ -63,6 +68,15 @@ def source_dir(tmp_path):
 @pytest.fixture
 def build_dir(tmp_path):
     return tmp_path / "build"
+
+
+@pytest.fixture
+def work_dir(tmp_path):
+    """The .synix/work directory where surfaces are materialized."""
+    synix_dir = tmp_path / ".synix"
+    w = synix_dir / "work"
+    w.mkdir(parents=True, exist_ok=True)
+    return w
 
 
 def _monthly_pipeline(build_dir: Path) -> Pipeline:
@@ -127,17 +141,16 @@ def pipeline_obj(build_dir):
 
 
 # ---------------------------------------------------------------------------
-# 1. Layer → Projection Dependency Chain
+# 1. Search Surface Materialization
 #
-# These tests call _materialize_layer_projections directly with incrementally
-# populated layer_artifacts, so you can see exactly which layer triggers
-# which projection work and what the index contains at each step.
+# These tests verify that _materialize_layer_search_surfaces correctly
+# materializes search surfaces to .synix/work/surfaces/ when their full
+# source set is available.
 # ---------------------------------------------------------------------------
 
 
-class TestLayerProjectionChain:
-    """Verify the progressive relationship: each layer completion triggers
-    its projection step, and downstream layers can query the result."""
+class TestSearchSurfaceMaterialization:
+    """Verify search surfaces materialize to work_dir once all sources are ready."""
 
     @pytest.fixture
     def episode_artifacts(self):
@@ -168,147 +181,29 @@ class TestLayerProjectionChain:
             ),
         ]
 
-    @pytest.fixture
-    def core_artifacts(self):
-        return [
-            Artifact(
-                label="core-memory",
-                artifact_type="core_memory",
-                content="## Identity\nSoftware engineer focused on AI.",
-                metadata={"layer_name": "core", "layer_level": 3},
-            ),
-        ]
-
-    def test_after_episodes_index_has_only_episodes(
-        self,
-        build_dir,
-        pipeline_obj,
-        episode_artifacts,
-    ):
-        """After episodes complete, search index contains episode data only."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-        layer_artifacts = {"episodes": episode_artifacts}
-
-        _materialize_layer_projections(
-            pipeline_obj,
-            "episodes",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-
-        db_path = build_dir / "search.db"
-        assert db_path.exists(), "search.db should exist after episodes projection"
-        assert _layers_in_index(db_path) == {"episodes"}
-
-    def test_after_monthly_index_has_episodes_and_monthly(
-        self,
-        build_dir,
-        pipeline_obj,
-        episode_artifacts,
-        monthly_artifacts,
-    ):
-        """After monthly completes, search index contains both episodes and monthly."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-        layer_artifacts = {"episodes": episode_artifacts}
-
-        # Step 1: episodes complete → first projection
-        _materialize_layer_projections(
-            pipeline_obj,
-            "episodes",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        db_path = build_dir / "search.db"
-        assert _layers_in_index(db_path) == {"episodes"}
-
-        # Step 2: monthly complete → index rebuilt with both
-        layer_artifacts["monthly"] = monthly_artifacts
-        _materialize_layer_projections(
-            pipeline_obj,
-            "monthly",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert _layers_in_index(db_path) == {"episodes", "monthly"}
-
-    def test_after_core_index_has_all_three_layers(
-        self,
-        build_dir,
-        pipeline_obj,
-        episode_artifacts,
-        monthly_artifacts,
-        core_artifacts,
-    ):
-        """After core completes, search index contains episodes + monthly + core."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-        layer_artifacts: dict[str, list[Artifact]] = {}
-
-        db_path = build_dir / "search.db"
-
-        # Simulate the runner's per-layer projection calls
-        layer_artifacts["episodes"] = episode_artifacts
-        _materialize_layer_projections(
-            pipeline_obj,
-            "episodes",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert _layers_in_index(db_path) == {"episodes"}
-
-        layer_artifacts["monthly"] = monthly_artifacts
-        _materialize_layer_projections(
-            pipeline_obj,
-            "monthly",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert _layers_in_index(db_path) == {"episodes", "monthly"}
-
-        layer_artifacts["core"] = core_artifacts
-        _materialize_layer_projections(
-            pipeline_obj,
-            "core",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert _layers_in_index(db_path) == {"episodes", "monthly", "core"}
-
     def test_search_surface_waits_for_all_source_layers(
         self,
-        build_dir,
+        work_dir,
         episode_artifacts,
         monthly_artifacts,
     ):
         """Search surfaces materialize only once their full source set is available."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-
         episodes = Source("episodes")
         monthly = Source("monthly")
         surface = SearchSurface("episode-monthly-search", sources=[episodes, monthly], modes=["fulltext"])
 
         pipeline = Pipeline("surface-pipeline")
-        pipeline.build_dir = str(build_dir)
+        pipeline.build_dir = str(work_dir.parent.parent / "build")
         pipeline.add(episodes, monthly, surface)
 
         layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
-        db_path = build_dir / "surfaces" / "episode-monthly-search.db"
+        db_path = work_dir / "surfaces" / "episode-monthly-search.db"
 
         _materialize_layer_search_surfaces(
             pipeline,
             "episodes",
             layer_artifacts,
-            store,
-            build_dir,
+            work_dir,
         )
         assert not db_path.exists(), "surface DB should not exist until all source layers are available"
 
@@ -317,127 +212,35 @@ class TestLayerProjectionChain:
             pipeline,
             "monthly",
             layer_artifacts,
-            store,
-            build_dir,
+            work_dir,
         )
         assert db_path.exists(), "surface DB should exist once all source layers are available"
         assert _layers_in_index(db_path) == {"episodes", "monthly"}
 
-    def test_synix_search_waits_for_full_surface(
+    def test_single_source_surface_materializes_immediately(
         self,
-        build_dir,
+        work_dir,
         episode_artifacts,
-        monthly_artifacts,
     ):
-        """SynixSearch materializes only after its declared surface is complete."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-
+        """A surface with a single source materializes as soon as that source completes."""
         episodes = Source("episodes")
-        monthly = Source("monthly")
-        surface = SearchSurface("episode-monthly-search", sources=[episodes, monthly], modes=["fulltext"])
-        search_output = SynixSearch("search", surface=surface)
+        surface = SearchSurface("episode-search", sources=[episodes], modes=["fulltext"])
 
-        pipeline = Pipeline("synix-search-pipeline")
-        pipeline.build_dir = str(build_dir)
-        pipeline.add(episodes, monthly, surface, search_output)
+        pipeline = Pipeline("single-surface-pipeline")
+        pipeline.build_dir = str(work_dir.parent.parent / "build")
+        pipeline.add(episodes, surface)
 
         layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
-        db_path = build_dir / "search.db"
+        db_path = work_dir / "surfaces" / "episode-search.db"
 
-        _materialize_layer_projections(
+        _materialize_layer_search_surfaces(
             pipeline,
             "episodes",
             layer_artifacts,
-            store,
-            build_dir,
+            work_dir,
         )
-        assert not db_path.exists(), "search.db should not exist until the full surface is available"
-
-        layer_artifacts["monthly"] = monthly_artifacts
-        _materialize_layer_projections(
-            pipeline,
-            "monthly",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert db_path.exists(), "search.db should exist once the full surface is available"
-        assert _layers_in_index(db_path) == {"episodes", "monthly"}
-
-    def test_flat_file_waits_for_all_sources(
-        self,
-        build_dir,
-        pipeline_obj,
-        episode_artifacts,
-        monthly_artifacts,
-    ):
-        """context-doc (flat_file) is NOT created until core layer is available."""
-        build_dir.mkdir(parents=True, exist_ok=True)
-        store = ArtifactStore(build_dir)
-        context_path = build_dir / "context.md"
-
-        layer_artifacts: dict[str, list[Artifact]] = {"episodes": episode_artifacts}
-        _materialize_layer_projections(
-            pipeline_obj,
-            "episodes",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert not context_path.exists(), "context.md should not exist after only episodes"
-
-        layer_artifacts["monthly"] = monthly_artifacts
-        _materialize_layer_projections(
-            pipeline_obj,
-            "monthly",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert not context_path.exists(), "context.md should not exist after only monthly"
-
-        # Only after core layer is present should the flat file materialize
-        layer_artifacts["core"] = [
-            Artifact(
-                label="core-memory",
-                artifact_type="core_memory",
-                content="## Identity\nSoftware engineer.",
-                metadata={"layer_name": "core", "layer_level": 3},
-            )
-        ]
-        _materialize_layer_projections(
-            pipeline_obj,
-            "core",
-            layer_artifacts,
-            store,
-            build_dir,
-        )
-        assert context_path.exists(), "context.md should exist after core completes"
-
-    def test_topical_transform_queries_intermediate_index(
-        self,
-        source_dir,
-        build_dir,
-        mock_llm,
-    ):
-        """Topical rollup can query the episode search index built after episodes complete.
-
-        This is the critical dependency: episodes → [search_index projection] → topics.
-        """
-        topical = _topical_pipeline(build_dir)
-        result = run(topical, source_dir=str(source_dir))
-
-        # Topics should have been built (not errored due to missing index)
-        topic_stats = next(s for s in result.layer_stats if s.name == "topics")
-        assert topic_stats.built > 0
-
-        # The search index should contain data from all three source layers
-        db_path = build_dir / "search.db"
-        layers = _layers_in_index(db_path)
-        assert "episodes" in layers
-        assert "topics" in layers
-        assert "core" in layers
+        assert db_path.exists(), "surface DB should exist after its single source completes"
+        assert _layers_in_index(db_path) == {"episodes"}
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +250,7 @@ class TestLayerProjectionChain:
 
 class TestProgressiveMaterialization:
     def test_topical_pipeline_with_cached_episodes(self, source_dir, build_dir, mock_llm):
-        """Build monthly then topical — episodes cached, topical succeeds (no 'no such table')."""
+        """Build monthly then topical -- episodes cached, topical succeeds (no 'no such table')."""
         monthly = _monthly_pipeline(build_dir)
         result1 = run(monthly, source_dir=str(source_dir))
         assert result1.built > 0
@@ -464,19 +267,29 @@ class TestProgressiveMaterialization:
         topic_stats = next(s for s in result2.layer_stats if s.name == "topics")
         assert topic_stats.built > 0
 
-    def test_search_index_queryable_after_run(self, source_dir, build_dir, mock_llm):
-        """After a pipeline run, search.db exists and returns results."""
-        pipeline = _monthly_pipeline(build_dir)
-        run(pipeline, source_dir=str(source_dir))
+    def test_topical_transform_queries_surface_at_build_time(
+        self,
+        source_dir,
+        build_dir,
+        mock_llm,
+    ):
+        """Topical rollup queries the episode search surface built at build time.
 
-        db_path = build_dir / "search.db"
-        assert db_path.exists()
+        This is the critical dependency: episodes -> [search surface] -> topics.
+        The surface is materialized to .synix/work/surfaces/.
+        """
+        pipeline = _surface_topical_pipeline(build_dir)
+        result = run(pipeline, source_dir=str(source_dir))
 
-        index = SearchIndex(db_path)
-        results = index.query("programming")
-        assert isinstance(results, list)
-        assert len(results) > 0
-        index.close()
+        # Topics should have been built (not errored due to missing surface)
+        topic_stats = next(s for s in result.layer_stats if s.name == "topics")
+        assert topic_stats.built > 0
+
+        # The surface DB should exist in the work directory
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        surface_db = synix_dir / "work" / "surfaces" / "episode-search.db"
+        assert surface_db.exists(), "Surface DB should be materialized in .synix/work/surfaces/"
+        assert "episodes" in _layers_in_index(surface_db)
 
 
 class TestProgressProjectionFinish:
@@ -512,132 +325,28 @@ class TestProgressProjectionFinish:
 
 
 # ---------------------------------------------------------------------------
-# 2. Projection Caching
-# ---------------------------------------------------------------------------
-
-
-class TestProjectionCaching:
-    def test_projection_cache_file_created(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """After a run, .projection_cache.json exists with entries per projection."""
-        run(pipeline_obj, source_dir=str(source_dir))
-
-        cache_path = build_dir / ".projection_cache.json"
-        assert cache_path.exists()
-
-        cache = json.loads(cache_path.read_text())
-        assert "memory-index" in cache
-        assert "context-doc" in cache
-
-    def test_projection_cached_on_second_run(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Second run: all projection_stats have status='cached'."""
-        run(pipeline_obj, source_dir=str(source_dir))
-        result2 = run(pipeline_obj, source_dir=str(source_dir))
-
-        assert len(result2.projection_stats) > 0
-        for ps in result2.projection_stats:
-            assert ps.status == "cached", f"Projection {ps.name} was {ps.status}, expected cached"
-
-    def test_synix_search_records_custom_output_path_in_projection_cache(self, source_dir, build_dir, mock_llm):
-        """SynixSearch persists its concrete DB path in projection cache metadata."""
-        pipeline = Pipeline("custom-search-output")
-        pipeline.build_dir = str(build_dir)
-        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-
-        transcripts = Source("transcripts")
-        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
-        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir / "outputs" / "search.db"))
-
-        pipeline.add(transcripts, episodes, surface, search_output)
-
-        run(pipeline, source_dir=str(source_dir))
-
-        cache = json.loads((build_dir / ".projection_cache.json").read_text())
-        assert cache["search"]["projection_type"] == "synix_search"
-        assert cache["search"]["db_path"] == "outputs/search.db"
-
-    def test_synix_search_output_path_must_stay_inside_build_dir(self, source_dir, build_dir, mock_llm):
-        """SynixSearch rejects output paths outside the build directory."""
-        pipeline = Pipeline("invalid-search-output")
-        pipeline.build_dir = str(build_dir)
-        pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
-
-        transcripts = Source("transcripts")
-        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-        surface = SearchSurface("memory-search", sources=[episodes], modes=["fulltext"])
-        search_output = SynixSearch("search", surface=surface, output_path=str(build_dir.parent / "escape.db"))
-
-        pipeline.add(transcripts, episodes, surface, search_output)
-
-        with pytest.raises(ValueError, match="must stay inside the build directory"):
-            run(pipeline, source_dir=str(source_dir))
-
-    def test_synix_search_tolerates_surface_without_embedding_config(self):
-        """SynixSearch defensively handles surfaces whose embedding_config is None."""
-        transcripts = Source("transcripts")
-        surface = SearchSurface("memory-search", sources=[transcripts], modes=["fulltext"])
-        surface.embedding_config = None
-
-        search_output = SynixSearch("search", surface=surface)
-        assert search_output.embedding_config == {}
-
-    def test_projection_rebuilds_on_new_artifacts(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """After adding a new conversation, at least one projection rebuilds."""
-        run(pipeline_obj, source_dir=str(source_dir))
-
-        # Add a new conversation to force new artifacts
-        claude_path = source_dir / "claude_export.json"
-        data = json.loads(claude_path.read_text())
-        data["conversations"].append(
-            {
-                "uuid": "conv-proj-test-001",
-                "title": "Projection rebuild test",
-                "created_at": "2024-05-01T10:00:00Z",
-                "chat_messages": [
-                    {
-                        "uuid": "msg-p1",
-                        "sender": "human",
-                        "text": "Hello, testing projection rebuild.",
-                        "created_at": "2024-05-01T10:00:00Z",
-                    },
-                    {
-                        "uuid": "msg-p2",
-                        "sender": "assistant",
-                        "text": "Acknowledged, this is a test conversation.",
-                        "created_at": "2024-05-01T10:01:00Z",
-                    },
-                ],
-            }
-        )
-        claude_path.write_text(json.dumps(data))
-
-        result2 = run(pipeline_obj, source_dir=str(source_dir))
-        statuses = {ps.name: ps.status for ps in result2.projection_stats}
-        assert "built" in statuses.values(), f"Expected at least one 'built' projection, got {statuses}"
-
-
-# ---------------------------------------------------------------------------
 # 3. Projection Plan
 # ---------------------------------------------------------------------------
 
 
 class TestProjectionPlan:
-    def test_plan_includes_projections(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """plan_build() on a fresh pipeline includes projections with status='new'."""
+    def test_plan_includes_projections_as_declared(self, pipeline_obj, source_dir, build_dir, mock_llm):
+        """plan_build() on a fresh pipeline includes projections with status='declared'."""
         plan = plan_build(pipeline_obj, source_dir=str(source_dir))
 
         assert len(plan.projections) == 2
         for pp in plan.projections:
-            assert pp.status == "new"
+            assert pp.status == "declared"
+            assert "manifest declaration" in pp.reason
             assert isinstance(pp, ProjectionPlan)
 
-    def test_plan_projections_cached_after_build(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """After running, plan_build() reports projections as 'cached'."""
+    def test_plan_projections_remain_declared_after_build(self, pipeline_obj, source_dir, build_dir, mock_llm):
+        """After running, plan_build() still reports projections as 'declared' (not cached)."""
         run(pipeline_obj, source_dir=str(source_dir))
         plan = plan_build(pipeline_obj, source_dir=str(source_dir))
 
         for pp in plan.projections:
-            assert pp.status == "cached", f"Projection {pp.name} was {pp.status}, expected cached"
+            assert pp.status == "declared", f"Projection {pp.name} was {pp.status}, expected declared"
 
     def test_plan_projections_in_json_output(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """plan.to_dict() has a 'projections' key with correct structure."""
@@ -661,16 +370,16 @@ class TestProjectionPlan:
         assert len(plan.surfaces) == 1
         assert plan.surfaces[0].name == "episode-search"
         assert plan.surfaces[0].projection_type == "search_surface"
-        assert plan.surfaces[0].status == "new"
+        assert plan.surfaces[0].status == "rebuild"
 
-    def test_plan_search_surfaces_cached_after_build(self, source_dir, build_dir, mock_llm):
-        """After running, plan_build() reports search surfaces as cached."""
+    def test_plan_search_surfaces_status_rebuild(self, source_dir, build_dir, mock_llm):
+        """After running, plan_build() still reports search surfaces as 'rebuild'."""
         pipeline = _surface_topical_pipeline(build_dir)
         run(pipeline, source_dir=str(source_dir))
         plan = plan_build(pipeline, source_dir=str(source_dir))
 
         assert len(plan.surfaces) == 1
-        assert plan.surfaces[0].status == "cached"
+        assert plan.surfaces[0].status == "rebuild"
 
     def test_plan_includes_synix_search_projection_type(self, source_dir, build_dir):
         """plan_build() exposes SynixSearch as the canonical search projection type."""
@@ -687,6 +396,7 @@ class TestProjectionPlan:
         plan = plan_build(pipeline, source_dir=str(source_dir))
         assert len(plan.projections) == 1
         assert plan.projections[0].projection_type == "synix_search"
+        assert plan.projections[0].status == "declared"
 
     def test_plan_rejects_surface_that_depends_on_future_layers(self, source_dir, build_dir, mock_llm):
         """A transform cannot use a search surface whose sources are not all upstream."""
@@ -782,34 +492,7 @@ class TestProjectionPlan:
 
 
 # ---------------------------------------------------------------------------
-# 4. Projection Stats
-# ---------------------------------------------------------------------------
-
-
-class TestProjectionStats:
-    def test_run_result_has_projection_stats(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """RunResult.projection_stats has one entry per projection."""
-        result = run(pipeline_obj, source_dir=str(source_dir))
-        assert len(result.projection_stats) == 2
-
-    def test_projection_stats_first_run_built(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """First run: all projection stats have status='built'."""
-        result = run(pipeline_obj, source_dir=str(source_dir))
-
-        for ps in result.projection_stats:
-            assert ps.status == "built", f"Projection {ps.name} was {ps.status}, expected built"
-
-    def test_projection_stats_second_run_cached(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """Second run: all projection stats have status='cached'."""
-        run(pipeline_obj, source_dir=str(source_dir))
-        result2 = run(pipeline_obj, source_dir=str(source_dir))
-
-        for ps in result2.projection_stats:
-            assert ps.status == "cached", f"Projection {ps.name} was {ps.status}, expected cached"
-
-
-# ---------------------------------------------------------------------------
-# 5. Topical Rollup Surface Requirements
+# 4. Topical Rollup Surface Requirements
 # ---------------------------------------------------------------------------
 
 
@@ -820,7 +503,8 @@ class TestTopicalRollupSurfaceRequirements:
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
 
-        store = ArtifactStore(build_dir)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        store = SnapshotArtifactCache(synix_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
@@ -848,12 +532,14 @@ class TestTopicalRollupSurfaceRequirements:
         monthly = _monthly_pipeline(build_dir)
         run(monthly, source_dir=str(source_dir))
 
-        store = ArtifactStore(build_dir)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        store = SnapshotArtifactCache(synix_dir)
         episodes = store.list_artifacts("episodes")
         assert len(episodes) > 0
 
         # Create an empty SQLite file (no search_index table)
         empty_db = build_dir / "empty_search.db"
+        empty_db.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(empty_db))
         conn.execute("CREATE TABLE dummy (id INTEGER)")
         conn.commit()
@@ -879,16 +565,23 @@ class TestTopicalRollupSurfaceRequirements:
 
 
 # ---------------------------------------------------------------------------
-# 6. Projection Logger Events
+# 5. Projection Logger Events
 # ---------------------------------------------------------------------------
 
 
 class TestProjectionLoggerEvents:
-    def test_projection_events_in_log_file(self, pipeline_obj, source_dir, build_dir, mock_llm):
-        """JSONL log file contains projection_start and projection_finish events."""
-        run(pipeline_obj, source_dir=str(source_dir))
+    def test_projection_events_in_log_file(self, source_dir, build_dir, mock_llm):
+        """JSONL log file contains projection_start and projection_finish events.
 
-        logs_dir = build_dir / "logs"
+        Uses a pipeline with a SearchSurface since only surfaces are materialized
+        at build time (projections like SearchIndex/FlatFile are declaration-only).
+        """
+        pipeline = _surface_topical_pipeline(build_dir)
+        run(pipeline, source_dir=str(source_dir))
+
+        # Logs are written to .synix/logs/ (not build/logs/)
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        logs_dir = synix_dir / "logs"
         assert logs_dir.exists()
 
         log_files = list(logs_dir.glob("*.jsonl"))
@@ -904,7 +597,23 @@ class TestProjectionLoggerEvents:
         assert "projection_start" in event_types, f"No projection_start in events: {event_types}"
         assert "projection_finish" in event_types, f"No projection_finish in events: {event_types}"
 
-        # Verify projection names are present
+        # Verify projection names are present (the surface name)
         proj_start_events = [e for e in events if e["event"] == "projection_start"]
         proj_names = {e["projection"] for e in proj_start_events}
-        assert "memory-index" in proj_names
+        assert "episode-search" in proj_names
+
+
+# ---------------------------------------------------------------------------
+# 6. SynixSearch defensive behavior
+# ---------------------------------------------------------------------------
+
+
+class TestSynixSearchDefensive:
+    def test_synix_search_tolerates_surface_without_embedding_config(self):
+        """SynixSearch defensively handles surfaces whose embedding_config is None."""
+        transcripts = Source("transcripts")
+        surface = SearchSurface("memory-search", sources=[transcripts], modes=["fulltext"])
+        surface.embedding_config = None
+
+        search_output = SynixSearch("search", surface=surface)
+        assert search_output.embedding_config == {}

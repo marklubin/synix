@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -153,7 +154,9 @@ class BuildTransaction:
     parent_snapshot_oid: str | None
     artifact_oids: dict[str, str] = field(default_factory=dict)
     layer_artifact_oids: dict[str, list[str]] = field(default_factory=dict)
+    parent_labels_map: dict[str, list[str]] = field(default_factory=dict)
     projection_oids: dict[str, str] = field(default_factory=dict)
+    projection_declarations: dict[str, dict] = field(default_factory=dict)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     @classmethod
@@ -219,19 +222,36 @@ class BuildTransaction:
                     layer_oids.remove(previous_oid)
 
             self.artifact_oids[artifact.label] = artifact_oid
+            self.parent_labels_map[artifact.label] = parent_labels
             layer_oids = self.layer_artifact_oids.setdefault(layer_name, [])
             if artifact_oid not in layer_oids:
                 layer_oids.append(artifact_oid)
 
             return artifact_oid
 
+    def record_projection(
+        self,
+        name: str,
+        *,
+        adapter: str,
+        input_artifact_labels: list[str],
+        config: dict,
+        config_fingerprint: str,
+        precomputed_oid: str | None = None,
+    ) -> None:
+        """Record a structured projection declaration for the manifest."""
+        with self._lock:
+            self.projection_declarations[name] = {
+                "adapter": adapter,
+                "input_artifacts": list(input_artifact_labels),
+                "config": config,
+                "config_fingerprint": config_fingerprint,
+                "precomputed_oid": precomputed_oid,
+            }
+
     def assert_complete(self, layer_artifacts: dict[str, list[Artifact]]) -> None:
         """Fail closed if the transaction missed artifacts present in the current build state."""
-        expected_labels = {
-            artifact.label
-            for artifacts in layer_artifacts.values()
-            for artifact in artifacts
-        }
+        expected_labels = {artifact.label for artifacts in layer_artifacts.values() for artifact in artifacts}
         recorded_labels = set(self.artifact_oids)
 
         missing = sorted(expected_labels.difference(recorded_labels))
@@ -350,11 +370,8 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             "manifest",
             pipeline_name=transaction.pipeline.name,
             pipeline_fingerprint=_pipeline_fingerprint(transaction.pipeline),
-            artifacts=[
-                {"label": label, "oid": oid}
-                for label, oid in sorted(transaction.artifact_oids.items())
-            ],
-            projections=transaction.projection_oids,
+            artifacts=[{"label": label, "oid": oid} for label, oid in sorted(transaction.artifact_oids.items())],
+            projections=transaction.projection_declarations,
         )
         manifest_oid = transaction.object_store.put_json(manifest_payload)
 
@@ -390,6 +407,34 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             "run_ref": run_ref,
             "synix_dir": str(synix_dir),
         }
+
+
+def write_layer_checkpoint(transaction: BuildTransaction, layer_name: str) -> None:
+    """Write a checkpoint after a layer completes successfully.
+
+    Checkpoints record which artifacts have been successfully built so far,
+    enabling cache recovery after interrupted builds.
+    """
+    checkpoint_dir = transaction.synix_dir / "checkpoints" / transaction.run_id
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    with transaction._lock:
+        payload = {
+            "type": "checkpoint",
+            "layer": layer_name,
+            "artifact_oids": dict(transaction.artifact_oids),
+            "parent_labels_map": {k: list(v) for k, v in transaction.parent_labels_map.items()},
+        }
+    atomic_write(
+        checkpoint_dir / f"{layer_name}.json",
+        json.dumps(payload, sort_keys=True, indent=2),
+    )
+
+
+def clear_checkpoints(synix_dir: Path) -> None:
+    """Remove all checkpoint dirs after a successful snapshot commit."""
+    checkpoint_base = synix_dir / "checkpoints"
+    if checkpoint_base.exists():
+        shutil.rmtree(checkpoint_base)
 
 
 def list_runs(build_dir: str | Path, *, synix_dir: str | Path | None = None) -> list[dict[str, str]]:

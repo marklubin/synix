@@ -440,13 +440,15 @@ class TestRunLogWithRunner:
         assert result2.run_log["total_cache_hits"] > 0
 
     def test_run_log_creates_jsonl_file(self, pipeline_and_sources):
-        """Pipeline run creates a JSONL log file in build_dir/logs/."""
+        """Pipeline run creates a JSONL log file in .synix/logs/."""
+        from synix.build.refs import synix_dir_for_build_dir
         from synix.build.runner import run
 
         pipeline, source_dir, build_dir = pipeline_and_sources
         result = run(pipeline, source_dir=str(source_dir))
 
-        logs_dir = build_dir / "logs"
+        synix_dir = synix_dir_for_build_dir(build_dir)
+        logs_dir = synix_dir / "logs"
         assert logs_dir.exists()
 
         log_files = list(logs_dir.glob("*.jsonl"))

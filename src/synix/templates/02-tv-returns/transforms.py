@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from synix.core.models import Artifact, Source, Transform, TransformContext
+from synix.core.models import Artifact, Source, Transform
 
 
 class DemoLoadProductOffersTransform(Source):
@@ -79,13 +79,12 @@ class DemoLoadPoliciesTransform(Source):
 class DemoExtractPoliciesTransform(Transform):
     """Extract key actionable rules from policy documents using LLM."""
 
-    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
-        ctx = self.get_context(ctx)
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         from synix.build.llm_transforms import _get_llm_client, _logged_complete
 
-        client = _get_llm_client(ctx)
+        client = _get_llm_client(config)
         prompt_id = "demo_extract_policies"
-        model_config = ctx.llm_config
+        model_config = config.get("llm_config", {})
 
         results: list[Artifact] = []
         for policy in inputs:
@@ -104,7 +103,7 @@ class DemoExtractPoliciesTransform(Transform):
             )
             response = _logged_complete(
                 client,
-                ctx,
+                config,
                 messages=[{"role": "user", "content": prompt}],
                 artifact_desc=f"policy extraction {policy.label}",
             )
@@ -125,8 +124,7 @@ class DemoExtractPoliciesTransform(Transform):
 class DemoEnrichCSBriefTransform(Transform):
     """Combine product/offer data with policy rules into a CS agent brief."""
 
-    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
-        ctx = self.get_context(ctx)
+    def split(self, inputs: list[Artifact], config: dict) -> list[tuple[list[Artifact], dict]]:
         products = sorted(
             [a for a in inputs if a.artifact_type == "product_offer_view"],
             key=lambda a: a.label,
@@ -137,13 +135,12 @@ class DemoEnrichCSBriefTransform(Transform):
         )
         return [([product] + policies, {}) for product in products]
 
-    def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
-        ctx = self.get_context(ctx)
+    def execute(self, inputs: list[Artifact], config: dict) -> list[Artifact]:
         from synix.build.llm_transforms import _get_llm_client, _logged_complete
 
-        client = _get_llm_client(ctx)
+        client = _get_llm_client(config)
         prompt_id = "demo_enrich_cs_brief"
-        model_config = ctx.llm_config
+        model_config = config.get("llm_config", {})
 
         products = sorted(
             [a for a in inputs if a.artifact_type == "product_offer_view"],
@@ -187,7 +184,7 @@ class DemoEnrichCSBriefTransform(Transform):
 
             response = _logged_complete(
                 client,
-                ctx,
+                config,
                 messages=[{"role": "user", "content": prompt}],
                 artifact_desc=f"cs brief {product.metadata['sku']}",
             )

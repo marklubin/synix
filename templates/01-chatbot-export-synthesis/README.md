@@ -29,14 +29,18 @@ cp .env.example .env       # add your API key
 # Full build — transcripts -> episodes -> monthly rollups -> core memory
 uvx synix build pipeline_monthly.py
 
+# Release to materialize search index + context document
+uvx synix release HEAD --to local
+
 # Search your memory
-uvx synix search "what do I think about anthropic?"
+uvx synix search "what do I think about anthropic?" --release local
 
 # View the generated context document
-cat build/context.md
+cat .synix/releases/local/context.md
 
 # Swap to topic-based rollups (episodes cached, only rollups + core rebuild)
 uvx synix build pipeline_topical.py
+uvx synix release HEAD --to local
 ```
 
 ## Pipelines
@@ -74,7 +78,8 @@ cp /tmp/claude-export/*.json sources/
 
 ```bash
 uvx synix build pipeline_monthly.py
-uvx synix search "your query here"
+uvx synix release HEAD --to local
+uvx synix search "your query here" --release local
 ```
 
 The parse transform auto-detects ChatGPT vs Claude export format.

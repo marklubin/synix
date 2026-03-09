@@ -3,8 +3,6 @@
 # Synix pipelines are defined in Python. Each pipeline declares:
 #   - Layers:      the DAG of transforms (source -> derived -> enriched)
 #   - Projections: how artifacts become searchable (FTS5, embeddings)
-#   - Validators:  domain rules to check (semantic conflicts, PII)
-#   - Fixers:      LLM-powered auto-repair for violations
 #
 # This pipeline builds customer service product briefs for a TV retailer.
 # Source data: product catalog + vendor offers + store policies.
@@ -20,8 +18,6 @@ from transforms import (
 )
 
 from synix import Pipeline, SearchSurface, SynixSearch
-from synix.fixers import SemanticEnrichment
-from synix.validators import PII, SemanticConflict
 
 # ======================================================================
 # PIPELINE DEFINITION — edit this to change what Synix builds
@@ -66,29 +62,4 @@ cs_search = SearchSurface(
 pipeline.add(product_offers, policies, policy_index, cs_product_brief, cs_search)
 
 # -- Projection: makes artifacts searchable ----------------------------
-pipeline.add(
-    SynixSearch("search", surface=cs_search)
-)
-
-# -- Validators: domain rules checked after build ---------------------
-pipeline.add_validator(
-    SemanticConflict(  # LLM detects contradictions in briefs
-        artifact_ids=["cs-brief-SAM-OLED-65"],
-        llm_config={"provider": "anthropic", "model": "claude-haiku-4-5-20251001", "temperature": 0.0},
-    )
-)
-pipeline.add_validator(
-    PII(  # regex catches emails, phones, etc.
-        layers=[cs_product_brief],
-        patterns=["email"],
-        severity="error",
-    )
-)
-
-# -- Fixer: LLM auto-repairs violations (you accept/reject each) ------
-pipeline.add_fixer(
-    SemanticEnrichment(  # rewrites conflicting artifact sections
-        max_context_episodes=5,
-        temperature=0.3,
-    )
-)
+pipeline.add(SynixSearch("search", surface=cs_search))

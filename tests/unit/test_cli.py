@@ -7,10 +7,10 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from synix.build.artifacts import ArtifactStore
 from synix.cli import main
 from synix.core.models import Artifact
 from synix.search.indexer import SearchIndex
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 
 @pytest.fixture
@@ -72,12 +72,13 @@ def test_lineage_no_provenance(runner, tmp_path):
 
 
 def test_status_empty_build_dir(runner, tmp_path):
-    """synix status with empty build dir shows empty table."""
+    """synix status with empty build dir (no .synix) shows 'no build' error."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
     result = runner.invoke(main, ["status", "--build-dir", str(build_dir)])
-    assert result.exit_code == 0
-    assert "Build Status" in result.output
+    # After Phase 12, build/ alone is not enough — .synix/ must exist
+    assert result.exit_code != 0
+    assert "No build directory" in result.output
 
 
 def test_main_help(runner):
@@ -212,15 +213,20 @@ def test_info_shows_logo(runner, tmp_path, monkeypatch):
 
 
 def _create_build_with_custom_search_output(build_dir):
-    store = ArtifactStore(build_dir)
     artifact = Artifact(
         label="ep-custom-001",
         artifact_type="episode",
         content="Custom search output artifact",
         metadata={"layer_name": "episodes"},
     )
-    store.save_artifact(artifact, "episodes", 1)
 
+    # Create snapshot store (sibling .synix directory, used by status command)
+    create_test_snapshot(
+        build_dir.parent,
+        {"episodes": [artifact]},
+    )
+
+    # Create search index in the build dir (used by list_search_outputs)
     custom_db = build_dir / "outputs" / "memory.db"
     custom_db.parent.mkdir(parents=True, exist_ok=True)
     index = SearchIndex(custom_db)
@@ -228,12 +234,27 @@ def _create_build_with_custom_search_output(build_dir):
     index.insert(artifact, "episodes", 1)
     index.close()
 
+    # Projection cache for search output discovery
     (build_dir / ".projection_cache.json").write_text(
         json.dumps(
             {
                 "search": {
                     "projection_type": "synix_search",
                     "db_path": "outputs/memory.db",
+                }
+            }
+        )
+    )
+
+    # Minimal legacy manifest.json (required by info command's _show_build_status)
+    (build_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "ep-custom-001": {
+                    "path": "",
+                    "layer": "episodes",
+                    "level": 1,
+                    "artifact_id": artifact.artifact_id or "",
                 }
             }
         )

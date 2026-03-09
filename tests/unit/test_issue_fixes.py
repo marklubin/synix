@@ -19,9 +19,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from synix import Artifact, Pipeline, Source
-from synix.build.artifacts import ArtifactStore
 from synix.build.plan import plan_build
 from synix.build.runner import _execute_transform_concurrent, run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Transform
 from synix.ext import EpisodeSummary
@@ -149,7 +149,8 @@ class TestPerUnitCaching:
 
         # First build
         run(p, concurrency=1)
-        store = ArtifactStore(build_dir)
+        synix_dir = tmp_path / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
         original_episodes = sorted(store.list_artifacts("episodes"), key=lambda a: a.label)
 
         # Add new source
@@ -157,8 +158,8 @@ class TestPerUnitCaching:
 
         # Second build
         run(p, concurrency=1)
-        # Re-create store to pick up new manifest entries from the second build
-        store = ArtifactStore(build_dir)
+        # Re-create store to pick up new snapshot from the second build
+        store = SnapshotArtifactCache(synix_dir)
         all_episodes = sorted(store.list_artifacts("episodes"), key=lambda a: a.label)
 
         # All 3 episodes should be present (2 cached + 1 new)

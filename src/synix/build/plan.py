@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from synix.build.artifacts import ArtifactStore
 from synix.build.dag import compute_levels, resolve_build_order
 from synix.build.fingerprint import Fingerprint
+from synix.build.refs import synix_dir_for_build_dir
 from synix.build.search_surfaces import transform_runtime_search_updates, validate_search_surface_uses
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.core.config import LLMConfig, redact_api_key
 from synix.core.models import (
     Artifact,
@@ -108,7 +108,8 @@ def plan_build(
     compute_levels(pipeline.layers)
     validate_search_surface_uses(pipeline)
 
-    store = ArtifactStore(build_dir) if build_dir.exists() else None
+    synix_dir = synix_dir_for_build_dir(build_dir)
+    store = SnapshotArtifactCache(synix_dir) if synix_dir.exists() else None
 
     build_order = resolve_build_order(pipeline)
 
@@ -162,7 +163,7 @@ def _plan_layer(
     layer: Layer,
     pipeline: Pipeline,
     src_dir: str,
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
     prior_steps: list[StepPlan],
     input_tokens_per_call: int,
@@ -305,7 +306,7 @@ def _plan_source_layer(
     layer: Source,
     pipeline: Pipeline,
     src_dir: str,
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
 ) -> StepPlan:
     """Plan a Source layer by running its load() method."""
@@ -404,7 +405,7 @@ def _plan_source_layer(
 def _plan_transform_layer(
     layer: Transform,
     inputs: list[Artifact],
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
     layer_artifacts: dict[str, list[Artifact]],
     upstream_dirty: bool,
     input_tokens_per_call: int,
@@ -651,19 +652,15 @@ def _plan_projection(
     proj,
     pipeline: Pipeline,
     layer_artifacts: dict[str, list[Artifact]],
-    store: ArtifactStore | None,
+    store: SnapshotArtifactCache | None,
 ) -> ProjectionPlan:
-    """Analyze a projection to determine its plan status."""
-    from synix.build.runner import (
-        PROJECTION_CACHE_FILE,
-        _compute_content_only_hash,
-        _compute_embedding_config_hash,
-        _compute_projection_hash,
-        _get_projection_config,
-    )
+    """Analyze a projection to determine its plan status.
 
+    Projections are recorded as declarations in the manifest during build.
+    Materialization happens at release time via ``synix release``.
+    Search surfaces are materialized at build time to .synix/work/.
+    """
     source_layers = [s.name for s in proj.sources]
-    build_dir = Path(pipeline.build_dir)
 
     # Extract embedding config for display
     embedding_config = proj.embedding_config if isinstance(proj, (SearchIndex, SynixSearch, SearchSurface)) else None
@@ -690,88 +687,24 @@ def _plan_projection(
     else:
         proj_type = "unknown"
 
-    # Check projection cache
-    cache_path = build_dir / PROJECTION_CACHE_FILE
-    if cache_path.exists():
-        try:
-            cache = json.loads(cache_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            cache = {}
-    else:
-        cache = {}
-
-    cached_entry = cache.get(proj.name)
-    if cached_entry is None:
+    # Surfaces are materialized at build time; projections are declared only
+    if isinstance(proj, SearchSurface):
         return ProjectionPlan(
             name=proj.name,
             projection_type=proj_type,
             source_layers=source_layers,
-            status="new",
+            status="rebuild",
             artifact_count=artifact_count,
-            reason="new",
+            reason="build-time surface",
             embedding_config=embedding_config,
         )
-
-    # Support both old (source_hash) and new (content_hash/embedding_hash) cache formats
-    if "content_hash" in cached_entry:
-        # New split-hash format
-        content_hash = _compute_content_only_hash(all_artifacts)
-        emb_hash = None
-        if isinstance(proj, (SearchIndex, SynixSearch, SearchSurface)):
-            emb_hash = _compute_embedding_config_hash(proj)
-
-        content_cached = (
-            cached_entry.get("content_hash") == content_hash and cached_entry.get("artifact_count") == artifact_count
-        )
-        embedding_cached = cached_entry.get("embedding_hash") == emb_hash
-
-        if content_cached and embedding_cached:
-            return ProjectionPlan(
-                name=proj.name,
-                projection_type=proj_type,
-                source_layers=source_layers,
-                status="cached",
-                artifact_count=artifact_count,
-                reason="all cached",
-                embedding_config=embedding_config,
-            )
-
-        # Determine reason
-        reasons = []
-        if not content_cached:
-            reasons.append("source artifacts changed")
-        if not embedding_cached:
-            reasons.append("embedding config changed")
-        reason = ", ".join(reasons)
-    else:
-        # Legacy format — single source_hash
-        proj_config = _get_projection_config(proj)
-        current_hash = _compute_projection_hash(all_artifacts, proj_config)
-
-        if cached_entry.get("source_hash") == current_hash and cached_entry.get("artifact_count") == artifact_count:
-            return ProjectionPlan(
-                name=proj.name,
-                projection_type=proj_type,
-                source_layers=source_layers,
-                status="cached",
-                artifact_count=artifact_count,
-                reason="all cached",
-                embedding_config=embedding_config,
-            )
-
-        reason = "source artifacts changed"
-        if cached_entry.get("config_hash") is not None and proj_config:
-            old_config_hash = cached_entry["config_hash"]
-            new_config_hash = hashlib.sha256(json.dumps(proj_config, sort_keys=True, default=str).encode()).hexdigest()
-            if old_config_hash != new_config_hash:
-                reason = "projection config changed"
 
     return ProjectionPlan(
         name=proj.name,
         projection_type=proj_type,
         source_layers=source_layers,
-        status="rebuild",
+        status="declared",
         artifact_count=artifact_count,
-        reason=reason,
+        reason="manifest declaration (materialize with synix release)",
         embedding_config=embedding_config,
     )

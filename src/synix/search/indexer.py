@@ -9,7 +9,6 @@ import sqlite3
 from pathlib import Path
 
 from synix.build.projections import BaseProjection
-from synix.build.provenance import ProvenanceTracker
 from synix.core.citations import extract_citations
 from synix.core.config import EmbeddingConfig
 from synix.core.models import Artifact
@@ -197,9 +196,14 @@ class SearchIndex:
         self,
         q: str,
         layers: list[str] | None = None,
-        provenance_tracker: ProvenanceTracker | None = None,
+        provenance_tracker: object | None = None,
     ) -> list[SearchResult]:
-        """Search with optional layer filtering and provenance chains."""
+        """Search with optional layer filtering and provenance chains.
+
+        provenance_tracker can be a ProvenanceTracker (returns ProvenanceRecord
+        objects from get_chain) or a SnapshotArtifactCache (returns label strings
+        from get_chain). Both are handled transparently.
+        """
         conn = self._get_conn()
         safe_q = self._sanitize_fts5_query(q)
 
@@ -227,8 +231,9 @@ class SearchIndex:
         for row in rows:
             chain: list[str] = []
             if provenance_tracker is not None:
-                records = provenance_tracker.get_chain(row["label"])
-                chain = [r.label for r in records]
+                raw_chain = provenance_tracker.get_chain(row["label"])
+                # Handle both ProvenanceRecord objects (have .label) and plain strings
+                chain = [getattr(r, "label", r) for r in raw_chain]
 
             metadata = json.loads(row["metadata"]) if row["metadata"] else {}
 
@@ -418,7 +423,7 @@ class SearchIndexProjection(BaseProjection):
         self,
         q: str,
         layers: list[str] | None = None,
-        provenance_tracker: ProvenanceTracker | None = None,
+        provenance_tracker: object | None = None,
     ) -> list[SearchResult]:
         """Query the search index with optional layer filtering and provenance."""
         index = self._get_index()

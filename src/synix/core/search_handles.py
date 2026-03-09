@@ -109,9 +109,7 @@ class SearchSurfaceHandle(Mapping[str, Any]):
         from synix.search.indexer import SearchIndex
 
         if not self.path.exists():
-            raise SearchSurfaceUnavailableError(
-                f"Search surface '{self.name}' is not available at {self.path}."
-            )
+            raise SearchSurfaceUnavailableError(f"Search surface '{self.name}' is not available at {self.path}.")
 
         index = SearchIndex(self.path)
         try:
@@ -144,9 +142,7 @@ class SearchSurfaceHandle(Mapping[str, Any]):
         search, so ``fulltext`` and ``keyword`` are equivalent here.
         """
         if mode not in {"fulltext", "keyword"}:
-            raise NotImplementedError(
-                f"Search surface '{self.name}' does not support runtime mode '{mode}' yet."
-            )
+            raise NotImplementedError(f"Search surface '{self.name}' does not support runtime mode '{mode}' yet.")
         return self.query(q, layers=layers, limit=limit)
 
     def __getitem__(self, key: str) -> Any:

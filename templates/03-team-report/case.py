@@ -4,8 +4,8 @@ Flow:
   1. Plan     — show the DAG and what will be built
   2. Build    — parse bios + brief, map work styles, reduce team dynamics,
                 fold final report
-  3. Search   — query across all layers
-  4. Validate — check final report has input_count
+  3. Release  — materialize search index to a release target
+  4. Search   — query across all layers via release
   5. Rebuild  — second run, everything cached
   6. Explain  — show cache decisions inline
 
@@ -14,6 +14,7 @@ This demonstrates:
   - MapSynthesis: 1:1 LLM transform (bio → work style profile)
   - ReduceSynthesis: N:1 rollup (work styles → team dynamics)
   - FoldSynthesis: sequential accumulation (team dynamics + brief → final report)
+  - Release workflow: build → release → query
   - Full-text search across all 5 layers with provenance
   - Incremental rebuild (second run is instant)
   - Explain-cache with inline fingerprint breakdown
@@ -32,12 +33,15 @@ case = {
             "command": ["synix", "demo", "note", "2/6 Building: bios → work styles → team dynamics → final report..."],
         },
         {"name": "build", "command": ["synix", "build", "PIPELINE"]},
-        # Step 3: Search
-        {"name": "note_search", "command": ["synix", "demo", "note", "3/6 Searching across all layers..."]},
+        # Step 3: Release — materialize projections to a named release target
+        {
+            "name": "note_release",
+            "command": ["synix", "demo", "note", "3/6 Releasing: materializing search index..."],
+        },
+        {"name": "release", "command": ["synix", "release", "HEAD", "--to", "local"]},
+        # Step 4: Search
+        {"name": "note_search", "command": ["synix", "demo", "note", "4/6 Searching across all layers..."]},
         {"name": "search", "command": ["synix", "search", "climate dashboard", "--mode", "keyword", "--limit", "3"]},
-        # Step 4: Validate
-        {"name": "note_validate", "command": ["synix", "demo", "note", "4/6 Validating final report..."]},
-        {"name": "validate", "command": ["synix", "validate", "PIPELINE", "--json"], "capture_json": True},
         # Step 5: Rebuild — everything cached
         {
             "name": "note_rebuild",
@@ -48,7 +52,5 @@ case = {
         {"name": "note_explain", "command": ["synix", "demo", "note", "6/6 Explaining cache decisions..."]},
         {"name": "explain", "command": ["synix", "plan", "PIPELINE", "--explain-cache"]},
     ],
-    "goldens": {
-        "validate": "validate.json",
-    },
+    "goldens": {},
 }

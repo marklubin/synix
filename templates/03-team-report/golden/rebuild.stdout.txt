@@ -12,18 +12,16 @@
   ✓ team_dynamics (level 2)  <BUILD_COUNTS>  <TIME>
   ✓ final_report (level 3)  <BUILD_COUNTS>  <TIME>
     └─ report-search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
-    └─ search  <MATERIALIZED>
                        Build Summary
-╭───────────────┬──────────────┬───────┬────────┬─────────╮
-│ Layer         │    Level     │ Built │ Cached │ Skipped │
-├───────────────┼──────────────┼───────┼────────┼─────────┤
+╭───────────────┬──────────────┬───────┬────────┬──────────╮
+│ Layer         │    Level     │ Built │ Cached │  Skipped │
+├───────────────┼──────────────┼───────┼────────┼──────────┤
 │ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
 │ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ synix_search │       │        │ <MATERIALIZED> │
-╰───────────────┴──────────────┴───────┴────────┴─────────╯
+│   → search    │ synix_search │       │        │ complete │
+╰───────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

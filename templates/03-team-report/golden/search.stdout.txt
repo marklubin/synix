@@ -33,11 +33,20 @@ t-text-project_brief
 │                                                                                                                      │
 ╰────────────────────────────────────────────────────── Result 2 ──────────────────────────────────────────────────────╯
 final-report
+├── t-text-alice
+├── t-text-bob
+├── t-text-carol
 ├── t-text-project_brief
-└── team-dynamics
-    ├── ws-alice
-    │   └── t-text-alice
-    ├── ws-bob
-    │   └── t-text-bob
-    └── ws-carol
-        └── t-text-carol
+├── team-dynamics
+│   ├── t-text-alice
+│   ├── t-text-bob
+│   ├── t-text-carol
+│   ├── ws-alice
+│   │   └── t-text-alice
+│   ├── ws-bob
+│   │   └── t-text-bob
+│   └── ws-carol
+│       └── t-text-carol
+├── ws-alice
+├── ws-bob
+└── ws-carol

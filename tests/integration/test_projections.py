@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
-from synix.artifacts.provenance import ProvenanceTracker
 from synix.build.runner import run
+from synix.build.snapshot_view import SnapshotArtifactCache
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 from synix.search.index import SearchIndex as SearchIdx
 
@@ -53,9 +53,15 @@ def pipeline_obj(build_dir):
 class TestProjections:
     def test_search_index_reflects_all_layers(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """Search results come from multiple layers."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        index = SearchIdx(build_dir / "search.db")
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        index = SearchIdx(release_dir / "search.db")
 
         # Query broadly — should get results from episodes, monthly, and core
         results = index.query("programming")
@@ -72,14 +78,15 @@ class TestProjections:
         """Core result traces back to transcript through all layers."""
         run(pipeline_obj, source_dir=str(source_dir))
 
-        provenance = ProvenanceTracker(build_dir)
+        synix_dir = build_dir.parent / ".synix"
+        store = SnapshotArtifactCache(synix_dir)
 
         # Core memory should have a provenance chain
-        chain = provenance.get_chain("core-memory")
+        chain = store.get_chain("core-memory")
         assert len(chain) > 0
 
         # The chain should include the core artifact
-        chain_ids = [r.label for r in chain]
+        chain_ids = list(chain)
         assert "core-memory" in chain_ids
 
         # Should trace through monthly rollups
@@ -88,9 +95,15 @@ class TestProjections:
 
     def test_flat_file_is_ready_to_use(self, pipeline_obj, source_dir, build_dir, mock_llm):
         """context.md could be pasted into a system prompt."""
+        from synix.build.release_engine import execute_release
+
         run(pipeline_obj, source_dir=str(source_dir))
 
-        context_path = build_dir / "context.md"
+        synix_dir = build_dir.parent / ".synix"
+        execute_release(synix_dir, release_name="local")
+        release_dir = synix_dir / "releases" / "local"
+
+        context_path = release_dir / "context.md"
         assert context_path.exists()
 
         content = context_path.read_text()

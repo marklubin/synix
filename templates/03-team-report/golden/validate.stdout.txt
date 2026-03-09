@@ -1,7 +1,0 @@
-{
-  "passed": true,
-  "validators_run": [
-    "required_field"
-  ],
-  "violations": []
-}

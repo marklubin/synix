@@ -8,32 +8,25 @@ import pytest
 from click.testing import CliRunner
 
 from synix import Artifact
-from synix.build.artifacts import ArtifactStore
-from synix.build.provenance import ProvenanceTracker
 from synix.build.verify import verify_build
 from synix.cli import main
 from synix.search.indexer import SearchIndex
+from tests.helpers.snapshot_factory import create_test_snapshot
 
 
 @pytest.fixture
 def populated_build(tmp_path):
-    """Create a build directory with artifacts and provenance."""
+    """Create a build directory with a .synix snapshot."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
 
-    store = ArtifactStore(build_dir)
-    provenance = ProvenanceTracker(build_dir)
-
-    # Create transcript (level 0 — no provenance needed)
     t1 = Artifact(
         label="t-001",
         artifact_type="transcript",
         content="User: Hello\n\nAssistant: Hi there!",
         metadata={"source": "chatgpt", "date": "2025-01-15"},
     )
-    store.save_artifact(t1, "transcripts", 0)
 
-    # Create episode (level 1 — needs provenance)
     ep1 = Artifact(
         label="ep-001",
         artifact_type="episode",
@@ -41,12 +34,9 @@ def populated_build(tmp_path):
         input_ids=[t1.artifact_id],
         prompt_id="episode_summary_v1",
         model_config={"model": "test"},
-        metadata={"source_conversation_id": "001"},
+        metadata={"source_conversation_id": "001", "layer_level": 1},
     )
-    store.save_artifact(ep1, "episodes", 1)
-    provenance.record("ep-001", parent_labels=["t-001"], prompt_id="episode_summary_v1")
 
-    # Create core memory (level 3)
     core = Artifact(
         label="core-memory",
         artifact_type="core_memory",
@@ -54,10 +44,17 @@ def populated_build(tmp_path):
         input_ids=[ep1.artifact_id],
         prompt_id="core_memory_v1",
         model_config={"model": "test"},
-        metadata={},
+        metadata={"layer_level": 3},
     )
-    store.save_artifact(core, "core", 3)
-    provenance.record("core-memory", parent_labels=["ep-001"], prompt_id="core_memory_v1")
+
+    create_test_snapshot(
+        build_dir,
+        {"transcripts": [t1], "episodes": [ep1], "core": [core]},
+        parent_labels_map={
+            "ep-001": ["t-001"],
+            "core-memory": ["ep-001"],
+        },
+    )
 
     return build_dir
 
@@ -82,24 +79,50 @@ class TestVerifyBuild:
         assert not result.passed
 
     def test_missing_artifact_file(self, populated_build):
-        """Remove an artifact file but keep manifest entry."""
-        # Find and delete an artifact file
-        for layer_dir in populated_build.iterdir():
-            if layer_dir.is_dir() and layer_dir.name.startswith("layer"):
-                for f in layer_dir.glob("*.json"):
-                    f.unlink()
-                    break
-                break
+        """Delete an artifact object from the snapshot store."""
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import RefStore, synix_dir_for_build_dir
+
+        synix_dir = synix_dir_for_build_dir(populated_build)
+        obj_store = ObjectStore(synix_dir)
+        ref_store = RefStore(synix_dir)
+
+        head_oid = ref_store.read_ref("refs/heads/main")
+        snapshot_obj = obj_store.get_json(head_oid)
+        manifest_obj = obj_store.get_json(snapshot_obj["manifest_oid"])
+
+        # Delete the content blob for the first artifact
+        target_entry = manifest_obj["artifacts"][0]
+        art_obj = obj_store.get_json(target_entry["oid"])
+        content_oid = art_obj["content_oid"]
+        content_path = synix_dir / "objects" / content_oid[:2] / content_oid[2:]
+        content_path.unlink()
 
         result = verify_build(populated_build, checks=["artifacts_exist"])
         assert not result.passed
 
     def test_missing_provenance(self, populated_build):
-        """Remove provenance for a non-root artifact."""
-        prov_path = populated_build / "provenance.json"
-        prov_data = json.loads(prov_path.read_text())
-        del prov_data["ep-001"]
-        prov_path.write_text(json.dumps(prov_data))
+        """Remove parent_labels for a non-root artifact in the snapshot."""
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import RefStore, synix_dir_for_build_dir
+
+        synix_dir = synix_dir_for_build_dir(populated_build)
+        obj_store = ObjectStore(synix_dir)
+        ref_store = RefStore(synix_dir)
+
+        head_oid = ref_store.read_ref("refs/heads/main")
+        snapshot_obj = obj_store.get_json(head_oid)
+        manifest_obj = obj_store.get_json(snapshot_obj["manifest_oid"])
+
+        # Find ep-001 and remove its parent_labels
+        for entry in manifest_obj["artifacts"]:
+            art_obj = obj_store.get_json(entry["oid"])
+            if art_obj["label"] == "ep-001":
+                art_obj["parent_labels"] = []
+                oid = entry["oid"]
+                obj_path = synix_dir / "objects" / oid[:2] / oid[2:]
+                obj_path.write_text(json.dumps(art_obj))
+                break
 
         result = verify_build(populated_build, checks=["provenance_complete"])
         assert not result.passed
@@ -107,27 +130,37 @@ class TestVerifyBuild:
         assert "1" in check.message  # 1 artifact missing provenance
 
     def test_content_hash_mismatch(self, populated_build):
-        """Tamper with artifact content without updating artifact_id."""
-        manifest = json.loads((populated_build / "manifest.json").read_text())
-        for aid, entry in manifest.items():
-            art_path = populated_build / entry["path"]
-            data = json.loads(art_path.read_text())
-            data["content"] = "TAMPERED CONTENT"
-            # Don't update artifact_id — this should fail verification
-            art_path.write_text(json.dumps(data))
-            break
+        """Tamper with artifact_id in snapshot object store."""
+        from synix.build.object_store import ObjectStore
+        from synix.build.refs import RefStore, synix_dir_for_build_dir
+
+        synix_dir = synix_dir_for_build_dir(populated_build)
+        obj_store = ObjectStore(synix_dir)
+        ref_store = RefStore(synix_dir)
+
+        # Walk the snapshot -> manifest -> artifact objects to find one to tamper
+        head_oid = ref_store.read_ref("refs/heads/main")
+        snapshot_obj = obj_store.get_json(head_oid)
+        manifest_obj = obj_store.get_json(snapshot_obj["manifest_oid"])
+
+        target_entry = manifest_obj["artifacts"][0]
+        art_obj = obj_store.get_json(target_entry["oid"])
+
+        # Tamper: set artifact_id to a wrong hash
+        art_obj["artifact_id"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        # Overwrite the object file in place (bypassing content-addressing)
+        oid = target_entry["oid"]
+        obj_path = synix_dir / "objects" / oid[:2] / oid[2:]
+        obj_path.write_text(json.dumps(art_obj))
 
         result = verify_build(populated_build, checks=["content_hashes"])
         assert not result.passed
 
     def test_orphaned_artifact(self, populated_build):
-        """Create an artifact file not in the manifest."""
-        layer_dir = populated_build / "layer0-transcripts"
-        orphan = layer_dir / "orphan-999.json"
-        orphan.write_text(json.dumps({"artifact_id": "orphan-999", "content": "stale"}))
-
+        """With content-addressed store, orphan check always passes."""
         result = verify_build(populated_build, checks=["no_orphans"])
-        assert not result.passed
+        assert result.passed
+        assert "no orphans" in result.checks[0].message.lower()
 
     def test_specific_checks(self, populated_build):
         """Run only specific checks."""
