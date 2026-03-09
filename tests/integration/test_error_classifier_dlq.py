@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -9,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from synix import FlatFile, Pipeline, SearchIndex, Source
+from synix.build.error_classifier import LLMErrorClassifier
 from synix.build.runner import run
 from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
 
@@ -86,8 +88,8 @@ class TestContentFilterDLQ:
         mock_client.messages.create = mock_create
         monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
 
-        # Build should complete despite the content filter
-        result = run(pipeline_obj, source_dir=str(source_dir))
+        # Build should complete despite the content filter (with DLQ enabled)
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
 
         # DLQ should have exactly 1 entry
         assert len(result.dlq) == 1
@@ -96,6 +98,35 @@ class TestContentFilterDLQ:
 
         # Build should still have produced artifacts (all except the filtered one)
         assert result.built > 0
+
+    def test_default_no_dlq_content_filter_is_fatal(self, pipeline_obj, source_dir, build_dir, monkeypatch):
+        """Without --dlq, content filter errors abort the build (fail-closed default)."""
+        filter_count = [0]
+
+        class MockResponse:
+            def __init__(self, text):
+                self.content = [MagicMock(text=text)]
+                self.model = "claude-sonnet-4-20250514"
+                self.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        def mock_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            content = messages[0].get("content", "") if messages else ""
+
+            if "episode summary" in content.lower() or "summarizing a conversation" in content.lower():
+                if filter_count[0] == 0:
+                    filter_count[0] += 1
+                    raise RuntimeError("Error code: 400 - content_filter rejected prompt")
+                return MockResponse("Episode summary.")
+            return MockResponse("Mock.")
+
+        mock_client = MagicMock()
+        mock_client.messages.create = mock_create
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
+
+        # Without error_classifier, content filter should be fatal
+        with pytest.raises(RuntimeError, match="content_filter"):
+            run(pipeline_obj, source_dir=str(source_dir))
 
     def test_auth_error_still_fatal(self, pipeline_obj, source_dir, build_dir, monkeypatch):
         """Auth errors (401) are classified as fatal and still abort the build."""
@@ -152,11 +183,61 @@ class TestContentFilterDLQ:
         mock_client.messages.create = mock_create
         monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
 
-        result = run(pipeline_obj, source_dir=str(source_dir))
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
 
         assert len(result.dlq) == 2
         assert "2 artifacts skipped" in result.dlq.summary()
         assert "RuntimeError" in result.dlq.summary()
+
+    def test_dlq_entries_in_jsonl_log(self, pipeline_obj, source_dir, build_dir, monkeypatch):
+        """DLQ entries are written to the JSONL structured log."""
+        filter_count = [0]
+
+        class MockResponse:
+            def __init__(self, text):
+                self.content = [MagicMock(text=text)]
+                self.model = "claude-sonnet-4-20250514"
+                self.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+        def mock_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            content = messages[0].get("content", "") if messages else ""
+
+            if "episode summary" in content.lower() or "summarizing a conversation" in content.lower():
+                if filter_count[0] == 0:
+                    filter_count[0] += 1
+                    raise RuntimeError("Error code: 400 - content_filter rejected prompt")
+                return MockResponse("Episode summary.")
+            elif "monthly" in content.lower() or "monthly overview" in content.lower():
+                return MockResponse("Monthly overview.")
+            elif "core memory" in content.lower():
+                return MockResponse("## Identity\nEngineer.")
+            return MockResponse("Mock.")
+
+        mock_client = MagicMock()
+        mock_client.messages.create = mock_create
+        monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
+
+        result = run(pipeline_obj, source_dir=str(source_dir), error_classifier=LLMErrorClassifier())
+
+        # Find the JSONL log file — synix_dir is sibling to build_dir
+        logs_dir = build_dir.parent / ".synix" / "logs"
+        assert logs_dir.exists(), "Logs directory should exist"
+        log_files = list(logs_dir.glob("*.jsonl"))
+        assert len(log_files) >= 1, "At least one JSONL log file should exist"
+
+        # Parse the log and find DLQ events
+        log_path = log_files[-1]
+        events = [json.loads(line) for line in log_path.read_text().strip().split("\n")]
+        dlq_events = [e for e in events if e.get("event") == "artifact_dlq"]
+        assert len(dlq_events) == 1
+        assert dlq_events[0]["error_type"] == "RuntimeError"
+        assert "content_filter" in dlq_events[0]["error_message"]
+        assert dlq_events[0]["layer"] == "episodes"
+
+        # Also check DLQ entries in run_finish event
+        run_finish = [e for e in events if e.get("event") == "run_finish"]
+        assert len(run_finish) == 1
 
     def test_sequential_content_filter_skipped(self, pipeline_obj, source_dir, build_dir, monkeypatch):
         """Content filter in sequential (concurrency=1) mode also uses DLQ."""
@@ -187,7 +268,7 @@ class TestContentFilterDLQ:
         mock_client.messages.create = mock_create
         monkeypatch.setattr("anthropic.Anthropic", lambda **kwargs: mock_client)
 
-        result = run(pipeline_obj, source_dir=str(source_dir), concurrency=1)
+        result = run(pipeline_obj, source_dir=str(source_dir), concurrency=1, error_classifier=LLMErrorClassifier())
 
         assert len(result.dlq) == 1
         assert result.built > 0

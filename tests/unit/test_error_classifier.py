@@ -93,3 +93,21 @@ class TestDeadLetterQueue:
         assert "3 artifacts skipped" in summary
         assert "2 RuntimeError" in summary
         assert "1 ValueError" in summary
+
+    def test_slogger_receives_dlq_events(self):
+        """When a SynixLogger is attached, DLQ.add() writes to the structured log."""
+
+        class FakeLogger:
+            def __init__(self):
+                self.calls = []
+
+            def artifact_dlq(self, layer_name, artifact_desc, error_type, error_message):
+                self.calls.append((layer_name, artifact_desc, error_type, error_message))
+
+        fake = FakeLogger()
+        dlq = DeadLetterQueue()
+        dlq._slogger = fake
+        dlq.add("ep-42", RuntimeError("content_filter hit"), layer_name="episodes")
+
+        assert len(fake.calls) == 1
+        assert fake.calls[0] == ("episodes", "ep-42", "RuntimeError", "content_filter hit")

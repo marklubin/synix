@@ -80,6 +80,7 @@ class RunLog:
     total_cache_hits: int = 0
     total_tokens: int = 0
     total_cost_estimate: float = 0.0
+    dlq_entries: list[dict[str, str]] = field(default_factory=list)
 
     def get_or_create_step(self, name: str) -> StepLog:
         """Get existing step log or create a new one."""
@@ -96,7 +97,7 @@ class RunLog:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict matching the format expected by assertion helpers."""
-        return {
+        d: dict[str, Any] = {
             "run_id": self.run_id,
             "steps": {name: step.to_dict() for name, step in self.steps.items()},
             "total_llm_calls": self.total_llm_calls,
@@ -105,6 +106,9 @@ class RunLog:
             "total_tokens": self.total_tokens,
             "total_cost_estimate": self.total_cost_estimate,
         }
+        if self.dlq_entries:
+            d["dlq"] = list(self.dlq_entries)
+        return d
 
 
 @dataclass
@@ -447,6 +451,28 @@ class SynixLogger:
         self._console_print(
             f"    [cyan]=[/cyan] {name} (cached)",
             Verbosity.VERBOSE,
+        )
+
+    # -- DLQ events --
+
+    def artifact_dlq(self, layer_name: str, artifact_desc: str, error_type: str, error_message: str) -> None:
+        """Log that an artifact was sent to the dead letter queue."""
+        self._write_event(
+            {
+                "event": "artifact_dlq",
+                "layer": layer_name,
+                "artifact_desc": artifact_desc,
+                "error_type": error_type,
+                "error_message": error_message,
+            }
+        )
+
+        if self.progress:
+            self.progress.artifact_dlq(artifact_desc, error_message)
+
+        self._console_print(
+            f"      [yellow]✗[/yellow] {artifact_desc} [dim](DLQ: {error_type})[/dim]",
+            Verbosity.DEFAULT,  # Always show DLQ entries
         )
 
     # -- Run lifecycle --

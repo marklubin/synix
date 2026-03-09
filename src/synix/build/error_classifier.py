@@ -47,20 +47,32 @@ class DeadLetterEntry:
 
 @dataclass
 class DeadLetterQueue:
-    """Collects artifacts that were skipped due to non-fatal errors."""
+    """Collects artifacts that were skipped due to non-fatal errors.
+
+    When a structured logger (SynixLogger) is attached, DLQ entries are
+    written to the JSONL build log at `.synix/logs/{run_id}.jsonl` and
+    surfaced in the CLI build summary.
+    """
 
     entries: list[DeadLetterEntry] = field(default_factory=list)
+    _slogger: object | None = field(default=None, repr=False)
 
     def add(self, artifact_desc: str, exc: Exception, layer_name: str = "") -> None:
         """Record a skipped artifact."""
+        error_type = type(exc).__name__
+        error_message = str(exc)
         entry = DeadLetterEntry(
             artifact_desc=artifact_desc,
-            error_type=type(exc).__name__,
-            error_message=str(exc),
+            error_type=error_type,
+            error_message=error_message,
             layer_name=layer_name,
         )
         self.entries.append(entry)
-        logger.warning("DLQ: skipped %s — %s: %s", artifact_desc, type(exc).__name__, exc)
+        logger.warning("DLQ: skipped %s — %s: %s", artifact_desc, error_type, exc)
+
+        # Write to structured build log if available
+        if self._slogger is not None:
+            self._slogger.artifact_dlq(layer_name, artifact_desc, error_type, error_message)
 
     def __len__(self) -> int:
         return len(self.entries)

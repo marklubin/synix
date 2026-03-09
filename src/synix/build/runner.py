@@ -15,8 +15,8 @@ from pathlib import Path
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
 from synix.build.error_classifier import (
     DeadLetterQueue,
+    ErrorClassifier,
     ErrorVerdict,
-    LLMErrorClassifier,
 )
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import get_projection
@@ -105,6 +105,7 @@ def run(
     concurrency: int = 5,
     progress=None,
     validate: bool = False,
+    error_classifier: ErrorClassifier | None = None,
 ) -> RunResult:
     """Execute the full pipeline — walk DAG, run transforms, materialize projections.
 
@@ -115,6 +116,10 @@ def run(
         concurrency: Number of concurrent LLM requests (1 = sequential).
         progress: Optional BuildProgress for live display updates.
         validate: Run domain validators after build (default False).
+        error_classifier: Optional classifier for non-fatal errors. When None
+            (default), all LLM errors are fatal and abort the build. Pass
+            ``LLMErrorClassifier()`` to enable DLQ — content-filter and
+            input-too-large errors will be skipped instead of aborting.
 
     Returns:
         RunResult with build statistics.
@@ -139,6 +144,7 @@ def run(
         build_dir=synix_dir,
         progress=progress,
     )
+    result.dlq._slogger = slogger
     snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
     store = SnapshotArtifactCache(snapshot_txn.synix_dir)
 
@@ -317,11 +323,11 @@ def run(
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,
-                        dlq=result.dlq,
+                        dlq=result.dlq if error_classifier else None,
+                        error_classifier=error_classifier,
                         layer_name=layer.name,
                     )
                 else:
-                    seq_classifier = LLMErrorClassifier()
                     for unit_inputs, config_extras in units:
                         # Per-unit cache check
                         unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
@@ -335,9 +341,11 @@ def run(
                             for artifact in new_artifacts:
                                 _save_artifact(artifact, parent_inputs=unit_inputs)
                         except Exception as exc:
+                            if error_classifier is None:
+                                raise
                             labels = [a.label for a in unit_inputs[:3]]
                             artifact_desc = ", ".join(labels)
-                            verdict = seq_classifier.classify(exc, artifact_desc)
+                            verdict = error_classifier.classify(exc, artifact_desc)
                             if verdict == ErrorVerdict.DLQ:
                                 result.dlq.add(artifact_desc, exc, layer_name=layer.name)
                             else:
@@ -387,6 +395,15 @@ def run(
     result.total_time = time.time() - start_time
     if len(result.dlq) > 0:
         logger.warning("Build completed with DLQ entries: %s", result.dlq.summary())
+        slogger.run_log.dlq_entries = [
+            {
+                "artifact_desc": e.artifact_desc,
+                "error_type": e.error_type,
+                "error_message": e.error_message,
+                "layer_name": e.layer_name,
+            }
+            for e in result.dlq.entries
+        ]
     slogger.run_finish(result.total_time)
     result.run_log = slogger.run_log.to_dict()
     return result
@@ -694,7 +711,7 @@ def _execute_transform_concurrent(
     cached_by_inputs: dict[tuple[str, ...], list[Artifact]] | None = None,
     on_cached=None,
     dlq: DeadLetterQueue | None = None,
-    error_classifier: LLMErrorClassifier | None = None,
+    error_classifier: ErrorClassifier | None = None,
     layer_name: str = "",
 ) -> list[Artifact]:
     """Execute transform work units concurrently.
@@ -783,7 +800,6 @@ def _execute_transform_concurrent(
         worker_ctx = TransformContext.from_value(worker_config)
         return index, _invoke_transform_execute(worker_transform, unit_inputs, worker_ctx)
 
-    classifier = error_classifier or LLMErrorClassifier()
     first_fatal: Exception | None = None
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -811,15 +827,21 @@ def _execute_transform_concurrent(
                 _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
                 labels = [a.label for a in unit_inputs[:3]]
                 artifact_desc = ", ".join(labels)
-                verdict = classifier.classify(exc, artifact_desc)
-                if verdict == ErrorVerdict.DLQ:
-                    results[idx] = exc
-                    if dlq is not None:
-                        dlq.add(artifact_desc, exc, layer_name=layer_name)
-                else:
+                if error_classifier is None:
+                    # No classifier → fail hard immediately
                     results[idx] = exc
                     if first_fatal is None:
                         first_fatal = exc
+                else:
+                    verdict = error_classifier.classify(exc, artifact_desc)
+                    if verdict == ErrorVerdict.DLQ:
+                        results[idx] = exc
+                        if dlq is not None:
+                            dlq.add(artifact_desc, exc, layer_name=layer_name)
+                    else:
+                        results[idx] = exc
+                        if first_fatal is None:
+                            first_fatal = exc
 
     # Flatten successful results in order
     all_artifacts: list[Artifact] = []
