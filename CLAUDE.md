@@ -26,6 +26,7 @@ src/synix/
 ├── __init__.py            # Public API: Pipeline, Source, Transform, SearchIndex, FlatFile, Artifact
 ├── core/
 │   └── models.py          # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
+├── sdk.py                 # SDK — programmatic access (Project, Release, search, init/open)
 ├── build/
 │   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
 │   ├── plan.py            # Dry-run planner — per-artifact rebuild/cached decisions
@@ -176,6 +177,7 @@ Every PR must link to the GitHub issues it addresses:
 
 | Doc | Contents |
 |-----|----------|
+| [docs/sdk.md](docs/sdk.md) | SDK API guide — Project, Release, search, pipeline interop, error hierarchy |
 | [docs/entity-model.md](docs/entity-model.md) | Dataclass definitions, storage format, FTS5 schema, cache logic, architecture north star |
 | [docs/pipeline-api.md](docs/pipeline-api.md) | Python pipeline definition, examples, config change demo |
 | [docs/cli-ux.md](docs/cli-ux.md) | CLI UX requirements, color scheme, per-command formatting |

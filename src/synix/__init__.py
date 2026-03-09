@@ -21,3 +21,14 @@ from synix.core.search_handles import (  # noqa: F401
     SearchSurfaceLookupError,
     SearchSurfaceUnavailableError,
 )
+from synix.sdk import (  # noqa: F401
+    SDK_VERSION,
+    BuildResult,
+    Project,
+    Release,
+    SdkArtifact,
+    SdkSearchResult,
+    SearchHandle,
+    init,
+    open,
+)
