@@ -1,87 +1,115 @@
-```
 # synix
 
 > A build system for agent memory
 
 ## What it does
 
-Synix transforms raw conversation data into structured, searchable memory through declarative Python pipelines. It processes ChatGPT exports, Claude conversations, and text files using LLM-powered transforms to create episode summaries, monthly rollups, and core memory documents — with full provenance tracking and incremental rebuilds when sources or prompts change.
+Synix transforms raw conversations into searchable, hierarchical memory with full provenance tracking. Declarative pipelines define how conversation exports become episodes, summaries, rollups, and core memory. When you change a config, only affected layers rebuild. The output is system prompt + RAG built from conversations with complete lineage.
 
 ## Key concepts
 
-- **Pipeline** — Python definition of sources, transforms, and projections with explicit dependencies
-- **Layer** — Named pipeline stage (transcripts → episodes → monthly → core) with typed transforms
-- **Transform** — Processing step that converts inputs to outputs (1:1 MapSynthesis, N:1 ReduceSynthesis, N:M GroupSynthesis, sequential FoldSynthesis)
-- **Artifact** — Immutable build output with content, metadata, and provenance chain back to sources
-- **Projection** — Build target like search index or flat file, materialized at release time
-- **Snapshot** — Immutable build state stored in `.synix/objects/` with content-addressed artifacts
-- **Release** — Materialization of projections from a snapshot to named targets
-- **Cache/Rebuild** — Fingerprint-based: rebuilds only when inputs, prompts, or transform code changes
+- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory) with content-addressed SHA256 identity
+- **Layer** — typed processing step in the build DAG. Source for inputs, Transform subclasses for LLM steps, SearchSurface/SynixSearch/FlatFile for projections
+- **Pipeline** — declared in Python using Pipeline.add(*layers). Dependencies via object references, not strings
+- **Projection** — structured output declaration materialized at release time (search.db, context.md)
+- **Release** — synix release HEAD --to <name> materializes projections from snapshot to .synix/releases/<name>/
+- **Provenance** — every artifact traces to inputs via parent_labels. Always included in search results
+- **Cache/Rebuild** — fingerprint comparison: if inputs or transform changed, rebuild. Otherwise skip
 
 ## Installation and quick start
 
 ```bash
-# Install with uv (recommended)
+# Install
 uvx synix init my-project
 cd my-project
 
-# Add your API key and build
-export ANTHROPIC_API_KEY=sk-ant-...
-uvx synix build
+# Add API key (see pipeline.py), then build and release
+uvx synix build                   # produce immutable snapshot
+uvx synix release HEAD --to local # materialize search.db, context.md
 
-# Release and search
-uvx synix release HEAD --to local
-uvx synix search "your query" --release local
+# Use
+uvx synix search "hiking" --release local
+uvx synix list                    # all artifacts
+uvx synix show final-report       # render an artifact
+uvx synix lineage <artifact-id>   # full provenance chain
 ```
 
 ## CLI commands
 
-- `synix init <name>` — Scaffold new project with pipeline, sources, README
-- `synix build [pipeline.py]` — Execute pipeline, produce immutable snapshot
-- `synix plan [pipeline.py]` — Dry-run showing rebuild/cache decisions and costs
-- `synix release <ref> --to <name>` — Materialize projections from snapshot to release target
-- `synix search <query> [--release <name>]` — Query materialized search index
-- `synix list [--ref <ref>]` — List artifacts in snapshot
-- `synix show <label> [--ref <ref>]` — Display artifact content
-- `synix lineage <label> [--ref <ref>]` — Show provenance chain
-- `synix diff <ref-a> <ref-b>` — Compare artifacts between snapshots
-- `synix verify` — Check build integrity and consistency
-- `synix clean [--release <name>]` — Remove release targets and temp files
+- `synix build pipeline.py` — execute pipeline, produce snapshot in .synix/
+- `synix plan pipeline.py` — dry-run showing rebuild/cached decisions
+- `synix release HEAD --to local` — materialize projections to named release
+- `synix search "query" --release local` — query materialized release
+- `synix list [--ref HEAD]` — artifacts in snapshot
+- `synix show <label> [--ref HEAD]` — display artifact content
+- `synix lineage <artifact-id>` — provenance tree from .synix/
+- `synix diff <ref-a> <ref-b>` — structured comparison
+- `synix clean` — remove .synix/releases/ and .synix/work/
+- `synix init <name>` — scaffold new project
 
 ## Architecture overview
 
-Core modules: `synix.build/` (pipeline execution, caching, artifacts), `synix.search/` (indexing, retrieval), `synix.cli/` (commands), `synix.adapters/` (source parsers), `synix.ext/` (memory transforms).
-
-Key files: `pipeline.py` (user-defined pipeline), `.synix/` (canonical store with objects/refs/releases), `src/synix/core/models.py` (Layer/Pipeline definitions), `src/synix/build/runner.py` (pipeline executor).
-
-Storage: Content-addressed objects in `.synix/objects/`, git-like refs in `.synix/refs/`, materialized outputs in `.synix/releases/<name>/`.
+```
+src/synix/
+├── core/models.py          # Layer hierarchy, Pipeline, Transform base classes
+├── build/
+│   ├── runner.py          # Execute pipeline, walk DAG, run transforms, cache artifacts
+│   ├── snapshot_view.py   # Read API over .synix/ refs and objects
+│   ├── release_engine.py  # Materialize projections via adapters
+│   ├── adapters.py        # Projection adapter contract (plan/apply/verify)
+│   └── llm_transforms.py  # Built-in memory transforms
+├── search/
+│   ├── indexer.py         # SQLite FTS5 + embedding indexing
+│   ├── retriever.py       # Hybrid search with RRF fusion
+│   └── adapter.py         # SynixSearch projection adapter
+├── ext/                   # Generic platform transforms
+│   ├── map_synthesis.py   # 1:1 MapSynthesis transform
+│   ├── group_synthesis.py # N:M GroupSynthesis transform
+│   └── reduce_synthesis.py# N:1 ReduceSynthesis transform
+├── adapters/              # Source file parsers
+│   ├── chatgpt.py        # ChatGPT JSON exports
+│   ├── claude.py         # Claude JSON exports
+│   └── text.py           # Text/markdown with YAML frontmatter
+└── cli/                  # Click CLI commands
+```
 
 ## Pipeline definition
 
+Pipeline definitions are Python code with object references:
+
 ```python
-from synix import Pipeline, SearchSurface, Source, SynixSearch
+from synix import Pipeline, Source, SearchSurface, SynixSearch
 from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
 pipeline = Pipeline("my-pipeline")
-pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}
+pipeline.source_dir = "./sources"
+pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku"}
 
+# Define layers
 transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
 monthly = MonthlyRollup("monthly", depends_on=[episodes])
 core = CoreSynthesis("core", depends_on=[monthly])
 
-memory_search = SearchSurface("memory-search", sources=[episodes, monthly, core], modes=["fulltext"])
+# Define search surface and output
+memory_search = SearchSurface(
+    "memory-search", 
+    sources=[episodes, monthly, core], 
+    modes=["fulltext", "semantic"]
+)
 
+# Add to pipeline
 pipeline.add(transcripts, episodes, monthly, core, memory_search)
 pipeline.add(SynixSearch("search", surface=memory_search))
 ```
 
+Transform types: MapSynthesis (1:1), GroupSynthesis (N:M), ReduceSynthesis (N:1), FoldSynthesis (N:1 sequential)
+
 ## Important constraints
 
-- SQLite only (no external databases required)
-- Local execution (no hosted service)
-- Immutable artifacts (no in-place updates)
-- Single-user CLI tool (no web UI)
-- Source files must fit in memory during parsing
-- LLM API keys required for transforms (Anthropic, OpenAI, or compatible)
-```
+- SQLite only — no external databases required
+- No web UI — CLI and Python API only
+- Build separates from release — synix build produces snapshots, synix release materializes outputs
+- Single source of truth in .synix/ — no build/ directory
+- Providers: Anthropic, OpenAI, or OpenAI-compatible via base_url
+- Python 3.11+ required
