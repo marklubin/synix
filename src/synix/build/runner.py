@@ -13,6 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from synix.build.dag import compute_levels, needs_rebuild, resolve_build_order
+from synix.build.error_classifier import (
+    DeadLetterQueue,
+    ErrorVerdict,
+    LLMErrorClassifier,
+)
 from synix.build.fingerprint import Fingerprint, compute_build_fingerprint
 from synix.build.projections import get_projection
 from synix.build.refs import synix_dir_for_build_dir
@@ -56,6 +61,7 @@ class LayerStats:
     built: int = 0
     cached: int = 0
     skipped: int = 0
+    dlq_count: int = 0
     time_seconds: float = 0.0
 
 
@@ -78,6 +84,7 @@ class RunResult:
     layer_stats: list[LayerStats] = field(default_factory=list)
     projection_stats: list[ProjectionStats] = field(default_factory=list)
     run_log: dict = field(default_factory=dict)
+    dlq: DeadLetterQueue = field(default_factory=DeadLetterQueue)
     validation: object | None = None  # ValidationResult when validators are declared
     snapshot_oid: str | None = None
     manifest_oid: str | None = None
@@ -310,8 +317,11 @@ def run(
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,
+                        dlq=result.dlq,
+                        layer_name=layer.name,
                     )
                 else:
+                    seq_classifier = LLMErrorClassifier()
                     for unit_inputs, config_extras in units:
                         # Per-unit cache check
                         unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
@@ -319,10 +329,19 @@ def run(
                         if cached_arts:
                             _on_cached(cached_arts, unit_inputs)
                             continue
-                        unit_ctx = transform_ctx.with_updates(config_extras)
-                        new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
-                        for artifact in new_artifacts:
-                            _save_artifact(artifact, parent_inputs=unit_inputs)
+                        try:
+                            unit_ctx = transform_ctx.with_updates(config_extras)
+                            new_artifacts = _invoke_transform_execute(layer, unit_inputs, unit_ctx)
+                            for artifact in new_artifacts:
+                                _save_artifact(artifact, parent_inputs=unit_inputs)
+                        except Exception as exc:
+                            labels = [a.label for a in unit_inputs[:3]]
+                            artifact_desc = ", ".join(labels)
+                            verdict = seq_classifier.classify(exc, artifact_desc)
+                            if verdict == ErrorVerdict.DLQ:
+                                result.dlq.add(artifact_desc, exc, layer_name=layer.name)
+                            else:
+                                raise
 
             layer_artifacts[layer.name] = layer_built
 
@@ -366,6 +385,8 @@ def run(
         clear_checkpoints(snapshot_txn.synix_dir)
 
     result.total_time = time.time() - start_time
+    if len(result.dlq) > 0:
+        logger.warning("Build completed with DLQ entries: %s", result.dlq.summary())
     slogger.run_finish(result.total_time)
     result.run_log = slogger.run_log.to_dict()
     return result
@@ -672,6 +693,9 @@ def _execute_transform_concurrent(
     on_complete=None,
     cached_by_inputs: dict[tuple[str, ...], list[Artifact]] | None = None,
     on_cached=None,
+    dlq: DeadLetterQueue | None = None,
+    error_classifier: LLMErrorClassifier | None = None,
+    layer_name: str = "",
 ) -> list[Artifact]:
     """Execute transform work units concurrently.
 
@@ -759,7 +783,8 @@ def _execute_transform_concurrent(
         worker_ctx = TransformContext.from_value(worker_config)
         return index, _invoke_transform_execute(worker_transform, unit_inputs, worker_ctx)
 
-    first_error: Exception | None = None
+    classifier = error_classifier or LLMErrorClassifier()
+    first_fatal: Exception | None = None
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
@@ -779,13 +804,22 @@ def _execute_transform_concurrent(
                 labels = [a.label for a in unit_inputs[:3]]
                 err = RuntimeError(f"Transform work unit timed out after 600s (inputs: {labels})")
                 results[idx] = err
-                if first_error is None:
-                    first_error = err
+                if first_fatal is None:
+                    first_fatal = err
                 logger.warning("Work unit %d timed out (inputs: %s)", idx, labels)
             except Exception as exc:
-                results[idx] = exc
-                if first_error is None:
-                    first_error = exc
+                _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
+                labels = [a.label for a in unit_inputs[:3]]
+                artifact_desc = ", ".join(labels)
+                verdict = classifier.classify(exc, artifact_desc)
+                if verdict == ErrorVerdict.DLQ:
+                    results[idx] = exc
+                    if dlq is not None:
+                        dlq.add(artifact_desc, exc, layer_name=layer_name)
+                else:
+                    results[idx] = exc
+                    if first_fatal is None:
+                        first_fatal = exc
 
     # Flatten successful results in order
     all_artifacts: list[Artifact] = []
@@ -794,8 +828,8 @@ def _execute_transform_concurrent(
             continue
         all_artifacts.extend(r)
 
-    if first_error is not None:
-        raise first_error
+    if first_fatal is not None:
+        raise first_fatal
 
     return all_artifacts
 
