@@ -162,10 +162,6 @@ def open_project(path: str | Path = ".") -> Project:
     return Project(synix_dir, project_root)
 
 
-# Deprecated alias — shadows Python builtin, use open_project() instead
-open = open_project
-
-
 def init(path: str | Path, *, pipeline=None) -> Project:
     """Create a new synix project at path.
 
@@ -215,15 +211,22 @@ class SdkSource:
         self._dir = source_dir
         self._dir.mkdir(parents=True, exist_ok=True)
 
+    def _validate_name(self, name: str) -> Path:
+        """Validate a filename and return its resolved path within the source dir."""
+        resolved = (self._dir / name).resolve()
+        if not resolved.parent == self._dir.resolve():
+            raise SdkError(f"Invalid source file name {name!r}: must be a plain filename, not a path")
+        return resolved
+
     def add(self, path: str | Path) -> None:
         """Copy a file into the source directory."""
         src = Path(path)
-        dest = self._dir / src.name
+        dest = self._validate_name(src.name)
         shutil.copy2(str(src), str(dest))
 
     def add_text(self, content: str, label: str) -> None:
         """Create a text file in the source directory."""
-        dest = self._dir / label
+        dest = self._validate_name(label)
         dest.write_text(content, encoding="utf-8")
 
     def list(self) -> list[str]:
@@ -234,7 +237,7 @@ class SdkSource:
 
     def remove(self, name: str) -> None:
         """Remove a source file."""
-        target = self._dir / name
+        target = self._validate_name(name)
         if target.exists():
             target.unlink()
 
@@ -309,32 +312,41 @@ class Release:
         self._closure = None
         self._is_scratch = name == "HEAD"
         self._scratch_dir: Path | None = None
+        self._scratch_release_name: str | None = None
 
     @property
     def name(self) -> str:
         return self._name
 
     def _release_dir(self) -> Path:
+        """Return the directory where adapter outputs (search.db, etc.) live."""
         if self._is_scratch:
             if self._scratch_dir is None:
                 scratch_id = uuid.uuid4().hex[:12]
                 self._scratch_dir = self._synix_dir / "work" / f"scratch_{scratch_id}"
                 self._scratch_dir.mkdir(parents=True, exist_ok=True)
+                self._scratch_release_name = f"_scratch_{scratch_id}"
                 # Materialize scratch release
                 from synix.build.release_engine import execute_release
 
                 execute_release(
                     self._synix_dir,
                     ref="HEAD",
-                    release_name=f"_scratch_{scratch_id}",
+                    release_name=self._scratch_release_name,
                     target=self._scratch_dir,
                 )
             return self._scratch_dir
         return self._synix_dir / "releases" / self._name
 
+    def _receipt_dir(self) -> Path:
+        """Return the directory where execute_release writes the receipt."""
+        if self._is_scratch and self._scratch_release_name:
+            return self._synix_dir / "releases" / self._scratch_release_name
+        return self._synix_dir / "releases" / self._name
+
     def _ensure_release_exists(self) -> Path:
         release_dir = self._release_dir()
-        if not self._is_scratch and not (release_dir / "receipt.json").exists():
+        if not self._is_scratch and not (self._receipt_dir() / "receipt.json").exists():
             raise ReleaseNotFoundError(f"Release {self._name!r} not found at {release_dir}")
         return release_dir
 
@@ -342,21 +354,18 @@ class Release:
         if self._closure is None:
             from synix.build.release import ReleaseClosure
 
-            release_dir = self._ensure_release_exists()
-            receipt_path = release_dir / "receipt.json"
+            self._ensure_release_exists()
+            receipt_path = self._receipt_dir() / "receipt.json"
 
-            if self._is_scratch:
-                # For scratch, resolve from HEAD
-                self._closure = ReleaseClosure.from_ref(self._synix_dir, "HEAD")
-            else:
-                try:
-                    receipt_data = json.loads(receipt_path.read_text(encoding="utf-8"))
-                    snapshot_oid = receipt_data["snapshot_oid"]
-                except (KeyError, json.JSONDecodeError) as exc:
-                    raise ReleaseNotFoundError(
-                        f"Release {self._name!r} has a malformed receipt at {receipt_path}"
-                    ) from exc
-                self._closure = ReleaseClosure.from_snapshot(self._synix_dir, snapshot_oid)
+            # Read from receipt to ensure the closure matches the exact
+            # snapshot that was materialized (avoids race if another build
+            # lands between materialization and read).
+            try:
+                receipt_data = json.loads(receipt_path.read_text(encoding="utf-8"))
+                snapshot_oid = receipt_data["snapshot_oid"]
+            except (KeyError, json.JSONDecodeError) as exc:
+                raise ReleaseNotFoundError(f"Release {self._name!r} has a malformed receipt at {receipt_path}") from exc
+            self._closure = ReleaseClosure.from_snapshot(self._synix_dir, snapshot_oid)
         return self._closure
 
     # -- Artifact access --
@@ -531,8 +540,8 @@ class Release:
 
     def receipt(self) -> dict:
         """Return the release receipt as a dict."""
-        release_dir = self._ensure_release_exists()
-        receipt_path = release_dir / "receipt.json"
+        self._ensure_release_exists()
+        receipt_path = self._receipt_dir() / "receipt.json"
         if not receipt_path.exists():
             raise ReleaseNotFoundError(f"No receipt found for release {self._name!r}")
         return json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -544,7 +553,13 @@ class Release:
         if self._is_scratch and self._scratch_dir is not None:
             if self._scratch_dir.exists():
                 shutil.rmtree(self._scratch_dir)
+            # Also clean up the receipt dir under releases/
+            if self._scratch_release_name:
+                receipt_dir = self._synix_dir / "releases" / self._scratch_release_name
+                if receipt_dir.exists():
+                    shutil.rmtree(receipt_dir)
             self._scratch_dir = None
+            self._scratch_release_name = None
         self._closure = None
 
     def __enter__(self) -> Release:

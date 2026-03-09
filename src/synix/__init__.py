@@ -28,9 +28,9 @@ from synix.sdk import (  # noqa: F401
     ProjectionNotFoundError,
     Release,
     SdkArtifact,
+    SdkError,
     SdkSearchResult,
     SearchHandle,
     init,
-    open,  # deprecated alias — prefer open_project
     open_project,
 )

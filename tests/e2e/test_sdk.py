@@ -164,32 +164,32 @@ class TestInitDiscovery:
         assert (project_dir / "custom" / "data").is_dir()
 
     def test_open_finds_synix_dir(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         assert project.synix_dir == sdk_project / ".synix"
 
     def test_open_walks_upward(self, sdk_project: Path):
         """open() finds .synix in parent directories."""
         subdir = sdk_project / "sub" / "deep"
         subdir.mkdir(parents=True)
-        project = synix.open(subdir)
+        project = synix.open_project(subdir)
         assert project.synix_dir == sdk_project / ".synix"
 
     def test_open_raises_not_found(self, tmp_path: Path):
         empty = tmp_path / "empty"
         empty.mkdir()
         with pytest.raises(SynixNotFoundError):
-            synix.open(empty)
+            synix.open_project(empty)
 
     def test_init_then_open_roundtrip(self, tmp_path: Path):
         project_dir = tmp_path / "roundtrip"
         project_dir.mkdir()
         synix.init(project_dir)
-        project = synix.open(project_dir)
+        project = synix.open_project(project_dir)
         assert project.synix_dir == project_dir / ".synix"
 
     def test_open_default_cwd(self, sdk_project: Path, monkeypatch):
         monkeypatch.chdir(sdk_project)
-        project = synix.open()
+        project = synix.open_project()
         assert project.synix_dir == sdk_project / ".synix"
 
 
@@ -200,7 +200,7 @@ class TestInitDiscovery:
 
 class TestPipelineInterop:
     def test_set_pipeline(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         pipeline = Pipeline("test")
         pipeline.add(Source("data"))
         project.set_pipeline(pipeline)
@@ -224,7 +224,7 @@ class TestPipelineInterop:
         )
         (project_dir / "sources").mkdir()
 
-        project = synix.open(project_dir)
+        project = synix.open_project(project_dir)
         loaded = project.load_pipeline()
         assert loaded.name == "file-test"
         assert project.pipeline is loaded
@@ -253,7 +253,7 @@ class TestPipelineInterop:
         )
         (project_dir / "src").mkdir()
 
-        project = synix.open(project_dir)
+        project = synix.open_project(project_dir)
         loaded = project.load_pipeline(pipeline_file)
         assert loaded.name == "custom"
 
@@ -335,6 +335,42 @@ class TestSourceManagement:
         project.source("exports").add_text("test", "test.txt")
         assert (project_dir / "custom" / "exports" / "test.txt").exists()
 
+    def test_path_traversal_add_text_rejected(self, tmp_path: Path):
+        project_dir = tmp_path / "src-traversal"
+        project_dir.mkdir()
+        pipeline = Pipeline("test", source_dir="./sources")
+        pipeline.add(Source("data"))
+        project = synix.init(project_dir, pipeline=pipeline)
+
+        from synix.sdk import SdkError
+
+        with pytest.raises(SdkError, match="plain filename"):
+            project.source("data").add_text("malicious", "../escape.txt")
+
+    def test_path_traversal_remove_rejected(self, tmp_path: Path):
+        project_dir = tmp_path / "src-traversal-rm"
+        project_dir.mkdir()
+        pipeline = Pipeline("test", source_dir="./sources")
+        pipeline.add(Source("data"))
+        project = synix.init(project_dir, pipeline=pipeline)
+
+        from synix.sdk import SdkError
+
+        with pytest.raises(SdkError, match="plain filename"):
+            project.source("data").remove("../../important.txt")
+
+    def test_undeclared_source_raises(self, tmp_path: Path):
+        project_dir = tmp_path / "src-undeclared"
+        project_dir.mkdir()
+        pipeline = Pipeline("test", source_dir="./sources")
+        pipeline.add(Source("exports"))
+        project = synix.init(project_dir, pipeline=pipeline)
+
+        from synix.sdk import SdkError
+
+        with pytest.raises(SdkError, match="not declared"):
+            project.source("nonexistent")
+
 
 # ---------------------------------------------------------------------------
 # Release operations
@@ -344,7 +380,7 @@ class TestSourceManagement:
 class TestRelease:
     def test_release_to_creates_receipt(self, sdk_project: Path):
         """release_to() is tested via fixture — verify receipt format."""
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("local")
         receipt = release.receipt()
         assert "release_name" in receipt
@@ -353,17 +389,17 @@ class TestRelease:
         assert "adapters" in receipt
 
     def test_release_handle(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("local")
         assert release.name == "local"
 
     def test_releases_list(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         names = project.releases()
         assert "local" in names
 
     def test_release_not_found(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("nonexistent")
         with pytest.raises(ReleaseNotFoundError):
             release.receipt()
@@ -376,7 +412,7 @@ class TestRelease:
 
 class TestArtifactAccess:
     def test_artifact_by_label(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         art = release.artifact("ep-1")
         assert isinstance(art, SdkArtifact)
         assert art.label == "ep-1"
@@ -384,18 +420,18 @@ class TestArtifactAccess:
         assert "Memory systems" in art.content
 
     def test_artifact_content(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         art = release.artifact("core-1")
         assert art.content == "Core memory about software builds."
 
     def test_artifact_metadata(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         art = release.artifact("ep-1")
         assert isinstance(art.metadata, dict)
         assert art.layer == "episodes"
 
     def test_artifact_provenance(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         art = release.artifact("core-1")
         assert "core-1" in art.provenance
         # core-1 has parents ep-1, ep-2
@@ -403,18 +439,18 @@ class TestArtifactAccess:
         assert "ep-2" in art.provenance
 
     def test_artifact_not_found(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         with pytest.raises(ArtifactNotFoundError):
             release.artifact("nonexistent")
 
     def test_artifacts_all(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         arts = list(release.artifacts())
         labels = {a.label for a in arts}
         assert labels == {"ep-1", "ep-2", "core-1"}
 
     def test_artifacts_layer_filter(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         episodes = list(release.artifacts(layer="episodes"))
         labels = {a.label for a in episodes}
         assert labels == {"ep-1", "ep-2"}
@@ -427,19 +463,19 @@ class TestArtifactAccess:
 
 class TestSearchKeyword:
     def test_keyword_search(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="keyword")
         assert len(results) > 0
         assert all(isinstance(r, SdkSearchResult) for r in results)
         assert any("memory" in r.content.lower() for r in results)
 
     def test_keyword_limit(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="keyword", limit=1)
         assert len(results) <= 1
 
     def test_keyword_layer_filter(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="keyword", layers=["core"])
         for r in results:
             assert r.layer == "core"
@@ -452,32 +488,32 @@ class TestSearchKeyword:
 
 class TestSearchSemantic:
     def test_hybrid_search(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("agent memory systems", mode="hybrid")
         assert len(results) > 0
         assert all(r.mode == "hybrid" for r in results)
 
     def test_semantic_search(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("AI architectures", mode="semantic")
         assert len(results) > 0
         assert all(r.mode == "semantic" for r in results)
 
     def test_provenance_in_results(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="hybrid")
         # At least some results should have provenance
         for r in results:
             assert isinstance(r.provenance, list)
 
     def test_layered_search(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("software builds", mode="layered")
         assert len(results) > 0
 
     def test_hybrid_uses_both(self, sdk_project: Path):
         """Hybrid mode uses both FTS5 and embeddings (has score)."""
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory architectures", mode="hybrid")
         assert len(results) > 0
         for r in results:
@@ -492,7 +528,7 @@ class TestSearchSemantic:
 class TestSearchFailClosed:
     def test_semantic_with_embeddings_works(self, sdk_project: Path):
         """embedding_config declared + embeddings present → hybrid works."""
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="hybrid")
         assert len(results) > 0
 
@@ -529,13 +565,13 @@ class TestSearchFailClosed:
 
     def test_semantic_no_config_raises(self, keyword_only_project: Path):
         """No embedding_config + mode='semantic' → SearchNotAvailableError."""
-        release = synix.open(keyword_only_project).release("local")
+        release = synix.open_project(keyword_only_project).release("local")
         with pytest.raises(SearchNotAvailableError, match="modes="):
             release.search("test", mode="semantic")
 
     def test_keyword_no_config_works(self, keyword_only_project: Path):
         """No embedding_config + mode='keyword' → works fine."""
-        release = synix.open(keyword_only_project).release("local")
+        release = synix.open_project(keyword_only_project).release("local")
         results = release.search("memory", mode="keyword")
         assert len(results) > 0
 
@@ -548,17 +584,17 @@ class TestSearchFailClosed:
 class TestSearchSurface:
     def test_auto_detect_single(self, sdk_project: Path):
         """Default surface auto-detected when only one search projection."""
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="keyword")
         assert len(results) > 0
 
     def test_explicit_surface(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         results = release.search("memory", mode="keyword", surface="memory-search")
         assert len(results) > 0
 
     def test_nonexistent_surface(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         with pytest.raises(SearchNotAvailableError):
             release.search("test", surface="nonexistent")
 
@@ -597,18 +633,18 @@ class TestSearchSurface:
 
 class TestSearchHandle:
     def test_index_returns_handle(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         handle = release.index("memory-search")
         assert isinstance(handle, SearchHandle)
 
     def test_handle_search(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         handle = release.index("memory-search")
         results = handle.search("memory", mode="keyword")
         assert len(results) > 0
 
     def test_handle_fail_closed(self, keyword_only_project: Path):
-        release = synix.open(keyword_only_project).release("local")
+        release = synix.open_project(keyword_only_project).release("local")
         handle = release.index("keyword-search")
         with pytest.raises(SearchNotAvailableError):
             handle.search("test", mode="semantic")
@@ -621,21 +657,21 @@ class TestSearchHandle:
 
 class TestLayers:
     def test_layers_list(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         layers = release.layers()
         names = {l.name for l in layers}
         assert "episodes" in names
         assert "core" in names
 
     def test_layer_counts(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         layers = release.layers()
         layer_map = {l.name: l for l in layers}
         assert layer_map["episodes"].count == 2
         assert layer_map["core"].count == 1
 
     def test_layer_artifacts(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         layers = release.layers()
         ep_layer = next(l for l in layers if l.name == "episodes")
         arts = list(ep_layer.artifacts())
@@ -649,7 +685,7 @@ class TestLayers:
 
 class TestLineage:
     def test_multi_level_provenance(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         chain = release.lineage("core-1")
         labels = [a.label for a in chain]
         assert "core-1" in labels
@@ -657,7 +693,7 @@ class TestLineage:
         assert "ep-2" in labels
 
     def test_root_artifact_lineage(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         chain = release.lineage("ep-1")
         # Root artifact provenance is just itself
         assert len(chain) >= 1
@@ -671,18 +707,18 @@ class TestLineage:
 
 class TestFlatFiles:
     def test_flat_file_content(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         content = release.flat_file("context-doc")
         assert "Core memory about software builds." in content
 
     def test_flat_file_path(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         path = release.flat_file_path("context-doc")
         assert path.exists()
         assert path.name == "context.md"
 
     def test_flat_file_not_found(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         with pytest.raises(ProjectionNotFoundError):
             release.flat_file("nonexistent")
 
@@ -694,7 +730,7 @@ class TestFlatFiles:
 
 class TestReceipt:
     def test_receipt_schema(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         receipt = release.receipt()
         assert "schema_version" in receipt
         assert "release_name" in receipt
@@ -702,7 +738,7 @@ class TestReceipt:
         assert "adapters" in receipt
 
     def test_receipt_has_adapters(self, sdk_project: Path):
-        release = synix.open(sdk_project).release("local")
+        release = synix.open_project(sdk_project).release("local")
         receipt = release.receipt()
         assert "memory-search" in receipt["adapters"]
         assert "context-doc" in receipt["adapters"]
@@ -716,13 +752,13 @@ class TestReceipt:
 class TestScratchRelease:
     def test_head_search(self, sdk_project: Path):
         """release("HEAD").search(...) works via scratch realization."""
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         with project.release("HEAD") as release:
             results = release.search("memory", mode="keyword")
             assert len(results) > 0
 
     def test_context_manager_cleanup(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("HEAD")
         with release:
             # Force materialization
@@ -734,7 +770,7 @@ class TestScratchRelease:
         assert not scratch_dir.exists()
 
     def test_explicit_close(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("HEAD")
         release.search("test", mode="keyword")
         scratch_dir = release._scratch_dir
@@ -749,7 +785,7 @@ class TestScratchRelease:
 
 class TestErrorPaths:
     def test_release_not_found(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         release = project.release("does-not-exist")
         with pytest.raises(ReleaseNotFoundError):
             release.artifact("ep-1")
@@ -777,7 +813,7 @@ class TestErrorPaths:
 
     def test_synix_not_found(self, tmp_path: Path):
         with pytest.raises(SynixNotFoundError):
-            synix.open(tmp_path / "nonexistent")
+            synix.open_project(tmp_path / "nonexistent")
 
 
 # ---------------------------------------------------------------------------
@@ -787,7 +823,7 @@ class TestErrorPaths:
 
 class TestRefs:
     def test_refs_dict(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         refs = project.refs()
         assert isinstance(refs, dict)
         # Should have at least heads/main and releases/local
@@ -803,7 +839,7 @@ class TestRefs:
 
 class TestClean:
     def test_clean_removes_releases(self, sdk_project: Path):
-        project = synix.open(sdk_project)
+        project = synix.open_project(sdk_project)
         releases_dir = project.synix_dir / "releases"
         assert releases_dir.exists()
 

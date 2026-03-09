@@ -18,7 +18,7 @@ An agent runtime that ingests ChatGPT/Claude exports and live session logs, proc
 ```python
 import synix
 
-mem = synix.open("~/unified-memory").release("local")
+mem = synix.open_project("~/unified-memory").release("local")
 
 # System prompt: inject core memory directly from artifact
 system_prompt = f"""You are Mark's assistant.
@@ -46,11 +46,11 @@ A benchmark that evaluates memory systems by streaming episodes and scoring retr
 import synix
 
 # Generate benchmark dataset
-project = synix.open(f"datasets/scopes/{scope_id}")
+project = synix.open_project(f"datasets/scopes/{scope_id}")
 project.build(pipeline="pipeline.py", concurrency=8)
 
 # Evaluate a synix-backed memory adapter
-project = synix.open(adapter_workspace)
+project = synix.open_project(adapter_workspace)
 release = project.release("eval")
 results = release.search(question, limit=budget)
 core = release.artifact("core-memory").content
@@ -61,7 +61,7 @@ core = release.artifact("core-memory").content
 ### Entry Point
 
 ```python
-project = synix.open(path)
+project = synix.open_project(path)
 ```
 
 Finds `.synix/` in or above `path`. Returns a `Project` handle. Lazy — nothing loads until accessed.
@@ -139,7 +139,7 @@ release.receipt()                           # → release receipt dict
 
 1. **Artifacts are the core primitive** — everything flows through artifacts. Flat files and search indices are projections of artifacts, not separate concepts.
 
-2. **Lazy everything** — `synix.open()` finds the path. `project.release()` resolves the ref. Nothing loads into memory until you access `.content`, `.search()`, etc.
+2. **Lazy everything** — `synix.open_project()` finds the path. `project.release()` resolves the ref. Nothing loads into memory until you access `.content`, `.search()`, etc.
 
 3. **Sources are managed, not filesystem ops** — `source.add()` abstracts file placement. You hand the SDK a document, it puts it in the right place. Whether that's a directory, a database, or a remote store is an implementation detail.
 
@@ -215,7 +215,7 @@ Buffer lives in `.synix/buffer/` — append-only JSONL or SQLite. Indexed for in
 
 ```python
 # Top-level
-synix.open(path: str | Path) -> Project
+synix.open_project(path: str | Path) -> Project
 
 # Project
 Project.release(name: str) -> Release

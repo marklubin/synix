@@ -8,7 +8,7 @@ Programmatic access to synix — "boto3 for synix". Build pipelines, manage sour
 import synix
 
 # Open an existing project
-project = synix.open("~/my-project")
+project = synix.open_project("~/my-project")
 mem = project.release("local")
 
 # Search memory (hybrid = keyword + semantic)
