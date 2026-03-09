@@ -1,113 +1,87 @@
+```
 # synix
 
 > A build system for agent memory
 
 ## What it does
 
-Synix transforms raw conversations into searchable, hierarchical memory with full provenance tracking. It processes conversation exports (ChatGPT, Claude, text files) through configurable LLM-backed transforms to create episode summaries, monthly rollups, and core memory artifacts. Change a prompt or add new conversations - only affected layers rebuild incrementally, like `make` or `dbt` but for AI agent memory.
+Synix transforms raw conversation data into structured, searchable memory through declarative Python pipelines. It processes ChatGPT exports, Claude conversations, and text files using LLM-powered transforms to create episode summaries, monthly rollups, and core memory documents — with full provenance tracking and incremental rebuilds when sources or prompts change.
 
 ## Key concepts
 
-- **Pipeline** - Python-defined DAG of sources, transforms, and outputs
-- **Layer** - Named processing stage (episodes, monthly rollups, core memory) 
-- **Transform** - LLM-backed processing step (1:1, N:1, N:M patterns)
-- **Artifact** - Immutable build output with content hash and provenance chain
-- **SearchSurface** - Build-time searchable capability over artifact sets
-- **Projection** - Materialized output (search index, context document)
-- **Provenance** - Full chain from any artifact back to source conversations
-- **Incremental rebuild** - Content-addressed caching skips unchanged work
+- **Pipeline** — Python definition of sources, transforms, and projections with explicit dependencies
+- **Layer** — Named pipeline stage (transcripts → episodes → monthly → core) with typed transforms
+- **Transform** — Processing step that converts inputs to outputs (1:1 MapSynthesis, N:1 ReduceSynthesis, N:M GroupSynthesis, sequential FoldSynthesis)
+- **Artifact** — Immutable build output with content, metadata, and provenance chain back to sources
+- **Projection** — Build target like search index or flat file, materialized at release time
+- **Snapshot** — Immutable build state stored in `.synix/objects/` with content-addressed artifacts
+- **Release** — Materialization of projections from a snapshot to named targets
+- **Cache/Rebuild** — Fingerprint-based: rebuilds only when inputs, prompts, or transform code changes
 
 ## Installation and quick start
 
 ```bash
+# Install with uv (recommended)
 uvx synix init my-project
 cd my-project
 
-# Add API key and sources, then build
-export ANTHROPIC_API_KEY=your-key
+# Add your API key and build
+export ANTHROPIC_API_KEY=sk-ant-...
 uvx synix build
 
-# Release to materialize search index + context document
+# Release and search
 uvx synix release HEAD --to local
-
-# Search with provenance
-uvx synix search "database migration" --release local
-uvx synix show final-report
-uvx synix lineage artifact-id
+uvx synix search "your query" --release local
 ```
 
 ## CLI commands
 
-- `synix init <name>` - Create new pipeline with sources and config
-- `synix build` - Run pipeline, rebuild only changed artifacts
-- `synix release <ref> --to <name>` - Materialize projections from a build snapshot
-- `synix revert <ref> --to <name>` - Release an older snapshot (rollback)
-- `synix plan` - Show what would build without executing
-- `synix search <query> --release <name>` - Search released artifacts with provenance
-- `synix show <id>` - Display artifact content by label/ID prefix
-- `synix lineage <id>` - Show full provenance tree for artifact
-- `synix list [layer]` - List artifacts, optionally filtered by layer
-- `synix validate` - Run domain validators on build outputs
-- `synix clean` - Remove release targets and work files
-- `synix releases list` - Show all releases with receipt info
-- `synix refs list` - Show all refs (build runs + releases)
-- `synix runs list` - Show immutable build snapshots
-- `synix batch-build run` - Submit pipeline to OpenAI Batch API (50% cost)
-- `synix mesh create` - Create distributed build mesh over Tailscale
+- `synix init <name>` — Scaffold new project with pipeline, sources, README
+- `synix build [pipeline.py]` — Execute pipeline, produce immutable snapshot
+- `synix plan [pipeline.py]` — Dry-run showing rebuild/cache decisions and costs
+- `synix release <ref> --to <name>` — Materialize projections from snapshot to release target
+- `synix search <query> [--release <name>]` — Query materialized search index
+- `synix list [--ref <ref>]` — List artifacts in snapshot
+- `synix show <label> [--ref <ref>]` — Display artifact content
+- `synix lineage <label> [--ref <ref>]` — Show provenance chain
+- `synix diff <ref-a> <ref-b>` — Compare artifacts between snapshots
+- `synix verify` — Check build integrity and consistency
+- `synix clean [--release <name>]` — Remove release targets and temp files
 
 ## Architecture overview
 
-All state lives in `.synix/` — no `build/` directory is created. Build produces immutable snapshots; `synix release` materializes them into usable outputs.
+Core modules: `synix.build/` (pipeline execution, caching, artifacts), `synix.search/` (indexing, retrieval), `synix.cli/` (commands), `synix.adapters/` (source parsers), `synix.ext/` (memory transforms).
 
-```
-src/synix/
-├── core/models.py          # Pipeline, Layer, Transform, Artifact models
-├── build/
-│   ├── runner.py          # Execute pipeline, walk DAG, cache artifacts
-│   ├── object_store.py    # Content-addressed object storage
-│   ├── snapshots.py       # Immutable build snapshots + transactions
-│   ├── snapshot_view.py   # Ref-resolved read API over snapshots
-│   ├── release_engine.py  # Release orchestration (lock, dispatch, receipt)
-│   ├── release.py         # ReleaseClosure — resolved artifact set
-│   ├── adapters.py        # Projection adapter contract + registry
-│   └── llm_transforms.py  # Built-in episode/rollup/core transforms
-├── ext/                   # Generic transform patterns (Map, Reduce, etc)
-├── search/
-│   ├── indexer.py         # SQLite FTS5 + embedding search
-│   ├── retriever.py       # Hybrid keyword + semantic retrieval
-│   └── adapter.py         # synix_search release adapter
-├── cli/                   # Click commands with Rich formatting
-└── templates/             # Demo pipelines for common patterns
-```
+Key files: `pipeline.py` (user-defined pipeline), `.synix/` (canonical store with objects/refs/releases), `src/synix/core/models.py` (Layer/Pipeline definitions), `src/synix/build/runner.py` (pipeline executor).
+
+Storage: Content-addressed objects in `.synix/objects/`, git-like refs in `.synix/refs/`, materialized outputs in `.synix/releases/<name>/`.
 
 ## Pipeline definition
 
 ```python
-# pipeline.py - code-first Python API
 from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.ext import EpisodeSummary, MonthlyRollup, CoreSynthesis
 
-pipeline = Pipeline("personal-memory")
-pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku"}
+pipeline = Pipeline("my-pipeline")
+pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}
 
-# Define processing layers
-transcripts = Source("transcripts")  
+transcripts = Source("transcripts")
 episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-monthly = MonthlyRollup("monthly", depends_on=[episodes]) 
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
 core = CoreSynthesis("core", depends_on=[monthly])
 
-# Create searchable surface and output
-search = SearchSurface("search", sources=[episodes, monthly, core])
-pipeline.add(transcripts, episodes, monthly, core, search)
-pipeline.add(SynixSearch("search", surface=search))
+memory_search = SearchSurface("memory-search", sources=[episodes, monthly, core], modes=["fulltext"])
+
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
 ```
 
 ## Important constraints
 
-- **SQLite only** - No external databases, filesystem-backed storage
-- **Local execution** - No web UI, runs via CLI or Python API  
-- **LLM required** - Transforms use Anthropic/OpenAI for processing
-- **Source formats** - ChatGPT/Claude JSON exports, plain text/markdown
-- **Python 3.11+** - Uses modern Python features and type hints
-- **Content-addressed** - Artifacts identified by SHA-256 content hash
-- **Incremental only** - No full rebuilds unless forced with --full flag
+- SQLite only (no external databases required)
+- Local execution (no hosted service)
+- Immutable artifacts (no in-place updates)
+- Single-user CLI tool (no web UI)
+- Source files must fit in memory during parsing
+- LLM API keys required for transforms (Anthropic, OpenAI, or compatible)
+```
