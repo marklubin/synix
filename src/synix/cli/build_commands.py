@@ -38,6 +38,25 @@ def _print_error(label: str, exc: Exception, verbose: int, con) -> None:
         con.print(f"[red]{label}:[/red] {type(exc).__name__}: {exc}")
 
 
+def _print_build_error(exc: Exception, dlq_enabled: bool, verbose: int, con) -> None:
+    """Print a build error with DLQ opt-in hint when applicable."""
+    _print_error("Pipeline failed", exc, verbose, con)
+
+    if not dlq_enabled:
+        # Check if this looks like a content-filter or input-too-large error
+        from synix.build.error_classifier import ErrorVerdict, LLMErrorClassifier
+
+        classifier = LLMErrorClassifier()
+        verdict = classifier.classify(exc, "")
+        if verdict == ErrorVerdict.DLQ:
+            con.print(
+                "\n[yellow]Hint:[/yellow] This error is recoverable. "
+                "Re-run with [bold]--dlq[/bold] to skip failing artifacts "
+                "and continue building:\n"
+                "  [dim]synix build pipeline.py --dlq[/dim]"
+            )
+
+
 def _projection_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]]]:
     """Compute layer_name → [(proj_name, proj_type, trigger_type)] mapping.
 
@@ -108,6 +127,12 @@ def _surface_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]
 @click.option("--concurrency", "-j", default=5, type=int, help="Number of concurrent LLM requests (default 5)")
 @click.option("--validate", is_flag=True, default=False, help="Run domain validators after build")
 @click.option("--plain", is_flag=True, default=False, help="Plain text output (no TUI, safe for CI/pipes)")
+@click.option(
+    "--dlq",
+    is_flag=True,
+    default=False,
+    help="Enable dead letter queue: skip content-filter and input-too-large errors instead of aborting",
+)
 def build(
     pipeline_path: str,
     source_dir: str | None,
@@ -116,6 +141,7 @@ def build(
     concurrency: int,
     validate: bool,
     plain: bool,
+    dlq: bool,
 ):
     """Build memory artifacts from a pipeline definition.
 
@@ -123,8 +149,11 @@ def build(
     """
     # Trigger search projection registration
     import synix.search.indexer  # noqa: F401
+    from synix.build.error_classifier import LLMErrorClassifier
     from synix.build.pipeline import load_pipeline
     from synix.build.runner import run as run_pipeline
+
+    classifier = LLMErrorClassifier() if dlq else None
 
     try:
         pipeline = load_pipeline(pipeline_path)
@@ -170,10 +199,11 @@ def build(
                 concurrency=concurrency,
                 progress=progress,
                 validate=validate,
+                error_classifier=classifier,
             )
         except Exception as e:
             console.print()
-            _print_error("Pipeline failed", e, verbose, console)
+            _print_build_error(e, dlq, verbose, console)
             sys.exit(1)
     else:
         progress = BuildProgress()
@@ -186,10 +216,11 @@ def build(
                     concurrency=concurrency,
                     progress=progress,
                     validate=validate,
+                    error_classifier=classifier,
                 )
         except Exception as e:
             console.print()
-            _print_error("Pipeline failed", e, verbose, console)
+            _print_build_error(e, dlq, verbose, console)
             sys.exit(1)
 
     elapsed = time.time() - start_time
@@ -201,12 +232,16 @@ def build(
     proj_status = {ps.name: ps.status for ps in result.projection_stats}
 
     # Summary table
+    has_dlq = any(s.dlq_count > 0 for s in result.layer_stats)
+
     table = Table(title="Build Summary", box=box.ROUNDED)
     table.add_column("Layer", style="bold", no_wrap=True)
     table.add_column("Level", justify="center")
     table.add_column("Built", justify="right", style="green")
     table.add_column("Cached", justify="right", style="cyan")
     table.add_column("Skipped", justify="right", style="dim")
+    if has_dlq:
+        table.add_column("DLQ", justify="right", style="yellow")
 
     # Determine the last trigger layer for each projection (for showing final status)
     last_trigger_layer: dict[str, str] = {}
@@ -216,13 +251,16 @@ def build(
 
     for stats in result.layer_stats:
         style = get_layer_style(stats.level)
-        table.add_row(
+        row = [
             f"[{style}]{stats.name}[/{style}]",
             str(stats.level),
             str(stats.built),
             str(stats.cached),
             str(stats.skipped),
-        )
+        ]
+        if has_dlq:
+            row.append(str(stats.dlq_count) if stats.dlq_count > 0 else "")
+        table.add_row(*row)
 
         # Inline projection rows after this layer
         for proj_name, proj_type, trigger_type in proj_triggers.get(stats.name, []):
@@ -231,19 +269,24 @@ def build(
                 status_label = proj_status.get(proj_name, trigger_type)
             else:
                 status_label = trigger_type
-            table.add_row(
+            proj_row = [
                 f"  [dim]→[/dim] [magenta]{proj_name}[/magenta]",
                 f"[dim]{proj_type}[/dim]",
                 "",
                 "",
                 f"[dim]{status_label}[/dim]",
-            )
+            ]
+            if has_dlq:
+                proj_row.append("")
+            table.add_row(*proj_row)
 
     console.print()
     console.print(table)
     from synix.cli.main import is_demo_mode
 
     console.print(f"\n[bold]Total:[/bold] {result.built} built, {result.cached} cached, {result.skipped} skipped")
+    if len(result.dlq) > 0:
+        console.print(f"[yellow bold]DLQ:[/yellow bold] {result.dlq.summary()}")
     if not is_demo_mode():
         console.print(f"[bold]Time:[/bold] {elapsed:.1f}s")
     if not is_demo_mode() and result.snapshot_oid and result.run_ref:

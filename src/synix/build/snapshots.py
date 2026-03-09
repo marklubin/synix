@@ -157,6 +157,7 @@ class BuildTransaction:
     parent_labels_map: dict[str, list[str]] = field(default_factory=dict)
     projection_oids: dict[str, str] = field(default_factory=dict)
     projection_declarations: dict[str, dict] = field(default_factory=dict)
+    dlq_entries: list[dict[str, str]] = field(default_factory=list)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     @classmethod
@@ -366,12 +367,17 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             msg = "HEAD advanced during build; rerun against the latest snapshot"
             raise RuntimeError(msg)
 
+        manifest_extra: dict[str, Any] = {}
+        if transaction.dlq_entries:
+            manifest_extra["dlq"] = transaction.dlq_entries
+
         manifest_payload = _object(
             "manifest",
             pipeline_name=transaction.pipeline.name,
             pipeline_fingerprint=_pipeline_fingerprint(transaction.pipeline),
             artifacts=[{"label": label, "oid": oid} for label, oid in sorted(transaction.artifact_oids.items())],
             projections=transaction.projection_declarations,
+            **manifest_extra,
         )
         manifest_oid = transaction.object_store.put_json(manifest_payload)
 

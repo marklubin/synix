@@ -93,6 +93,14 @@ class BuildProgress:
             else:
                 self._artifacts[name].status = "cached"
 
+    def artifact_dlq(self, name: str, error_message: str) -> None:
+        with self._lock:
+            if name not in self._artifacts:
+                self._artifacts[name] = _ArtifactState(name, "dlq")
+                self._order.append(name)
+            else:
+                self._artifacts[name].status = "dlq"
+
     def projection_start(self, name: str, triggered_by: str | None = None) -> None:
         with self._lock:
             entry = {"name": name, "status": "running"}
@@ -221,6 +229,8 @@ class BuildProgress:
                         yield Text.from_markup(f"    [green]✓[/green] {short}  [dim]{art.elapsed:.1f}s[/dim]")
                     elif art.status == "cached":
                         yield Text.from_markup(f"    [cyan]=[/cyan] {short}  [dim]cached[/dim]")
+                    elif art.status == "dlq":
+                        yield Text.from_markup(f"    [yellow]✗[/yellow] {short}  [dim]skipped (DLQ)[/dim]")
                     elif art.status == "running":
                         rt = now - art.start_time
                         yield Text.from_markup(f"    [yellow]⟳[/yellow] {short}  [yellow]{rt:.1f}s[/yellow]")
@@ -285,6 +295,9 @@ class PlainBuildProgress:
 
     def artifact_cached(self, name: str) -> None:
         self._console.print(f"[{self._ts()}]   artifact {name} cached")
+
+    def artifact_dlq(self, name: str, error_message: str) -> None:
+        self._console.print(f"[{self._ts()}]   artifact {name} DLQ: {error_message}")
 
     def projection_start(self, name: str, triggered_by: str | None = None) -> None:
         self._console.print(f"[{self._ts()}]   projection {name} started")
