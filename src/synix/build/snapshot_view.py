@@ -219,6 +219,11 @@ class SnapshotArtifactCache:
         # Load checkpoint artifacts from interrupted builds as fallback
         self._load_checkpoints(synix_dir)
 
+        # Last resort: scan object store for orphaned artifacts not covered
+        # by any snapshot or checkpoint (e.g. interrupted build before
+        # checkpoint support was added).
+        self._recover_orphaned_artifacts(synix_dir)
+
     def _load_checkpoints(self, synix_dir: Path) -> None:
         """Load artifacts from checkpoint files left by interrupted builds."""
         checkpoint_base = synix_dir / "checkpoints"
@@ -276,6 +281,80 @@ class SnapshotArtifactCache:
                         "layer": layer_name,
                         "level": layer_level,
                     }
+
+    def _recover_orphaned_artifacts(self, synix_dir: Path) -> None:
+        """Scan object store for artifacts not covered by snapshot or checkpoint.
+
+        This recovers artifacts from interrupted builds that happened before
+        checkpoint support was added.  The scan walks every object in the store,
+        so it runs only when there are labels still missing after snapshot +
+        checkpoint loading.
+        """
+        object_store = ObjectStore(synix_dir)
+        objects_dir = object_store.objects_dir
+        if not objects_dir.exists():
+            return
+
+        recovered = 0
+        for prefix_dir in objects_dir.iterdir():
+            if not prefix_dir.is_dir():
+                continue
+            for obj_file in prefix_dir.iterdir():
+                if not obj_file.is_file() or obj_file.suffix == ".tmp":
+                    continue
+                try:
+                    raw = obj_file.read_bytes()
+                    obj = json.loads(raw)
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+                if obj.get("type") != "artifact":
+                    continue
+
+                label = obj.get("label")
+                if not label or label in self._artifacts_by_label:
+                    continue
+
+                # Load content from object store
+                content_oid = obj.get("content_oid")
+                if not content_oid:
+                    continue
+                try:
+                    content = object_store.get_bytes(content_oid).decode("utf-8")
+                except (FileNotFoundError, OSError):
+                    continue
+
+                created_at_str = obj.get("metadata", {}).get("created_at")
+                created_at = datetime.fromisoformat(created_at_str) if created_at_str else datetime.now()
+
+                artifact = Artifact(
+                    label=label,
+                    artifact_type=obj["artifact_type"],
+                    artifact_id=obj["artifact_id"],
+                    input_ids=obj.get("input_ids", []),
+                    prompt_id=obj.get("prompt_id"),
+                    model_config=obj.get("model_config"),
+                    created_at=created_at,
+                    content=content,
+                    metadata=obj.get("metadata", {}),
+                )
+
+                layer_name = obj.get("metadata", {}).get("layer_name", "")
+                layer_level = obj.get("metadata", {}).get("layer_level", 0)
+
+                self._artifacts_by_label[label] = artifact
+                self._artifacts_by_layer.setdefault(layer_name, []).append(artifact)
+                self._parent_labels_map[label] = obj.get("parent_labels", [])
+                self._manifest_entries[label] = {
+                    "path": "",
+                    "artifact_id": obj["artifact_id"],
+                    "layer": layer_name,
+                    "level": layer_level,
+                }
+                recovered += 1
+
+        if recovered:
+            logger.info("Recovered %d orphaned artifacts from object store in %s", recovered, synix_dir)
 
     def load_artifact(self, label: str) -> Artifact | None:
         """Load an artifact by label. Returns None if not found."""

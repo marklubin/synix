@@ -209,3 +209,75 @@ class TestCheckpointRecovery:
 
         # All checkpoints (including stale ones) should be cleared
         assert not (synix_dir / "checkpoints").exists(), "All checkpoints should be cleared after successful build"
+
+    def test_orphaned_artifacts_recovered_from_object_store(self, pipeline_obj, source_dir, build_dir, mock_llm):
+        """Artifacts in object store with no snapshot or checkpoint are recovered.
+
+        This reproduces the kimi scenario: a build writes artifacts to .synix/objects/
+        but is interrupted before commit_build_snapshot runs. No checkpoint files
+        exist either (pre-checkpoint code). The next build should discover these
+        orphaned artifacts via object store scan and use them as cache hits.
+        """
+        # Build 1: full build, produces snapshot
+        result1 = run(pipeline_obj, source_dir=str(source_dir))
+        synix_dir = Path(result1.synix_dir)
+        calls_after_build1 = len(mock_llm)
+
+        # Capture which artifacts exist in the object store
+        from synix.build.snapshot_view import SnapshotView
+
+        view = SnapshotView.open(synix_dir)
+        original_labels = {entry["label"] for entry in view._manifest["artifacts"]}
+
+        # Now nuke the snapshot ref (simulate interrupted build that never committed)
+        # but leave the artifact objects in the store untouched.
+        head_path = synix_dir / "HEAD"
+        head_content = head_path.read_text(encoding="utf-8").strip()
+        target_ref = head_content.removeprefix("ref: ")
+        target_ref_path = synix_dir / target_ref
+        target_ref_path.unlink()
+
+        # Also ensure no checkpoints exist
+        checkpoint_base = synix_dir / "checkpoints"
+        assert not checkpoint_base.exists()
+
+        # Build 2: object store scan should find the orphaned artifacts
+        # and use them as cache — episodes should NOT require LLM calls.
+        calls_before_build2 = len(mock_llm)
+        result2 = run(pipeline_obj, source_dir=str(source_dir))
+        calls_in_build2 = len(mock_llm) - calls_before_build2
+
+        # The key assertion: episodes were already in the object store,
+        # so the second build should make 0 LLM calls for them.
+        assert calls_in_build2 == 0, f"Expected 0 LLM calls when artifacts exist in object store, got {calls_in_build2}"
+
+    def test_orphan_recovery_cache_loads_correct_content(self, pipeline_obj, source_dir, build_dir, mock_llm):
+        """Orphaned artifact recovery loads correct content and artifact_ids."""
+        result1 = run(pipeline_obj, source_dir=str(source_dir))
+        synix_dir = Path(result1.synix_dir)
+
+        from synix.build.snapshot_view import SnapshotView
+
+        view = SnapshotView.open(synix_dir)
+        # Capture expected content from the committed snapshot
+        expected = {}
+        for entry in view._manifest["artifacts"]:
+            art_obj = view._object_store.get_json(entry["oid"])
+            content = view._object_store.get_bytes(art_obj["content_oid"]).decode("utf-8")
+            expected[entry["label"]] = (art_obj["artifact_id"], content)
+
+        # Nuke the snapshot ref
+        head_path = synix_dir / "HEAD"
+        head_content = head_path.read_text(encoding="utf-8").strip()
+        target_ref = head_content.removeprefix("ref: ")
+        target_ref_path = synix_dir / target_ref
+        target_ref_path.unlink()
+
+        # Load cache — should recover from object store scan
+        cache = SnapshotArtifactCache(synix_dir)
+
+        for label, (expected_id, expected_content) in expected.items():
+            art = cache.load_artifact(label)
+            assert art is not None, f"Orphaned artifact {label} should be recoverable"
+            assert art.artifact_id == expected_id, f"artifact_id mismatch for {label}"
+            assert art.content == expected_content, f"content mismatch for {label}"
