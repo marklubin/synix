@@ -21,3 +21,22 @@ from synix.core.search_handles import (  # noqa: F401
     SearchSurfaceLookupError,
     SearchSurfaceUnavailableError,
 )
+from synix.sdk import (  # noqa: F401
+    SDK_VERSION,
+    ArtifactNotFoundError,
+    BuildResult,
+    EmbeddingRequiredError,
+    PipelineRequiredError,
+    Project,
+    ProjectionNotFoundError,
+    Release,
+    ReleaseNotFoundError,
+    SdkArtifact,
+    SdkError,
+    SdkSearchResult,
+    SearchHandle,
+    SearchNotAvailableError,
+    SynixNotFoundError,
+    init,
+    open_project,
+)
