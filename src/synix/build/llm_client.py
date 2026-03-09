@@ -7,6 +7,8 @@ import sys
 import time
 from dataclasses import dataclass
 
+import httpx
+
 from synix.core.config import LLMConfig
 
 
@@ -56,6 +58,12 @@ class LLMClient:
                 kwargs["api_key"] = api_key
             if self.config.base_url:
                 kwargs["base_url"] = self.config.base_url
+            kwargs["timeout"] = httpx.Timeout(
+                connect=10.0,
+                read=self.config.timeout,
+                write=self.config.timeout,
+                pool=self.config.timeout,
+            )
             return anthropic.Anthropic(**kwargs)
 
         elif self.config.provider in ("openai", "deepseek", "openai-compatible"):
@@ -70,6 +78,14 @@ class LLMClient:
                 kwargs["base_url"] = "https://api.deepseek.com"
             elif self.config.provider == "openai-compatible" and not self.config.base_url:
                 raise ValueError("openai-compatible provider requires base_url to be set")
+            if self.config.default_headers:
+                kwargs["default_headers"] = self.config.default_headers
+            kwargs["timeout"] = httpx.Timeout(
+                connect=10.0,
+                read=self.config.timeout,
+                write=self.config.timeout,
+                pool=self.config.timeout,
+            )
             return openai.OpenAI(**kwargs)
 
         else:

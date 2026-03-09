@@ -51,6 +51,8 @@ class LLMConfig:
     base_url: str | None = None  # For OpenAI-compatible APIs (Ollama, vLLM, DeepSeek)
     api_key: str | None = None  # Override; defaults to env var
     api_key_env: str | None = None  # Custom env var name (e.g. "TOGETHER_API_KEY")
+    default_headers: dict[str, str] | None = None  # Extra HTTP headers for API calls
+    timeout: float = 300.0  # Per-request HTTP timeout in seconds (connect + read)
 
     @classmethod
     def from_dict(cls, data: dict) -> LLMConfig:
@@ -89,6 +91,10 @@ class LLMConfig:
             config.api_key = data["api_key"]
         if "api_key_env" in data:
             config.api_key_env = data["api_key_env"]
+        if "default_headers" in data:
+            config.default_headers = data["default_headers"]
+        if "timeout" in data:
+            config.timeout = data["timeout"]
 
         return config
 

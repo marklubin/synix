@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -214,6 +215,67 @@ class SnapshotArtifactCache:
                 }
         except (ValueError, FileNotFoundError, KeyError):
             logger.debug("No previous snapshot found in %s — starting with empty cache", synix_dir)
+
+        # Load checkpoint artifacts from interrupted builds as fallback
+        self._load_checkpoints(synix_dir)
+
+    def _load_checkpoints(self, synix_dir: Path) -> None:
+        """Load artifacts from checkpoint files left by interrupted builds."""
+        checkpoint_base = synix_dir / "checkpoints"
+        if not checkpoint_base.exists():
+            return
+
+        object_store = ObjectStore(synix_dir)
+        # Iterate run dirs newest-first (lexicographic on run_id which includes timestamp)
+        for run_dir in sorted(checkpoint_base.iterdir(), reverse=True):
+            if not run_dir.is_dir():
+                continue
+            for cp_file in sorted(run_dir.glob("*.json")):
+                try:
+                    cp = json.loads(cp_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    logger.debug("Skipping corrupted checkpoint %s", cp_file)
+                    continue
+
+                for label, oid in cp.get("artifact_oids", {}).items():
+                    if label in self._artifacts_by_label:
+                        continue  # Already loaded from committed snapshot
+
+                    try:
+                        art_obj = object_store.get_json(oid)
+                        content = object_store.get_bytes(art_obj["content_oid"]).decode("utf-8")
+                    except (KeyError, FileNotFoundError, OSError):
+                        logger.debug("Checkpoint artifact %s (oid=%s) missing from object store", label, oid)
+                        continue
+
+                    created_at_str = art_obj.get("metadata", {}).get("created_at")
+                    created_at = datetime.fromisoformat(created_at_str) if created_at_str else datetime.now()
+
+                    artifact = Artifact(
+                        label=art_obj["label"],
+                        artifact_type=art_obj["artifact_type"],
+                        artifact_id=art_obj["artifact_id"],
+                        input_ids=art_obj.get("input_ids", []),
+                        prompt_id=art_obj.get("prompt_id"),
+                        model_config=art_obj.get("model_config"),
+                        created_at=created_at,
+                        content=content,
+                        metadata=art_obj.get("metadata", {}),
+                    )
+
+                    layer_name = art_obj.get("metadata", {}).get("layer_name", "")
+                    layer_level = art_obj.get("metadata", {}).get("layer_level", 0)
+
+                    self._artifacts_by_label[label] = artifact
+                    self._artifacts_by_layer.setdefault(layer_name, []).append(artifact)
+                    parent_labels = cp.get("parent_labels_map", {}).get(label, art_obj.get("parent_labels", []))
+                    self._parent_labels_map[label] = parent_labels
+                    self._manifest_entries[label] = {
+                        "path": "",
+                        "artifact_id": art_obj["artifact_id"],
+                        "layer": layer_name,
+                        "level": layer_level,
+                    }
 
     def load_artifact(self, label: str) -> Artifact | None:
         """Load an artifact by label. Returns None if not found."""

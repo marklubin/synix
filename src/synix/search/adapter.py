@@ -179,6 +179,18 @@ class SynixSearchAdapter(ProjectionAdapter):
                 shadow_path.unlink()
             raise
 
+        # Generate embeddings if embedding_config is declared (fail-closed)
+        embedding_config = declaration.config.get("embedding_config")
+        if embedding_config:
+            from synix.core.config import EmbeddingConfig
+            from synix.search.embeddings import EmbeddingProvider
+
+            config = EmbeddingConfig.from_dict(embedding_config)
+            provider = EmbeddingProvider(config, str(target_path))
+            texts = [art.content for art in artifacts.values()]
+            # Fail-closed: embedding generation failure is a hard error
+            provider.embed_batch(texts)
+
         return AdapterReceipt(
             adapter="synix_search",
             projection_name=plan.projection_name,

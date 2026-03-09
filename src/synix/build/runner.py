@@ -23,7 +23,13 @@ from synix.build.search_surfaces import (
     validate_search_surface_uses,
 )
 from synix.build.snapshot_view import SnapshotArtifactCache
-from synix.build.snapshots import BuildTransaction, commit_build_snapshot, start_build_transaction
+from synix.build.snapshots import (
+    BuildTransaction,
+    clear_checkpoints,
+    commit_build_snapshot,
+    start_build_transaction,
+    write_layer_checkpoint,
+)
 from synix.core.logging import SynixLogger, Verbosity
 from synix.core.models import (
     Artifact,
@@ -327,6 +333,9 @@ def run(
         result.skipped += stats.skipped
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
+        # Checkpoint after each layer so interrupted builds can recover
+        write_layer_checkpoint(snapshot_txn, layer.name)
+
         _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, work_dir, logger=slogger)
 
     # Record projection declarations in the snapshot transaction
@@ -352,6 +361,9 @@ def run(
         result.head_ref = snapshot_info["head_ref"]
         result.run_ref = snapshot_info["run_ref"]
         result.synix_dir = snapshot_info["synix_dir"]
+
+        # Successful commit supersedes all prior checkpoints
+        clear_checkpoints(snapshot_txn.synix_dir)
 
     result.total_time = time.time() - start_time
     slogger.run_finish(result.total_time)
@@ -758,10 +770,18 @@ def _execute_transform_concurrent(
         for future in as_completed(futures):
             idx = futures[future]
             try:
-                _, artifacts = future.result()
+                _, artifacts = future.result(timeout=600)  # 10 min hard ceiling per work unit
                 results[idx] = artifacts
                 _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
                 _invoke_callback(on_complete, artifacts, unit_inputs)
+            except TimeoutError:
+                _orig_idx, unit_inputs, _config_extras = units_to_run[idx]
+                labels = [a.label for a in unit_inputs[:3]]
+                err = RuntimeError(f"Transform work unit timed out after 600s (inputs: {labels})")
+                results[idx] = err
+                if first_error is None:
+                    first_error = err
+                logger.warning("Work unit %d timed out (inputs: %s)", idx, labels)
             except Exception as exc:
                 results[idx] = exc
                 if first_error is None:

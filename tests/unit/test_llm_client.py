@@ -124,6 +124,21 @@ class TestLLMConfig:
         config = LLMConfig(provider="anthropic", api_key="explicit-key")
         assert config.resolve_api_key() == "explicit-key"
 
+    def test_timeout_default(self):
+        """Default timeout is 300 seconds."""
+        config = LLMConfig()
+        assert config.timeout == 300.0
+
+    def test_from_dict_timeout(self):
+        """from_dict picks up custom timeout."""
+        config = LLMConfig.from_dict({"timeout": 60})
+        assert config.timeout == 60
+
+    def test_from_dict_timeout_not_set_uses_default(self):
+        """from_dict without timeout keeps default."""
+        config = LLMConfig.from_dict({"model": "gpt-4o"})
+        assert config.timeout == 300.0
+
     def test_backward_compat_no_provider_key(self):
         """Dict without 'provider' defaults to anthropic — backward compatible."""
         config = LLMConfig.from_dict(
@@ -181,28 +196,38 @@ class TestLLMClientInit:
 
     def test_init_anthropic_provider(self, monkeypatch):
         """Anthropic provider creates an anthropic.Anthropic client."""
+        import httpx
+
         mock_anthropic_cls = MagicMock(return_value=MagicMock())
         monkeypatch.setattr("anthropic.Anthropic", mock_anthropic_cls)
 
         config = LLMConfig(provider="anthropic", api_key="test-key")
         client = LLMClient(config)
 
-        mock_anthropic_cls.assert_called_once_with(api_key="test-key")
+        call_kwargs = mock_anthropic_cls.call_args[1]
+        assert call_kwargs["api_key"] == "test-key"
+        assert isinstance(call_kwargs["timeout"], httpx.Timeout)
         assert client._client is not None
 
     def test_init_openai_provider(self, monkeypatch):
         """OpenAI provider creates an openai.OpenAI client."""
+        import httpx
+
         mock_openai_cls = MagicMock(return_value=MagicMock())
         monkeypatch.setattr("openai.OpenAI", mock_openai_cls)
 
         config = LLMConfig(provider="openai", api_key="oai-test-key")
         client = LLMClient(config)
 
-        mock_openai_cls.assert_called_once_with(api_key="oai-test-key")
+        call_kwargs = mock_openai_cls.call_args[1]
+        assert call_kwargs["api_key"] == "oai-test-key"
+        assert isinstance(call_kwargs["timeout"], httpx.Timeout)
         assert client._client is not None
 
     def test_init_openai_compatible_provider(self, monkeypatch):
         """OpenAI-compatible provider passes base_url to openai.OpenAI."""
+        import httpx
+
         mock_openai_cls = MagicMock(return_value=MagicMock())
         monkeypatch.setattr("openai.OpenAI", mock_openai_cls)
 
@@ -213,10 +238,10 @@ class TestLLMClientInit:
         )
         client = LLMClient(config)
 
-        mock_openai_cls.assert_called_once_with(
-            api_key="compat-key",
-            base_url="http://localhost:11434/v1",
-        )
+        call_kwargs = mock_openai_cls.call_args[1]
+        assert call_kwargs["api_key"] == "compat-key"
+        assert call_kwargs["base_url"] == "http://localhost:11434/v1"
+        assert isinstance(call_kwargs["timeout"], httpx.Timeout)
 
     def test_init_openai_compatible_requires_base_url(self, monkeypatch):
         """OpenAI-compatible without base_url raises ValueError."""
@@ -242,8 +267,9 @@ class TestLLMClientInit:
         config = LLMConfig(provider="anthropic")
         LLMClient(config)
 
-        # Called with no kwargs (api_key is None, so not passed)
-        mock_anthropic_cls.assert_called_once_with()
+        call_kwargs = mock_anthropic_cls.call_args[1]
+        assert "api_key" not in call_kwargs
+        assert "timeout" in call_kwargs  # timeout always present
 
     def test_init_anthropic_with_base_url(self, monkeypatch):
         """Anthropic provider passes base_url when set."""
@@ -257,10 +283,63 @@ class TestLLMClientInit:
         )
         LLMClient(config)
 
-        mock_anthropic_cls.assert_called_once_with(
-            api_key="test-key",
-            base_url="https://custom-anthropic.example.com",
-        )
+        call_kwargs = mock_anthropic_cls.call_args[1]
+        assert call_kwargs["api_key"] == "test-key"
+        assert call_kwargs["base_url"] == "https://custom-anthropic.example.com"
+        assert "timeout" in call_kwargs
+
+
+class TestLLMClientTimeout:
+    """Tests verifying HTTP timeouts are passed to SDK clients."""
+
+    def test_anthropic_client_receives_timeout(self, monkeypatch):
+        """Anthropic client is created with httpx.Timeout from config."""
+        import httpx
+
+        mock_anthropic_cls = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("anthropic.Anthropic", mock_anthropic_cls)
+
+        config = LLMConfig(provider="anthropic", api_key="test-key", timeout=120.0)
+        LLMClient(config)
+
+        call_kwargs = mock_anthropic_cls.call_args[1]
+        timeout = call_kwargs["timeout"]
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.connect == 10.0
+        assert timeout.read == 120.0
+        assert timeout.write == 120.0
+        assert timeout.pool == 120.0
+
+    def test_openai_client_receives_timeout(self, monkeypatch):
+        """OpenAI client is created with httpx.Timeout from config."""
+        import httpx
+
+        mock_openai_cls = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("openai.OpenAI", mock_openai_cls)
+
+        config = LLMConfig(provider="openai", api_key="test-key", timeout=60.0)
+        LLMClient(config)
+
+        call_kwargs = mock_openai_cls.call_args[1]
+        timeout = call_kwargs["timeout"]
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.connect == 10.0
+        assert timeout.read == 60.0
+
+    def test_default_timeout_300s(self, monkeypatch):
+        """Default config uses 300s timeout."""
+        import httpx
+
+        mock_anthropic_cls = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("anthropic.Anthropic", mock_anthropic_cls)
+
+        config = LLMConfig(provider="anthropic", api_key="test-key")
+        LLMClient(config)
+
+        call_kwargs = mock_anthropic_cls.call_args[1]
+        timeout = call_kwargs["timeout"]
+        assert isinstance(timeout, httpx.Timeout)
+        assert timeout.read == 300.0
 
 
 class TestLLMClientCompleteAnthropic:

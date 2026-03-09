@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import shutil
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -406,6 +407,34 @@ def commit_build_snapshot(transaction: BuildTransaction) -> dict[str, str]:
             "run_ref": run_ref,
             "synix_dir": str(synix_dir),
         }
+
+
+def write_layer_checkpoint(transaction: BuildTransaction, layer_name: str) -> None:
+    """Write a checkpoint after a layer completes successfully.
+
+    Checkpoints record which artifacts have been successfully built so far,
+    enabling cache recovery after interrupted builds.
+    """
+    checkpoint_dir = transaction.synix_dir / "checkpoints" / transaction.run_id
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    with transaction._lock:
+        payload = {
+            "type": "checkpoint",
+            "layer": layer_name,
+            "artifact_oids": dict(transaction.artifact_oids),
+            "parent_labels_map": {k: list(v) for k, v in transaction.parent_labels_map.items()},
+        }
+    atomic_write(
+        checkpoint_dir / f"{layer_name}.json",
+        json.dumps(payload, sort_keys=True, indent=2),
+    )
+
+
+def clear_checkpoints(synix_dir: Path) -> None:
+    """Remove all checkpoint dirs after a successful snapshot commit."""
+    checkpoint_base = synix_dir / "checkpoints"
+    if checkpoint_base.exists():
+        shutil.rmtree(checkpoint_base)
 
 
 def list_runs(build_dir: str | Path, *, synix_dir: str | Path | None = None) -> list[dict[str, str]]:
