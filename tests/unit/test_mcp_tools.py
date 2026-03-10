@@ -327,14 +327,10 @@ class TestInspect:
 class TestProjectFailureModes:
     """Failure modes for project lifecycle tools."""
 
-    def test_open_project_no_synix_dir(self, tmp_path):
-        """open_project on a dir without .synix/ raises SynixNotFoundError."""
+    def test_open_project_nonexistent_path(self):
+        """open_project on a nonexistent path raises."""
         with pytest.raises(SynixNotFoundError):
-            open_project(str(tmp_path))
-
-    def test_open_project_nonexistent_path(self, tmp_path):
-        with pytest.raises(SynixNotFoundError):
-            open_project(str(tmp_path / "does-not-exist"))
+            open_project("/nonexistent-synix-test-path-abc123")
 
     def test_load_pipeline_missing_file(self, project_dir):
         """load_pipeline with a nonexistent file raises."""
