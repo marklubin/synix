@@ -86,9 +86,9 @@ def _show_pipeline_info() -> None:
 
     # Layer names with levels
     layer_parts = []
-    for layer in sorted(pipeline.layers, key=lambda l: l._level):
-        style = get_layer_style(layer._level)
-        layer_parts.append(f"[{style}]{layer.name}[/{style}] (L{layer._level})")
+    for layer in sorted(pipeline.layers, key=lambda l: l.level):
+        style = get_layer_style(layer.level)
+        layer_parts.append(f"[{style}]{layer.name}[/{style}] (L{layer.level})")
     if layer_parts:
         table.add_row("Layer Detail", ", ".join(layer_parts))
 

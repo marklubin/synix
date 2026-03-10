@@ -627,7 +627,12 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
                 source_config = {"source_dir": pipeline.source_dir}
                 artifacts = layer.load(source_config)
                 layer_cardinality[layer.name] = len(artifacts)
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Source '%s' failed to load during batch plan: %s",
+                    layer.name,
+                    exc,
+                )
                 layer_cardinality[layer.name] = 1
         elif isinstance(layer, Transform):
             try:
