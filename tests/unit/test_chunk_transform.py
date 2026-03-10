@@ -139,6 +139,18 @@ class TestMetadata:
         result = chunk.execute([source], TransformContext())
         assert result[0].metadata["tag"] == "new"
 
+    def test_metadata_fn_cannot_override_reserved_keys(self):
+        """metadata_fn must not overwrite source_label, chunk_index, or chunk_total."""
+        chunk = Chunk(
+            "c",
+            depends_on=[],
+            chunk_size=100,
+            chunk_overlap=0,
+            metadata_fn=lambda inp, i, t: {"source_label": "hijacked"},
+        )
+        with pytest.raises(ValueError, match="reserved chunk keys"):
+            chunk.execute([_art("doc", "content")], TransformContext())
+
 
 class TestLabels:
     def test_default_labels_are_content_based(self):
@@ -195,11 +207,11 @@ class TestSplit:
             assert unit_inputs[0] is original
             assert extras == {}
 
-    def test_split_empty_inputs(self):
+    def test_split_empty_inputs_produces_no_units(self):
+        """Empty inputs → no units (nothing to chunk, avoids execute([]) crash)."""
         chunk = Chunk("c", depends_on=[], chunk_size=10, chunk_overlap=0)
         units = chunk.split([], TransformContext())
-        assert len(units) == 1
-        assert units[0] == ([], {})
+        assert len(units) == 0
 
 
 class TestCacheKey:
@@ -252,6 +264,10 @@ class TestValidation:
     def test_separator_skips_validation(self):
         """When separator is provided, chunk_size/overlap validation is skipped."""
         Chunk("c", depends_on=[], separator="\n", chunk_size=0, chunk_overlap=0)
+
+    def test_empty_separator_raises(self):
+        with pytest.raises(ValueError, match="separator must be a non-empty string"):
+            Chunk("c", depends_on=[], separator="")
 
 
 class TestExecuteValidation:

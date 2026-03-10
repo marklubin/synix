@@ -63,6 +63,8 @@ class Chunk(Transform):
         self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
 
+        if separator is not None and not separator:
+            raise ValueError("separator must be a non-empty string")
         if chunker is None and separator is None:
             if chunk_size <= 0:
                 raise ValueError(f"chunk_size must be positive, got {chunk_size}")
@@ -105,6 +107,10 @@ class Chunk(Transform):
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
+    def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
+        """One unit per input artifact. Empty inputs → no units (nothing to chunk)."""
+        return [([inp], {}) for inp in inputs]
+
     def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         if len(inputs) != 1:
             raise ValueError(
@@ -127,7 +133,12 @@ class Chunk(Transform):
                 }
             )
             if self.metadata_fn is not None:
-                meta.update(self.metadata_fn(inp, i, total))
+                custom_meta = self.metadata_fn(inp, i, total)
+                _RESERVED_KEYS = {"source_label", "chunk_index", "chunk_total"}
+                conflicts = _RESERVED_KEYS & set(custom_meta)
+                if conflicts:
+                    raise ValueError(f"metadata_fn must not override reserved chunk keys: {sorted(conflicts)}")
+                meta.update(custom_meta)
 
             if self.label_fn is not None:
                 label = self.label_fn(inp, i, total)
