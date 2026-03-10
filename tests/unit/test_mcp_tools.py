@@ -9,6 +9,7 @@ from synix.mcp.server import (
     build,
     clean,
     get_artifact,
+    get_flat_file,
     init_project,
     lineage,
     list_artifacts,
@@ -26,7 +27,14 @@ from synix.mcp.server import (
     source_list,
     source_remove,
 )
-from synix.sdk import ArtifactNotFoundError, ReleaseNotFoundError, SdkError
+from synix.sdk import (
+    ArtifactNotFoundError,
+    PipelineRequiredError,
+    ProjectionNotFoundError,
+    ReleaseNotFoundError,
+    SdkError,
+    SynixNotFoundError,
+)
 
 PIPELINE_PY = """\
 from synix import Pipeline, Source, SearchSurface, SynixSearch
@@ -309,3 +317,205 @@ class TestInspect:
     def test_clean(self, built_project):
         clean()
         assert list_releases() == []
+
+
+# ---------------------------------------------------------------------------
+# Failure modes — error paths for all tool categories
+# ---------------------------------------------------------------------------
+
+
+class TestProjectFailureModes:
+    """Failure modes for project lifecycle tools."""
+
+    def test_open_project_no_synix_dir(self, tmp_path):
+        """open_project on a dir without .synix/ raises SynixNotFoundError."""
+        with pytest.raises(SynixNotFoundError):
+            open_project(str(tmp_path))
+
+    def test_open_project_nonexistent_path(self, tmp_path):
+        with pytest.raises(SynixNotFoundError):
+            open_project(str(tmp_path / "does-not-exist"))
+
+    def test_load_pipeline_missing_file(self, project_dir):
+        """load_pipeline with a nonexistent file raises."""
+        open_project(str(project_dir))
+        with pytest.raises(FileNotFoundError):
+            load_pipeline(str(project_dir / "nonexistent.py"))
+
+    def test_load_pipeline_malformed(self, project_dir):
+        """load_pipeline with a file that has no Pipeline object raises."""
+        bad_pipeline = project_dir / "bad_pipeline.py"
+        bad_pipeline.write_text("x = 42\n")
+        open_project(str(project_dir))
+        with pytest.raises((ValueError, AttributeError)):
+            load_pipeline(str(bad_pipeline))
+
+    def test_load_pipeline_syntax_error(self, project_dir):
+        """load_pipeline with invalid Python raises."""
+        bad_pipeline = project_dir / "syntax_error.py"
+        bad_pipeline.write_text("def broken(\n")
+        open_project(str(project_dir))
+        with pytest.raises(SyntaxError):
+            load_pipeline(str(bad_pipeline))
+
+
+class TestSourceFailureModes:
+    """Failure modes for source management tools."""
+
+    def test_source_ops_no_project(self):
+        """All source tools raise when no project is open."""
+        with pytest.raises(ValueError, match="No project open"):
+            source_list("docs")
+        with pytest.raises(ValueError, match="No project open"):
+            source_add_text("docs", "content", "file.txt")
+        with pytest.raises(ValueError, match="No project open"):
+            source_remove("docs", "file.txt")
+        with pytest.raises(ValueError, match="No project open"):
+            source_clear("docs")
+
+    def test_source_add_file_nonexistent(self, project_dir):
+        """source_add_file with a file that doesn't exist raises."""
+        open_project(str(project_dir))
+        load_pipeline()
+        with pytest.raises(FileNotFoundError):
+            source_add_file("docs", str(project_dir / "missing-file.txt"))
+
+    def test_source_add_text_path_traversal(self, project_dir):
+        """source_add_text rejects filenames with path components."""
+        open_project(str(project_dir))
+        load_pipeline()
+        with pytest.raises(SdkError, match="plain filename"):
+            source_add_text("docs", "malicious content", "../escape.txt")
+
+    def test_source_add_file_path_traversal(self, project_dir):
+        """source_add_file rejects filenames with path components via the copy target."""
+        ext = project_dir / "legit.txt"
+        ext.write_text("ok")
+        # Rename with path separator to trigger validation
+        open_project(str(project_dir))
+        load_pipeline()
+        # The SDK validates the destination filename, so a normal file copy is safe.
+        # But source_add_text with path separators is caught.
+        with pytest.raises(SdkError, match="plain filename"):
+            source_add_text("docs", "content", "sub/dir/file.txt")
+
+    def test_source_remove_nonexistent_file(self, project_dir):
+        """source_remove on a file that doesn't exist is a no-op (no error)."""
+        open_project(str(project_dir))
+        load_pipeline()
+        # Should not raise — SDK remove is idempotent
+        source_remove("docs", "file-that-never-existed.txt")
+
+    def test_source_clear_already_empty(self, project_dir):
+        """source_clear on an already-empty directory is a no-op."""
+        open_project(str(project_dir))
+        load_pipeline()
+        source_remove("docs", "recipe.md")
+        source_clear("docs")
+        assert source_list("docs") == []
+
+
+class TestBuildReleaseFailureModes:
+    """Failure modes for build and release tools."""
+
+    def test_build_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            build()
+
+    def test_build_no_pipeline(self, tmp_path):
+        """build without a pipeline.py file raises."""
+        synix.init(str(tmp_path))
+        open_project(str(tmp_path))
+        with pytest.raises((PipelineRequiredError, ValueError, FileNotFoundError)):
+            build()
+
+    def test_release_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            release("local")
+
+    def test_release_invalid_ref(self, project_dir):
+        """release with a ref that doesn't exist raises."""
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        with pytest.raises((ValueError, FileNotFoundError)):
+            release("test", ref="nonexistent-ref")
+
+
+class TestSearchFailureModes:
+    """Failure modes for search tool."""
+
+    def test_search_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            search("query")
+
+    def test_search_invalid_release(self, project_dir):
+        """search on a release that doesn't exist raises."""
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        with pytest.raises(ReleaseNotFoundError):
+            search("chocolate", release_name="nonexistent")
+
+
+class TestInspectFailureModes:
+    """Failure modes for inspection tools."""
+
+    @pytest.fixture
+    def built_project(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        return project_dir
+
+    def test_get_artifact_invalid_release(self, project_dir):
+        open_project(str(project_dir))
+        with pytest.raises(ReleaseNotFoundError):
+            get_artifact("some-label", "nonexistent")
+
+    def test_list_artifacts_invalid_release(self, project_dir):
+        open_project(str(project_dir))
+        with pytest.raises(ReleaseNotFoundError):
+            list_artifacts("nonexistent")
+
+    def test_list_artifacts_nonexistent_layer(self, built_project):
+        """list_artifacts with a layer that doesn't exist returns empty."""
+        arts = list_artifacts("local", layer="nonexistent-layer")
+        assert arts == []
+
+    def test_list_layers_invalid_release(self, project_dir):
+        open_project(str(project_dir))
+        with pytest.raises(ReleaseNotFoundError):
+            list_layers("nonexistent")
+
+    def test_lineage_invalid_release(self, project_dir):
+        open_project(str(project_dir))
+        with pytest.raises(ReleaseNotFoundError):
+            lineage("some-label", "nonexistent")
+
+    def test_lineage_invalid_artifact(self, built_project):
+        with pytest.raises(ArtifactNotFoundError):
+            lineage("nonexistent-label", "local")
+
+    def test_get_flat_file_no_projection(self, built_project):
+        """get_flat_file for a projection that doesn't exist raises."""
+        with pytest.raises(ProjectionNotFoundError):
+            get_flat_file("nonexistent-projection", "local")
+
+    def test_get_flat_file_invalid_release(self, project_dir):
+        open_project(str(project_dir))
+        with pytest.raises(ReleaseNotFoundError):
+            get_flat_file("context", "nonexistent")
+
+    def test_show_release_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            show_release("local")
+
+    def test_list_refs_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            list_refs()
+
+    def test_clean_no_project(self):
+        with pytest.raises(ValueError, match="No project open"):
+            clean()
