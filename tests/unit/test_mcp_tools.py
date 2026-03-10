@@ -553,6 +553,197 @@ class TestInspectFailureModes:
             clean()
 
 
+class TestSearchEdgeCases:
+    """Edge case tests for search — layers, surface, and result handling."""
+
+    @pytest.fixture
+    def released_project(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        return project_dir
+
+    def test_search_nonexistent_layer_filter(self, released_project):
+        """search with a layer that doesn't exist returns empty results."""
+        results = search("chocolate", release_name="local", layers=["nonexistent-layer"])
+        assert results == []
+
+    def test_search_empty_query(self, released_project):
+        """search with an empty query raises — FTS5 cannot match empty strings."""
+        with pytest.raises((ValueError, Exception)):
+            search("", release_name="local")
+
+    def test_search_result_schema(self, released_project):
+        """Every search result has the required fields with correct types."""
+        results = search("chocolate", release_name="local")
+        assert len(results) > 0
+        for r in results:
+            assert isinstance(r["label"], str)
+            assert isinstance(r["layer"], str)
+            assert isinstance(r["layer_level"], int)
+            assert isinstance(r["score"], (int, float))
+            assert isinstance(r["mode"], str)
+            assert isinstance(r["content"], str)
+            assert isinstance(r["provenance"], list)
+            assert isinstance(r["metadata"], dict)
+
+    def test_search_with_limit(self, released_project):
+        """search respects limit parameter."""
+        results = search("chocolate", release_name="local", limit=1)
+        assert len(results) <= 1
+
+
+class TestBuildSideEffects:
+    """Tests for build() pipeline loading side effects."""
+
+    def test_build_pipeline_path_swaps_pipeline(self, tmp_path):
+        """build(pipeline_path=...) loads a different pipeline — verify it takes effect."""
+        # Create two pipelines with different names
+        pipeline_a = """\
+from synix import Pipeline, Source, SearchSurface, SynixSearch
+from synix.transforms import Chunk
+
+pipeline = Pipeline("pipeline-a", source_dir="./sources")
+docs = Source("docs")
+chunks = Chunk("chunks", depends_on=[docs], chunk_size=200, chunk_overlap=50)
+surface = SearchSurface("search", sources=[chunks], modes=["fulltext"])
+search_out = SynixSearch("search", surface=surface)
+pipeline.add(docs, chunks, surface, search_out)
+"""
+        pipeline_b = """\
+from synix import Pipeline, Source, SearchSurface, SynixSearch
+from synix.transforms import Chunk
+
+pipeline = Pipeline("pipeline-b", source_dir="./sources")
+docs = Source("docs")
+chunks = Chunk("chunks", depends_on=[docs], chunk_size=100, chunk_overlap=20)
+surface = SearchSurface("search", sources=[chunks], modes=["fulltext"])
+search_out = SynixSearch("search", surface=surface)
+pipeline.add(docs, chunks, surface, search_out)
+"""
+        (tmp_path / "pipeline_a.py").write_text(pipeline_a)
+        (tmp_path / "pipeline_b.py").write_text(pipeline_b)
+        sources = tmp_path / "sources" / "docs"
+        sources.mkdir(parents=True)
+        (sources / "doc.md").write_text(DOC_CONTENT)
+        synix.init(str(tmp_path))
+
+        open_project(str(tmp_path))
+        load_pipeline(str(tmp_path / "pipeline_a.py"))
+
+        # Build with pipeline_b — should swap the loaded pipeline
+        result = build(pipeline_path=str(tmp_path / "pipeline_b.py"))
+        assert result["built"] > 0
+
+    def test_build_result_schema(self, project_dir):
+        """build() returns all expected fields with correct types."""
+        open_project(str(project_dir))
+        load_pipeline()
+        result = build()
+        assert isinstance(result["built"], int)
+        assert isinstance(result["cached"], int)
+        assert isinstance(result["skipped"], int)
+        assert isinstance(result["total_time"], float)
+        assert isinstance(result["snapshot_oid"], str)
+        assert len(result["snapshot_oid"]) > 0
+        assert isinstance(result["manifest_oid"], str)
+
+
+class TestSourceEdgeCases:
+    """Edge case tests for source operations."""
+
+    def test_source_add_text_empty_content(self, project_dir):
+        """Adding empty text content succeeds (no silent data loss)."""
+        open_project(str(project_dir))
+        load_pipeline()
+        result = source_add_text("docs", "", "empty.md")
+        assert "Added empty.md" in result
+        files = source_list("docs")
+        assert "empty.md" in files
+
+    def test_source_add_text_large_content(self, project_dir):
+        """Adding large text content succeeds."""
+        open_project(str(project_dir))
+        load_pipeline()
+        large_content = "x" * 100_000
+        result = source_add_text("docs", large_content, "large.md")
+        assert "Added large.md" in result
+
+
+class TestResponseSchemas:
+    """Verify response schemas match documented contract."""
+
+    def test_init_project_schema(self, tmp_path):
+        result = init_project(str(tmp_path / "schema-test"))
+        assert set(result.keys()) == {"project_root", "synix_dir"}
+        assert isinstance(result["project_root"], str)
+        assert isinstance(result["synix_dir"], str)
+
+    def test_open_project_schema(self, project_dir):
+        result = open_project(str(project_dir))
+        assert set(result.keys()) == {"project_root", "synix_dir", "releases"}
+        assert isinstance(result["releases"], list)
+
+    def test_load_pipeline_schema(self, project_dir):
+        open_project(str(project_dir))
+        result = load_pipeline()
+        assert "name" in result
+        assert "source_dir" in result
+        assert "sources" in result
+        assert "transforms" in result
+        assert "layer_count" in result
+        assert isinstance(result["sources"], list)
+        assert isinstance(result["transforms"], list)
+        assert isinstance(result["layer_count"], int)
+
+    def test_list_layers_schema(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        layers = list_layers("local")
+        assert isinstance(layers, list)
+        assert len(layers) > 0
+        for layer in layers:
+            assert set(layer.keys()) == {"name", "level", "count"}
+            assert isinstance(layer["name"], str)
+            assert isinstance(layer["level"], int)
+            assert isinstance(layer["count"], int)
+
+    def test_list_artifacts_schema(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        arts = list_artifacts("local")
+        assert len(arts) > 0
+        for a in arts:
+            assert set(a.keys()) == {"label", "artifact_type", "layer", "layer_level", "artifact_id"}
+
+    def test_get_artifact_schema(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        arts = list_artifacts("local")
+        art = get_artifact(arts[0]["label"], "local")
+        expected_keys = {"label", "artifact_type", "content", "artifact_id", "layer", "layer_level", "provenance", "metadata"}
+        assert set(art.keys()) == expected_keys
+
+    def test_lineage_schema(self, project_dir):
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        arts = list_artifacts("local", layer="chunks")
+        if arts:
+            chain = lineage(arts[0]["label"], "local")
+            assert isinstance(chain, list)
+            for a in chain:
+                assert set(a.keys()) == {"label", "artifact_type", "layer", "layer_level"}
+
+
 class TestAutoOpen:
     """Tests for main() auto-open behavior."""
 

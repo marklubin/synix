@@ -47,6 +47,11 @@ mcp = FastMCP(
 
 # ---------------------------------------------------------------------------
 # Server state — single project, long-lived process
+#
+# SINGLE-TENANT CONSTRAINT: This server manages one project at a time in
+# process-global state. Thread-safe only because FastMCP processes stdio
+# requests sequentially. If transport changes to HTTP with concurrent
+# requests, _state must be replaced with session-scoped storage.
 # ---------------------------------------------------------------------------
 
 _state: dict = {"project": None}
@@ -143,10 +148,12 @@ def build(
     """Build the pipeline — run transforms and produce a snapshot.
 
     Args:
-        pipeline_path: Path to pipeline.py (uses loaded pipeline if None).
+        pipeline_path: Path to pipeline.py. If provided, replaces the
+            currently loaded pipeline for this and subsequent operations.
+            Uses the already-loaded pipeline if None.
         dry_run: If True, return plan counts without building.
         concurrency: Max parallel transform workers.
-        timeout: Per-request LLM timeout in seconds.
+        timeout: Per-request LLM timeout in seconds (per individual LLM call).
 
     Returns counts of built, cached, and skipped artifacts.
     """
@@ -230,7 +237,10 @@ def source_add_file(source_name: str, file_path: str) -> str:
 
 @mcp.tool()
 def source_remove(source_name: str, filename: str) -> str:
-    """Remove a file from the source directory."""
+    """Remove a file from the source directory.
+
+    Warning: destructive — permanently deletes the file from the source directory.
+    """
     project = _require_project()
     project.source(source_name).remove(filename)
     return f"Removed {filename} from source {source_name}"
@@ -238,7 +248,10 @@ def source_remove(source_name: str, filename: str) -> str:
 
 @mcp.tool()
 def source_clear(source_name: str) -> str:
-    """Remove all files from the source directory."""
+    """Remove all files from the source directory.
+
+    Warning: destructive — permanently deletes all files from the source directory.
+    """
     project = _require_project()
     project.source(source_name).clear()
     return f"Cleared all files from source {source_name}"
@@ -395,7 +408,11 @@ def list_refs() -> dict[str, str]:
 
 @mcp.tool()
 def clean() -> str:
-    """Remove releases/ and work/ directories. Does not remove build snapshots in objects/."""
+    """Remove releases/ and work/ directories. Does not remove build snapshots in objects/.
+
+    Warning: destructive — deletes all materialized releases. Rebuild with
+    release() to restore. Build snapshots in objects/ are preserved.
+    """
     project = _require_project()
     project.clean()
     return "Cleaned releases and work directories"
