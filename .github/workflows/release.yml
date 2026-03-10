@@ -23,6 +23,9 @@ jobs:
 
   mcp-agent-smoke:
     runs-on: ubuntu-latest
+    # Non-blocking: reports result but does not gate publish.
+    # External API availability should not block releases.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -37,7 +40,7 @@ jobs:
         run: uv run pytest tests/e2e/test_mcp_agent.py -k live_agent -v --log-cli-level=INFO --timeout=120
 
   publish:
-    needs: [test, mcp-agent-smoke]
+    needs: [test]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

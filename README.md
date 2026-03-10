@@ -298,13 +298,15 @@ All mesh state persists in `~/.synix-mesh/` on disk. Features: debounced build s
 
 See [docs/mesh.md](docs/mesh.md) for the full guide — configuration, server API, failover protocol, security model, and data layout.
 
-## MCP Server — Agent Integration
+## MCP Server — Agent Integration (Experimental)
 
-Synix exposes its full SDK as an [MCP](https://modelcontextprotocol.io) server, so AI agents can manage pipelines, build memory, and search — all via structured tool calls over stdin/stdout.
+> **Warning:** MCP support is experimental. Tool names, arguments, and response shapes may change in future releases.
+
+Synix exposes its SDK as an [MCP](https://modelcontextprotocol.io) server, so AI agents can manage pipelines, build memory, and search — all via structured tool calls over stdin/stdout.
 
 ```bash
 # Start directly
-uvx 'synix[mcp]' python -m synix.mcp
+uvx --from 'synix[mcp]' python -m synix.mcp
 
 # Or configure in your MCP client (Claude Desktop, etc.)
 ```

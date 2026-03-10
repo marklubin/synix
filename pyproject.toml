@@ -77,7 +77,7 @@ mesh-dev = [
 testpaths = ["tests"]
 markers = [
     "mesh: mesh distributed build tests",
-    "live_agent: live agent tests requiring ANTHROPIC_API_KEY",
+    "live_agent: live agent tests requiring OPENAI_API_KEY or ANTHROPIC_API_KEY",
 ]
 
 [tool.ruff]
