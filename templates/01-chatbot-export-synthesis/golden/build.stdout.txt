@@ -1,10 +1,10 @@
 ╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
-│ Pipeline: personal-memory                                                                                            │
-│ Source: <CASE_DIR>/sources                                               │
-│ Build: <CASE_DIR>/build                                                  │
-│ Layers: 4                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Concurrency: 5 threads                                                                                               │
+│ Pipeline: personal-memory  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 4  │
+│ Surfaces: 1  │
+│ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ transcripts (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ episodes (level 1)  <BUILD_COUNTS>  <TIME>
@@ -13,14 +13,14 @@
     └─ memory-search  <MATERIALIZED>
                         Build Summary
 ╭─────────────────┬──────────────┬───────┬────────┬──────────╮
-│ Layer           │    Level     │ Built │ Cached │  Skipped │
+│ Layer           │    Level     │ Built │ Cached │  Skipped  │
 ├─────────────────┼──────────────┼───────┼────────┼──────────┤
 │ transcripts     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ episodes        │  <N>  │  <N>  │  <N>  │  <N>  │
 │ monthly         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ core            │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search      │ synix_search │       │        │ complete │
-│   → context-doc │  flat_file   │       │        │ complete │
+│   → search      │ synix_search │       │        │ complete  │
+│   → context-doc │  flat_file   │       │        │ complete  │
 ╰─────────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

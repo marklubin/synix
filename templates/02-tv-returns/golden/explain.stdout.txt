@@ -1,20 +1,20 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
-│ Pipeline: tv-returns-demo                                                                                            │
-│ Source: <CASE_DIR>/sources                                                             │
-│ Build: <CASE_DIR>/build                                                                │
-│ Layers: 4                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Projections: 1                                                                                                       │
+│ Pipeline: tv-returns-demo  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 4  │
+│ Surfaces: 1  │
+│ Projections: 1  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
              LLM Configuration
 ╭─────────────┬───────────────────────────╮
-│ Setting     │ Value                     │
+│ Setting     │ Value  │
 ├─────────────┼───────────────────────────┤
-│ Provider    │ anthropic                 │
-│ Model       │ claude-haiku-4-5-20251001 │
-│ Temperature │ 0.3                       │
-│ Max Tokens  │ 2048                      │
+│ Provider    │ anthropic  │
+│ Model       │ claude-haiku-4-5-20251001  │
+│ Temperature │ 0.3  │
+│ Max Tokens  │ 2048  │
 ╰─────────────┴───────────────────────────╯
 
 tv-returns-demo  claude-haiku-4-5-20251001 (anthropic)

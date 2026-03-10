@@ -1,10 +1,10 @@
 ╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
-│ Pipeline: tv-returns-demo                                                                                            │
-│ Source: <CASE_DIR>/sources                                                             │
-│ Build: <CASE_DIR>/build                                                                │
-│ Layers: 4                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Concurrency: 5 threads                                                                                               │
+│ Pipeline: tv-returns-demo  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 4  │
+│ Surfaces: 1  │
+│ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ policies (level 0)  <BUILD_COUNTS>  <TIME>
@@ -13,13 +13,13 @@
     └─ cs-search  <MATERIALIZED>
                          Build Summary
 ╭──────────────────┬──────────────┬───────┬────────┬──────────╮
-│ Layer            │    Level     │ Built │ Cached │  Skipped │
+│ Layer            │    Level     │ Built │ Cached │  Skipped  │
 ├──────────────────┼──────────────┼───────┼────────┼──────────┤
 │ product_offers   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policies         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policy_index     │  <N>  │  <N>  │  <N>  │  <N>  │
 │ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search       │ synix_search │       │        │ complete │
+│   → search       │ synix_search │       │        │ complete  │
 ╰──────────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

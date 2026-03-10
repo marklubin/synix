@@ -1,10 +1,10 @@
 ╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
-│ Pipeline: my-first-pipeline                                                                                          │
-│ Source: <CASE_DIR>/sources                                                            │
-│ Build: <CASE_DIR>/build                                                               │
-│ Layers: 5                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Concurrency: 5 threads                                                                                               │
+│ Pipeline: my-first-pipeline  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 5  │
+│ Surfaces: 1  │
+│ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
@@ -14,14 +14,14 @@
     └─ report-search  <MATERIALIZED>
                        Build Summary
 ╭───────────────┬──────────────┬───────┬────────┬──────────╮
-│ Layer         │    Level     │ Built │ Cached │  Skipped │
+│ Layer         │    Level     │ Built │ Cached │  Skipped  │
 ├───────────────┼──────────────┼───────┼────────┼──────────┤
 │ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
 │ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search    │ synix_search │       │        │ complete │
+│   → search    │ synix_search │       │        │ complete  │
 ╰───────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>
