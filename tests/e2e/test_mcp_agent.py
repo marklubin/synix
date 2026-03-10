@@ -129,7 +129,7 @@ class ScenarioLog:
             try:
                 idx = self.tool_names.index(name)
             except ValueError:
-                raise AssertionError(f"Tool {name!r} never called. Calls: {self.tool_names}")
+                raise AssertionError(f"Tool {name!r} never called. Calls: {self.tool_names}") from None
             indices.append(idx)
         assert indices == sorted(indices), (
             f"Expected order {list(tool_names)} but got indices {indices}. "

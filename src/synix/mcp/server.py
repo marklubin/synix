@@ -111,7 +111,8 @@ def load_pipeline(path: str | None = None) -> dict:
     project = _require_project()
     pipeline = project.load_pipeline(path)
 
-    from synix.core.models import Source as SourceLayer, Transform
+    from synix.core.models import Source as SourceLayer
+    from synix.core.models import Transform
 
     sources = [layer.name for layer in pipeline.layers if isinstance(layer, SourceLayer)]
     transforms = [layer.name for layer in pipeline.layers if isinstance(layer, Transform)]

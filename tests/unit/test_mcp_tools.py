@@ -9,7 +9,6 @@ from synix.mcp.server import (
     build,
     clean,
     get_artifact,
-    get_flat_file,
     init_project,
     lineage,
     list_artifacts,
@@ -27,6 +26,7 @@ from synix.mcp.server import (
     source_list,
     source_remove,
 )
+from synix.sdk import ArtifactNotFoundError, ReleaseNotFoundError, SdkError
 
 PIPELINE_PY = """\
 from synix import Pipeline, Source, SearchSurface, SynixSearch
@@ -151,7 +151,7 @@ class TestSourceManagement:
     def test_source_bad_name_raises(self, project_dir):
         open_project(str(project_dir))
         load_pipeline()
-        with pytest.raises(Exception):
+        with pytest.raises(SdkError):
             source_list("nonexistent")
 
 
@@ -190,7 +190,7 @@ class TestBuildRelease:
     def test_release_no_build_raises(self, project_dir):
         open_project(str(project_dir))
         load_pipeline()
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, FileNotFoundError, RuntimeError)):
             release("test-release")
 
 
@@ -269,7 +269,7 @@ class TestInspect:
         assert art["content"]  # not empty
 
     def test_get_artifact_not_found(self, built_project):
-        with pytest.raises(Exception):
+        with pytest.raises(ArtifactNotFoundError):
             get_artifact("nonexistent-label", "local")
 
     def test_list_layers(self, built_project):
@@ -299,7 +299,7 @@ class TestInspect:
         assert "snapshot_oid" in receipt
 
     def test_show_release_not_found(self, built_project):
-        with pytest.raises(Exception):
+        with pytest.raises(ReleaseNotFoundError):
             show_release("nonexistent")
 
     def test_list_refs(self, built_project):
