@@ -116,6 +116,7 @@ class Chunk(Transform):
         total = len(chunks)
 
         results = []
+        seen_labels: dict[str, int] = {}
         for i, chunk_text in enumerate(chunks):
             meta = dict(inp.metadata)
             meta.update(
@@ -131,7 +132,16 @@ class Chunk(Transform):
             if self.label_fn is not None:
                 label = self.label_fn(inp, i, total)
             else:
-                label = f"{self.name}-{inp.label}-{i}"
+                # Content-based label: stable across chunk count changes.
+                # Same text always produces the same label regardless of position.
+                content_hash = hashlib.sha256(chunk_text.encode()).hexdigest()[:8]
+                label = f"{self.name}-{inp.label}-{content_hash}"
+                # Handle identical chunks (rare but possible)
+                if label in seen_labels:
+                    seen_labels[label] += 1
+                    label = f"{label}-{seen_labels[label]}"
+                else:
+                    seen_labels[label] = 0
 
             results.append(
                 Artifact(

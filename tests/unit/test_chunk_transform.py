@@ -141,11 +141,34 @@ class TestMetadata:
 
 
 class TestLabels:
-    def test_default_labels(self):
+    def test_default_labels_are_content_based(self):
         chunk = Chunk("chunks", depends_on=[], chunk_size=5, chunk_overlap=0)
         result = chunk.execute([_art("readme", "0123456789")], TransformContext())
-        assert result[0].label == "chunks-readme-0"
-        assert result[1].label == "chunks-readme-1"
+        # Labels use content hash, not position index
+        for art in result:
+            assert art.label.startswith("chunks-readme-")
+            # 8 hex chars from SHA256
+            suffix = art.label.split("chunks-readme-")[1]
+            assert len(suffix) == 8
+            assert all(c in "0123456789abcdef" for c in suffix)
+
+    def test_labels_stable_across_chunk_count_changes(self):
+        """Same text produces same label regardless of surrounding chunks."""
+        chunk = Chunk("c", depends_on=[], separator="\n\n")
+        # Two paragraphs
+        r1 = chunk.execute([_art("doc", "para one\n\npara two")], TransformContext())
+        # Three paragraphs — para one is still there
+        r2 = chunk.execute([_art("doc", "para one\n\npara two\n\npara three")], TransformContext())
+        assert r1[0].label == r2[0].label  # "para one" has same label in both
+        assert r1[1].label == r2[1].label  # "para two" has same label in both
+
+    def test_duplicate_content_gets_unique_labels(self):
+        """Identical chunks get disambiguated labels."""
+        chunk = Chunk("c", depends_on=[], separator="---")
+        result = chunk.execute([_art("doc", "same---same---same")], TransformContext())
+        assert len(result) == 3
+        labels = [a.label for a in result]
+        assert len(set(labels)) == 3  # all unique
 
     def test_custom_label_fn(self):
         def my_labels(inp, idx, total):
