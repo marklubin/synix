@@ -103,12 +103,6 @@ def clean(build_dir: str, synix_dir: str | None, release_name: str | None, yes: 
         shutil.rmtree(path)
         console.print(f"[green]Cleaned:[/green] {name} ({path})")
 
-    # Clean corresponding release refs
-    if release_name:
-        ref_file = sd / "refs" / "releases" / release_name
-        if ref_file.exists():
-            ref_file.unlink()
-    else:
-        release_refs_dir = sd / "refs" / "releases"
-        if release_refs_dir.exists():
-            shutil.rmtree(release_refs_dir)
+    # Release refs are preserved — they still point at valid snapshots
+    # and can be used to re-materialize releases. Use `refs delete` to
+    # explicitly remove refs.

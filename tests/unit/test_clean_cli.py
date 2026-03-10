@@ -136,8 +136,8 @@ class TestClean:
         assert "Cleaned" in result.output
         assert not legacy_build.exists()
 
-    def test_clean_specific_release_removes_ref(self, runner, tmp_path, synix_dir):
-        """clean --release NAME also removes the corresponding release ref."""
+    def test_clean_specific_release_preserves_ref(self, runner, tmp_path, synix_dir):
+        """clean --release NAME removes payloads but preserves the release ref."""
         # Create a release ref file
         ref_dir = synix_dir / "refs" / "releases"
         ref_dir.mkdir(parents=True)
@@ -150,10 +150,11 @@ class TestClean:
         assert result.exit_code == 0
         assert "Cleaned" in result.output
         assert not (synix_dir / "releases" / "local").exists()
-        assert not (ref_dir / "local").exists()
+        # Ref is preserved — it still points at a valid snapshot
+        assert (ref_dir / "local").exists()
 
-    def test_clean_all_releases_removes_release_refs(self, runner, tmp_path, synix_dir):
-        """clean -y (all releases) also removes all release refs."""
+    def test_clean_all_releases_preserves_release_refs(self, runner, tmp_path, synix_dir):
+        """clean -y removes all release payloads but preserves release refs."""
         # Create release ref files
         ref_dir = synix_dir / "refs" / "releases"
         ref_dir.mkdir(parents=True)
@@ -172,26 +173,7 @@ class TestClean:
         assert result.exit_code == 0
         assert "Cleaned" in result.output
         assert not (synix_dir / "releases").exists()
-        assert not ref_dir.exists()
-
-    def test_clean_specific_release_preserves_other_refs(self, runner, tmp_path, synix_dir):
-        """clean --release NAME preserves refs for other releases."""
-        # Add prod release
-        prod = synix_dir / "releases" / "prod"
-        prod.mkdir()
-        (prod / "search.db").write_text("fake")
-
-        # Create release ref files for both
-        ref_dir = synix_dir / "refs" / "releases"
-        ref_dir.mkdir(parents=True)
-        (ref_dir / "local").write_text("fake-oid-1")
-        (ref_dir / "prod").write_text("fake-oid-2")
-
-        result = runner.invoke(
-            main,
-            ["clean", "--synix-dir", str(synix_dir), "--release", "local", "-y"],
-        )
-        assert result.exit_code == 0
-        assert not (ref_dir / "local").exists()
-        # prod ref should still exist
+        # Refs are preserved — they still point at valid snapshots
+        assert ref_dir.exists()
+        assert (ref_dir / "local").exists()
         assert (ref_dir / "prod").exists()
