@@ -51,6 +51,8 @@ mcp = FastMCP(
 
 _state: dict = {"project": None}
 
+_VALID_SEARCH_MODES = {"keyword", "semantic", "hybrid", "layered"}
+
 
 def _require_project():
     """Return the current project or raise with a clear message."""
@@ -148,6 +150,10 @@ def build(
 
     Returns counts of built, cached, and skipped artifacts.
     """
+    if concurrency < 1:
+        raise ValueError(f"concurrency must be >= 1, got {concurrency}")
+    if timeout is not None and timeout <= 0:
+        raise ValueError(f"timeout must be positive, got {timeout}")
     project = _require_project()
     if pipeline_path:
         project.load_pipeline(pipeline_path)
@@ -264,6 +270,10 @@ def search(
 
     Returns results with content, score, provenance chain, and metadata.
     """
+    if mode not in _VALID_SEARCH_MODES:
+        raise ValueError(f"Invalid search mode {mode!r}. Must be one of: {sorted(_VALID_SEARCH_MODES)}")
+    if limit < 1:
+        raise ValueError(f"limit must be >= 1, got {limit}")
     project = _require_project()
     rel = project.release(release_name)
     results = rel.search(query, mode=mode, limit=limit, layers=layers, surface=surface)
@@ -405,7 +415,8 @@ def main():
         try:
             _state["project"] = synix.open_project(project_path)
             logger.info("Auto-opened project at %s", project_path)
-        except Exception as exc:
-            logger.warning("Failed to auto-open SYNIX_PROJECT=%s: %s", project_path, exc)
+        except Exception:
+            logger.error("Failed to auto-open project at %s", project_path, exc_info=True)
+            raise
 
     mcp.run(transport="stdio")

@@ -306,15 +306,27 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
             # --- Phase 1: Project lifecycle ---
 
             # 1. init_project
-            await call("init_project", {"path": str(project_dir)})
+            result = await call("init_project", {"path": str(project_dir)})
+            init_data = json.loads(_text(result))
+            assert "project_root" in init_data
+            assert "synix_dir" in init_data
             assert (project_dir / ".synix").is_dir()
 
             # 2. open_project
-            await call("open_project", {"path": str(project_dir)})
+            result = await call("open_project", {"path": str(project_dir)})
+            open_data = json.loads(_text(result))
+            assert "project_root" in open_data
+            assert "synix_dir" in open_data
+            assert "releases" in open_data
+            assert isinstance(open_data["releases"], list)
 
             # 3. load_pipeline
             result = await call("load_pipeline", {"path": str(project_dir / "pipeline.py")})
-            assert "test-memory" in _text(result)
+            pipeline_data = json.loads(_text(result))
+            assert pipeline_data["name"] == "test-memory"
+            assert "docs" in pipeline_data["sources"]
+            assert "chunks" in pipeline_data["transforms"]
+            assert isinstance(pipeline_data["layer_count"], int)
 
             # 4. source_list (empty)
             result = await call("source_list", {"source_name": "docs"})
@@ -341,8 +353,13 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
 
             # 8. build
             result = await call("build")
-            content = _text(result)
-            assert "built" in content.lower() or "snapshot_oid" in content
+            build_data = json.loads(_text(result))
+            assert isinstance(build_data["built"], int)
+            assert isinstance(build_data["cached"], int)
+            assert isinstance(build_data["skipped"], int)
+            assert isinstance(build_data["total_time"], (int, float))
+            assert isinstance(build_data["snapshot_oid"], str)
+            assert len(build_data["snapshot_oid"]) > 0
 
             # 9. release
             await call("release", {"name": "local"})
@@ -356,20 +373,39 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
                 "release_name": "local",
                 "mode": "keyword",
             })
-            assert "chocolate" in _text(result).lower()
+            search_results = _parse_artifacts(result)
+            assert len(search_results) > 0
+            first = search_results[0]
+            assert "label" in first
+            assert "layer" in first
+            assert "score" in first
+            assert isinstance(first["score"], (int, float))
+            assert "content" in first
+            assert "chocolate" in first["content"].lower()
 
             # --- Phase 5: Full inspection ---
 
             # 11. list_layers
             result = await call("list_layers", {"release_name": "local"})
-            content = _text(result)
-            assert "docs" in content
-            assert "chunks" in content
+            layers_data = _parse_artifacts(result)
+            layer_names = {l["name"] for l in layers_data}
+            assert "docs" in layer_names
+            assert "chunks" in layer_names
+            for layer in layers_data:
+                assert "name" in layer
+                assert "level" in layer
+                assert "count" in layer
+                assert isinstance(layer["count"], int)
 
             # 12. list_artifacts (unfiltered)
             result = await call("list_artifacts", {"release_name": "local"})
             all_arts = _parse_artifacts(result)
             assert len(all_arts) > 0
+            for art in all_arts:
+                assert "label" in art
+                assert "artifact_type" in art
+                assert "layer" in art
+                assert "artifact_id" in art
 
             # 13. list_artifacts (filtered by layer)
             result = await call("list_artifacts", {"release_name": "local", "layer": "chunks"})
@@ -380,15 +416,30 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
             # 14. get_artifact
             label = chunk_arts[0]["label"]
             result = await call("get_artifact", {"label": label, "release_name": "local"})
-            assert "content" in _text(result)
+            art_data = json.loads(_text(result))
+            assert art_data["label"] == label
+            assert "content" in art_data
+            assert len(art_data["content"]) > 0
+            assert "artifact_id" in art_data
+            assert "artifact_type" in art_data
+            assert "layer" in art_data
+            assert "provenance" in art_data
+            assert "metadata" in art_data
 
             # 15. lineage
             result = await call("lineage", {"label": label, "release_name": "local"})
-            assert "docs" in _text(result)
+            lineage_data = _parse_artifacts(result)
+            assert len(lineage_data) > 0
+            for ancestor in lineage_data:
+                assert "label" in ancestor
+                assert "layer" in ancestor
+            # Chunk should trace back to docs source layer
+            assert any(a["layer"] == "docs" for a in lineage_data)
 
             # 16. get_flat_file
             result = await call("get_flat_file", {"name": "context", "release_name": "local"})
-            assert len(_text(result)) > 0
+            flat_content = _text(result)
+            assert len(flat_content) > 0
 
             # 17. list_releases
             result = await call("list_releases")
@@ -396,11 +447,14 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
 
             # 18. show_release
             result = await call("show_release", {"name": "local"})
-            assert "snapshot_oid" in _text(result)
+            receipt_data = json.loads(_text(result))
+            assert "snapshot_oid" in receipt_data
 
             # 19. list_refs
             result = await call("list_refs")
-            assert len(_text(result)) > 0
+            refs_data = json.loads(_text(result))
+            assert isinstance(refs_data, dict)
+            assert len(refs_data) > 0
 
             # --- Phase 6: Modify sources ---
 

@@ -425,6 +425,24 @@ class TestBuildReleaseFailureModes:
         with pytest.raises((PipelineRequiredError, ValueError, FileNotFoundError)):
             build()
 
+    def test_build_invalid_concurrency(self, project_dir):
+        """build with concurrency < 1 raises at the boundary."""
+        open_project(str(project_dir))
+        load_pipeline()
+        with pytest.raises(ValueError, match="concurrency must be >= 1"):
+            build(concurrency=0)
+        with pytest.raises(ValueError, match="concurrency must be >= 1"):
+            build(concurrency=-5)
+
+    def test_build_invalid_timeout(self, project_dir):
+        """build with non-positive timeout raises at the boundary."""
+        open_project(str(project_dir))
+        load_pipeline()
+        with pytest.raises(ValueError, match="timeout must be positive"):
+            build(timeout=0)
+        with pytest.raises(ValueError, match="timeout must be positive"):
+            build(timeout=-10)
+
     def test_release_no_project(self):
         with pytest.raises(ValueError, match="No project open"):
             release("local")
@@ -452,6 +470,24 @@ class TestSearchFailureModes:
         build()
         with pytest.raises(ReleaseNotFoundError):
             search("chocolate", release_name="nonexistent")
+
+    def test_search_invalid_mode(self, project_dir):
+        """search with an unsupported mode raises at the boundary."""
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        with pytest.raises(ValueError, match="Invalid search mode"):
+            search("query", release_name="local", mode="invalid_mode")
+
+    def test_search_invalid_limit(self, project_dir):
+        """search with limit < 1 raises at the boundary."""
+        open_project(str(project_dir))
+        load_pipeline()
+        build()
+        release("local")
+        with pytest.raises(ValueError, match="limit must be >= 1"):
+            search("query", release_name="local", limit=0)
 
 
 class TestInspectFailureModes:
@@ -515,3 +551,15 @@ class TestInspectFailureModes:
     def test_clean_no_project(self):
         with pytest.raises(ValueError, match="No project open"):
             clean()
+
+
+class TestAutoOpen:
+    """Tests for main() auto-open behavior."""
+
+    def test_auto_open_invalid_path_raises(self, monkeypatch):
+        """main() with SYNIX_PROJECT pointing to nonexistent path raises instead of swallowing."""
+        from synix.mcp.server import main
+
+        monkeypatch.setenv("SYNIX_PROJECT", "/tmp/nonexistent-synix-project-xyz")
+        with pytest.raises(SynixNotFoundError):
+            main()
