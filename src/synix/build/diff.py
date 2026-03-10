@@ -6,13 +6,33 @@ import difflib
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from synix.build.refs import RefStore, synix_dir_for_build_dir
-from synix.build.snapshot_view import SnapshotArtifactCache, SnapshotView
+from synix.build.snapshot_view import SnapshotView
 from synix.core.models import Artifact
 
 logger = logging.getLogger(__name__)
+
+
+def _artifact_from_view_data(data: dict) -> Artifact:
+    """Build an Artifact from a SnapshotView artifact dict (with content loaded)."""
+    created_at_str = data.get("metadata", {}).get("created_at")
+    kwargs: dict = {
+        "label": data["label"],
+        "artifact_type": data["artifact_type"],
+        "artifact_id": data["artifact_id"],
+        "input_ids": data.get("input_ids", []),
+        "prompt_id": data.get("prompt_id"),
+        "model_config": data.get("model_config"),
+        "content": data["content"],
+        "metadata": data.get("metadata", {}),
+    }
+    if created_at_str:
+        kwargs["created_at"] = datetime.fromisoformat(created_at_str)
+    # If created_at is missing, let Artifact's default_factory handle it.
+    return Artifact(**kwargs)
 
 
 @dataclass
@@ -83,34 +103,42 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
 
 
 def diff_builds(old_build_dir: str | Path, new_build_dir: str | Path, layer: str | None = None) -> DiffResult:
-    """Compare artifacts between two build directories."""
+    """Compare artifacts between two build directories.
+
+    Uses SnapshotView directly (raises on broken refs) instead of
+    SnapshotArtifactCache (which silently falls back to empty on errors).
+    """
     old_synix_dir = synix_dir_for_build_dir(Path(old_build_dir))
     new_synix_dir = synix_dir_for_build_dir(Path(new_build_dir))
-    old_store = SnapshotArtifactCache(old_synix_dir)
-    new_store = SnapshotArtifactCache(new_synix_dir)
 
-    old_entries = old_store.iter_entries()
-    new_entries = new_store.iter_entries()
-    old_ids = set(old_entries.keys())
-    new_ids = set(new_entries.keys())
+    old_view = SnapshotView.open(old_synix_dir)
+    new_view = SnapshotView.open(new_synix_dir)
+
+    # Build label→artifact_obj lookup from each view
+    old_artifacts = {a["label"]: a for a in old_view.list_artifacts()}
+    new_artifacts = {a["label"]: a for a in new_view.list_artifacts()}
+
+    old_labels = set(old_artifacts.keys())
+    new_labels = set(new_artifacts.keys())
 
     # Filter by layer if specified
     if layer:
-        old_ids = {aid for aid in old_ids if old_entries[aid].get("layer") == layer}
-        new_ids = {aid for aid in new_ids if new_entries[aid].get("layer") == layer}
+        old_labels = {lbl for lbl in old_labels if old_artifacts[lbl].get("metadata", {}).get("layer_name") == layer}
+        new_labels = {lbl for lbl in new_labels if new_artifacts[lbl].get("metadata", {}).get("layer_name") == layer}
 
     result = DiffResult()
-    result.added = sorted(new_ids - old_ids)
-    result.removed = sorted(old_ids - new_ids)
+    result.added = sorted(new_labels - old_labels)
+    result.removed = sorted(old_labels - new_labels)
 
-    # Diff common artifacts
-    for aid in sorted(old_ids & new_ids):
-        old_art = old_store.load_artifact(aid)
-        new_art = new_store.load_artifact(aid)
-        if old_art and new_art:
-            d = diff_artifact(old_art, new_art)
-            if d.has_changes:
-                result.diffs.append(d)
+    # Diff common artifacts — load full content via get_artifact
+    for lbl in sorted(old_labels & new_labels):
+        old_data = old_view.get_artifact(lbl)
+        new_data = new_view.get_artifact(lbl)
+        old_art = _artifact_from_view_data(old_data)
+        new_art = _artifact_from_view_data(new_data)
+        d = diff_artifact(old_art, new_art)
+        if d.has_changes:
+            result.diffs.append(d)
 
     return result
 
@@ -124,17 +152,21 @@ def diff_artifact_by_label(
     Otherwise, checks for version history in the same build directory.
     """
     synix_dir = synix_dir_for_build_dir(Path(build_dir))
-    store = SnapshotArtifactCache(synix_dir)
-    new_art = store.load_artifact(label)
-    if new_art is None:
+    view = SnapshotView.open(synix_dir)
+    try:
+        new_data = view.get_artifact(label)
+    except KeyError:
         return None
+    new_art = _artifact_from_view_data(new_data)
 
     if previous_build_dir:
         old_synix_dir = synix_dir_for_build_dir(Path(previous_build_dir))
-        old_store = SnapshotArtifactCache(old_synix_dir)
-        old_art = old_store.load_artifact(label)
-        if old_art is None:
+        old_view = SnapshotView.open(old_synix_dir)
+        try:
+            old_data = old_view.get_artifact(label)
+        except KeyError:
             return None
+        old_art = _artifact_from_view_data(old_data)
         return diff_artifact(old_art, new_art)
 
     # No previous build dir — try snapshot-era ref lookup.
@@ -161,24 +193,7 @@ def diff_artifact_by_label(
                     prev_data = None
 
                 if prev_data is not None:
-                    from datetime import datetime
-
-                    created_at_str = prev_data.get("metadata", {}).get("created_at")
-                    kwargs: dict = {
-                        "label": prev_data["label"],
-                        "artifact_type": prev_data["artifact_type"],
-                        "artifact_id": prev_data["artifact_id"],
-                        "input_ids": prev_data.get("input_ids", []),
-                        "prompt_id": prev_data.get("prompt_id"),
-                        "model_config": prev_data.get("model_config"),
-                        "content": prev_data["content"],
-                        "metadata": prev_data.get("metadata", {}),
-                    }
-                    if created_at_str:
-                        kwargs["created_at"] = datetime.fromisoformat(created_at_str)
-                    # If created_at is missing, let Artifact's default_factory
-                    # handle it — diff compares content, not timestamps.
-                    old_art = Artifact(**kwargs)
+                    old_art = _artifact_from_view_data(prev_data)
                     return diff_artifact(old_art, new_art)
     except (ValueError, FileNotFoundError, KeyError):
         logger.debug("Snapshot-era ref lookup failed for diff of %r", label, exc_info=True)
@@ -195,8 +210,6 @@ def diff_artifact_by_label(
 
     # Load the previous version
     data = json.loads(version_files[0].read_text())
-    from datetime import datetime
-
     old_art = Artifact(
         label=data["label"],
         artifact_type=data["artifact_type"],

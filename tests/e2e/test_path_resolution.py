@@ -260,6 +260,61 @@ class TestInfoWithSynixDir:
         assert "Artifacts" in info_result.output or "Build Status" in info_result.output
 
 
+    def test_info_with_build_dir_override(self, runner, tmp_path):
+        """info --build-dir finds .synix even when not in the project directory."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        sources_dir = project_dir / "sources"
+        sources_dir.mkdir()
+
+        shutil.copy(FIXTURES_DIR / "chatgpt_export.json", sources_dir / "chatgpt_export.json")
+        shutil.copy(FIXTURES_DIR / "claude_export.json", sources_dir / "claude_export.json")
+
+        build_dir = project_dir / "build"
+        pipeline_file = _write_pipeline(
+            project_dir,
+            source_dir=str(sources_dir),
+            build_dir=str(build_dir),
+        )
+
+        # Build
+        build_result = runner.invoke(main, ["build", str(pipeline_file), "--plain"])
+        assert build_result.exit_code == 0, f"Build failed:\n{build_result.output}"
+
+        # Run info from tmp_path (NOT project_dir) with --build-dir
+        info_result = runner.invoke(main, ["info", "--build-dir", str(build_dir)])
+        assert info_result.exit_code == 0, f"Info failed:\n{info_result.output}"
+        assert "Artifacts" in info_result.output or "Build Status" in info_result.output
+
+    def test_info_with_synix_dir_override(self, runner, tmp_path):
+        """info --synix-dir finds state directly."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        sources_dir = project_dir / "sources"
+        sources_dir.mkdir()
+
+        shutil.copy(FIXTURES_DIR / "chatgpt_export.json", sources_dir / "chatgpt_export.json")
+        shutil.copy(FIXTURES_DIR / "claude_export.json", sources_dir / "claude_export.json")
+
+        build_dir = project_dir / "build"
+        pipeline_file = _write_pipeline(
+            project_dir,
+            source_dir=str(sources_dir),
+            build_dir=str(build_dir),
+        )
+
+        # Build
+        build_result = runner.invoke(main, ["build", str(pipeline_file), "--plain"])
+        assert build_result.exit_code == 0, f"Build failed:\n{build_result.output}"
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+
+        # Run info from tmp_path (NOT project_dir) with --synix-dir
+        info_result = runner.invoke(main, ["info", "--synix-dir", str(synix_dir)])
+        assert info_result.exit_code == 0, f"Info failed:\n{info_result.output}"
+        assert "Artifacts" in info_result.output or "Build Status" in info_result.output
+
+
 class TestStatusShowsReleases:
     """Bug 9: status command shows release projections from .synix/releases/."""
 
@@ -304,3 +359,31 @@ class TestStatusShowsReleases:
         assert "search" in status_result.output.lower(), (
             f"Status output should mention search projection.\nOutput:\n{status_result.output}"
         )
+
+    def test_status_with_synix_dir_override(self, runner, tmp_path):
+        """status --synix-dir finds state directly without build_dir."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        sources_dir = project_dir / "sources"
+        sources_dir.mkdir()
+
+        shutil.copy(FIXTURES_DIR / "chatgpt_export.json", sources_dir / "chatgpt_export.json")
+        shutil.copy(FIXTURES_DIR / "claude_export.json", sources_dir / "claude_export.json")
+
+        build_dir = project_dir / "build"
+        pipeline_file = _write_pipeline(
+            project_dir,
+            source_dir=str(sources_dir),
+            build_dir=str(build_dir),
+        )
+
+        # Build
+        build_result = runner.invoke(main, ["build", str(pipeline_file), "--plain"])
+        assert build_result.exit_code == 0, f"Build failed:\n{build_result.output}"
+
+        synix_dir = synix_dir_for_build_dir(build_dir)
+
+        # Run status with --synix-dir from a different cwd
+        status_result = runner.invoke(main, ["status", "--synix-dir", str(synix_dir)])
+        assert status_result.exit_code == 0, f"Status failed:\n{status_result.output}"
+        assert "Build Status" in status_result.output

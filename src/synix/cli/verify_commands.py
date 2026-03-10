@@ -109,28 +109,24 @@ def lineage(artifact_id: str, build_dir: str, synix_dir: str | None, ref: str):
 
 
 @click.command()
-@click.option("--build-dir", default="./build", help="Build directory")
+@click.option("--build-dir", default=None, help="Build directory (used to locate .synix)")
+@click.option("--synix-dir", "synix_dir_opt", default=None, help="Explicit .synix directory")
 @click.option("--resolved", is_flag=True, help="Show resolved violation details")
-def status(build_dir: str, resolved: bool):
+def status(build_dir: str | None, synix_dir_opt: str | None, resolved: bool):
     """Show build status summary."""
     import json as _json
     from datetime import datetime
 
     from rich.tree import Tree
 
-    from synix.build.refs import synix_dir_for_build_dir
     from synix.build.snapshot_view import SnapshotArtifactCache
+    from synix.cli.info_commands import _discover_synix_dir
 
-    build_path = Path(build_dir)
-    try:
-        synix_dir = synix_dir_for_build_dir(build_path)
-    except (ValueError, OSError):
+    synix_dir = _discover_synix_dir(build_dir, synix_dir_opt)
+    if synix_dir is None:
         console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
         sys.exit(1)
 
-    if not synix_dir.exists():
-        console.print("[red]No build directory found.[/red] Run [bold]synix build[/bold] first.")
-        sys.exit(1)
     store = SnapshotArtifactCache(synix_dir)
 
     # ── Build layers table ──────────────────────────────────────────────
@@ -210,7 +206,11 @@ def status(build_dir: str, resolved: bool):
         console.print(stale_tree)
 
     # ── Violations ──────────────────────────────────────────────────────
-    violations_state = build_path / "violations_state.json"
+    # violations_state.json lives in the build dir, which is a sibling of .synix/
+    # or the parent of .synix/. Check both locations.
+    violations_state = synix_dir.parent / "violations_state.json"
+    if not violations_state.exists():
+        violations_state = synix_dir.parent / "build" / "violations_state.json"
     by_status: dict[str, int] = {}
     state: dict = {}
 

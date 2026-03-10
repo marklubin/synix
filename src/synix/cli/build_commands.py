@@ -533,6 +533,8 @@ def plan(
                 status_parts.append(f"[{status_style}]{count_str}[/{status_style}]")
         elif step.status == "cached":
             status_parts.append(f"[{status_style}]{step.artifact_count} cached[/{status_style}]")
+        elif step.status == "error":
+            status_parts.append(f"[{status_style}]error: {step.reason}[/{status_style}]")
         status_str = "  ".join(status_parts)
 
         # Inline cache reason when --explain-cache

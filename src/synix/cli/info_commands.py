@@ -106,18 +106,38 @@ def _show_pipeline_info() -> None:
     console.print(table)
 
 
-def _show_build_status() -> None:
-    """Show build status if a .synix snapshot store exists."""
+def _discover_synix_dir(
+    build_dir: str | None = None, synix_dir_opt: str | None = None
+) -> Path | None:
+    """Discover the .synix directory from explicit options or convention.
+
+    Priority:
+    1. Explicit --synix-dir option
+    2. Explicit --build-dir option (resolves via synix_dir_for_build_dir)
+    3. pipeline.py in cwd (uses pipeline.build_dir)
+    4. Convention: cwd/build → sibling .synix
+    5. Direct: cwd/.synix
+    """
     from synix.build.refs import synix_dir_for_build_dir
-    from synix.build.snapshot_view import SnapshotView
 
-    # Try to discover .synix/:
-    # 1. From pipeline.py build_dir (if pipeline exists)
-    # 2. Via build_dir convention (cwd/build)
-    # 3. Direct sibling (.synix in cwd)
-    synix_dir = None
+    # 1. Explicit --synix-dir
+    if synix_dir_opt:
+        resolved = Path(synix_dir_opt)
+        if resolved.exists():
+            return resolved
+        return None
 
-    # Try pipeline first — this handles non-default build_dir locations
+    # 2. Explicit --build-dir
+    if build_dir:
+        try:
+            candidate = synix_dir_for_build_dir(Path(build_dir))
+            if candidate.exists():
+                return candidate
+        except (ValueError, OSError):
+            pass
+        return None
+
+    # 3. pipeline.py in cwd
     pipeline_file = Path.cwd() / "pipeline.py"
     if pipeline_file.exists():
         try:
@@ -126,21 +146,33 @@ def _show_build_status() -> None:
             p = load_pipeline(str(pipeline_file))
             candidate = synix_dir_for_build_dir(Path(p.build_dir))
             if candidate.exists():
-                synix_dir = candidate
+                return candidate
         except Exception:
             pass
 
-    if synix_dir is None:
-        try:
-            candidate = synix_dir_for_build_dir(Path.cwd() / "build")
-            if candidate.exists():
-                synix_dir = candidate
-        except (ValueError, OSError):
-            pass
-    if synix_dir is None:
-        candidate = Path.cwd() / ".synix"
+    # 4. Convention: cwd/build
+    try:
+        candidate = synix_dir_for_build_dir(Path.cwd() / "build")
         if candidate.exists():
-            synix_dir = candidate
+            return candidate
+    except (ValueError, OSError):
+        pass
+
+    # 5. Direct: cwd/.synix
+    candidate = Path.cwd() / ".synix"
+    if candidate.exists():
+        return candidate
+
+    return None
+
+
+def _show_build_status(
+    build_dir: str | None = None, synix_dir_opt: str | None = None
+) -> None:
+    """Show build status if a .synix snapshot store exists."""
+    from synix.build.snapshot_view import SnapshotView
+
+    synix_dir = _discover_synix_dir(build_dir, synix_dir_opt)
 
     if synix_dir is None:
         console.print("[dim]No build state found[/dim]")
@@ -201,7 +233,9 @@ def _show_build_status() -> None:
 
 
 @click.command()
-def info():
+@click.option("--build-dir", default=None, help="Build directory (used to locate .synix)")
+@click.option("--synix-dir", default=None, help="Explicit .synix directory")
+def info(build_dir: str | None, synix_dir: str | None):
     """Display Synix system information and configuration overview."""
     # Logo
     console.print(Text(SYNIX_LOGO, style="bold cyan"))
@@ -216,4 +250,4 @@ def info():
     console.print()
 
     # Build status
-    _show_build_status()
+    _show_build_status(build_dir, synix_dir)
