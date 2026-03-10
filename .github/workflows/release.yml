@@ -21,8 +21,26 @@ jobs:
       - run: uv sync
       - run: uv run pytest tests/ -v
 
+  mcp-agent-smoke:
+    runs-on: ubuntu-latest
+    # Non-blocking: reports result but does not gate publish.
+    # External API availability should not block releases.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - name: MCP live agent smoke test (OpenAI)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AGENT_BACKEND: openai
+          AGENT_MODEL: gpt-4o
+        run: uv run pytest tests/e2e/test_mcp_agent.py -k live_agent -v --log-cli-level=INFO --timeout=120
+
   publish:
-    needs: test
+    needs: [test]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

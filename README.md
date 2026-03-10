@@ -298,6 +298,35 @@ All mesh state persists in `~/.synix-mesh/` on disk. Features: debounced build s
 
 See [docs/mesh.md](docs/mesh.md) for the full guide — configuration, server API, failover protocol, security model, and data layout.
 
+## MCP Server — Agent Integration (Experimental)
+
+> **Warning:** MCP support is experimental. Tool names, arguments, and response shapes may change in future releases.
+
+Synix exposes its SDK as an [MCP](https://modelcontextprotocol.io) server, so AI agents can manage pipelines, build memory, and search — all via structured tool calls over stdin/stdout.
+
+```bash
+# Start directly
+uvx --from 'synix[mcp]' python -m synix.mcp
+
+# Or configure in your MCP client (Claude Desktop, etc.)
+```
+
+```json
+{
+    "mcpServers": {
+        "synix": {
+            "command": "uvx",
+            "args": ["--from", "synix[mcp]", "python", "-m", "synix.mcp"],
+            "env": {"SYNIX_PROJECT": "/path/to/project"}
+        }
+    }
+}
+```
+
+20 tools covering the full lifecycle: `init_project`, `open_project`, `load_pipeline`, `build`, `release`, `search`, `source_add_text`, `source_add_file`, `get_artifact`, `lineage`, and more.
+
+See [docs/mcp.md](docs/mcp.md) for the full tool reference and agent workflow examples.
+
 ## Key Capabilities
 
 **Incremental rebuilds** — Change a prompt or add new sources. Only downstream artifacts reprocess.
@@ -334,6 +363,7 @@ Synix is not a memory store. It's the build system that produces one.
 | [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API for 50% cost reduction |
 | [Mesh](docs/mesh.md) | *(Experimental)* Distributed builds across machines via Tailscale |
 | [Python SDK](docs/sdk.md) | Programmatic access — init, build, release, search from Python |
+| [MCP Server](docs/mcp.md) | Agent integration — 20 MCP tools, client configuration, workflows |
 | [CLI UX](docs/cli-ux.md) | Output formatting, color scheme |
 
 ## Links

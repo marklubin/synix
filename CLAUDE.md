@@ -66,6 +66,10 @@ src/synix/
 │   ├── indexer.py         # SQLite FTS5 — build, query, shadow swap
 │   ├── embeddings.py      # Embedding provider — fastembed, OpenAI, cached
 │   └── retriever.py       # Hybrid search — keyword + semantic + RRF fusion
+├── mcp/
+│   ├── __init__.py        # Package exports (main, mcp)
+│   ├── __main__.py        # Entry point for `python -m synix.mcp`
+│   └── server.py          # FastMCP server — 20 tools exposing full SDK surface
 ├── cli/                   # Click CLI commands
 │   ├── main.py
 │   ├── build_commands.py
@@ -189,4 +193,5 @@ Every PR must link to the GitHub issues it addresses:
 | [docs/projection-release-v2-rfc.md](docs/projection-release-v2-rfc.md) | Build/release separation, `.synix/` layout, adapter contract, release receipts |
 | [docs/build-phases.md](docs/build-phases.md) | Phase 1-5 implementation breakdown (historical) |
 | [docs/DESIGN.md](docs/DESIGN.md) | Vision, origin story, full design narrative |
+| [docs/mcp.md](docs/mcp.md) | MCP server setup, tool reference, agent integration |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Deferred items from v0.9 development |

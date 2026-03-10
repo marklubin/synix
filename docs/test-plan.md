@@ -25,6 +25,7 @@ tests/
 │   ├── test_transforms.py
 │   ├── test_search_index.py
 │   ├── test_flat_file.py
+│   ├── test_mcp_tools.py         # MCP server — direct function calls, failure modes
 │   └── test_cli.py
 ├── integration/
 │   ├── test_pipeline_run.py
@@ -33,7 +34,8 @@ tests/
 │   └── test_projections.py
 └── e2e/
     ├── test_demo_flow.py
-    └── test_real_data.py
+    ├── test_real_data.py
+    └── test_mcp_agent.py          # MCP protocol lifecycle + live agent (20/20 tools)
 ```
 
 ## conftest.py Fixtures
