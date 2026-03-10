@@ -155,6 +155,7 @@ def execute_release(
     # 3. Resolve target directory
     release_dir = _release_dir(synix_path, release_name)
     target_path = Path(target) if target else release_dir
+    target_path.mkdir(parents=True, exist_ok=True)
 
     # 4. Write pending transaction
     pending_path = _write_pending(release_dir, closure, ref)

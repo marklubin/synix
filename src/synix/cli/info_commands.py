@@ -211,21 +211,35 @@ def _show_build_status(
             layer_parts.append(f"{layer_name} ({count})")
         table.add_row("Layers", ", ".join(layer_parts))
 
-    # Check for releases under .synix/releases/
+    # Check for releases — read from receipt.json for accurate target info
     releases_dir = synix_dir / "releases"
     if releases_dir.exists():
         release_parts = []
         for release_path in sorted(releases_dir.iterdir()):
             if not release_path.is_dir():
                 continue
-            name = release_path.name
-            # Enumerate all non-hidden files in the release directory
-            outputs = [
-                f.name for f in sorted(release_path.iterdir())
-                if f.is_file() and not f.name.startswith(".")
-            ]
-            if outputs:
-                release_parts.append(f"[green]{name}[/green]: {', '.join(outputs)}")
+            receipt_file = release_path / "receipt.json"
+            if not receipt_file.exists():
+                continue
+            import json as _json
+
+            receipt_data = _json.loads(receipt_file.read_text(encoding="utf-8"))
+            adapters = receipt_data.get("adapters", {})
+            if adapters:
+                outputs = []
+                for _adapter_name, adapter_info in adapters.items():
+                    target = adapter_info.get("target", "")
+                    adapter_type = adapter_info.get("adapter", "")
+                    count = adapter_info.get("artifacts_applied", 0)
+                    # Show short path if inside .synix/, full path if external
+                    if target and str(synix_dir) in target:
+                        short = Path(target).name
+                    else:
+                        short = target
+                    outputs.append(f"{adapter_type}:{short} ({count})")
+                release_parts.append(
+                    f"[green]{release_path.name}[/green]: {', '.join(outputs)}"
+                )
         if release_parts:
             table.add_row("Releases", "  ".join(release_parts))
 

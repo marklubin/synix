@@ -54,13 +54,9 @@ class FlatFileAdapter(ProjectionAdapter):
 
         content = "\n\n".join(parts)
 
-        # Determine output path
+        # Determine output path — target is always a directory
         output_filename = declaration.config.get("output_path", "context.md")
-        if target_path.is_dir():
-            output_path = target_path / Path(output_filename).name
-        else:
-            output_path = target_path
-
+        output_path = target_path / Path(output_filename).name
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write via tempfile + os.replace

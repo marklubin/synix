@@ -636,7 +636,11 @@ def plan(
     summary_parts = []
 
     # Layers
-    summary_parts.append(f"{build_plan.total_rebuild} layer(s) to build, {build_plan.total_cached} cached")
+    total_errors = sum(1 for s in build_plan.steps if s.status == "error")
+    layers_summary = f"{build_plan.total_rebuild} layer(s) to build, {build_plan.total_cached} cached"
+    if total_errors > 0:
+        layers_summary += f", [red]{total_errors} error(s)[/red]"
+    summary_parts.append(layers_summary)
     summary_parts.append(f"{len(build_plan.surfaces)} surface(s), {len(build_plan.projections)} projection(s)")
 
     # Cost estimate

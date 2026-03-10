@@ -40,7 +40,7 @@ class StepPlan:
 
     name: str
     level: int
-    status: str  # "rebuild", "cached", "new"
+    status: str  # "rebuild", "cached", "new", "error"
     artifact_count: int  # number of artifacts in this layer
     estimated_llm_calls: int  # 0 if cached
     estimated_tokens: int  # rough estimate (input + output)
@@ -143,6 +143,8 @@ def plan_build(
 
         if step.status == "cached":
             plan.total_cached += 1
+        elif step.status == "error":
+            pass  # errors don't count toward rebuild/cached totals
         else:
             plan.total_rebuild += 1
 
@@ -177,6 +179,32 @@ def _plan_layer(
 
     # Must be a Transform
     assert isinstance(layer, Transform), f"Expected Transform, got {type(layer)}"
+
+    # Check if any upstream dependency has errored — a broken source can never
+    # leave downstream layers looking healthy.
+    upstream_error = False
+    upstream_error_names: list[str] = []
+    step_lookup = {s.name: s for s in prior_steps}
+    for dep in layer.depends_on:
+        dep_step = step_lookup.get(dep.name)
+        if dep_step and dep_step.status == "error":
+            upstream_error = True
+            upstream_error_names.append(dep.name)
+
+    if upstream_error:
+        layer_artifacts[layer.name] = []
+        return StepPlan(
+            name=layer.name,
+            level=layer._level,
+            status="error",
+            artifact_count=0,
+            rebuild_count=0,
+            cached_count=0,
+            estimated_llm_calls=0,
+            estimated_tokens=0,
+            estimated_cost=0.0,
+            reason=f"upstream error: {', '.join(upstream_error_names)}",
+        )
 
     # Gather inputs from dependent layers
     inputs: list[Artifact] = []

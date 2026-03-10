@@ -233,6 +233,23 @@ def _create_build_with_release(build_dir):
     index.insert(artifact, "episodes", 1)
     index.close()
 
+    # Write receipt.json so status/info can discover release outputs
+    import json as _json
+
+    receipt = {
+        "schema_version": 1,
+        "release_name": "local",
+        "adapters": {
+            "search": {
+                "adapter": "synix_search",
+                "target": str(release_db),
+                "artifacts_applied": 1,
+                "status": "success",
+            }
+        },
+    }
+    (release_dir / "receipt.json").write_text(_json.dumps(receipt))
+
     return synix_dir
 
 

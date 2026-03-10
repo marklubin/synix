@@ -727,6 +727,177 @@ class TestPlanEdgeCases:
         assert topics_step.artifact_count == 3  # one per topic
 
 
+class TestSourceErrorPropagation:
+    """Tests that source errors propagate correctly to all downstream transforms."""
+
+    def test_source_error_propagates_to_downstream(self, tmp_path):
+        """Source error should cascade status='error' to all downstream transforms."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("source directory is corrupt")
+
+        p = Pipeline("error-cascade")
+        p.source_dir = str(tmp_path / "sources")
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = FailingSource("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        core = CoreSynthesis("core", depends_on=[episodes], context_budget=10000)
+        p.add(transcripts, episodes, core)
+
+        plan = plan_build(p)
+
+        # Source should be error
+        transcript_step = next(s for s in plan.steps if s.name == "transcripts")
+        assert transcript_step.status == "error"
+        assert "source load failed" in transcript_step.reason
+        assert transcript_step.artifact_count == 0
+
+        # First downstream transform should be error with upstream reference
+        episode_step = next(s for s in plan.steps if s.name == "episodes")
+        assert episode_step.status == "error"
+        assert "upstream error" in episode_step.reason
+        assert "transcripts" in episode_step.reason
+        assert episode_step.artifact_count == 0
+
+        # Second downstream transform (transitive) should also be error
+        core_step = next(s for s in plan.steps if s.name == "core")
+        assert core_step.status == "error"
+        assert "upstream error" in core_step.reason
+        assert "episodes" in core_step.reason
+        assert core_step.artifact_count == 0
+
+    def test_source_error_does_not_affect_independent_layers(self, tmp_path, source_dir):
+        """A broken source should not poison unrelated layers in the same pipeline."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("bad directory")
+
+        p = Pipeline("independent-error")
+        p.source_dir = str(source_dir)
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        # Branch A: broken source -> transform
+        broken_src = FailingSource("broken-src")
+        broken_downstream = EpisodeSummary("broken-episodes", depends_on=[broken_src])
+
+        # Branch B: healthy source -> transform
+        healthy_src = Source("healthy-src")
+        healthy_downstream = EpisodeSummary("healthy-episodes", depends_on=[healthy_src])
+
+        p.add(broken_src, broken_downstream, healthy_src, healthy_downstream)
+
+        plan = plan_build(p)
+
+        # Branch A should be in error
+        broken_src_step = next(s for s in plan.steps if s.name == "broken-src")
+        assert broken_src_step.status == "error"
+        broken_ep_step = next(s for s in plan.steps if s.name == "broken-episodes")
+        assert broken_ep_step.status == "error"
+        assert "upstream error" in broken_ep_step.reason
+
+        # Branch B should NOT be in error
+        healthy_src_step = next(s for s in plan.steps if s.name == "healthy-src")
+        assert healthy_src_step.status != "error"
+        healthy_ep_step = next(s for s in plan.steps if s.name == "healthy-episodes")
+        assert healthy_ep_step.status != "error"
+
+    def test_plan_json_output_includes_error_status(self, tmp_path):
+        """BuildPlan.to_json() should include error status in serialized output."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("disk on fire")
+
+        p = Pipeline("json-error")
+        p.source_dir = str(tmp_path / "sources")
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = FailingSource("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        p.add(transcripts, episodes)
+
+        build_plan = plan_build(p)
+        parsed = json.loads(build_plan.to_json())
+
+        assert parsed["pipeline_name"] == "json-error"
+        assert len(parsed["steps"]) == 2
+
+        # Both steps should have error status in JSON
+        transcript_json = parsed["steps"][0]
+        assert transcript_json["status"] == "error"
+        assert "source load failed" in transcript_json["reason"]
+        assert transcript_json["artifact_count"] == 0
+
+        episode_json = parsed["steps"][1]
+        assert episode_json["status"] == "error"
+        assert "upstream error" in episode_json["reason"]
+        assert episode_json["artifact_count"] == 0
+
+        # Error steps should not inflate rebuild/cached totals
+        assert parsed["total_rebuild"] == 0
+        assert parsed["total_cached"] == 0
+
+    def test_error_steps_have_zero_estimates(self, tmp_path):
+        """Error steps should report zero LLM calls, tokens, and cost."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("gone")
+
+        p = Pipeline("zero-estimates")
+        p.source_dir = str(tmp_path / "sources")
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = FailingSource("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        p.add(transcripts, episodes)
+
+        plan = plan_build(p)
+
+        for step in plan.steps:
+            assert step.status == "error"
+            assert step.estimated_llm_calls == 0
+            assert step.estimated_tokens == 0
+            assert step.estimated_cost == 0.0
+
+    def test_plan_summary_counts_errors(self, tmp_path):
+        """Error steps should not count toward rebuild or cached totals."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("nope")
+
+        p = Pipeline("error-counts")
+        p.source_dir = str(tmp_path / "sources")
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = FailingSource("transcripts")
+        episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+        core = CoreSynthesis("core", depends_on=[episodes], context_budget=10000)
+        p.add(transcripts, episodes, core)
+
+        plan = plan_build(p)
+
+        # All three steps should be errors
+        error_steps = [s for s in plan.steps if s.status == "error"]
+        assert len(error_steps) == 3
+
+        # Errors should not count as rebuild or cached
+        assert plan.total_rebuild == 0
+        assert plan.total_cached == 0
+        assert plan.total_estimated_llm_calls == 0
+        assert plan.total_estimated_tokens == 0
+        assert plan.total_estimated_cost == 0.0
+
+
 class TestComputeSourceInfo:
     """Tests for _compute_source_info() — human-readable source directory summary."""
 

@@ -175,24 +175,34 @@ def status(build_dir: str | None, synix_dir_opt: str | None, resolved: bool):
     console.print()
     console.print(table)
 
-    # ── Releases / Projections ─────────────────────────────────────────
+    # ── Releases / Projections — read from receipt.json ──────────────
     releases_dir = synix_dir / "releases"
     has_releases = False
     if releases_dir.exists():
         for release_path in sorted(releases_dir.iterdir()):
             if not release_path.is_dir():
                 continue
-            name = release_path.name
-            # Enumerate all non-hidden files in the release directory
-            outputs = [
-                f.name for f in sorted(release_path.iterdir())
-                if f.is_file() and not f.name.startswith(".")
-            ]
-            if outputs:
+            receipt_file = release_path / "receipt.json"
+            if not receipt_file.exists():
+                continue
+            receipt_data = _json.loads(receipt_file.read_text(encoding="utf-8"))
+            adapters = receipt_data.get("adapters", {})
+            if adapters:
                 if not has_releases:
                     console.print("\n[bold]Releases:[/bold]")
                     has_releases = True
-                console.print(f"  [green]{name}[/green]: {', '.join(outputs)}")
+                outputs = []
+                for _adapter_name, adapter_info in adapters.items():
+                    target = adapter_info.get("target", "")
+                    adapter_type = adapter_info.get("adapter", "")
+                    count = adapter_info.get("artifacts_applied", 0)
+                    # Show short path if inside .synix/, full path if external
+                    if target and str(synix_dir) in target:
+                        short = Path(target).name
+                    else:
+                        short = target
+                    outputs.append(f"{adapter_type}:{short} ({count})")
+                console.print(f"  [green]{release_path.name}[/green]: {', '.join(outputs)}")
 
     # ── Stale artifacts ─────────────────────────────────────────────────
     stale = _find_stale_artifacts(store)
