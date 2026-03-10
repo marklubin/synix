@@ -231,6 +231,38 @@ class TestValidation:
         Chunk("c", depends_on=[], separator="\n", chunk_size=0, chunk_overlap=0)
 
 
+class TestExecuteValidation:
+    def test_execute_zero_inputs_raises(self):
+        chunk = Chunk("c", depends_on=[], chunk_size=10, chunk_overlap=0)
+        with pytest.raises(ValueError, match="expects exactly 1 input"):
+            chunk.execute([], TransformContext())
+
+    def test_execute_multiple_inputs_raises(self):
+        chunk = Chunk("c", depends_on=[], chunk_size=10, chunk_overlap=0)
+        with pytest.raises(ValueError, match="expects exactly 1 input"):
+            chunk.execute([_art("a", "aaa"), _art("b", "bbb")], TransformContext())
+
+
+class TestFingerprintConsistency:
+    def test_fingerprint_changes_with_chunker(self):
+        """compute_fingerprint must change when chunker callable changes."""
+        c1 = Chunk("c", depends_on=[], chunker=lambda t: t.split("."))
+        c2 = Chunk("c", depends_on=[], chunker=lambda t: t.split(","))
+        fp1 = c1.compute_fingerprint({})
+        fp2 = c2.compute_fingerprint({})
+        assert fp1.digest != fp2.digest
+
+    def test_fingerprint_and_cache_key_agree_on_identity(self):
+        """If cache key differs, fingerprint must also differ (and vice versa)."""
+        fn_a = lambda t: t.split(".")  # noqa: E731
+        fn_b = lambda t: t.split(",")  # noqa: E731
+        c1 = Chunk("c", depends_on=[], chunker=fn_a)
+        c2 = Chunk("c", depends_on=[], chunker=fn_b)
+        keys_differ = c1.get_cache_key({}) != c2.get_cache_key({})
+        fps_differ = c1.compute_fingerprint({}).digest != c2.compute_fingerprint({}).digest
+        assert keys_differ == fps_differ
+
+
 class TestEstimate:
     def test_estimate_output_count(self):
         chunk = Chunk("c", depends_on=[], chunk_size=100, chunk_overlap=0)

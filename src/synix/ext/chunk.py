@@ -8,7 +8,6 @@ and carries metadata for downstream grouping.
 from __future__ import annotations
 
 import hashlib
-import inspect
 import logging
 from collections.abc import Callable
 
@@ -84,7 +83,11 @@ class Chunk(Transform):
         return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
-        """Add callable fingerprint components for chunker, label_fn, metadata_fn."""
+        """Add callable fingerprint components for chunker, label_fn, metadata_fn.
+
+        Uses ``stable_callable_repr`` — the same identity scheme as ``get_cache_key`` —
+        so plan/explain-cache and actual rebuild semantics always agree.
+        """
         fp = super().compute_fingerprint(config)
         callables = {}
         if self.chunker is not None:
@@ -98,14 +101,16 @@ class Chunk(Transform):
 
             components = dict(fp.components)
             for key, fn in callables.items():
-                try:
-                    components[key] = fingerprint_value(inspect.getsource(fn))
-                except (OSError, TypeError):
-                    components[key] = fingerprint_value(repr(fn))
+                components[key] = fingerprint_value(stable_callable_repr(fn))
             return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
     def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
+        if len(inputs) != 1:
+            raise ValueError(
+                f"Chunk.execute() expects exactly 1 input artifact, got {len(inputs)}. "
+                "Chunk is a 1:N transform — split() dispatches one artifact per call."
+            )
         inp = inputs[0]
         chunks = self._chunk(inp.content)
         total = len(chunks)
@@ -140,6 +145,7 @@ class Chunk(Transform):
         return results
 
     def estimate_output_count(self, input_count: int) -> int:
+        """Rough heuristic for plan cost estimation — actual count depends on content."""
         return input_count * 3
 
     def _chunk(self, text: str) -> list[str]:
