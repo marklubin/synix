@@ -54,7 +54,8 @@ src/synix/
 │   ├── map_synthesis.py   # Generic 1:1 synthesis transform implementation
 │   ├── group_synthesis.py # Generic N:M grouping synthesis transform implementation
 │   ├── reduce_synthesis.py# Generic N:1 synthesis transform implementation
-│   └── fold_synthesis.py  # Generic sequential fold synthesis transform implementation
+│   ├── fold_synthesis.py  # Generic sequential fold synthesis transform implementation
+│   └── chunk.py           # Generic 1:N text chunking transform (no LLM)
 ├── validators/
 │   └── __init__.py        # Re-export: MutualExclusion, RequiredField, PII, SemanticConflict, Citation
 ├── fixers/

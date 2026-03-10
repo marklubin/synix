@@ -128,10 +128,10 @@ For the full pipeline API, built-in transforms, validators, and advanced pattern
 
 ## Platform Transforms (`synix.transforms`)
 
-Most LLM steps follow one of four generic patterns. The `synix.transforms` module provides those platform transforms directly — no custom subclass needed for common synthesis flows.
+The `synix.transforms` module provides generic transform shapes — no custom subclass needed for common flows.
 
 ```python
-from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Chunk
 ```
 
 | Transform | Pattern | Use when... |
@@ -140,8 +140,9 @@ from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, Fold
 | `GroupSynthesis` | N:M | Group inputs by a metadata key, one output per group |
 | `ReduceSynthesis` | N:1 | All inputs become a single output |
 | `FoldSynthesis` | N:1 sequential | Accumulate through inputs one at a time |
+| `Chunk` | 1:N | Split each input into smaller pieces (no LLM) |
 
-All four take a `prompt` string with placeholders like `{artifact}`, `{artifacts}`, `{group_key}`, `{accumulated}`. Changing the prompt automatically invalidates the cache.
+LLM-backed transforms take a `prompt` string with placeholders like `{artifact}`, `{artifacts}`, `{group_key}`, `{accumulated}`. Changing the prompt automatically invalidates the cache. `Chunk` is pure text processing — configure with `chunk_size`, `separator`, or a custom `chunker` callable.
 
 For full parameter reference and examples of each, see [docs/pipeline-api.md#generic-transforms-synixtransforms](docs/pipeline-api.md#generic-transforms-synixtransforms).
 
