@@ -1,32 +1,34 @@
 # synix
 
-> A build system for agent memory — declarative pipelines define how raw conversations become searchable, hierarchical memory with full provenance tracking.
+> A build system for agent memory
 
 ## What it does
 
-Synix processes conversation exports through configurable DAGs of LLM transforms to create hierarchical memory artifacts (episodes, summaries, rollups, core memory) with full lineage tracking. Change a config, only affected layers rebuild. Think `make` or `dbt`, but for AI agent memory producing system prompt + RAG outputs.
+Synix transforms raw conversations into searchable, hierarchical memory with full provenance tracking. Declare your memory architecture in Python, build it incrementally, then change it — only affected layers rebuild. Think `make` or `dbt`, but for AI agent memory that produces system prompt + RAG outputs.
 
 ## Key concepts
 
-- **Artifact** — immutable, versioned build output (transcript, episode, rollup, core memory). Content-addressed via SHA256.
-- **Layer** — typed Python object in build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchSurface`/`SynixSearch`/`FlatFile` for projections.
-- **Pipeline** — declared in Python. `Pipeline.add(*layers)` routes transforms to layers, projections to manifest.
-- **Projection** — structured declaration materialized at release time by adapters (`synix_search`, `flat_file`).
-- **Release** — `synix release HEAD --to <name>` materializes projections from snapshot into `.synix/releases/<name>/`.
-- **Provenance** — every artifact traces back via `parent_labels`. Always included in search results.
-- **Cache/Rebuild** — hash comparison: if inputs or prompt changed, rebuild. Otherwise skip.
+**Artifacts** — immutable, versioned build outputs (transcripts, episodes, rollups, core memory) with SHA256 content addressing and full provenance chains back to sources.
+
+**Layers** — typed Python objects in the build DAG. `Source` for inputs, `Transform` subclasses for LLM steps, `SearchSurface`/`SynixSearch`/`FlatFile` for projections. Dependencies declared via `depends_on` object references.
+
+**Pipeline** — Python code defining the memory architecture. `Pipeline.add(*layers)` registers transforms and projections. No YAML configuration.
+
+**Build/Release separation** — `synix build` produces immutable snapshots in `.synix/`. `synix release` materializes projections to named targets. Search queries target release names.
+
+**Fingerprint caching** — Hash-based rebuild decisions comparing inputs, prompts, model config, and transform source code. Change anything, only affected artifacts rebuild.
 
 ## Installation and quick start
 
 ```bash
-# Install and initialize project
+# Initialize project
 uvx synix init my-project
 cd my-project
 
-# Build immutable snapshot
+# Build pipeline (produces snapshot)
 uvx synix build
 
-# Materialize projections (search.db, context.md) 
+# Release projections (materializes search.db, context.md)
 uvx synix release HEAD --to local
 
 # Search and inspect
@@ -37,81 +39,66 @@ uvx synix show artifact-label
 
 ## CLI commands
 
-- `synix build pipeline.py` — produce immutable snapshot in `.synix/`
-- `synix plan pipeline.py` — dry-run showing rebuild/cached decisions
-- `synix release HEAD --to local` — materialize projections to named release
-- `synix search "query" --release local` — search release target
-- `synix list [--ref HEAD]` — artifacts in snapshot via SnapshotView
-- `synix show <label> [--ref HEAD]` — render artifact content
-- `synix lineage <label>` — provenance tree from `.synix/objects/`
-- `synix releases list/show <name>` — release history and receipts
-- `synix refs list/show <ref>` — all refs with snapshot details
+- `synix init <name>` — scaffold new project with pipeline template
+- `synix build [pipeline.py]` — execute pipeline, produce immutable snapshot
+- `synix plan` — dry-run showing rebuild/cached decisions and cost estimates
+- `synix release <ref> --to <name>` — materialize projections from snapshot to release target
+- `synix search <query> --release <name>` — hybrid search with provenance
+- `synix list [--ref <ref>]` — browse artifacts in snapshot
+- `synix show <label>` — display artifact content
+- `synix lineage <label>` — full provenance tree from artifact to sources
+- `synix diff <ref-a> <ref-b>` — structured diff between snapshots
+- `synix releases list/show` — manage named releases
+- `synix refs list/show` — inspect build and release refs
 - `synix clean` — remove release targets and work state
-- `synix verify` — (experimental) run validators against artifacts
-- `synix batch-build run/resume` — (experimental) OpenAI Batch API for 50% cost reduction
 
 ## Architecture overview
 
-```
-src/synix/
-├── core/models.py          # Layer hierarchy (Source, Transform, SearchIndex, FlatFile, Pipeline)
-├── sdk.py                 # SDK — programmatic access (Project, Release, search, init/open_project)
-├── build/
-│   ├── runner.py          # Execute pipeline — walk DAG, run transforms, cache artifacts
-│   ├── object_store.py    # Content-addressed write path (.synix/objects/)
-│   ├── snapshots.py       # BuildTransaction + commit_build_snapshot
-│   ├── snapshot_view.py   # SnapshotView — ref-resolved reads from objects
-│   ├── release_engine.py  # Release orchestration via adapter contracts
-│   ├── adapters.py        # ProjectionAdapter ABC + registry
-│   ├── transforms.py      # Transform base + registry
-│   └── llm_transforms.py  # Bundled memory transforms + LLM helpers
-├── search/
-│   ├── indexer.py         # SQLite FTS5 — build, query, shadow swap
-│   ├── retriever.py       # Hybrid search — keyword + semantic + RRF fusion
-│   └── adapter.py         # SynixSearch projection adapter
-├── cli/                   # Click CLI commands
-└── templates/             # Bundled demo pipelines
-```
+**Core modules:**
+- `src/synix/core/` — Pipeline model, Layer hierarchy, shared primitives
+- `src/synix/build/` — DAG execution, transform registry, caching, object store
+- `src/synix/search/` — FTS5 + semantic indexing, hybrid retrieval
+- `src/synix/ext/` — Generic transforms (Map, Group, Reduce, Fold synthesis)
+- `src/synix/cli/` — Click commands with Rich progress and formatting
+
+**Data flow:**
+Sources (conversations) → Transforms (LLM processing) → Artifacts (episodes, rollups, core) → Projections (search.db, context.md) → Release targets
+
+**Storage model:**
+`.synix/objects/` stores content-addressed artifact objects and content blobs. `.synix/refs/` tracks build snapshots and release pointers. `.synix/releases/` contains materialized projection outputs.
 
 ## Pipeline definition
 
-Pipelines are Python code with object dependencies:
-
 ```python
-from synix import Pipeline, Source, SearchSurface, SynixSearch, FlatFile
+from synix import Pipeline, Source, SearchSurface, SynixSearch
 from synix.transforms import MapSynthesis, ReduceSynthesis
 
 pipeline = Pipeline("my-pipeline")
-pipeline.source_dir = "./sources"
-pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}
+pipeline.llm_config = {"provider": "anthropic", "model": "claude-haiku"}
 
-# Parse and transform
-bios = Source("bios")
-work_styles = MapSynthesis(
-    "work_styles", 
-    depends_on=[bios],
-    prompt="Infer this person's work style:\n\n{artifact}",
-    artifact_type="work_style"
-)
-report = ReduceSynthesis(
-    "report",
-    depends_on=[work_styles], 
-    prompt="Write team analysis from:\n\n{artifacts}",
-    label="team-report"
-)
+# Parse sources
+transcripts = Source("transcripts")
 
-# Search capability and outputs
-search_surface = SearchSurface("search", sources=[work_styles, report], modes=["fulltext"])
+# 1:1 transform
+episodes = MapSynthesis("episodes", depends_on=[transcripts], 
+    prompt="Summarize: {artifact}", artifact_type="episode")
 
-pipeline.add(bios, work_styles, report, search_surface)
+# N:1 transform  
+core = ReduceSynthesis("core", depends_on=[episodes],
+    prompt="Synthesize world model: {artifacts}", label="core")
+
+# Search surface
+search_surface = SearchSurface("search", sources=[episodes, core], modes=["fulltext"])
+
+pipeline.add(transcripts, episodes, core, search_surface)
 pipeline.add(SynixSearch("search", surface=search_surface))
-pipeline.add(FlatFile("context", sources=[report]))
 ```
 
 ## Important constraints
 
-- **SQLite only** — no external databases, content-addressed `.synix/` storage
-- **No web UI** — CLI and Python SDK only
-- **Fail closed** — validators/fixers require explicit `fail_open=True` for graceful degradation
-- **No shared state** — tests use `tmp_path`, mocked LLMs except E2E
-- **Experimental features** — batch-build and mesh require explicit `[experimental]` extras
+- **SQLite only** — No external databases. All state in `.synix/` directory.
+- **No web UI** — CLI and Python SDK only. File-based projection outputs.
+- **Build/release separation** — Build produces snapshots, release materializes outputs. No `build/` directory.
+- **Python 3.11+ required** — Uses modern Python features, uv for dependency management.
+- **Fail-closed validation** — Validators and fixers fail fast by default, not silently.
+- **Single-user focused** — Designed for local development, not multi-tenant hosting.
