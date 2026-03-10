@@ -168,9 +168,8 @@ def run(
 
             try:
                 artifacts = layer.load(source_config)
-            except Exception:
-                logger.warning("Source %s failed to load", layer.name, exc_info=True)
-                artifacts = []
+            except Exception as exc:
+                raise RuntimeError(f"Source '{layer.name}' failed to load: {exc}") from exc
 
             # Record source artifacts in snapshot
             for artifact in artifacts:

@@ -74,3 +74,13 @@ def clean(build_dir: str, synix_dir: str | None, release_name: str | None, yes: 
     for name, path in targets:
         shutil.rmtree(path)
         console.print(f"[green]Cleaned:[/green] {name} ({path})")
+
+    # Clean corresponding release refs
+    if release_name:
+        ref_file = sd / "refs" / "releases" / release_name
+        if ref_file.exists():
+            ref_file.unlink()
+    else:
+        release_refs_dir = sd / "refs" / "releases"
+        if release_refs_dir.exists():
+            shutil.rmtree(release_refs_dir)

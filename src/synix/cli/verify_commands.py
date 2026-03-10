@@ -119,7 +119,6 @@ def status(build_dir: str, resolved: bool):
     from rich.tree import Tree
 
     from synix.build.refs import synix_dir_for_build_dir
-    from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
     from synix.build.snapshot_view import SnapshotArtifactCache
 
     build_path = Path(build_dir)
@@ -180,24 +179,27 @@ def status(build_dir: str, resolved: bool):
     console.print()
     console.print(table)
 
-    # ── Projections ─────────────────────────────────────────────────────
-    context_doc = build_path / "context.md"
-    proj_parts = []
-    try:
-        search_outputs = list_search_outputs(build_path)
-    except SearchOutputResolutionError:
-        proj_parts.append("[yellow]search output metadata invalid[/yellow]")
-    else:
-        if search_outputs:
-            if len(search_outputs) == 1:
-                proj_parts.append("[green]search index[/green]")
-            else:
-                proj_parts.append(f"[green]{len(search_outputs)} search outputs[/green]")
-    if context_doc.exists():
-        size = context_doc.stat().st_size
-        proj_parts.append(f"[green]context doc[/green] ({size}b)")
-    if proj_parts:
-        console.print(f"\n[bold]Projections:[/bold] {', '.join(proj_parts)}")
+    # ── Releases / Projections ─────────────────────────────────────────
+    releases_dir = synix_dir / "releases"
+    has_releases = False
+    if releases_dir.exists():
+        for release_path in sorted(releases_dir.iterdir()):
+            if not release_path.is_dir():
+                continue
+            name = release_path.name
+            search_db = release_path / "search.db"
+            context_md = release_path / "context.md"
+            parts = []
+            if search_db.exists():
+                parts.append("search")
+            if context_md.exists():
+                size = context_md.stat().st_size
+                parts.append(f"context ({size}b)")
+            if parts:
+                if not has_releases:
+                    console.print("\n[bold]Releases:[/bold]")
+                    has_releases = True
+                console.print(f"  [green]{name}[/green]: {', '.join(parts)}")
 
     # ── Stale artifacts ─────────────────────────────────────────────────
     stale = _find_stale_artifacts(store)

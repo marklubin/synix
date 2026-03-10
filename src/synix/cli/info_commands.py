@@ -86,9 +86,9 @@ def _show_pipeline_info() -> None:
 
     # Layer names with levels
     layer_parts = []
-    for layer in sorted(pipeline.layers, key=lambda l: l.level):
-        style = get_layer_style(layer.level)
-        layer_parts.append(f"[{style}]{layer.name}[/{style}] (L{layer.level})")
+    for layer in sorted(pipeline.layers, key=lambda l: l._level):
+        style = get_layer_style(layer._level)
+        layer_parts.append(f"[{style}]{layer.name}[/{style}] (L{layer._level})")
     if layer_parts:
         table.add_row("Layer Detail", ", ".join(layer_parts))
 
@@ -107,25 +107,35 @@ def _show_pipeline_info() -> None:
 
 
 def _show_build_status() -> None:
-    """Show build status if a build directory exists."""
-    import json
-    import sqlite3
+    """Show build status if a .synix snapshot store exists."""
+    from synix.build.refs import synix_dir_for_build_dir
+    from synix.build.snapshot_view import SnapshotView
 
-    from synix.build.artifacts import MANIFEST_FILENAME
-    from synix.build.search_outputs import SearchOutputResolutionError, list_search_outputs
-
-    build_path = Path.cwd() / "build"
-    manifest_path = build_path / MANIFEST_FILENAME
-
-    if not manifest_path.exists():
-        console.print("[dim]No build directory with manifest found[/dim]")
-        return
-
+    # Try to discover .synix/ — first via build_dir convention, then direct sibling
+    synix_dir = None
     try:
-        manifest = json.loads(manifest_path.read_text())
-    except Exception:
-        console.print("[yellow]Could not read manifest.json[/yellow]")
+        candidate = synix_dir_for_build_dir(Path.cwd() / "build")
+        if candidate.exists():
+            synix_dir = candidate
+    except (ValueError, OSError):
+        pass
+    if synix_dir is None:
+        candidate = Path.cwd() / ".synix"
+        if candidate.exists():
+            synix_dir = candidate
+
+    if synix_dir is None:
+        console.print("[dim]No build state found[/dim]")
         return
+
+    # Open snapshot view and list artifacts grouped by layer
+    try:
+        view = SnapshotView.open(synix_dir)
+    except (ValueError, KeyError):
+        console.print("[dim]No build state found[/dim]")
+        return
+
+    artifacts = view.list_artifacts()
 
     table = Table(
         title="Build Status",
@@ -136,67 +146,41 @@ def _show_build_status() -> None:
     table.add_column("Key", style="bold")
     table.add_column("Value")
 
-    table.add_row("Artifacts", str(len(manifest)))
+    table.add_row("Artifacts", str(len(artifacts)))
 
-    # Last build time — find the most recent artifact
-    last_modified = None
-    for _aid, info in manifest.items():
-        path_str = info.get("path")
-        if path_str:
-            artifact_path = build_path / path_str
-            if artifact_path.exists():
-                mtime = artifact_path.stat().st_mtime
-                if last_modified is None or mtime > last_modified:
-                    last_modified = mtime
+    # Group by layer
+    layers: dict[str, int] = {}
+    for art in artifacts:
+        meta = art.get("metadata", {})
+        layer = meta.get("layer_name", "unknown")
+        layers[layer] = layers.get(layer, 0) + 1
 
-    if last_modified is not None:
-        from datetime import datetime
+    if layers:
+        layer_parts = []
+        for layer_name, count in sorted(layers.items()):
+            layer_parts.append(f"{layer_name} ({count})")
+        table.add_row("Layers", ", ".join(layer_parts))
 
-        last_dt = datetime.fromtimestamp(last_modified)
-        table.add_row("Last Build", last_dt.strftime("%Y-%m-%d %H:%M:%S"))
-
-    # Local Synix search status
-    try:
-        search_outputs = list_search_outputs(build_path)
-    except SearchOutputResolutionError:
-        table.add_row("Synix Search", "[yellow]invalid metadata[/yellow]")
-    else:
-        if not search_outputs:
-            table.add_row("Synix Search", "[dim]not built[/dim]")
-        else:
-            output_counts: list[tuple[str, int]] = []
-            unreadable = False
-            for output in search_outputs:
-                try:
-                    conn = sqlite3.connect(str(output.db_path))
-                    try:
-                        cursor = conn.execute("SELECT COUNT(*) FROM search_index")
-                        count = cursor.fetchone()[0]
-                    finally:
-                        conn.close()
-                    output_counts.append((output.name, count))
-                except Exception:
-                    unreadable = True
-                    break
-
-            if unreadable:
-                table.add_row("Synix Search", "exists (could not read)")
-            elif len(output_counts) == 1:
-                output_name, count = output_counts[0]
-                if output_name == "search":
-                    table.add_row("Synix Search", f"{count} entries")
-                else:
-                    table.add_row("Synix Search", f"{output_name} ({count} entries)")
-            else:
-                summary = ", ".join(f"{name} ({count})" for name, count in output_counts)
-                table.add_row("Synix Search", f"{len(output_counts)} outputs: {summary}")
-
-    surfaces_dir = build_path / "surfaces"
-    surface_dbs = sorted(surfaces_dir.glob("*.db")) if surfaces_dir.exists() else []
-    if surface_dbs:
-        table.add_row("Search Surfaces", f"{len(surface_dbs)} built")
-    else:
-        table.add_row("Search Surfaces", "[dim]not built[/dim]")
+    # Check for releases under .synix/releases/
+    releases_dir = synix_dir / "releases"
+    if releases_dir.exists():
+        release_parts = []
+        for release_path in sorted(releases_dir.iterdir()):
+            if not release_path.is_dir():
+                continue
+            name = release_path.name
+            search_db = release_path / "search.db"
+            context_md = release_path / "context.md"
+            parts = []
+            if search_db.exists():
+                parts.append("search")
+            if context_md.exists():
+                size = context_md.stat().st_size
+                parts.append(f"context ({size}b)")
+            if parts:
+                release_parts.append(f"[green]{name}[/green]: {', '.join(parts)}")
+        if release_parts:
+            table.add_row("Releases", "  ".join(release_parts))
 
     console.print(table)
 

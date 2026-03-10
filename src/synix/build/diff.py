@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from synix.build.refs import synix_dir_for_build_dir
-from synix.build.snapshot_view import SnapshotArtifactCache
+from synix.build.refs import RefStore, synix_dir_for_build_dir
+from synix.build.snapshot_view import SnapshotArtifactCache, SnapshotView
 from synix.core.models import Artifact
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -134,7 +137,52 @@ def diff_artifact_by_label(
             return None
         return diff_artifact(old_art, new_art)
 
-    # No previous build dir — check for version history
+    # No previous build dir — try snapshot-era ref lookup.
+    # Find the previous run ref whose OID differs from HEAD.
+    try:
+        ref_store = RefStore(synix_dir)
+        head_oid = ref_store.read_ref("HEAD")
+        if head_oid is not None:
+            run_refs = ref_store.iter_refs("refs/runs")
+            # Find runs whose OID differs from HEAD (i.e. previous runs)
+            prev_ref: str | None = None
+            # iter_refs returns sorted ascending; walk in reverse to find
+            # the most recent run that is NOT the current HEAD.
+            for ref_name, oid in reversed(run_refs):
+                if oid != head_oid:
+                    prev_ref = ref_name
+                    break
+
+            if prev_ref is not None:
+                prev_view = SnapshotView.open(synix_dir, ref=prev_ref)
+                try:
+                    prev_data = prev_view.get_artifact(label)
+                except KeyError:
+                    prev_data = None
+
+                if prev_data is not None:
+                    from datetime import datetime
+
+                    created_at_str = prev_data.get("metadata", {}).get("created_at")
+                    created_at = (
+                        datetime.fromisoformat(created_at_str) if created_at_str else datetime.now()
+                    )
+                    old_art = Artifact(
+                        label=prev_data["label"],
+                        artifact_type=prev_data["artifact_type"],
+                        artifact_id=prev_data["artifact_id"],
+                        input_ids=prev_data.get("input_ids", []),
+                        prompt_id=prev_data.get("prompt_id"),
+                        model_config=prev_data.get("model_config"),
+                        created_at=created_at,
+                        content=prev_data["content"],
+                        metadata=prev_data.get("metadata", {}),
+                    )
+                    return diff_artifact(old_art, new_art)
+    except (ValueError, FileNotFoundError, KeyError):
+        logger.debug("Snapshot-era ref lookup failed for diff of %r", label, exc_info=True)
+
+    # Legacy fallback: check for build/versions/<label> directories
     versions_dir = Path(build_dir) / "versions" / label
     if not versions_dir.exists():
         return None

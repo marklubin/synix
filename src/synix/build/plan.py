@@ -315,9 +315,20 @@ def _plan_source_layer(
 
     try:
         artifacts = layer.load(source_config)
-    except Exception:
-        # If loading fails (e.g., source_dir doesn't exist), report 0 artifacts
-        artifacts = []
+    except Exception as exc:
+        layer_artifacts[layer.name] = []
+        return StepPlan(
+            name=layer.name,
+            level=layer._level,
+            status="error",
+            artifact_count=0,
+            rebuild_count=0,
+            cached_count=0,
+            estimated_llm_calls=0,
+            estimated_tokens=0,
+            estimated_cost=0.0,
+            reason=f"source load failed: {exc}",
+        )
 
     layer_artifacts[layer.name] = artifacts
     artifact_count = len(artifacts)
@@ -424,7 +435,10 @@ def _plan_transform_layer(
         estimated_count = layer.estimate_output_count(len(inputs))
 
         # Store placeholder artifacts for downstream planning
-        layer_artifacts[layer.name] = inputs  # approximate
+        layer_artifacts[layer.name] = [
+            Artifact(label=f"__plan__{layer.name}_{i}", artifact_type="placeholder", content="")
+            for i in range(estimated_count)
+        ]
 
         return StepPlan(
             name=layer.name,
@@ -508,7 +522,13 @@ def _plan_transform_layer(
         reason = "new"
 
     # Store existing artifacts for downstream planning
-    layer_artifacts[layer.name] = existing if existing else inputs
+    if existing:
+        layer_artifacts[layer.name] = existing
+    else:
+        layer_artifacts[layer.name] = [
+            Artifact(label=f"__plan__{layer.name}_{i}", artifact_type="placeholder", content="")
+            for i in range(total_count)
+        ]
 
     return StepPlan(
         name=layer.name,

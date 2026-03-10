@@ -50,6 +50,39 @@ class TestRefsListE2E:
         assert "No snapshot store found" in result.output
 
 
+    def test_refs_list_shows_plan_refs(self, tmp_path):
+        """refs list includes refs/plans/ prefix."""
+        synix_dir = create_test_snapshot(tmp_path, {"episodes": [_make_artifact("ep-1", "Content")]})
+
+        # Manually create a plan ref
+        plan_ref_dir = synix_dir / "refs" / "plans"
+        plan_ref_dir.mkdir(parents=True, exist_ok=True)
+
+        # Read existing HEAD oid to use as a valid snapshot ref
+        head_oid = (synix_dir / "refs" / "heads" / "main").read_text().strip()
+        (plan_ref_dir / "latest").write_text(head_oid)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["refs", "list", "--synix-dir", str(synix_dir)])
+        assert result.exit_code == 0, result.output
+        assert "refs/plans/latest" in result.output
+
+    def test_refs_list_json_includes_plan_refs(self, tmp_path):
+        """refs list --json includes plan refs in output."""
+        synix_dir = create_test_snapshot(tmp_path, {"episodes": [_make_artifact("ep-1", "Content")]})
+
+        plan_ref_dir = synix_dir / "refs" / "plans"
+        plan_ref_dir.mkdir(parents=True, exist_ok=True)
+        head_oid = (synix_dir / "refs" / "heads" / "main").read_text().strip()
+        (plan_ref_dir / "latest").write_text(head_oid)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["refs", "list", "--synix-dir", str(synix_dir), "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert any(r["ref"] == "refs/plans/latest" for r in data["refs"])
+
+
 class TestRefsShowE2E:
     def test_refs_show_head(self, tmp_path):
         synix_dir = create_test_snapshot(tmp_path, {"episodes": [_make_artifact("ep-1", "Content")]})

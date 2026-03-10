@@ -1,7 +1,7 @@
 ╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
 │ Pipeline: batch-build-demo                                                                                           │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
+│ Source: <CASE_DIR>/sources                                                            │
+│ Build: <CASE_DIR>/build                                                               │
 │ Layers: 3                                                                                                            │
 │ Surfaces: 1                                                                                                          │
 │ Concurrency: 5 threads                                                                                               │

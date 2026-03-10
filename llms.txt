@@ -39,7 +39,7 @@ synix lineage <artifact-id>                      # Provenance tree
 synix list                                       # All artifacts in current snapshot
 synix show <id>                                  # Render artifact content
 synix plan pipeline.py                           # Dry-run with cost estimates
-synix diff <ref-a> <ref-b>                      # Structured diff between refs
+synix diff [ARTIFACT_ID] --old-build-dir DIR     # Diff artifacts between build dirs
 synix clean                                      # Remove releases and work state
 ```
 

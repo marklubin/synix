@@ -1,7 +1,7 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
 │ Pipeline: sales-deal-room                                                                                            │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
+│ Source: <CASE_DIR>/sources                                                        │
+│ Build: <CASE_DIR>/build                                                           │
 │ Layers: 7                                                                                                            │
 │ Surfaces: 1                                                                                                          │
 │ Projections: 1                                                                                                       │

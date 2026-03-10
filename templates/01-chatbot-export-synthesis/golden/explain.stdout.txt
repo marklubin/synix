@@ -1,7 +1,7 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
 │ Pipeline: personal-memory                                                                                            │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
+│ Source: <CASE_DIR>/sources                                               │
+│ Build: <CASE_DIR>/build                                                  │
 │ Layers: 4                                                                                                            │
 │ Surfaces: 1                                                                                                          │
 │ Projections: 2                                                                                                       │
@@ -19,7 +19,7 @@
 
 personal-memory  claude-haiku-4-5-20251001 (anthropic)
 ├── transcripts  source:parse  <STATS>
-│   └── ← ./sources (2 .json files)
+│   └── ← <CASE_DIR>/sources (2 .json files)
 ├── episodes  transform:EpisodeSummary  <STATS>
 │   ├── ← transcripts
 │   └── cache: all components match (v2: model prompt source transform_id)

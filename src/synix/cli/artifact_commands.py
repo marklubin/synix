@@ -58,9 +58,9 @@ def list_artifacts(layer: str | None, build_dir: str, synix_dir: str | None, ref
 
     try:
         view = SnapshotView.open(resolved_synix_dir, ref=ref)
-    except ValueError:
-        console.print("[dim]No artifacts found.[/dim]")
-        return
+    except ValueError as e:
+        console.print(f"[red]Cannot open snapshot:[/red] {e}")
+        sys.exit(1)
 
     artifacts = view.list_artifacts()
 

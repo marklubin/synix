@@ -25,10 +25,11 @@ def mesh():
 @click.option("--pipeline", required=True, type=click.Path(exists=True), help="Path to pipeline.py")
 def create(name: str, pipeline: str):
     """Create a new mesh (generates config and token)."""
+    from synix.mesh.config import resolve_mesh_root
     from synix.mesh.provision import create_mesh
 
     try:
-        config = create_mesh(name, Path(pipeline))
+        config = create_mesh(name, Path(pipeline), mesh_root=resolve_mesh_root())
         console.print(f"[green]Created mesh '[bold]{name}[/bold]'[/green]")
         console.print(f"  Config: {config.mesh_dir / 'synix-mesh.toml'}")
         console.print(f"  Token:  {config.token[:12]}...")
@@ -47,6 +48,7 @@ def create(name: str, pipeline: str):
 @click.option("--server", "server_url", default="", help="Server address for client role (e.g., obispo:7433)")
 def provision(name: str, role: str, server_url: str):
     """Provision this machine as server or client in a mesh."""
+    from synix.mesh.config import resolve_mesh_root
     from synix.mesh.provision import provision_role
 
     if role == "client" and not server_url:
@@ -58,7 +60,7 @@ def provision(name: str, role: str, server_url: str):
         server_url = f"http://{server_url}"
 
     try:
-        provision_role(name, role, server_url=server_url)
+        provision_role(name, role, server_url=server_url, mesh_root=resolve_mesh_root())
         console.print(f"[green]Provisioned as [bold]{role}[/bold] for mesh '[bold]{name}[/bold]'[/green]")
         if role == "server":
             console.print("  Server will start automatically via systemd")
@@ -75,11 +77,11 @@ def run_server(name: str):
     """Start the mesh server daemon."""
     import uvicorn
 
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
     from synix.mesh.logging import setup_mesh_logging
     from synix.mesh.server import create_app
 
-    config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
+    config_path = resolve_mesh_root() / name / "synix-mesh.toml"
     if not config_path.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
@@ -102,10 +104,10 @@ def run_server(name: str):
 def run_client(name: str):
     """Start the mesh client daemon."""
     from synix.mesh.client import MeshClient
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
     from synix.mesh.logging import setup_mesh_logging
 
-    config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
+    config_path = resolve_mesh_root() / name / "synix-mesh.toml"
     if not config_path.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
@@ -130,9 +132,9 @@ def run_client(name: str):
 @click.option("--name", required=True, help="Mesh name")
 def status(name: str):
     """Show mesh health, members, and last build info."""
-    from synix.mesh.config import DEFAULT_MESH_ROOT
+    from synix.mesh.config import resolve_mesh_root
 
-    mesh_dir = DEFAULT_MESH_ROOT / name
+    mesh_dir = resolve_mesh_root() / name
     if not mesh_dir.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
@@ -190,16 +192,16 @@ def submit(name: str, file_path: str):
     import httpx
 
     from synix.mesh.auth import auth_headers
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
 
-    config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
+    config_path = resolve_mesh_root() / name / "synix-mesh.toml"
     if not config_path.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
 
     config = load_mesh_config(config_path)
 
-    state_path = DEFAULT_MESH_ROOT / name / "state.json"
+    state_path = resolve_mesh_root() / name / "state.json"
     server_url = ""
     if state_path.exists():
         state = json.loads(state_path.read_text())
@@ -243,15 +245,15 @@ def trigger_build(name: str):
     import httpx
 
     from synix.mesh.auth import auth_headers
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
 
-    config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
+    config_path = resolve_mesh_root() / name / "synix-mesh.toml"
     if not config_path.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
 
     config = load_mesh_config(config_path)
-    state_path = DEFAULT_MESH_ROOT / name / "state.json"
+    state_path = resolve_mesh_root() / name / "state.json"
     server_url = ""
     if state_path.exists():
         state = json.loads(state_path.read_text())
@@ -281,16 +283,16 @@ def trigger_build(name: str):
 @click.option("--name", required=True, help="Mesh name")
 def force_deploy(name: str):
     """Force run local deploy hooks."""
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
     from synix.mesh.deploy import run_deploy_hooks
 
-    config_path = DEFAULT_MESH_ROOT / name / "synix-mesh.toml"
+    config_path = resolve_mesh_root() / name / "synix-mesh.toml"
     if not config_path.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
 
     config = load_mesh_config(config_path)
-    mesh_dir = DEFAULT_MESH_ROOT / name
+    mesh_dir = resolve_mesh_root() / name
     state = json.loads((mesh_dir / "state.json").read_text()) if (mesh_dir / "state.json").exists() else {}
     role = state.get("role", "client")
 
@@ -315,9 +317,10 @@ def force_deploy(name: str):
 @mesh.command("list")
 def list_cmd():
     """List all meshes on this machine."""
+    from synix.mesh.config import resolve_mesh_root
     from synix.mesh.provision import list_meshes
 
-    meshes = list_meshes()
+    meshes = list_meshes(mesh_root=resolve_mesh_root())
     if not meshes:
         console.print("[dim]No meshes found[/dim]")
         return
@@ -345,10 +348,11 @@ def list_cmd():
 @click.option("--name", required=True, help="Mesh name")
 def cmd_rotate_token(name: str):
     """Generate a new mesh token and update config."""
+    from synix.mesh.config import resolve_mesh_root
     from synix.mesh.provision import rotate_token
 
     try:
-        new_token = rotate_token(name)
+        new_token = rotate_token(name, mesh_root=resolve_mesh_root())
         console.print(f"[green]Token rotated for mesh '[bold]{name}[/bold]'[/green]")
         console.print(f"  New token: {new_token[:12]}...")
         console.print()
@@ -366,10 +370,10 @@ def cmd_rotate_token(name: str):
 @click.option("--lines", default=20, help="Number of log lines to display")
 def dashboard(name: str, refresh: int, lines: int):
     """Live dashboard showing mesh health, members, and activity."""
-    from synix.mesh.config import DEFAULT_MESH_ROOT, load_mesh_config
+    from synix.mesh.config import load_mesh_config, resolve_mesh_root
     from synix.mesh.dashboard import run_dashboard
 
-    mesh_dir = DEFAULT_MESH_ROOT / name
+    mesh_dir = resolve_mesh_root() / name
     if not mesh_dir.exists():
         console.print(f"[red]Error:[/red] Mesh '{name}' not found")
         sys.exit(1)
@@ -402,7 +406,8 @@ def dashboard(name: str, refresh: int, lines: int):
 @click.confirmation_option(prompt="This will remove all mesh data. Continue?")
 def destroy(name: str):
     """Remove mesh config, data, and stop services."""
+    from synix.mesh.config import resolve_mesh_root
     from synix.mesh.provision import destroy_mesh
 
-    destroy_mesh(name)
+    destroy_mesh(name, mesh_root=resolve_mesh_root())
     console.print(f"[green]Destroyed mesh '[bold]{name}[/bold]'[/green]")
