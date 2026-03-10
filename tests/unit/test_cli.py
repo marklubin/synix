@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from click.testing import CliRunner
 
@@ -212,7 +210,7 @@ def test_info_shows_logo(runner, tmp_path, monkeypatch):
     assert "███" in result.output
 
 
-def _create_build_with_custom_search_output(build_dir):
+def _create_build_with_release(build_dir):
     artifact = Artifact(
         label="ep-custom-001",
         artifact_type="episode",
@@ -221,69 +219,47 @@ def _create_build_with_custom_search_output(build_dir):
     )
 
     # Create snapshot store (sibling .synix directory, used by status command)
-    create_test_snapshot(
+    synix_dir = create_test_snapshot(
         build_dir.parent,
         {"episodes": [artifact]},
     )
 
-    # Create search index in the build dir (used by list_search_outputs)
-    custom_db = build_dir / "outputs" / "memory.db"
-    custom_db.parent.mkdir(parents=True, exist_ok=True)
-    index = SearchIndex(custom_db)
+    # Create a release with search.db under .synix/releases/local/
+    release_dir = synix_dir / "releases" / "local"
+    release_dir.mkdir(parents=True, exist_ok=True)
+    release_db = release_dir / "search.db"
+    index = SearchIndex(release_db)
     index.create()
     index.insert(artifact, "episodes", 1)
     index.close()
 
-    # Projection cache for search output discovery
-    (build_dir / ".projection_cache.json").write_text(
-        json.dumps(
-            {
-                "search": {
-                    "projection_type": "synix_search",
-                    "db_path": "outputs/memory.db",
-                }
-            }
-        )
-    )
-
-    # Minimal legacy manifest.json (required by info command's _show_build_status)
-    (build_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "ep-custom-001": {
-                    "path": "",
-                    "layer": "episodes",
-                    "level": 1,
-                    "artifact_id": artifact.artifact_id or "",
-                }
-            }
-        )
-    )
+    return synix_dir
 
 
-def test_status_uses_custom_search_output(runner, tmp_path):
-    """synix status detects a SynixSearch output stored outside build/search.db."""
+def test_status_shows_release_projections(runner, tmp_path):
+    """synix status detects releases under .synix/releases/."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
-    _create_build_with_custom_search_output(build_dir)
+    _create_build_with_release(build_dir)
 
     result = runner.invoke(main, ["status", "--build-dir", str(build_dir)])
     assert result.exit_code == 0
-    assert "Projections:" in result.output
-    assert "search index" in result.output
+    assert "Releases:" in result.output
+    assert "local" in result.output
+    assert "search" in result.output
 
 
-def test_info_uses_custom_search_output(runner, tmp_path, monkeypatch):
-    """synix info reports SynixSearch outputs discovered from projection metadata."""
+def test_info_shows_build_artifacts(runner, tmp_path, monkeypatch):
+    """synix info reports artifact counts from .synix snapshot store."""
     build_dir = tmp_path / "build"
     build_dir.mkdir()
-    _create_build_with_custom_search_output(build_dir)
+    _create_build_with_release(build_dir)
 
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(main, ["info"])
     assert result.exit_code == 0
-    assert "Synix Search" in result.output
-    assert "1 entries" in result.output
+    assert "Artifacts" in result.output
+    assert "Releases" in result.output
 
 
 def test_version_flag(runner):

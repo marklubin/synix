@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_MESH_ROOT = Path.home() / ".synix-mesh"
 
 
+def resolve_mesh_root() -> Path:
+    """Resolve the mesh root directory, honoring SYNIX_MESH_ROOT env var."""
+    return Path(os.environ.get("SYNIX_MESH_ROOT", str(DEFAULT_MESH_ROOT)))
+
+
 @dataclass
 class SourceConfig:
     watch_dir: str = "~/.claude/projects"

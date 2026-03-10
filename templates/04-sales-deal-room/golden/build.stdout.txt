@@ -1,10 +1,10 @@
 ╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
-│ Pipeline: sales-deal-room                                                                                            │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
-│ Layers: 7                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Concurrency: 5 threads                                                                                               │
+│ Pipeline: sales-deal-room  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 7  │
+│ Surfaces: 1  │
+│ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ competitor_docs (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ product_specs (level 0)  <BUILD_COUNTS>  <TIME>
@@ -16,7 +16,7 @@
     └─ deal-search  <MATERIALIZED>
                          Build Summary
 ╭───────────────────┬──────────────┬───────┬────────┬──────────╮
-│ Layer             │    Level     │ Built │ Cached │  Skipped │
+│ Layer             │    Level     │ Built │ Cached │  Skipped  │
 ├───────────────────┼──────────────┼───────┼────────┼──────────┤
 │ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
@@ -25,7 +25,7 @@
 │ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
 │ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │
-│   → search        │ synix_search │       │        │ complete │
+│   → search        │ synix_search │       │        │ complete  │
 ╰───────────────────┴──────────────┴───────┴────────┴──────────╯
 
 <BUILD_TOTAL>

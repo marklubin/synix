@@ -80,6 +80,10 @@ class Layer:
         self.config: dict = config or {}
         self._level: int = 0  # computed by compute_levels()
 
+    @property
+    def level(self) -> int:
+        return self._level
+
 
 class Source(Layer):
     """Root layer — reads source files. No dependencies.

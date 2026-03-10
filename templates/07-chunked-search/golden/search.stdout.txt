@@ -2,13 +2,13 @@
 Search results for: "encryption" (keyword mode)
 
 ╭──────────────────────────────────────────────────── chunks (L1) ─────────────────────────────────────────────────────╮
-│                                                                                                                      │
-│  CloudSync supports end-to-end encryption for all stored files. Encryption keys are derived from the user's          │
-│  passphrase and never leave the client device. Enterprise customers can integrate with their existing key            │
-│  management infrastructure via the KMS bridge API.                                                                   │
-│                                                                                                                      │
-│  Label: chunks-t-text-product-overview-f17c6ae9  Score: 3.31  Mode: keyword                                          │
-│                                                                                                                      │
+│  │
+│  CloudSync supports end-to-end encryption for all stored files. Encryption keys are derived from the user's  │
+│  passphrase and never leave the client device. Enterprise customers can integrate with their existing key  │
+│  management infrastructure via the KMS bridge API.  │
+│  │
+│  Label: chunks-t-text-product-overview-f17c6ae9  Score: 3.31  Mode: keyword  │
+│  │
 ╰────────────────────────────────────────────────────── Result 1 ──────────────────────────────────────────────────────╯
 chunks-t-text-product-overview-f17c6ae9
 └── t-text-product-overview

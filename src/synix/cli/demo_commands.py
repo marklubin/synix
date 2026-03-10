@@ -377,6 +377,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
         line = re.sub(r"\btmp[a-z0-9_]+\.tmp\b", "tmp<TEMPFILE>.tmp", line)
         # Normalize OpenAI batch IDs (batch_<hex> from real API runs)
         line = re.sub(r"\bbatch_[A-Za-z0-9_]+\b", "batch_<OPENAI_ID>", line)
+        # Normalize Rich panel padding — collapse variable-width padding before trailing │
+        line = re.sub(r"\s+│\s*$", "  │", line)
         # Strip trailing whitespace
         line = line.rstrip()
         normalized.append(line)

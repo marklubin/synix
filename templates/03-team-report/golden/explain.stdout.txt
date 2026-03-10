@@ -1,27 +1,27 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
-│ Pipeline: my-first-pipeline                                                                                          │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
-│ Layers: 5                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Projections: 1                                                                                                       │
+│ Pipeline: my-first-pipeline  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 5  │
+│ Surfaces: 1  │
+│ Projections: 1  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
              LLM Configuration
 ╭─────────────┬───────────────────────────╮
-│ Setting     │ Value                     │
+│ Setting     │ Value  │
 ├─────────────┼───────────────────────────┤
-│ Provider    │ anthropic                 │
-│ Model       │ claude-haiku-4-5-20251001 │
-│ Temperature │ 0.3                       │
-│ Max Tokens  │ 1024                      │
+│ Provider    │ anthropic  │
+│ Model       │ claude-haiku-4-5-20251001  │
+│ Temperature │ 0.3  │
+│ Max Tokens  │ 1024  │
 ╰─────────────┴───────────────────────────╯
 
 my-first-pipeline  claude-haiku-4-5-20251001 (anthropic)
 ├── bios  source:parse  <STATS>
-│   └── ← ./sources/bios (3 .md files)
+│   └── ← <CASE_DIR>/sources/bios (3 .md files)
 ├── project_brief  source:parse  <STATS>
-│   └── ← ./sources/brief (1 .md file)
+│   └── ← <CASE_DIR>/sources/brief (1 .md file)
 ├── work_styles  transform:MapSynthesis  <STATS>
 │   ├── ← bios
 │   └── cache: all components match (v2: config label_fn model source transform_id)

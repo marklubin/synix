@@ -1,25 +1,25 @@
 ╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
-│ Pipeline: chunked-search                                                                                             │
-│ Source: ./sources                                                                                                    │
-│ Build: ./build                                                                                                       │
-│ Layers: 2                                                                                                            │
-│ Surfaces: 1                                                                                                          │
-│ Projections: 1                                                                                                       │
+│ Pipeline: chunked-search  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 2  │
+│ Surfaces: 1  │
+│ Projections: 1  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
             LLM Configuration
 ╭─────────────┬──────────────────────────╮
-│ Setting     │ Value                    │
+│ Setting     │ Value  │
 ├─────────────┼──────────────────────────┤
-│ Provider    │ anthropic                │
-│ Model       │ claude-sonnet-4-20250514 │
-│ Temperature │ 0.3                      │
-│ Max Tokens  │ 1024                     │
+│ Provider    │ anthropic  │
+│ Model       │ claude-sonnet-4-20250514  │
+│ Temperature │ 0.3  │
+│ Max Tokens  │ 1024  │
 ╰─────────────┴──────────────────────────╯
 
 chunked-search  claude-sonnet-4-20250514 (anthropic)
 ├── articles  source:parse  <STATS>
-│   └── ← ./sources/articles (3 .md files)
+│   └── ← <CASE_DIR>/sources/articles (3 .md files)
 └── chunks  transform:Chunk  <STATS>
     ├── ← articles
     ├── ⇢ chunk-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed

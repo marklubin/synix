@@ -42,11 +42,21 @@ def load_pipeline(path: str) -> Pipeline:
         raise ValueError(f"Pipeline module {path} must define a 'pipeline' variable")
     if not isinstance(pipeline, Pipeline):
         raise TypeError(f"'pipeline' variable must be a Pipeline instance, got {type(pipeline)}")
+
+    # Resolve relative paths against the pipeline file location
+    pipeline_parent = filepath.parent
+    if not Path(pipeline.source_dir).is_absolute():
+        pipeline.source_dir = str((pipeline_parent / pipeline.source_dir).resolve())
+    if not Path(pipeline.build_dir).is_absolute():
+        pipeline.build_dir = str((pipeline_parent / pipeline.build_dir).resolve())
+
+    # Also resolve per-Source dir overrides against the pipeline file
+    for layer in pipeline.layers:
+        if isinstance(layer, Source) and layer.dir and not Path(layer.dir).is_absolute():
+            layer.dir = str((pipeline_parent / layer.dir).resolve())
+
     if pipeline.synix_dir is None:
-        build_dir = Path(pipeline.build_dir)
-        if not build_dir.is_absolute():
-            build_dir = (filepath.parent / build_dir).resolve()
-        pipeline.synix_dir = str(synix_dir_for_build_dir(build_dir))
+        pipeline.synix_dir = str(synix_dir_for_build_dir(Path(pipeline.build_dir)))
 
     validate_pipeline(pipeline)
     return pipeline

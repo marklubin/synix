@@ -612,6 +612,7 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
     compute_levels(pipeline.layers)
     build_order = resolve_build_order(pipeline)
 
+    layer_cardinality: dict[str, int] = {}
     layers_info = []
     for layer in build_order:
         info: dict = {
@@ -622,6 +623,17 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
 
         if isinstance(layer, Source):
             info["mode"] = "source"
+            try:
+                source_config = {"source_dir": pipeline.source_dir}
+                artifacts = layer.load(source_config)
+                layer_cardinality[layer.name] = len(artifacts)
+            except Exception as exc:
+                logger.warning(
+                    "Source '%s' failed to load during batch plan: %s",
+                    layer.name,
+                    exc,
+                )
+                layer_cardinality[layer.name] = 1
         elif isinstance(layer, Transform):
             try:
                 mode = _resolve_batch_mode(layer, pipeline)
@@ -637,13 +649,15 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
             info["mode"] = mode
             info["batch_param"] = layer.batch
 
-            # Estimate work units
+            # Estimate work units using DAG-aware cardinality tracking
             dep_counts = sum(
-                dep_layer.estimate_output_count(1) for dep_layer in layer.depends_on if isinstance(dep_layer, Transform)
+                layer_cardinality.get(dep.name, 1)
+                for dep in layer.depends_on
             )
             if dep_counts == 0:
-                dep_counts = len(layer.depends_on) or 1
+                dep_counts = 1
             info["estimated_requests"] = layer.estimate_output_count(dep_counts)
+            layer_cardinality[layer.name] = layer.estimate_output_count(dep_counts)
         else:
             info["mode"] = "unknown"
 

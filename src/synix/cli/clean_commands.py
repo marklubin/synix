@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import shutil
 from pathlib import Path
 
@@ -9,6 +11,27 @@ import click
 
 from synix.build.refs import synix_dir_for_build_dir
 from synix.cli.main import console
+
+logger = logging.getLogger(__name__)
+
+
+def _warn_external_targets(release_path: Path) -> None:
+    """Check release receipt for external target paths and warn the user."""
+    receipt_path = release_path / "receipt.json"
+    if not receipt_path.exists():
+        return
+    try:
+        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+    for adapter_name, adapter_data in data.get("adapters", {}).items():
+        target = adapter_data.get("target", "")
+        if target and str(release_path) not in target:
+            console.print(
+                f"[yellow]Note:[/yellow] release '{release_path.name}' adapter "
+                f"'{adapter_name}' wrote to external target: {target}\n"
+                f"  Clean will remove the receipt but not the external files."
+            )
 
 
 @click.command()
@@ -45,6 +68,7 @@ def clean(build_dir: str, synix_dir: str | None, release_name: str | None, yes: 
         release_path = sd / "releases" / release_name
         if release_path.exists():
             targets.append((f"release '{release_name}'", release_path))
+            _warn_external_targets(release_path)
         else:
             console.print(f"[dim]Release '{release_name}' does not exist.[/dim]")
             return
@@ -52,6 +76,10 @@ def clean(build_dir: str, synix_dir: str | None, release_name: str | None, yes: 
         releases_dir = sd / "releases"
         if releases_dir.exists():
             targets.append(("releases", releases_dir))
+            # Warn about external targets in any release
+            for rp in sorted(releases_dir.iterdir()):
+                if rp.is_dir():
+                    _warn_external_targets(rp)
         work_dir = sd / "work"
         if work_dir.exists():
             targets.append(("work", work_dir))
@@ -74,3 +102,7 @@ def clean(build_dir: str, synix_dir: str | None, release_name: str | None, yes: 
     for name, path in targets:
         shutil.rmtree(path)
         console.print(f"[green]Cleaned:[/green] {name} ({path})")
+
+    # Release refs are preserved — they still point at valid snapshots
+    # and can be used to re-materialize releases. Use `refs delete` to
+    # explicitly remove refs.

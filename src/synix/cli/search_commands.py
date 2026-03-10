@@ -227,7 +227,11 @@ def search(
 
     if ref is not None:
         # Scratch realization from a snapshot ref
-        db_path, provenance = _scratch_realize(build_dir, synix_dir, ref)
+        try:
+            db_path, provenance = _scratch_realize(build_dir, synix_dir, ref)
+        except (ValueError, FileNotFoundError) as e:
+            console.print(f"[red]Cannot open snapshot:[/red] {e}")
+            sys.exit(1)
         # Scratch realization doesn't support embeddings yet
         embeddings_base_dir = None
     elif release_name is not None:

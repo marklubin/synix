@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import time
+from pathlib import Path
 
 import click
 from rich import box
@@ -162,9 +163,10 @@ def build(
         sys.exit(1)
 
     if source_dir:
-        pipeline.source_dir = source_dir
+        pipeline.source_dir = str(Path(source_dir).resolve())
     if build_dir:
-        pipeline.build_dir = build_dir
+        pipeline.build_dir = str(Path(build_dir).resolve())
+        pipeline.synix_dir = None  # Force recomputation from overridden build_dir
 
     concurrency_label = f"{concurrency} threads" if concurrency > 1 else "sequential"
     console.print(
@@ -194,7 +196,6 @@ def build(
         try:
             result = run_pipeline(
                 pipeline,
-                source_dir=source_dir,
                 verbosity=effective_verbosity,
                 concurrency=concurrency,
                 progress=progress,
@@ -211,7 +212,6 @@ def build(
             with Live(progress, console=console, refresh_per_second=4):
                 result = run_pipeline(
                     pipeline,
-                    source_dir=source_dir,
                     verbosity=effective_verbosity,
                     concurrency=concurrency,
                     progress=progress,
@@ -428,12 +428,13 @@ def plan(
         sys.exit(1)
 
     if source_dir:
-        pipeline.source_dir = source_dir
+        pipeline.source_dir = str(Path(source_dir).resolve())
     if build_dir:
-        pipeline.build_dir = build_dir
+        pipeline.build_dir = str(Path(build_dir).resolve())
+        pipeline.synix_dir = None  # Force recomputation from overridden build_dir
 
     try:
-        build_plan = plan_build(pipeline, source_dir=source_dir)
+        build_plan = plan_build(pipeline)
     except Exception as e:
         console.print(f"[red]Error planning build:[/red] {e}")
         sys.exit(1)
@@ -464,6 +465,7 @@ def plan(
         "cached": "cyan",
         "rebuild": "yellow",
         "new": "green",
+        "error": "red",
     }
 
     # Model label for root
@@ -662,8 +664,6 @@ def _display_source_change_warnings(build_plan, pipeline):
     build_dir = pipeline.build_dir
     if not build_dir:
         return
-
-    from pathlib import Path
 
     from synix.build.refs import synix_dir_for_build_dir
     from synix.build.snapshot_view import SnapshotArtifactCache

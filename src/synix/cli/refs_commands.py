@@ -33,7 +33,7 @@ def refs_list(build_dir, synix_dir, json_output):
 
     # Gather all refs from known prefixes
     all_refs = []
-    for prefix in ("refs/heads", "refs/runs", "refs/releases"):
+    for prefix in ("refs/heads", "refs/runs", "refs/releases", "refs/plans"):
         for ref_name, oid in ref_store.iter_refs(prefix):
             all_refs.append({"ref": ref_name, "oid": oid})
 

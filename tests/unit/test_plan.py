@@ -679,7 +679,31 @@ class TestPlanEdgeCases:
         plan = plan_build(p)
 
         transcript_step = plan.steps[0]
+        # ParseTransform.execute() returns [] for nonexistent dirs without raising,
+        # so the plan reports 0 artifacts with "new" status (not an error).
         assert transcript_step.artifact_count == 0
+
+    def test_failing_source_reports_error_status(self, tmp_path):
+        """A Source that raises on load() should report error status in plan."""
+
+        class FailingSource(Source):
+            def load(self, config):
+                raise RuntimeError("source directory is corrupt")
+
+        p = Pipeline("failing-src")
+        p.source_dir = str(tmp_path / "sources")
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = FailingSource("transcripts")
+        p.add(transcripts)
+
+        plan = plan_build(p)
+
+        transcript_step = plan.steps[0]
+        assert transcript_step.status == "error"
+        assert transcript_step.artifact_count == 0
+        assert "source load failed" in transcript_step.reason
 
     def test_topical_grouping_estimate(self, tmp_path, source_dir):
         """Topical rollup should estimate one artifact per topic."""
@@ -911,3 +935,46 @@ class TestSourceInfo:
         plan = plan_build(p)
         docs_step = plan.steps[0]
         assert docs_step.source_info is None
+
+
+class TestReduceDownstreamCount:
+    """Tests that N:1 transforms (ReduceSynthesis) produce correct downstream counts."""
+
+    def test_reduce_downstream_count_on_cold_build(self, tmp_path, source_dir):
+        """ReduceSynthesis outputs 1 artifact; downstream MapSynthesis should see 1 input, not source count."""
+        from synix.ext import MapSynthesis, ReduceSynthesis
+
+        p = Pipeline("reduce-downstream-test")
+        p.source_dir = str(source_dir)
+        p.build_dir = str(tmp_path / "build")
+        p.llm_config = {"model": "test", "temperature": 0.3}
+
+        transcripts = Source("transcripts")
+        reduce = ReduceSynthesis(
+            "reduce",
+            depends_on=[transcripts],
+            prompt="Summarize all: {artifacts}",
+            label="summary",
+            artifact_type="summary",
+        )
+        downstream = MapSynthesis(
+            "downstream",
+            depends_on=[reduce],
+            prompt="Expand: {artifact}",
+            artifact_type="expansion",
+        )
+        p.add(transcripts, reduce, downstream)
+
+        plan = plan_build(p)
+
+        reduce_step = next(s for s in plan.steps if s.name == "reduce")
+        downstream_step = next(s for s in plan.steps if s.name == "downstream")
+
+        # ReduceSynthesis always produces 1 artifact
+        assert reduce_step.artifact_count == 1
+
+        # Downstream MapSynthesis (1:1) should see 1 input, NOT the transcript count
+        assert downstream_step.artifact_count == 1, (
+            f"Downstream should see 1 artifact from reduce, "
+            f"but got {downstream_step.artifact_count}"
+        )
