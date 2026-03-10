@@ -19,7 +19,7 @@
 
 chunked-search  claude-sonnet-4-20250514 (anthropic)
 ├── articles  source:parse  <STATS>
-│   └── ← ./sources/articles (3 .md files)
+│   └── ← <CASE_DIR>/sources/articles (3 .md files)
 └── chunks  transform:Chunk  <STATS>
     ├── ← articles
     ├── cache: all components match (v2: config source transform_id)

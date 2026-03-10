@@ -187,19 +187,16 @@ def status(build_dir: str, resolved: bool):
             if not release_path.is_dir():
                 continue
             name = release_path.name
-            search_db = release_path / "search.db"
-            context_md = release_path / "context.md"
-            parts = []
-            if search_db.exists():
-                parts.append("search")
-            if context_md.exists():
-                size = context_md.stat().st_size
-                parts.append(f"context ({size}b)")
-            if parts:
+            # Enumerate all non-hidden files in the release directory
+            outputs = [
+                f.name for f in sorted(release_path.iterdir())
+                if f.is_file() and not f.name.startswith(".")
+            ]
+            if outputs:
                 if not has_releases:
                     console.print("\n[bold]Releases:[/bold]")
                     has_releases = True
-                console.print(f"  [green]{name}[/green]: {', '.join(parts)}")
+                console.print(f"  [green]{name}[/green]: {', '.join(outputs)}")
 
     # ── Stale artifacts ─────────────────────────────────────────────────
     stale = _find_stale_artifacts(store)

@@ -196,7 +196,6 @@ def build(
         try:
             result = run_pipeline(
                 pipeline,
-                source_dir=source_dir,
                 verbosity=effective_verbosity,
                 concurrency=concurrency,
                 progress=progress,
@@ -213,7 +212,6 @@ def build(
             with Live(progress, console=console, refresh_per_second=4):
                 result = run_pipeline(
                     pipeline,
-                    source_dir=source_dir,
                     verbosity=effective_verbosity,
                     concurrency=concurrency,
                     progress=progress,
@@ -436,7 +434,7 @@ def plan(
         pipeline.synix_dir = None  # Force recomputation from overridden build_dir
 
     try:
-        build_plan = plan_build(pipeline, source_dir=source_dir)
+        build_plan = plan_build(pipeline)
     except Exception as e:
         console.print(f"[red]Error planning build:[/red] {e}")
         sys.exit(1)

@@ -111,14 +111,32 @@ def _show_build_status() -> None:
     from synix.build.refs import synix_dir_for_build_dir
     from synix.build.snapshot_view import SnapshotView
 
-    # Try to discover .synix/ — first via build_dir convention, then direct sibling
+    # Try to discover .synix/:
+    # 1. From pipeline.py build_dir (if pipeline exists)
+    # 2. Via build_dir convention (cwd/build)
+    # 3. Direct sibling (.synix in cwd)
     synix_dir = None
-    try:
-        candidate = synix_dir_for_build_dir(Path.cwd() / "build")
-        if candidate.exists():
-            synix_dir = candidate
-    except (ValueError, OSError):
-        pass
+
+    # Try pipeline first — this handles non-default build_dir locations
+    pipeline_file = Path.cwd() / "pipeline.py"
+    if pipeline_file.exists():
+        try:
+            from synix.build.pipeline import load_pipeline
+
+            p = load_pipeline(str(pipeline_file))
+            candidate = synix_dir_for_build_dir(Path(p.build_dir))
+            if candidate.exists():
+                synix_dir = candidate
+        except Exception:
+            pass
+
+    if synix_dir is None:
+        try:
+            candidate = synix_dir_for_build_dir(Path.cwd() / "build")
+            if candidate.exists():
+                synix_dir = candidate
+        except (ValueError, OSError):
+            pass
     if synix_dir is None:
         candidate = Path.cwd() / ".synix"
         if candidate.exists():
@@ -169,16 +187,13 @@ def _show_build_status() -> None:
             if not release_path.is_dir():
                 continue
             name = release_path.name
-            search_db = release_path / "search.db"
-            context_md = release_path / "context.md"
-            parts = []
-            if search_db.exists():
-                parts.append("search")
-            if context_md.exists():
-                size = context_md.stat().st_size
-                parts.append(f"context ({size}b)")
-            if parts:
-                release_parts.append(f"[green]{name}[/green]: {', '.join(parts)}")
+            # Enumerate all non-hidden files in the release directory
+            outputs = [
+                f.name for f in sorted(release_path.iterdir())
+                if f.is_file() and not f.name.startswith(".")
+            ]
+            if outputs:
+                release_parts.append(f"[green]{name}[/green]: {', '.join(outputs)}")
         if release_parts:
             table.add_row("Releases", "  ".join(release_parts))
 

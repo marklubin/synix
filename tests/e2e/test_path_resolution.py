@@ -105,6 +105,76 @@ class TestRelativeSourceDirResolution:
         assert synix_dir.exists(), f".synix not found at {synix_dir}"
 
 
+    def test_source_with_dir_override_resolves_relative_to_pipeline(self, runner, tmp_path):
+        """Source(dir='./custom_sources') resolves against pipeline file, not cwd."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        custom_dir = project_dir / "custom_sources"
+        custom_dir.mkdir()
+
+        shutil.copy(FIXTURES_DIR / "chatgpt_export.json", custom_dir / "chatgpt_export.json")
+
+        # Pipeline with Source that has per-layer dir override
+        pipeline_file = project_dir / "pipeline.py"
+        pipeline_file.write_text("""
+from synix import Pipeline, Source
+from synix.ext import EpisodeSummary
+
+pipeline = Pipeline("source-dir-override")
+pipeline.source_dir = "./sources"
+pipeline.build_dir = "./build"
+pipeline.llm_config = {"model": "claude-sonnet-4-20250514", "temperature": 0.3, "max_tokens": 1024}
+
+# This Source has a custom dir that differs from pipeline.source_dir
+transcripts = Source("transcripts", dir="./custom_sources")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+pipeline.add(transcripts, episodes)
+""")
+
+        # Invoke from tmp_path (NOT project_dir) with absolute path
+        result = runner.invoke(
+            main,
+            ["plan", str(pipeline_file), "--json"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, f"Plan failed:\n{result.output}"
+        import json as json_mod
+        plan_data = json_mod.loads(result.output)
+        transcript_step = next(s for s in plan_data["steps"] if s["name"] == "transcripts")
+        assert transcript_step["artifact_count"] > 0, (
+            f"Source with dir='./custom_sources' found 0 artifacts when invoked from different cwd. "
+            f"Full plan: {plan_data}"
+        )
+
+    def test_cli_source_dir_override_resolves(self, runner, tmp_path):
+        """--source-dir with a relative path resolves correctly."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        sources_dir = project_dir / "sources"
+        sources_dir.mkdir()
+
+        shutil.copy(FIXTURES_DIR / "chatgpt_export.json", sources_dir / "chatgpt_export.json")
+
+        pipeline_file = _write_pipeline(project_dir, source_dir="./nonexistent", build_dir="build")
+
+        # Pass --source-dir pointing to the real sources via relative path
+        # The CLI resolves it to absolute before passing to the pipeline
+        result = runner.invoke(
+            main,
+            ["plan", str(pipeline_file), "--source-dir", str(sources_dir), "--json"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, f"Plan failed:\n{result.output}"
+        import json as json_mod
+        plan_data = json_mod.loads(result.output)
+        transcript_step = next(s for s in plan_data["steps"] if s["name"] == "transcripts")
+        assert transcript_step["artifact_count"] > 0, (
+            f"--source-dir override found 0 artifacts. Full plan: {plan_data}"
+        )
+
+
 class TestBuildDirOverride:
     """Bug 4: --build-dir override writes .synix to correct location."""
 

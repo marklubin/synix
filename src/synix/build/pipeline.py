@@ -50,6 +50,11 @@ def load_pipeline(path: str) -> Pipeline:
     if not Path(pipeline.build_dir).is_absolute():
         pipeline.build_dir = str((pipeline_parent / pipeline.build_dir).resolve())
 
+    # Also resolve per-Source dir overrides against the pipeline file
+    for layer in pipeline.layers:
+        if isinstance(layer, Source) and layer.dir and not Path(layer.dir).is_absolute():
+            layer.dir = str((pipeline_parent / layer.dir).resolve())
+
     if pipeline.synix_dir is None:
         pipeline.synix_dir = str(synix_dir_for_build_dir(Path(pipeline.build_dir)))
 
