@@ -83,7 +83,6 @@ from synix.cli.demo_commands import demo  # noqa: E402, F401
 from synix.cli.fix_commands import fix  # noqa: E402, F401
 from synix.cli.info_commands import info  # noqa: E402, F401
 from synix.cli.init_commands import init  # noqa: E402, F401
-from synix.cli.llms_commands import llms  # noqa: E402, F401
 from synix.cli.mesh_commands import mesh  # noqa: E402, F401
 from synix.cli.refs_commands import refs_group  # noqa: E402, F401
 from synix.cli.release_commands import release, releases_group, revert  # noqa: E402, F401
@@ -109,7 +108,6 @@ main.add_command(clean)
 main.add_command(demo)
 main.add_command(info)
 main.add_command(init)
-main.add_command(llms)
 main.add_command(batch_build, name="batch-build")
 main.add_command(mesh)
 main.add_command(release)
