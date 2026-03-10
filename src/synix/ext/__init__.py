@@ -28,6 +28,7 @@ from synix.build.llm_transforms import (  # noqa: F401
     TopicalRollup,
     TopicalRollupTransform,
 )
+from synix.ext.chunk import Chunk  # noqa: F401
 from synix.ext.fold_synthesis import FoldSynthesis  # noqa: F401
 from synix.ext.group_synthesis import GroupSynthesis  # noqa: F401
 from synix.ext.map_synthesis import MapSynthesis  # noqa: F401
@@ -46,4 +47,5 @@ __all__ = [
     "GroupSynthesis",
     "ReduceSynthesis",
     "FoldSynthesis",
+    "Chunk",
 ]

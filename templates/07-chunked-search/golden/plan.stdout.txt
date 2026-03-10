@@ -1,0 +1,30 @@
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: chunked-search                                                                                             │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 2                                                                                                            │
+│ Surfaces: 1                                                                                                          │
+│ Projections: 1                                                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+            LLM Configuration
+╭─────────────┬──────────────────────────╮
+│ Setting     │ Value                    │
+├─────────────┼──────────────────────────┤
+│ Provider    │ anthropic                │
+│ Model       │ claude-sonnet-4-20250514 │
+│ Temperature │ 0.3                      │
+│ Max Tokens  │ 1024                     │
+╰─────────────┴──────────────────────────╯
+
+chunked-search  claude-sonnet-4-20250514 (anthropic)
+├── articles  source:parse  <STATS>
+│   └── ← ./sources/articles (3 .md files)
+└── chunks  transform:Chunk  <STATS>
+    ├── ← articles
+    ├── ⇢ chunk-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   └── ← chunks
+    └── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
+        └── ← chunks
+
+<PLAN_SUMMARY>

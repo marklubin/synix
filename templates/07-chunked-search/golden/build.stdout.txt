@@ -1,0 +1,21 @@
+╭──────────────────────────────────────────────────── Synix Build ─────────────────────────────────────────────────────╮
+│ Pipeline: chunked-search                                                                                             │
+│ Source: ./sources                                                                                                    │
+│ Build: ./build                                                                                                       │
+│ Layers: 2                                                                                                            │
+│ Surfaces: 1                                                                                                          │
+│ Concurrency: 5 threads                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  ✓ articles (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ chunks (level 1)  <BUILD_COUNTS>  <TIME>
+    └─ chunk-search  <MATERIALIZED>
+                      Build Summary
+╭────────────┬──────────────┬───────┬────────┬──────────╮
+│ Layer      │    Level     │ Built │ Cached │  Skipped │
+├────────────┼──────────────┼───────┼────────┼──────────┤
+│ articles   │  <N>  │  <N>  │  <N>  │  <N>  │
+│ chunks     │  <N>  │  <N>  │  <N>  │  <N>  │
+│   → search │ synix_search │       │        │ complete │
+╰────────────┴──────────────┴───────┴────────┴──────────╯
+
+<BUILD_TOTAL>

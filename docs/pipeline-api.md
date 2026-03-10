@@ -39,13 +39,13 @@ pipeline.add(
 
 ## Generic Transforms (`synix.transforms`)
 
-Most LLM pipeline steps follow one of four generic patterns. The `synix.transforms` module provides those platform transforms directly — just pass a prompt string and parameters instead of writing a custom class.
+The `synix.transforms` module provides generic transform shapes — pass parameters instead of writing a custom class.
 
 ```python
-from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis
+from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Chunk
 ```
 
-All generic transforms share these behaviors:
+LLM-backed transforms share these behaviors:
 - **Prompt templates** with placeholders — changing the prompt automatically invalidates the cache
 - **Deterministic ordering** — multi-input transforms sort by `artifact_id` before building prompts
 - **LLM calls** via the standard pipeline `llm_config`
@@ -181,6 +181,51 @@ progressive = FoldSynthesis(
 
 FoldSynthesis always runs synchronously (never batched) because each step depends on the previous.
 
+### Chunk (1:N)
+
+Split each input artifact into multiple smaller chunks. No LLM call — pure text processing. Each chunk tracks provenance to the source artifact and carries metadata for downstream grouping.
+
+```python
+# Fixed-size character chunking
+chunks = Chunk(
+    "doc-chunks",
+    depends_on=[documents],
+    chunk_size=1000,
+    chunk_overlap=200,
+    artifact_type="chunk",
+)
+
+# Separator-based splitting
+chunks = Chunk(
+    "doc-chunks",
+    depends_on=[documents],
+    separator="\n\n",
+    artifact_type="chunk",
+)
+
+# Custom callable
+chunks = Chunk(
+    "doc-chunks",
+    depends_on=[documents],
+    chunker=lambda text: text.split("\n## "),
+    artifact_type="chunk",
+)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `chunker` | `Callable[[str], list[str]] \| None` | `None` | Custom chunking function (highest priority) |
+| `chunk_size` | `int` | `1000` | Max characters per chunk (fixed-size strategy) |
+| `chunk_overlap` | `int` | `200` | Overlap between consecutive chunks (fixed-size strategy) |
+| `separator` | `str \| None` | `None` | Split on this delimiter (separator strategy) |
+| `label_fn` | `Callable[[Artifact, int, int], str] \| None` | `None` | Custom label function (receives artifact, chunk index, total) |
+| `metadata_fn` | `Callable[[Artifact, int, int], dict] \| None` | `None` | Custom metadata (receives artifact, chunk index, total) |
+| `artifact_type` | `str` | `"chunk"` | Output artifact type |
+
+**Strategy priority:** `chunker` > `separator` > `chunk_size`/`chunk_overlap`.
+
+**Output metadata:** Each chunk carries `source_label` (original artifact label), `chunk_index`, `chunk_total`, plus all metadata from the input artifact. This enables downstream `GroupSynthesis(group_by="source_label", ...)` to re-group chunks by source.
+
 ### Choosing a Transform
 
 | If your step... | Use |
@@ -189,6 +234,7 @@ FoldSynthesis always runs synchronously (never batched) because each step depend
 | Groups inputs by a key, one output per group | `GroupSynthesis` |
 | Combines all inputs into one output | `ReduceSynthesis` |
 | Needs to accumulate through inputs in order | `FoldSynthesis` |
+| Splits each input into smaller pieces (no LLM) | `Chunk` |
 
 ## Bundled Ext Transforms (`synix.ext`)
 
