@@ -120,6 +120,40 @@ from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, Fold
 
 See [Pipeline API](docs/pipeline-api.md) for the full reference.
 
+## Beyond agent memory
+
+The pipeline primitives are general-purpose. Anything that flows through sources → transforms → artifacts works — not just text, not just agents.
+
+**Photo library → searchable life timeline**
+```
+photos + EXIF metadata
+  → MapSynthesis: vision model captions each image
+  → GroupSynthesis: cluster by time + location into events ("Japan trip", "birthday party")
+  → ReduceSynthesis: compress events into a life timeline
+  → SearchSurface: "show me beach photos from last summer"
+```
+Every search result traces back to the original photo. Swap your captioning model → only captions rebuild. Add 50 new photos → only those 50 process.
+
+**Codebase → architectural memory**
+```
+git log + PRs + design docs
+  → MapSynthesis: summarize each PR/commit into a decision record
+  → GroupSynthesis: cluster by module or system area
+  → ReduceSynthesis: synthesize into architectural knowledge base
+  → SearchSurface: "why did we switch from REST to gRPC?"
+```
+
+**IoT sensors → operational knowledge**
+```
+sensor readings + maintenance logs + incident reports
+  → MapSynthesis: extract events from each data stream
+  → GroupSynthesis: correlate across sensor clusters
+  → FoldSynthesis: build evolving equipment health profiles
+  → SearchSurface: "what happened before the last compressor failure?"
+```
+
+The pattern is always the same: raw data → structured knowledge → searchable artifacts, with incremental rebuilds and full provenance. The agent memory template is where most people start, but the architecture doesn't care what your sources are.
+
 ## Where Synix fits
 
 |                          | Mem0    | Letta   | Graphiti | LangMem | **Synix**       |

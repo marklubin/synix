@@ -76,7 +76,7 @@ Sources → Transforms → Artifacts → Projections
    └── raw source files       └── immutable, content-addressed
 ```
 
-**Sources** read raw files — conversation exports, documents, reports, markdown, plain text. Any file your pipeline knows how to process.
+**Sources** read raw files — conversation exports, documents, reports, photos, sensor data, git logs, API responses, anything your pipeline knows how to process. The architecture doesn't assume text.
 
 **Transforms** process artifacts through LLM calls. Five patterns: 1:1 (Map), N:M (Group), N:1 (Reduce), sequential N:1 (Fold), and 1:N (Chunk, no LLM).
 
