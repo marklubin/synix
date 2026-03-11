@@ -4,10 +4,10 @@ How to use Synix memory from your agent.
 
 ## The model
 
-Synix runs offline — it processes conversations into structured memory artifacts. Your agent reads the output at inference time. They're decoupled.
+Synix runs offline — it processes sources into structured memory artifacts. Your agent reads the output at inference time. They're decoupled.
 
 ```
-conversations ──→ synix build ──→ artifacts (immutable)
+sources ──→ synix build ──→ artifacts (immutable)
                                        │
                               synix release
                                        │
@@ -17,7 +17,7 @@ conversations ──→ synix build ──→ artifacts (immutable)
                          your agent reads at runtime
 ```
 
-You rebuild when new conversations arrive. Your agent always reads the latest release. They don't need to be running at the same time.
+You rebuild when new sources arrive. Your agent always reads the latest release. They don't need to be running at the same time.
 
 ## Option 1: Python SDK
 
@@ -95,9 +95,9 @@ import synix
 project = synix.open_project("./my-project")
 project.load_pipeline()
 
-# Add a new conversation
+# Add a new source
 src = project.source("transcripts")
-src.add_text(conversation_text, label="session-2026-03-10")
+src.add_text(new_content, label="session-2026-03-10")
 
 # Rebuild (incremental — only new artifacts process)
 result = project.build()
@@ -154,8 +154,8 @@ For agents running in Claude Desktop, Cursor, or any MCP-compatible host. Synix 
 | `list_artifacts` | List all artifacts, optionally filtered by layer |
 | `list_layers` | List layers with artifact counts |
 | `get_flat_file` | Read a flat file projection (e.g., context.md) |
-| `source_add_text` | Add a conversation as text |
-| `source_add_file` | Add a conversation from a file path |
+| `source_add_text` | Add a source as text |
+| `source_add_file` | Add a source from a file path |
 | `source_list` | List source files |
 | `list_releases` | List all named releases |
 
@@ -166,7 +166,7 @@ A typical agent session:
 1. `open_project` → connect to the memory project
 2. `search` → retrieve relevant memory for the current query
 3. Use results in the response
-4. `source_add_text` → save the current conversation as a new source
+4. `source_add_text` → save the current session as a new source
 5. `build` → rebuild memory (incremental)
 6. `release` → update the search index
 
@@ -224,14 +224,14 @@ with open(".synix/releases/local/context.md") as f:
 
 ## When to rebuild
 
-Rebuild when new conversations arrive. Synix handles the rest:
+Rebuild when new sources arrive. Synix handles the rest:
 
 - **New sources:** Only new episodes process. Existing artifacts stay cached.
 - **Changed prompts:** Only downstream artifacts rebuild.
 - **Changed model config:** Affected layers rebuild (fingerprint includes model settings).
 - **Nothing changed:** Build completes instantly (everything cached).
 
-Automate rebuilds with cron, a file watcher, or trigger from your application when new conversations are saved.
+Automate rebuilds with cron, a file watcher, or trigger from your application when new data arrives.
 
 ```bash
 # Example cron: rebuild every hour

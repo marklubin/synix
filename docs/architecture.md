@@ -4,7 +4,7 @@ Programmable memory for AI agents — but why "programmable"? Because not all me
 
 ## The insight
 
-Every other agent memory system gives you one flat namespace. A fact learned 30 seconds ago and a preference built over 50 conversations get the same storage, the same retrieval rules, the same lifecycle. That's like running an operating system with no memory hierarchy — everything in one giant heap.
+Every other agent memory system gives you one flat namespace. A fact learned 30 seconds ago and a preference built over 50 sessions get the same storage, the same retrieval rules, the same lifecycle. That's like running an operating system with no memory hierarchy — everything in one giant heap.
 
 Real memory has tiers. Different kinds of information move at different speeds, change at different rates, and need different management. A CPU cache, L1/L2/L3, and main memory aren't just "faster and slower" — they have different physics. Agent memory is the same.
 
@@ -58,7 +58,7 @@ Four flows connect the tiers:
 | **Tier 2** | **Production** | **The current Synix pipeline.** Sources → transforms → artifacts → search. Incremental rebuilds, provenance tracking, fingerprint-based caching. |
 | Tier 3 | Designed | Identity formation from episodic compression specified but not built. |
 
-The Synix you use today is the **Tier 2 experience layer** — a programmable pipeline that processes conversations into structured memory with full provenance and incremental rebuilds.
+The Synix you use today is the **Tier 2 experience layer** — a programmable pipeline that processes raw sources (conversations, documents, reports, any data) into structured memory with full provenance and incremental rebuilds.
 
 ## The current system: pipelines
 
@@ -73,14 +73,14 @@ Sources → Transforms → Artifacts → Projections
    │     FoldSynthesis       │
    │     Chunk               │
    │                         │
-   └── raw conversations     └── immutable, content-addressed
+   └── raw source files       └── immutable, content-addressed
 ```
 
-**Sources** read raw files (ChatGPT exports, Claude exports, plain text, markdown).
+**Sources** read raw files — conversation exports, documents, reports, markdown, plain text. Any file your pipeline knows how to process.
 
 **Transforms** process artifacts through LLM calls. Five patterns: 1:1 (Map), N:M (Group), N:1 (Reduce), sequential N:1 (Fold), and 1:N (Chunk, no LLM).
 
-**Artifacts** are immutable and content-addressed. Each one records its input IDs (provenance), prompt ID, and model config. You can trace any artifact back to the source conversations that produced it.
+**Artifacts** are immutable and content-addressed. Each one records its input IDs (provenance), prompt ID, and model config. You can trace any artifact back to the sources that produced it.
 
 **Projections** materialize artifacts into queryable outputs at release time — a SQLite FTS5 search index (`search.db`), a flat markdown file for agent context (`context.md`), or both.
 
@@ -93,11 +93,11 @@ Every transform has a fingerprint: a hash of its source code, prompt template, c
 3. Matches → cached (skip). Mismatches → rebuild.
 4. Downstream transforms that depend on rebuilt artifacts are also invalidated.
 
-Change an episode summarization prompt → episodes rebuild → monthly rollups rebuild → core memory rebuilds. But sources stay cached. Add new conversations → only new episodes process; existing ones stay cached.
+Change an episode summarization prompt → episodes rebuild → monthly rollups rebuild → core memory rebuilds. But sources stay cached. Add new source files → only new episodes process; existing ones stay cached.
 
 ### Provenance
 
-Every artifact records its `input_ids` — the artifact IDs it was built from. Walking backwards through these chains takes you from any output all the way to the raw source conversations.
+Every artifact records its `input_ids` — the artifact IDs it was built from. Walking backwards through these chains takes you from any output all the way to the raw source data.
 
 ```bash
 uvx synix lineage core-memory-2026-03

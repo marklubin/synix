@@ -19,20 +19,20 @@
 uvx synix init my-project
 cd my-project
 cp .env.example .env              # add your API key
-# drop session transcripts into ./sources/
+# add your source data to ./sources/
 uvx synix build
 uvx synix release HEAD --to local
 uvx synix search "your query" --release local
 ```
 
-That's it. You get episode summaries, monthly rollups, a core memory document, and full-text search — with every insight traced back to the conversation that produced it.
+That's it. You get episode summaries, monthly rollups, a core memory document, and full-text search — with every insight traced back to its source.
 
 ## What just happened
 
-Synix processed your conversations through a **pipeline** — a directed graph of transforms you define in Python:
+Synix processed your sources through a **pipeline** — a directed graph of transforms you define in Python:
 
-1. **Sources** — raw conversations were parsed from `./sources/`
-2. **Episodes** — each conversation got an LLM-generated summary (1:1)
+1. **Sources** — raw data was parsed from `./sources/`
+2. **Episodes** — each source got an LLM-generated summary (1:1)
 3. **Monthly rollups** — episodes were grouped by month and synthesized (N:M)
 4. **Core memory** — all rollups were compressed into a single document (N:1)
 5. **Search index** — everything was indexed for full-text search
@@ -41,11 +41,11 @@ The template gave you a working pipeline. When you need to change it — differe
 
 ## The problem Synix solves
 
-Every agent memory tool — Mem0, Letta, Zep, LangMem — gives you one flat bucket. Same storage, same rules, same lifecycle for everything your agent knows. A fact learned 30 seconds ago and a preference built over 50 conversations get the same treatment.
+Every agent memory tool — Mem0, Letta, Zep, LangMem — gives you one flat bucket. Same storage, same rules, same lifecycle for everything your agent knows. A fact learned 30 seconds ago and a preference built over 50 sessions get the same treatment.
 
 When memory breaks, it breaks silently — contradictions, stale context, hallucinated recall. And when you want to change how memory works, you're looking at a migration or starting over.
 
-Synix lets you **program** how memory works — define the layers, write the prompts, control the lifecycle. Change your memory architecture and only affected layers rebuild. Trace any output back to the source conversation that produced it.
+Synix lets you **program** how memory works — define the layers, write the prompts, control the lifecycle. Change your memory architecture and only affected layers rebuild. Trace any output back to the source that produced it.
 
 ## How your agent uses the output
 
@@ -102,7 +102,7 @@ pipeline.add(SynixSearch("search", surface=memory_search))
 pipeline.add(FlatFile("context-doc", sources=[core]))
 ```
 
-Change a prompt → only downstream artifacts rebuild. Add new conversations → only new episodes process. Swap `MonthlyRollup` for `TopicalRollup` → transcripts and episodes stay cached. No migrations.
+Change a prompt → only downstream artifacts rebuild. Add new sources → only new episodes process. Swap `MonthlyRollup` for `TopicalRollup` → source parsing and episodes stay cached. No migrations.
 
 For custom pipelines beyond the built-in transforms, use the generic transform shapes:
 
@@ -131,7 +131,7 @@ See [Pipeline API](docs/pipeline-api.md) for the full reference.
 | **Memory lifecycle**     | —       | —       | —        | —       | Per-layer rules |
 | **Schema**               | Fixed   | Fixed   | Fixed    | Fixed   | You define it   |
 
-Synix is not a memory store. Mem0/Letta/Graphiti store and retrieve memories. Synix is the system that **produces** structured memory from raw conversations — with full provenance, incremental rebuilds, and an architecture you control.
+Synix is not a memory store. Mem0/Letta/Graphiti store and retrieve memories. Synix is the system that **produces** structured memory from raw sources — conversations, documents, reports, transactions, anything — with full provenance, incremental rebuilds, and an architecture you control.
 
 **When Synix is the right choice:** You want to control how memory is structured, not just store things. You need provenance. You expect your memory architecture to evolve. You want different layers with different rules.
 
