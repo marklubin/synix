@@ -34,8 +34,8 @@ def _available_templates() -> list[str]:
 @click.option(
     "--template",
     "-t",
-    default="03-team-report",
-    help="Template to use (default: 03-team-report). Use --list to see available templates.",
+    default="08-agent-memory",
+    help="Template to use (default: 08-agent-memory). Use --list to see available templates.",
 )
 @click.option(
     "--list",
@@ -56,7 +56,7 @@ def init(project_name: str, template: str, list_templates: bool):
             sys.exit(1)
         console.print("[bold]Available templates:[/bold]\n")
         for name in templates:
-            marker = " [dim](default)[/dim]" if name == "03-team-report" else ""
+            marker = " [dim](default)[/dim]" if name == "08-agent-memory" else ""
             console.print(f"  {name}{marker}")
         return
 
@@ -89,7 +89,7 @@ def init(project_name: str, template: str, list_templates: bool):
         f"\n"
         f"  cd {project_name}\n"
         f"  cp .env.example .env          [dim]# add your API key[/dim]\n"
-        f"  uvx synix build pipeline.py\n"
+        f"  uvx synix build\n"
         f"  uvx synix release HEAD --to local\n"
-        f"  uvx synix search 'hiking' --release local"
+        f"  uvx synix search 'your query' --release local"
     )

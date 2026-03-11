@@ -11,124 +11,100 @@
  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝
 </pre>
 
-<h3 align="center">A build system for agent memory.</h3>
+<h3 align="center">Programmable memory for AI agents.</h3>
 
-<p align="center">
-  <video src="./templates/02-tv-returns/tv_returns.mp4" width="720" controls></video>
-</p>
-
-## The Problem
-
-Agent memory hasn't converged. Mem0, Letta, Zep, LangMem — each bakes in a different architecture because the right one depends on your domain and changes as your agent evolves. Most systems force you to commit to a schema early. Changing your approach means migrations or starting over.
-
-## What Synix Does
-
-Conversations are sources. Prompts are build rules. Summaries and world models are artifacts. Declare your memory architecture in Python, build it, then change it — only affected layers rebuild. Trace any artifact back through the dependency graph to its source conversation.
-
-```bash
-uvx synix build pipeline.py
-uvx synix release HEAD --to local
-uvx synix search "return policy" --release local
-```
-
-## Quick Start
+## Get started in 60 seconds
 
 ```bash
 uvx synix init my-project
 cd my-project
+cp .env.example .env              # add your API key
+# drop session transcripts into ./sources/
+uvx synix build
+uvx synix release HEAD --to local
+uvx synix search "your query" --release local
 ```
 
-Add your API key (see `pipeline.py` for provider config), then build and release:
+That's it. You get episode summaries, monthly rollups, a core memory document, and full-text search — with every insight traced back to the conversation that produced it.
 
-```bash
-uvx synix build                   # produce immutable snapshot in .synix/
-uvx synix release HEAD --to local # materialize projections (search.db, context.md)
-```
+## What just happened
 
-Browse, search, and inspect:
+Synix processed your conversations through a **pipeline** — a directed graph of transforms you define in Python:
 
-```bash
-uvx synix list                    # all artifacts, grouped by layer
-uvx synix show final-report       # render an artifact
-uvx synix search "hiking" --release local  # search a released projection
-uvx synix runs list               # immutable build snapshots
-uvx synix releases list           # all named releases and their snapshots
-uvx synix validate                # run declared validators (experimental)
-```
+1. **Sources** — raw conversations were parsed from `./sources/`
+2. **Episodes** — each conversation got an LLM-generated summary (1:1)
+3. **Monthly rollups** — episodes were grouped by month and synthesized (N:M)
+4. **Core memory** — all rollups were compressed into a single document (N:1)
+5. **Search index** — everything was indexed for full-text search
 
-All build state lives under `.synix/` — content-addressed objects, snapshots, refs, and releases. There is no `build/` directory. `uvx synix clean` removes release targets and transient work state; it does not delete snapshot history.
+The template gave you a working pipeline. When you need to change it — different prompts, different grouping, different layers — you edit `pipeline.py`. Same tool, no migration.
 
-> **Note:** The `.synix` on-disk format may evolve before `v1.0`. Objects are schema-versioned, and future changes will preserve a compatibility path rather than silently reusing incompatible state.
+## The problem Synix solves
 
-## Defining a Pipeline
+Every agent memory tool — Mem0, Letta, Zep, LangMem — gives you one flat bucket. Same storage, same rules, same lifecycle for everything your agent knows. A fact learned 30 seconds ago and a preference built over 50 conversations get the same treatment.
 
-A pipeline is a Python file. Layers are real objects with dependencies expressed as object references.
+When memory breaks, it breaks silently — contradictions, stale context, hallucinated recall. And when you want to change how memory works, you're looking at a migration or starting over.
+
+Synix lets you **program** how memory works — define the layers, write the prompts, control the lifecycle. Change your memory architecture and only affected layers rebuild. Trace any output back to the source conversation that produced it.
+
+## How your agent uses the output
+
+After `synix release`, your agent queries memory at inference time:
 
 ```python
-# pipeline.py
-from synix import Pipeline, SearchSurface, Source, SynixSearch
-from synix.transforms import MapSynthesis, ReduceSynthesis
+import synix
 
-pipeline = Pipeline("my-pipeline")
+project = synix.open_project("./my-project")
+mem = project.release("local")
+
+# Search memory
+results = mem.search("return policy", limit=5)
+for r in results:
+    print(f"[{r.layer}] {r.label} ({r.score:.2f})")
+
+# Or load core memory as flat context
+context = mem.flat_file("context-doc")
+# → inject into your agent's system prompt
+```
+
+Synix runs offline. Your agent reads the output at runtime. They're decoupled — Synix doesn't need to be running while your agent serves requests.
+
+**Other integration options:** [MCP server](docs/mcp.md) for Claude/Cursor, [CLI](docs/integration.md#option-3-cli-from-automation) for automation, or [direct SQLite access](docs/integration.md#option-4-direct-file-access) to `search.db`. See the [Integration Guide](docs/integration.md).
+
+## Customize everything
+
+The template gave you a default pipeline. Open `pipeline.py` to see what's inside:
+
+```python
+from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
+from synix.ext import CoreSynthesis, EpisodeSummary, MonthlyRollup
+
+pipeline = Pipeline("agent-memory")
 pipeline.source_dir = "./sources"
 pipeline.llm_config = {
     "provider": "anthropic",
     "model": "claude-haiku-4-5-20251001",
-    "temperature": 0.3,
-    "max_tokens": 1024,
 }
 
-# Parse source files
-bios = Source("bios", dir="./sources/bios")
+transcripts = Source("transcripts")
+episodes = EpisodeSummary("episodes", depends_on=[transcripts])
+monthly = MonthlyRollup("monthly", depends_on=[episodes])
+core = CoreSynthesis("core", depends_on=[monthly])
 
-# 1:1 — apply a prompt to each input
-work_styles = MapSynthesis(
-    "work_styles",
-    depends_on=[bios],
-    prompt="Infer this person's work style in 2-3 sentences:\n\n{artifact}",
-    artifact_type="work_style",
-)
-
-# N:1 — combine all inputs into one output
-report = ReduceSynthesis(
-    "report",
-    depends_on=[work_styles],
-    prompt="Write a team analysis from these profiles:\n\n{artifacts}",
-    label="team-report",
-    artifact_type="report",
-)
-
-report_search = SearchSurface(
-    "report-search",
-    sources=[work_styles, report],
+memory_search = SearchSurface(
+    "memory-search",
+    sources=[episodes, monthly, core],
     modes=["fulltext"],
 )
 
-pipeline.add(bios, work_styles, report, report_search)
-pipeline.add(SynixSearch("search", surface=report_search))
+pipeline.add(transcripts, episodes, monthly, core, memory_search)
+pipeline.add(SynixSearch("search", surface=memory_search))
+pipeline.add(FlatFile("context-doc", sources=[core]))
 ```
 
-This is a complete, working pipeline. `uvx synix build pipeline.py` runs it.
+Change a prompt → only downstream artifacts rebuild. Add new conversations → only new episodes process. Swap `MonthlyRollup` for `TopicalRollup` → transcripts and episodes stay cached. No migrations.
 
-`SearchSurface` is the build-time search capability. `SynixSearch` is the canonical local search output. `SearchIndex` still works as a compatibility API, but new pipelines should use surfaces plus `SynixSearch`.
-
-Compatibility migration during `v0.x`:
-
-```python
-from synix import SearchIndex
-
-pipeline.add(SearchIndex("search", sources=[report], search=["fulltext"]))
-```
-
-Existing `SearchIndex` pipelines remain supported during the current `v0.x` migration window. New templates and docs use `SearchSurface + SynixSearch`, and any future deprecation will ship with an explicit migration note instead of a silent break.
-
-Projections are not materialized at build time. `synix build` records projection declarations in the manifest; `synix release HEAD --to <name>` materializes them into `.synix/releases/<name>/` (search.db, context.md). Search queries target a named release: `uvx synix search "query" --release local`.
-
-For the full pipeline API, built-in transforms, validators, and advanced patterns, see [docs/pipeline-api.md](docs/pipeline-api.md).
-
-## Platform Transforms (`synix.transforms`)
-
-The `synix.transforms` module provides generic transform shapes — no custom subclass needed for common flows.
+For custom pipelines beyond the built-in transforms, use the generic transform shapes:
 
 ```python
 from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, FoldSynthesis, Chunk
@@ -142,233 +118,91 @@ from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, Fold
 | `FoldSynthesis` | N:1 sequential | Accumulate through inputs one at a time |
 | `Chunk` | 1:N | Split each input into smaller pieces (no LLM) |
 
-LLM-backed transforms take a `prompt` string with placeholders like `{artifact}`, `{artifacts}`, `{group_key}`, `{accumulated}`. Changing the prompt automatically invalidates the cache. `Chunk` is pure text processing — configure with `chunk_size`, `separator`, or a custom `chunker` callable.
+See [Pipeline API](docs/pipeline-api.md) for the full reference.
 
-For full parameter reference and examples of each, see [docs/pipeline-api.md#generic-transforms-synixtransforms](docs/pipeline-api.md#generic-transforms-synixtransforms).
+## Where Synix fits
 
-When you need logic beyond prompt templating — filtering, conditional branching, multi-step chains — write a [custom Transform subclass](docs/pipeline-api.md#custom-transforms).
+|                          | Mem0    | Letta   | Graphiti | LangMem | **Synix**       |
+|--------------------------|---------|---------|----------|---------|-----------------|
+| **Approach**             | Memory API | Agent-managed blocks | Temporal knowledge graph | Taxonomy extraction | Programmable architecture |
+| **You define the rules** | No      | No      | No       | No      | Yes — in Python |
+| **Change architecture**  | Migration | Migration | Migration | Migration | Incremental rebuild |
+| **Provenance**           | —       | —       | —        | —       | Full chain to source |
+| **Memory lifecycle**     | —       | —       | —        | —       | Per-layer rules |
+| **Schema**               | Fixed   | Fixed   | Fixed    | Fixed   | You define it   |
 
-## Bundled Ext Transforms (`synix.ext`)
+Synix is not a memory store. Mem0/Letta/Graphiti store and retrieve memories. Synix is the system that **produces** structured memory from raw conversations — with full provenance, incremental rebuilds, and an architecture you control.
 
-Synix also ships a small set of opinionated memory-oriented transforms in `synix.ext`:
+**When Synix is the right choice:** You want to control how memory is structured, not just store things. You need provenance. You expect your memory architecture to evolve. You want different layers with different rules.
 
-| Class | What it does |
-|-------|-------------|
-| `EpisodeSummary` | 1 transcript → 1 episode summary |
-| `MonthlyRollup` | Group episodes by month, synthesize each |
-| `TopicalRollup` | Group episodes by user-defined topics |
-| `CoreSynthesis` | All rollups → single core memory document |
+**When something else is better:** You just need a key-value memory store (→ Mem0). You need a knowledge graph (→ Graphiti). You need real-time memory management during inference (→ not yet — planned).
 
-These are bundled convenience transforms, not the generic platform primitives.
+## Current status
 
-## Other Built-ins
+- **Stable:** Pipeline definition, build, release, search, provenance, incremental rebuilds, CLI, Python SDK
+- **Works but early:** Templates, MCP server for agent integration
+- **Experimental:** Validation/repair, batch builds (OpenAI Batch API), distributed builds (mesh)
+- **Not built yet:** Real-time runtime, agent-driven memory evolution, multi-tenancy
 
-Import from `synix.transforms`:
+Synix is a working tool used in production for personal and project memory pipelines. It is pre-1.0 — on-disk formats may evolve with a compatibility path. Solo-maintainer project.
 
-| Class | What it does |
-|-------|-------------|
-| `Merge` | Group artifacts by content similarity (Jaccard) |
+## Templates
+
+```bash
+uvx synix init --list    # see all templates
+```
+
+| Template | What it does | Best for |
+|----------|-------------|----------|
+| `08-agent-memory` | Session logs → episodes → rollups → core memory + search | **Agent memory across sessions (default)** |
+| `01-chatbot-export-synthesis` | Chat exports → episodes → rollups → core memory | Personal AI, journal apps |
+| `07-chunked-search` | Documents → chunks → search index | RAG, document Q&A |
+| `03-team-report` | Bios + briefs → analysis → searchable report | Team knowledge bases |
+| `02-tv-returns` | Customer calls → episodes → trends → report | Support analysis |
+| `04-sales-deal-room` | Deal docs → analysis → search | Sales intelligence |
 
 ## CLI Reference
 
 | Command | What it does |
 |---------|-------------|
-| `uvx synix init <name>` | Scaffold a new project with sources, pipeline, and README |
-| `uvx synix build` | Run the pipeline. Only rebuilds what changed. Produces immutable snapshot in `.synix/` |
-| `uvx synix plan` | Dry-run — show what would build without running transforms |
-| `uvx synix plan --explain-cache` | Plan with inline cache decision reasons |
-| `uvx synix release HEAD --to <name>` | Materialize projections from a snapshot to a named release target |
-| `uvx synix revert <ref> --to <name>` | Release an older snapshot to a release target |
-| `uvx synix releases list` | List all named releases with their snapshots |
-| `uvx synix releases show <name>` | Display release receipt details. `--json` for machine-readable |
-| `uvx synix refs list` | List all refs (build runs + releases) |
-| `uvx synix refs show <ref>` | Resolve a ref to snapshot details |
-| `uvx synix runs list` | List immutable build snapshots recorded under `.synix` |
-| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer. Reads from `.synix/` via SnapshotView |
-| `uvx synix show <id>` | Display an artifact. Resolves by label or ID prefix. `--raw` for JSON |
-| `uvx synix search <query>` | Search a release target. `--release <name>` to pick target, `--mode hybrid` for semantic |
-| `uvx synix validate` | *(Experimental)* Run validators against build artifacts |
-| `uvx synix fix` | *(Experimental)* LLM-assisted repair of violations |
-| `uvx synix lineage <id>` | Show the full provenance chain for an artifact. Reads from `.synix/` |
-| `uvx synix clean` | Remove release targets and transient work state from `.synix/` |
-| `uvx synix batch-build plan` | *(Experimental)* Dry-run showing which layers would batch vs sync |
-| `uvx synix batch-build run` | *(Experimental)* Submit a batch build via OpenAI Batch API. `--poll` to wait |
-| `uvx synix batch-build resume <id>` | *(Experimental)* Resume a previously submitted batch build |
-| `uvx synix batch-build list` | *(Experimental)* Show all batch build instances and their status |
-| `uvx synix batch-build status <id>` | *(Experimental)* Detailed status for a specific batch build. `--latest` for most recent |
-| `uvx 'synix[mesh]' mesh create` | *(Experimental)* Create a new mesh with config and token |
-| `uvx 'synix[mesh]' mesh provision` | *(Experimental)* Join this machine to a mesh as server or client |
-| `uvx 'synix[mesh]' mesh status` | *(Experimental)* Show mesh health, members, and last build |
-| `uvx 'synix[mesh]' mesh list` | *(Experimental)* List all meshes on this machine |
+| `uvx synix init <name>` | Scaffold a new project from a template |
+| `uvx synix build` | Run the pipeline. Only rebuilds what changed. |
+| `uvx synix plan` | Dry-run — show what would build. `--explain-cache` for details |
+| `uvx synix release HEAD --to <name>` | Materialize search index + flat files from a build |
+| `uvx synix search <query>` | Search a release. `--release <name>`, `--mode hybrid`, `--trace` |
+| `uvx synix list [layer]` | List all artifacts, optionally filtered by layer |
+| `uvx synix show <id>` | Display an artifact. `--raw` for JSON |
+| `uvx synix lineage <id>` | Full provenance chain for an artifact |
+| `uvx synix releases list` | List all named releases |
+| `uvx synix runs list` | List immutable build snapshots |
+| `uvx synix clean` | Remove release targets and work state |
+| `uvx synix validate` | *(Experimental)* Run validators |
+| `uvx synix batch-build run` | *(Experimental)* Batch build via OpenAI Batch API |
+| `uvx 'synix[mesh]' mesh create` | *(Experimental)* Distributed builds via Tailscale |
 
-## Batch Build (Experimental)
+## Architecture direction
 
-> **Warning:** Batch build is experimental. Commands, state formats, and behavior may change in future releases.
+Synix is designed around the idea that different kinds of memory need different management — four tiers with distinct physics, from execution context (milliseconds) to identity (permanent). Today, Synix manages the experience tier via programmable pipelines. The architecture is designed to expand across all four tiers — and eventually, agents will program their own memory.
 
-The OpenAI Batch API processes LLM requests asynchronously at **50% cost** with a 24-hour SLA. Synix wraps this into `batch-build` — submit your pipeline, disconnect, come back when it's done.
-
-### Quick Example
-
-```python
-# pipeline.py — mixed-provider pipeline
-pipeline.llm_config = {
-    "provider": "openai",           # OpenAI layers → batch mode (automatic)
-    "model": "gpt-4o",
-}
-
-episodes = EpisodeSummary("episodes", depends_on=[transcripts])
-monthly = MonthlyRollup("monthly", depends_on=[episodes])
-
-# Force this layer to run synchronously via Anthropic
-core = CoreSynthesis("core", depends_on=[monthly], batch=False)
-core.config = {"llm_config": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}}
-```
-
-```bash
-# Submit and wait for completion
-uvx synix batch-build run pipeline.py --poll
-```
-
-### Poll vs Resume
-
-**Poll workflow** — submit and wait in a single session:
-
-```bash
-uvx synix batch-build run pipeline.py --poll --poll-interval 120
-```
-
-**Resume workflow** — submit, disconnect, come back later:
-
-```bash
-# Submit (exits after first batch is submitted)
-uvx synix batch-build run pipeline.py
-#   Build ID: batch-a1b2c3d4
-#   Resume with: synix batch-build resume batch-a1b2c3d4 pipeline.py --poll
-
-# Check on it later
-uvx synix batch-build status --latest
-
-# Resume and poll to completion
-uvx synix batch-build resume batch-a1b2c3d4 pipeline.py --poll
-```
-
-### The `batch` Parameter
-
-Each transform accepts an optional `batch` parameter controlling whether it uses the Batch API:
-
-| Value | Behavior |
-|-------|----------|
-| `None` (default) | Auto-detect: batch if the layer's provider is native OpenAI, sync otherwise. |
-| `True` | Force batch mode. Raises an error if the provider is not native OpenAI. |
-| `False` | Force synchronous execution, even if the provider supports batch. |
-
-```python
-episodes = EpisodeSummary("episodes", depends_on=[transcripts])              # auto
-monthly = MonthlyRollup("monthly", depends_on=[episodes], batch=True)        # force batch
-core = CoreSynthesis("core", depends_on=[monthly], batch=False)              # force sync
-```
-
-### Provider Restrictions
-
-Batch mode **only works with native OpenAI** (`provider="openai"` with no custom `base_url`). Transforms using Anthropic, DeepSeek, or OpenAI-compatible endpoints via `base_url` always run synchronously. Setting `batch=True` on a non-OpenAI layer is a hard error.
-
-### Transform Requirements
-
-Transforms used in batch builds must be **stateless** — their `execute()` method must be idempotent and produce deterministic prompts from the same inputs. All built-in transforms (`EpisodeSummary`, `MonthlyRollup`, `TopicalRollup`, `CoreSynthesis`) meet this requirement.
-
-See [docs/batch-build.md](docs/batch-build.md) for the full specification including state management, error handling, and the request collection protocol.
-
-## Mesh — Distributed Builds (Experimental)
-
-> **Warning:** Mesh is experimental. Commands, configuration, and behavior may change in future releases.
-
-Synix Mesh distributes pipeline builds across machines over a private network (Tailscale). A central server receives source files from clients, runs builds, and distributes artifact bundles back. Clients automatically watch local directories, submit new files, and pull results.
-
-```bash
-# Mesh needs the [mesh] extra for its dependencies
-uvx 'synix[mesh]' mesh create --name my-mesh --pipeline ./pipeline.py
-uvx 'synix[mesh]' mesh provision --name my-mesh --role server
-uvx 'synix[mesh]' mesh provision --name my-mesh --role client --server server-host:7433
-
-# Check status
-uvx 'synix[mesh]' mesh status --name my-mesh
-```
-
-All mesh state persists in `~/.synix-mesh/` on disk. Features: debounced build scheduling, ETag-based artifact distribution, shared-token auth, automatic leader election with term-based fencing, deploy hooks, webhook notifications.
-
-See [docs/mesh.md](docs/mesh.md) for the full guide — configuration, server API, failover protocol, security model, and data layout.
-
-## MCP Server — Agent Integration (Experimental)
-
-> **Warning:** MCP support is experimental. Tool names, arguments, and response shapes may change in future releases.
-
-Synix exposes its SDK as an [MCP](https://modelcontextprotocol.io) server, so AI agents can manage pipelines, build memory, and search — all via structured tool calls over stdin/stdout.
-
-```bash
-# Start directly
-uvx --from 'synix[mcp]' python -m synix.mcp
-
-# Or configure in your MCP client (Claude Desktop, etc.)
-```
-
-```json
-{
-    "mcpServers": {
-        "synix": {
-            "command": "uvx",
-            "args": ["--from", "synix[mcp]", "python", "-m", "synix.mcp"],
-            "env": {"SYNIX_PROJECT": "/path/to/project"}
-        }
-    }
-}
-```
-
-20 tools covering the full lifecycle: `init_project`, `open_project`, `load_pipeline`, `build`, `release`, `search`, `source_add_text`, `source_add_file`, `get_artifact`, `lineage`, and more.
-
-See [docs/mcp.md](docs/mcp.md) for the full tool reference and agent workflow examples.
-
-## Key Capabilities
-
-**Incremental rebuilds** — Change a prompt or add new sources. Only downstream artifacts reprocess.
-
-**Full provenance** — Every artifact chains back to the source conversations that produced it. `uvx synix lineage <id>` shows the full tree.
-
-**Fingerprint-based caching** — Build fingerprints capture inputs, prompts, model config, and transform source code. Change any component and only affected artifacts rebuild. See [docs/cache-semantics.md](docs/cache-semantics.md).
-
-**Altitude-aware search** — Query across episode summaries, rollups, or core memory via named release targets. Drill into provenance from any result.
-
-**Architecture evolution** — Swap monthly rollups for topic-based clustering. Transcripts and episodes stay cached. No migration scripts.
-
-## Where Synix Fits
-
-| | Mem0 | Letta | Zep | LangMem | **Synix** |
-|---|---|---|---|---|---|
-| **Approach** | API-first memory store | Agent-managed memory | Temporal knowledge graph | Taxonomy-driven memory | Build system with pipelines |
-| **Incremental rebuilds** | — | — | — | — | Yes |
-| **Provenance tracking** | — | — | — | — | Full chain to source |
-| **Architecture changes** | Migration | Migration | Migration | Migration | Rebuild |
-| **Schema** | Fixed | Fixed | Fixed | Fixed | You define it |
-
-Synix is not a memory store. It's the build system that produces one.
+See [docs/architecture.md](docs/architecture.md) for the full picture.
 
 ## Learn More
 
 | Doc | Contents |
 |-----|----------|
-| [Pipeline API](docs/pipeline-api.md) | Full Python API — ext transforms, built-in transforms, projections, validators, custom transforms |
-| [Projection Release v2](docs/projection-release-v2-rfc.md) | Build/release separation, `.synix/` as single source of truth, adapter contract, release receipts |
-| [Search Surface RFC](docs/search-surface-rfc.md) | Build-time search capabilities and search surface declarations |
-| [Entity Model](docs/entity-model.md) | Artifact identity, storage format, cache logic |
-| [Cache Semantics](docs/cache-semantics.md) | Rebuild trigger matrix, fingerprint scheme |
-| [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API for 50% cost reduction |
-| [Mesh](docs/mesh.md) | *(Experimental)* Distributed builds across machines via Tailscale |
-| [Python SDK](docs/sdk.md) | Programmatic access — init, build, release, search from Python |
-| [MCP Server](docs/mcp.md) | Agent integration — 20 MCP tools, client configuration, workflows |
-| [CLI UX](docs/cli-ux.md) | Output formatting, color scheme |
+| [Getting Started](docs/getting-started.md) | Build your first pipeline in 5 minutes |
+| [Architecture](docs/architecture.md) | The four-tier memory model and where Synix fits |
+| [Integration Guide](docs/integration.md) | How your agent uses Synix output — SDK, MCP, CLI, direct access |
+| [Pipeline API](docs/pipeline-api.md) | Full Python API — transforms, projections, validators, custom transforms |
+| [Python SDK](docs/sdk.md) | Programmatic access — init, build, release, search |
+| [MCP Server](docs/mcp.md) | Agent integration — 20 MCP tools, client configuration |
+| [Cache Semantics](docs/cache-semantics.md) | Fingerprint scheme, rebuild triggers |
+| [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API — 50% cost reduction |
+| [Mesh](docs/mesh.md) | *(Experimental)* Distributed builds across machines |
 
 ## Links
 
 - [synix.dev](https://synix.dev)
 - [GitHub](https://github.com/marklubin/synix)
-- [Issue tracker](https://github.com/marklubin/synix/issues) — known limitations and roadmap
+- [Issue tracker](https://github.com/marklubin/synix/issues)
 - MIT License

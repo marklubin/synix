@@ -1,6 +1,8 @@
 # Synix SDK
 
-Programmatic access to synix — "boto3 for synix". Build pipelines, manage sources, release, search, and inspect memory programmatically without shelling out to the CLI.
+Programmatic access to synix — build pipelines, manage sources, release, search, and inspect memory programmatically without shelling out to the CLI.
+
+> For a quick overview of all integration options (SDK, MCP, CLI, direct file access), see the [Integration Guide](integration.md).
 
 ## Quick Start
 

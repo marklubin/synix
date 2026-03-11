@@ -2,6 +2,8 @@
 
 Pipelines are defined in Python. Layers are real objects — `Source` for inputs, transform classes for LLM steps, `SearchSurface` for build-time retrieval, and `SynixSearch` / `FlatFile` for outputs. Dependencies are expressed as object references, not strings.
 
+> **New to Synix?** Start with the [Getting Started](getting-started.md) tutorial — build a working pipeline in 5 minutes. This page is the full API reference.
+
 ```python
 # pipeline.py
 from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
