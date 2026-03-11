@@ -41,11 +41,11 @@ The template gave you a working pipeline. When you need to change it — differe
 
 ## The problem Synix solves
 
-Every agent memory tool — Mem0, Letta, Zep, LangMem — gives you one flat bucket. Same storage, same rules, same lifecycle for everything your agent knows. A fact learned 30 seconds ago and a preference built over 50 sessions get the same treatment.
+Memory is harder than it looks. You won't get it right the first time — nobody does. The question is what happens when you need to change it.
 
-When memory breaks, it breaks silently — contradictions, stale context, hallucinated recall. And when you want to change how memory works, you're looking at a migration or starting over.
+Every agent memory tool — Mem0, Letta, Zep, LangMem — gives you one flat bucket. Same storage, same rules, same lifecycle for everything your agent knows. When memory breaks, it breaks silently — contradictions, stale context, hallucinated recall. And when you realize your memory architecture is wrong, you're looking at a migration or starting over.
 
-Synix lets you **program** how memory works — define the layers, write the prompts, control the lifecycle. Change your memory architecture and only affected layers rebuild. Trace any output back to the source that produced it.
+Synix lets you **program** how memory works — define the layers, write the prompts, control the lifecycle. Change your memory architecture and only affected layers rebuild. Trace any output back to the source that produced it. Your memory system grows with your needs — start simple, course-correct as you learn what works, and never pay for the wrong first guess.
 
 ## How your agent uses the output
 
@@ -103,6 +103,8 @@ pipeline.add(FlatFile("context-doc", sources=[core]))
 ```
 
 Change a prompt → only downstream artifacts rebuild. Add new sources → only new episodes process. Swap `MonthlyRollup` for `TopicalRollup` → source parsing and episodes stay cached. No migrations.
+
+This means you can A/B test your memory architecture. Try topic-based rollups instead of monthly, compare the outputs, keep what works. Every experiment is just a rebuild — not a rewrite.
 
 For custom pipelines beyond the built-in transforms, use the generic transform shapes:
 
