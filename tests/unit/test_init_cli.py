@@ -39,12 +39,8 @@ def test_init_creates_project(runner, tmp_path, monkeypatch):
     assert project.is_dir()
     assert (project / "pipeline.py").is_file()
     assert (project / "README.md").is_file()
-    assert (project / "sources" / "bios").is_dir()
-    assert (project / "sources" / "bios" / "alice.md").is_file()
-    assert (project / "sources" / "bios" / "bob.md").is_file()
-    assert (project / "sources" / "bios" / "carol.md").is_file()
-    assert (project / "sources" / "brief").is_dir()
-    assert (project / "sources" / "brief" / "project_brief.md").is_file()
+    assert (project / "sources").is_dir()
+    assert (project / "sources" / "session-example.md").is_file()
 
 
 def test_init_source_content(runner, tmp_path, monkeypatch):
@@ -52,18 +48,9 @@ def test_init_source_content(runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     runner.invoke(main, ["init", "test-proj"])
 
-    alice = (tmp_path / "test-proj" / "sources" / "bios" / "alice.md").read_text()
-    assert "Alice" in alice
-    assert "hiking" in alice.lower()
-
-    bob = (tmp_path / "test-proj" / "sources" / "bios" / "bob.md").read_text()
-    assert "Bob" in bob
-
-    carol = (tmp_path / "test-proj" / "sources" / "bios" / "carol.md").read_text()
-    assert "Carol" in carol
-
-    brief = (tmp_path / "test-proj" / "sources" / "brief" / "project_brief.md").read_text()
-    assert "dashboard" in brief.lower()
+    session = (tmp_path / "test-proj" / "sources" / "session-example.md").read_text()
+    assert "Session" in session
+    assert "User:" in session or "**User:**" in session
 
 
 def test_init_env_example(runner, tmp_path, monkeypatch):
@@ -91,7 +78,6 @@ def test_init_readme_content(runner, tmp_path, monkeypatch):
     runner.invoke(main, ["init", "proj"])
     readme = (tmp_path / "proj" / "README.md").read_text()
     assert "synix build" in readme
-    assert "synix validate" in readme
     assert "synix search" in readme
 
 
@@ -103,15 +89,13 @@ def test_init_pipeline_loadable(runner, tmp_path, monkeypatch):
     from synix.build.pipeline import load_pipeline
 
     pipeline = load_pipeline(str(tmp_path / "load-test" / "pipeline.py"))
-    assert pipeline.name == "my-first-pipeline"
-    assert len(pipeline.layers) == 5
+    assert pipeline.name == "agent-memory"
     layer_names = [l.name for l in pipeline.layers]
-    assert "bios" in layer_names
-    assert "project_brief" in layer_names
-    assert "work_styles" in layer_names
-    assert "team_dynamics" in layer_names
-    assert "final_report" in layer_names
-    assert len(pipeline.projections) == 1
+    assert "transcripts" in layer_names
+    assert "episodes" in layer_names
+    assert "monthly" in layer_names
+    assert "core" in layer_names
+    assert len(pipeline.projections) >= 1
     assert len(pipeline.validators) == 0
 
 
@@ -125,23 +109,21 @@ def test_init_pipeline_dag_structure(runner, tmp_path, monkeypatch):
     pipeline = load_pipeline(str(tmp_path / "dag-test" / "pipeline.py"))
     by_name = {l.name: l for l in pipeline.layers}
 
-    # Two independent roots (Source layers, level computed from DAG)
-    assert by_name["bios"]._level == 0
-    assert by_name["bios"].depends_on == []
-    assert by_name["project_brief"]._level == 0
-    assert by_name["project_brief"].depends_on == []
+    # Single root source
+    assert by_name["transcripts"]._level == 0
+    assert by_name["transcripts"].depends_on == []
 
-    # 1:1 work style per bio
-    assert by_name["work_styles"]._level == 1
-    assert [d.name for d in by_name["work_styles"].depends_on] == ["bios"]
+    # 1:1 episode summaries
+    assert by_name["episodes"]._level == 1
+    assert [d.name for d in by_name["episodes"].depends_on] == ["transcripts"]
 
-    # Many:1 rollup
-    assert by_name["team_dynamics"]._level == 2
-    assert [d.name for d in by_name["team_dynamics"].depends_on] == ["work_styles"]
+    # Monthly rollup
+    assert by_name["monthly"]._level == 2
+    assert [d.name for d in by_name["monthly"].depends_on] == ["episodes"]
 
-    # Multi-source synthesis
-    assert by_name["final_report"]._level == 3
-    assert set(d.name for d in by_name["final_report"].depends_on) == {"team_dynamics", "project_brief"}
+    # Core synthesis
+    assert by_name["core"]._level == 3
+    assert [d.name for d in by_name["core"].depends_on] == ["monthly"]
 
 
 def test_init_output_message(runner, tmp_path, monkeypatch):
@@ -185,38 +167,25 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     # 2. Build with mocked LLM — returns different content per call
     call_count = 0
     mock_responses = [
-        # 3x work_style (one per bio, via MapSynthesis)
+        # 1x episode summary (one per source, via EpisodeSummary)
         _make_mock_response(
-            "Alice is a systematic thinker who thrives on technical depth. "
-            "She naturally takes the architect role and brings hiking "
-            "discipline to her engineering work."
+            "This session covered CI/CD pipeline setup for a FastAPI + PostgreSQL "
+            "microservice. Key decisions: rolling updates, Alembic migrations with "
+            "timeout safeguards, staging environment with manual approval gate, "
+            "and GitHub Actions secrets for credential management."
         ),
+        # 1x monthly rollup (via MonthlyRollup)
         _make_mock_response(
-            "Bob is a user-focused collaborator who bridges design and "
-            "engineering. He brings startup hustle and accessibility expertise."
+            "March 2026: Focus on infrastructure and deployment. The team "
+            "established CI/CD practices with a staging-to-production pipeline "
+            "including migration safeguards and secrets management."
         ),
+        # 1x core synthesis (via CoreSynthesis)
         _make_mock_response(
-            "Carol is a rigorous analyst who leads with data. "
-            "Her academic background makes her the team's methodologist."
-        ),
-        # 1x team_dynamics (via ReduceSynthesis)
-        _make_mock_response(
-            "This team combines deep backend expertise, user-centered design, "
-            "and data science rigor. Alice and Carol share analytical thinking "
-            "while Bob bridges technical work with user needs. The main risk "
-            "is geographic distribution across three time zones."
-        ),
-        # 2x final_report (via FoldSynthesis — one call per input)
-        _make_mock_response(
-            "Initial draft based on team dynamics analysis. The team has "
-            "complementary skills across backend, design, and data science."
-        ),
-        _make_mock_response(
-            "Alice should own the backend sensor ingestion pipeline given her "
-            "distributed systems expertise. Bob should lead the dashboard UI "
-            "and ensure WCAG compliance. Carol should build the data pipeline "
-            "and aggregation layer. The team's skills map well to the project "
-            "but they'll need strong async communication across time zones."
+            "Core knowledge: Engineering team of 3 uses FastAPI + PostgreSQL. "
+            "Deployment follows a staged pipeline with Alembic migrations, "
+            "manual approval gates, and GitHub Actions for CI/CD. Security "
+            "approach: environment variables for secrets, no secrets in images."
         ),
     ]
 
@@ -240,8 +209,8 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
         )
         assert result.exit_code == 0, f"Build failed: {result.output}"
 
-    # Verify all 6 LLM calls: 3 work_style (Map) + 1 dynamics (Reduce) + 2 report (Fold)
-    assert call_count == 6
+    # Verify all 3 LLM calls: 1 episode + 1 monthly rollup + 1 core synthesis
+    assert call_count == 3
 
     # 2b. Release — materialize projections (search.db, context.md) into a release target
     result = runner.invoke(
@@ -257,13 +226,13 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, f"Release failed: {result.output}"
 
-    # 3. Search — should find hiking (from bios and work_style artifacts)
+    # 3. Search — should find deployment (from session transcript and episode)
     #    Search uses the released search.db in .synix/releases/local/
     result = runner.invoke(
         main,
         [
             "search",
-            "hiking",
+            "deployment",
             "--build-dir",
             str(project_dir / "build"),
             "--release",
@@ -271,7 +240,7 @@ def test_init_build_validate_search_e2e(runner, tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, f"Search failed: {result.output}"
-    assert "hiking" in result.output.lower()
+    assert "deployment" in result.output.lower()
 
 
 def test_init_pipeline_has_no_validators(runner, tmp_path, monkeypatch):
