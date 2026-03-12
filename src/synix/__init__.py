@@ -1,6 +1,6 @@
 """Synix — Programmable memory for AI agents."""
 
-__version__ = "0.20.1"
+__version__ = "0.20.2"
 
 from synix.core.models import (  # noqa: F401
     Artifact,
