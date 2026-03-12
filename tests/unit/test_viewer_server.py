@@ -9,8 +9,6 @@ class TestStatus:
         assert data["loaded"] is True
         assert data["title"] == "Test Viewer"
         assert data["artifact_count"] == 4
-        assert data["cache_progress"] == 4
-        assert data["error"] is None
 
 
 class TestLayers:

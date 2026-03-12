@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from pathlib import Path
 
@@ -18,65 +17,76 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 # ---------------------------------------------------------------------------
-# ViewerState — pre-computed caches built once from the Release
+# ViewerState — lazy caches backed by SDK queries
 # ---------------------------------------------------------------------------
 
 
 class ViewerState:
-    """Holds the bound release and pre-computed indexes."""
+    """Holds the bound release with lazy, per-layer caching.
+
+    Nothing is loaded at init.  Layer metadata is fetched from the SDK
+    on first access.  The children index (reverse provenance) is built
+    lazily on first lineage request.
+    """
 
     def __init__(self, release: Release, title: str, *, project: Project | None = None):
         self.release = release
         self.title = title
         self.project = project
-        self.metadata_cache: dict[str, dict] = {}
-        self.children_index: dict[str, list[str]] = {}
+        self._layer_cache: dict[str, list[dict]] = {}
+        self._children_index: dict[str, list[str]] | None = None
         self._search_cache_key: tuple[str, str | None] = ("", None)
         self._search_cache_results: list = []
-        self.ready = False
-        self.cache_progress = 0
-        self._cache_error: str | None = None
 
-    def start_background_cache(self) -> None:
-        """Start building caches in a background thread."""
-        thread = threading.Thread(target=self._build_caches, daemon=True)
-        thread.start()
+    @property
+    def artifact_count(self) -> int:
+        """Total artifact count derived from layer metadata (no iteration)."""
+        return sum(layer.count for layer in self.release.layers())
 
-    def _build_caches(self) -> None:
-        """Iterate every artifact once to populate caches."""
-        try:
+    def layer_items(self, layer: str) -> list[dict]:
+        """Return metadata dicts for every artifact in *layer*, cached."""
+        if layer not in self._layer_cache:
             start = time.monotonic()
-            new_cache: dict[str, dict] = {}
-            new_children: dict[str, list[str]] = {}
-            count = 0
-            for art in self.release.artifacts():
-                count += 1
-                label = art.label
+            items: list[dict] = []
+            for art in self.release.artifacts(layer=layer):
                 meta = art.metadata
-                new_cache[label] = {
-                    "label": label,
-                    "title": meta.get("title", label),
+                items.append({
+                    "label": art.label,
+                    "title": meta.get("title", art.label),
                     "date": meta.get("date") or meta.get("month", ""),
                     "artifact_type": art.artifact_type,
                     "layer": art.layer,
                     "level": art.layer_level,
                     "metadata": meta,
-                }
-
-                for parent_label in art.provenance:
-                    if parent_label != label:
-                        new_children.setdefault(parent_label, []).append(label)
-                self.cache_progress = count
-
-            # Atomic swap
-            self.metadata_cache = new_cache
-            self.children_index = new_children
-            self.ready = True
+                })
+            self._layer_cache[layer] = items
             elapsed = time.monotonic() - start
-            logger.info("Viewer ready: %d artifacts cached in %.1fs", count, elapsed)
-        except Exception as exc:
-            logger.error("Failed to build caches: %s", exc)
-            self._cache_error = str(exc)
+            logger.info("Layer %r: %d artifacts cached in %.1fs", layer, len(items), elapsed)
+        return self._layer_cache[layer]
+
+    def children_of(self, label: str) -> list[str]:
+        """Return child labels for *label*, building the index lazily."""
+        if self._children_index is None:
+            start = time.monotonic()
+            index: dict[str, list[str]] = {}
+            count = 0
+            for art in self.release.artifacts():
+                count += 1
+                for parent_label in art.provenance:
+                    if parent_label != art.label:
+                        index.setdefault(parent_label, []).append(art.label)
+            self._children_index = index
+            elapsed = time.monotonic() - start
+            logger.info("Children index: %d artifacts scanned in %.1fs", count, elapsed)
+        return self._children_index.get(label, [])
+
+    def metadata_for(self, label: str) -> dict | None:
+        """Look up cached metadata for a label across all cached layers."""
+        for items in self._layer_cache.values():
+            for item in items:
+                if item["label"] == label:
+                    return item
+        return None
 
     def cached_search(self, query: str, layer: str | None = None) -> list:
         """Cache search results for pagination. Clears cache on query/layer change."""
@@ -90,45 +100,15 @@ class ViewerState:
         return self._search_cache_results
 
     def switch_release(self, name: str) -> None:
-        """Switch to a different release and rebuild caches atomically.
-
-        Builds new caches before swapping references so concurrent readers
-        never see partially-built state.
-        """
+        """Switch to a different release, clearing all caches."""
         if self.project is None:
             raise ValueError("No project available for release switching")
-        new_release = self.project.release(name)
-
-        # Build new caches before swapping
-        start = time.monotonic()
-        new_cache: dict[str, dict] = {}
-        new_children: dict[str, list[str]] = {}
-        count = 0
-        for art in new_release.artifacts():
-            count += 1
-            label = art.label
-            meta = art.metadata
-            new_cache[label] = {
-                "label": label,
-                "title": meta.get("title", label),
-                "date": meta.get("date") or meta.get("month", ""),
-                "artifact_type": art.artifact_type,
-                "layer": art.layer,
-                "level": art.layer_level,
-                "metadata": meta,
-            }
-            for parent_label in art.provenance:
-                if parent_label != label:
-                    new_children.setdefault(parent_label, []).append(label)
-
-        # Atomic swap — readers see either old or new state, never partial
-        self.release = new_release
-        self.metadata_cache = new_cache
-        self.children_index = new_children
+        self.release = self.project.release(name)
+        self._layer_cache.clear()
+        self._children_index = None
         self._search_cache_key = ("", None)
         self._search_cache_results = []
-        elapsed = time.monotonic() - start
-        logger.info("Release switched to %r: %d artifacts cached in %.1fs", name, count, elapsed)
+        logger.info("Switched to release %r", name)
 
 
 # ---------------------------------------------------------------------------
@@ -156,12 +136,10 @@ def create_app(state: ViewerState) -> Flask:
     @app.route("/api/status")
     def api_status():
         return jsonify({
-            "loaded": state.ready,
+            "loaded": True,
             "title": state.title,
-            "artifact_count": len(state.metadata_cache),
+            "artifact_count": state.artifact_count,
             "release": state.release.name,
-            "cache_progress": state.cache_progress,
-            "error": state._cache_error,
         })
 
     @app.route("/api/layers")
@@ -175,8 +153,6 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/artifacts")
     def api_artifacts():
-        if not state.ready:
-            return jsonify({"error": "Cache is still loading", "cache_progress": state.cache_progress}), 503
         layer = request.args.get("layer")
         if not layer:
             return jsonify({"error": "layer parameter is required"}), 400
@@ -190,7 +166,7 @@ def create_app(state: ViewerState) -> Flask:
         if order not in {"asc", "desc"}:
             order = "desc"
 
-        items = [m for m in state.metadata_cache.values() if m["layer"] == layer]
+        items = list(state.layer_items(layer))
 
         reverse = order == "desc"
         items.sort(key=lambda m: m.get(sort_key, ""), reverse=reverse)
@@ -226,8 +202,6 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/lineage/<label>")
     def api_lineage(label: str):
-        if not state.ready:
-            return jsonify({"error": "Cache is still loading"}), 503
         try:
             parents_raw = state.release.lineage(label)
         except ArtifactNotFoundError:
@@ -235,24 +209,40 @@ def create_app(state: ViewerState) -> Flask:
 
         parents = []
         for art in parents_raw:
-            entry = dict(state.metadata_cache.get(art.label, {}))
-            if not entry:
-                entry = {"label": art.label}
+            entry = state.metadata_for(art.label)
+            if entry:
+                entry = dict(entry)
+            else:
+                meta = art.metadata
+                entry = {
+                    "label": art.label,
+                    "title": meta.get("title", art.label),
+                    "level": art.layer_level,
+                }
             parents.append(entry)
 
         children = []
-        for child_label in state.children_index.get(label, []):
-            entry = dict(state.metadata_cache.get(child_label, {}))
-            if not entry:
-                entry = {"label": child_label}
+        for child_label in state.children_of(label):
+            entry = state.metadata_for(child_label)
+            if entry:
+                entry = dict(entry)
+            else:
+                try:
+                    art = state.release.artifact(child_label)
+                    meta = art.metadata
+                    entry = {
+                        "label": art.label,
+                        "title": meta.get("title", art.label),
+                        "level": art.layer_level,
+                    }
+                except ArtifactNotFoundError:
+                    entry = {"label": child_label}
             children.append(entry)
 
         return jsonify({"parents": parents, "children": children})
 
     @app.route("/api/search")
     def api_search():
-        if not state.ready:
-            return jsonify({"error": "Cache is still loading"}), 503
         q = request.args.get("q", "").strip()
         if not q:
             return jsonify({"error": "q parameter is required"}), 400
@@ -309,7 +299,7 @@ def create_app(state: ViewerState) -> Flask:
         return jsonify({
             "loaded": True,
             "title": state.title,
-            "artifact_count": len(state.metadata_cache),
+            "artifact_count": state.artifact_count,
             "release": name,
         })
 

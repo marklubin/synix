@@ -14,15 +14,13 @@ logger = logging.getLogger(__name__)
 def create_app(release: Release, *, title: str = "Viewer", project: Project | None = None):
     """Create a Flask app for browsing a synix release.
 
-    Caches are built in a background thread so the server starts
-    accepting requests immediately.  The frontend polls ``/api/status``
-    until ``loaded`` is true.
+    Data is loaded lazily from the SDK — nothing is preloaded at init,
+    so the server starts instantly regardless of release size.
     """
     from synix.viewer.server import ViewerState
     from synix.viewer.server import create_app as _create_app
 
     state = ViewerState(release, title, project=project)
-    state.start_background_cache()
     return _create_app(state)
 
 
