@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from synix.sdk import ArtifactNotFoundError, Project, Release
+from synix.sdk import ArtifactNotFoundError, Project, Release, SearchNotAvailableError
 from synix.viewer._snippet import make_snippet
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,10 @@ def create_app(state: ViewerState) -> Flask:
         page = max(1, request.args.get("page", 1, type=int))
         per_page = max(1, min(200, request.args.get("per_page", 20, type=int)))
 
-        all_results = state.cached_search(q, layer)
+        try:
+            all_results = state.cached_search(q, layer)
+        except SearchNotAvailableError:
+            return jsonify({"error": "Search is not available for this release (no search projection configured)"}), 400
         total = len(all_results)
         start = (page - 1) * per_page
         page_results = all_results[start : start + per_page]
