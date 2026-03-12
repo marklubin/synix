@@ -1,7 +1,5 @@
 """Unit tests for the synix viewer server."""
 
-import json
-
 from tests.helpers.viewer_fixtures import viewer_client, viewer_release  # noqa: F401
 
 
