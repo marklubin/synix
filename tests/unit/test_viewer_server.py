@@ -1,7 +1,5 @@
 """Unit tests for the synix viewer server."""
 
-from tests.helpers.viewer_fixtures import viewer_client, viewer_release  # noqa: F401
-
 
 class TestStatus:
     def test_returns_loaded(self, viewer_client):

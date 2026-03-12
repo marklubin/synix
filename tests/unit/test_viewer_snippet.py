@@ -37,3 +37,9 @@ class TestMakeSnippet:
         content = "Some content"
         result = make_snippet(content, "")
         assert result == content[:200]
+
+    def test_xss_content_escaped(self):
+        result = make_snippet('<script>alert("xss")</script> memory test', "memory")
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+        assert "<mark>memory</mark>" in result
