@@ -90,6 +90,7 @@ from synix.cli.runs_commands import runs_group  # noqa: E402, F401
 from synix.cli.search_commands import search  # noqa: E402, F401
 from synix.cli.validate_commands import validate  # noqa: E402, F401
 from synix.cli.verify_commands import diff, lineage, status, verify  # noqa: E402, F401
+from synix.cli.view_commands import view  # noqa: E402, F401
 
 # Register commands
 main.add_command(build)
@@ -115,3 +116,4 @@ main.add_command(releases_group, name="releases")
 main.add_command(revert)
 main.add_command(refs_group, name="refs")
 main.add_command(runs_group, name="runs")
+main.add_command(view)
