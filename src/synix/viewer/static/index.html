@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <nav id="sidebar">
+            <div id="logo">Viewer</div>
+            <div id="layer-nav"></div>
+            <div id="search-box">
+                <input type="search" id="search-input" placeholder="Search artifacts...">
+                <select id="search-layer-filter">
+                    <option value="">All layers</option>
+                </select>
+            </div>
+        </nav>
+        <main id="content">
+            <div id="list-panel">
+                <div id="list-header">
+                    <span class="title">Artifacts</span>
+                    <select id="list-sort">
+                        <option value="date-desc">Date (newest)</option>
+                        <option value="date-asc">Date (oldest)</option>
+                        <option value="title-asc">Title (A-Z)</option>
+                        <option value="title-desc">Title (Z-A)</option>
+                    </select>
+                </div>
+                <div id="back-to-browse">
+                    <button onclick="backToBrowse()">Back to browse</button>
+                </div>
+                <div id="list-items"></div>
+                <div id="list-pagination">
+                    <button class="page-btn" id="prev-page" onclick="prevPage()">Prev</button>
+                    <span id="page-info"></span>
+                    <button class="page-btn" id="next-page" onclick="nextPage()">Next</button>
+                </div>
+            </div>
+            <div id="reader-panel">
+                <button id="meta-toggle" onclick="toggleMeta()">Meta</button>
+                <div id="reader-header">
+                    <div id="reader-header-left">
+                        <div class="artifact-title"></div>
+                        <div class="artifact-meta"></div>
+                    </div>
+                    <button id="copy-btn" onclick="copyContent()">Copy</button>
+                </div>
+                <div id="reader-body">
+                    <div class="empty-state">Select an artifact to view</div>
+                </div>
+                <div id="lineage-panel"></div>
+            </div>
+        </main>
+        <aside id="meta-panel">
+            <div id="meta-header">Metadata</div>
+            <div id="meta-content"></div>
+        </aside>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
