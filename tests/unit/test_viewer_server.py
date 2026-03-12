@@ -105,7 +105,8 @@ class TestSearch:
         resp = viewer_client.get("/api/search?q=memory")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert data["total"] > 0
+        assert len(data["items"]) > 0
+        assert "has_more" in data
         assert all("snippet" in item for item in data["items"])
 
     def test_search_with_layer_filter(self, viewer_client):
@@ -122,6 +123,45 @@ class TestSearch:
     def test_empty_query(self, viewer_client):
         resp = viewer_client.get("/api/search?q=")
         assert resp.status_code == 400
+
+
+class TestSecurity:
+    def test_artifact_content_returned_raw(self, viewer_client):
+        """Verify the API returns raw content — client is responsible for sanitization."""
+        resp = viewer_client.get("/api/artifact/transcript-001")
+        data = resp.get_json()
+        # Content is returned as-is; sanitization is client-side via marked config
+        assert isinstance(data["content"], str)
+
+
+class TestInputValidation:
+    def test_negative_page(self, viewer_client):
+        resp = viewer_client.get("/api/artifacts?layer=transcripts&page=-1")
+        data = resp.get_json()
+        assert data["page"] == 1  # clamped to 1
+
+    def test_huge_per_page(self, viewer_client):
+        resp = viewer_client.get("/api/artifacts?layer=transcripts&per_page=99999")
+        data = resp.get_json()
+        assert data["per_page"] <= 200  # clamped
+
+    def test_invalid_sort(self, viewer_client):
+        resp = viewer_client.get("/api/artifacts?layer=transcripts&sort=malicious")
+        assert resp.status_code == 200  # should still work with default sort
+
+    def test_invalid_order(self, viewer_client):
+        resp = viewer_client.get("/api/artifacts?layer=transcripts&order=malicious")
+        assert resp.status_code == 200  # should still work with default order
+
+    def test_search_negative_page(self, viewer_client):
+        resp = viewer_client.get("/api/search?q=memory&page=-5")
+        data = resp.get_json()
+        assert data["page"] == 1
+
+    def test_search_huge_per_page(self, viewer_client):
+        resp = viewer_client.get("/api/search?q=memory&per_page=50000")
+        data = resp.get_json()
+        assert data["per_page"] <= 200
 
 
 class TestStatic:

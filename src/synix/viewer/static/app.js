@@ -460,12 +460,11 @@ function renderSearchResults(data) {
         }).join('');
     }
 
-    document.querySelector('#list-header .title').textContent = `Search: "${state.searchQuery}" (${data.total})`;
+    document.querySelector('#list-header .title').textContent = `Search: "${state.searchQuery}"`;
 
-    const totalPages = Math.ceil(data.total / data.per_page) || 1;
-    document.getElementById('page-info').textContent = `${data.page} / ${totalPages}`;
+    document.getElementById('page-info').textContent = `Page ${data.page}`;
     document.getElementById('prev-page').disabled = data.page <= 1;
-    document.getElementById('next-page').disabled = data.page >= totalPages;
+    document.getElementById('next-page').disabled = !data.has_more;
 }
 
 function backToBrowse() {
@@ -538,4 +537,14 @@ function escapeAttr(str) {
 
 // --- Boot ---
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+    marked.use({
+        renderer: {
+            html(token) {
+                // Escape raw HTML blocks to prevent XSS
+                return escapeHtml(typeof token === 'string' ? token : token.text);
+            }
+        }
+    });
+    init();
+});

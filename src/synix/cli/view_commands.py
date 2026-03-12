@@ -13,7 +13,7 @@ from synix.cli.main import console, main
 @click.option("--host", default="127.0.0.1", help="Host to bind to")
 @click.option("--title", default="Synix Viewer", help="Title shown in the UI")
 def view(release_name: str, port: int, host: str, title: str) -> None:
-    """Open the web viewer for a release."""
+    """Open the web viewer for a release (experimental)."""
     try:
         from flask import Flask  # noqa: F401
     except ImportError:
@@ -28,5 +28,11 @@ def view(release_name: str, port: int, host: str, title: str) -> None:
 
     project = open_project(".")
     release = project.release(release_name)
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        console.print(
+            "[yellow]Warning:[/yellow] Binding to a non-local address. "
+            "The viewer uses Flask's development server, which is not "
+            "suitable for production use."
+        )
     console.print(f"Opening viewer for release [bold]{release_name}[/bold] on http://{host}:{port}")
     serve(release, host=host, port=port, title=title)

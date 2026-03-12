@@ -95,10 +95,14 @@ def create_app(state: ViewerState) -> Flask:
         if not layer:
             return jsonify({"error": "layer parameter is required"}), 400
 
-        page = request.args.get("page", 1, type=int)
-        per_page = request.args.get("per_page", 50, type=int)
+        page = max(1, request.args.get("page", 1, type=int))
+        per_page = max(1, min(200, request.args.get("per_page", 50, type=int)))
         sort_key = request.args.get("sort", "date")
+        if sort_key not in {"date", "title", "artifact_type"}:
+            sort_key = "date"
         order = request.args.get("order", "desc")
+        if order not in {"asc", "desc"}:
+            order = "desc"
 
         items = [m for m in state.metadata_cache.values() if m["layer"] == layer]
 
@@ -164,8 +168,8 @@ def create_app(state: ViewerState) -> Flask:
             return jsonify({"error": "q parameter is required"}), 400
 
         layer = request.args.get("layer")
-        page = request.args.get("page", 1, type=int)
-        per_page = request.args.get("per_page", 20, type=int)
+        page = max(1, request.args.get("page", 1, type=int))
+        per_page = max(1, min(200, request.args.get("per_page", 20, type=int)))
 
         layers_filter = [layer] if layer else None
         # Fetch one extra result beyond the current page to detect if more exist.
@@ -178,9 +182,11 @@ def create_app(state: ViewerState) -> Flask:
         )
 
         has_more = len(all_results) > page * per_page
-        total = len(all_results) if not has_more else len(all_results) - 1
         start = (page - 1) * per_page
         page_results = all_results[start : start + per_page]
+
+        # Only report a real total when we know we have all results.
+        total = len(all_results) if not has_more else None
 
         items = []
         for r in page_results:
