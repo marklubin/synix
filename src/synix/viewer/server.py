@@ -168,14 +168,17 @@ def create_app(state: ViewerState) -> Flask:
         per_page = request.args.get("per_page", 20, type=int)
 
         layers_filter = [layer] if layer else None
+        # Fetch one extra result beyond the current page to detect if more exist.
+        fetch_limit = page * per_page + 1
         all_results = state.release.search(
             q,
             mode="keyword",
-            limit=page * per_page,
+            limit=fetch_limit,
             layers=layers_filter,
         )
 
-        total = len(all_results)
+        has_more = len(all_results) > page * per_page
+        total = len(all_results) if not has_more else len(all_results) - 1
         start = (page - 1) * per_page
         page_results = all_results[start : start + per_page]
 
@@ -194,6 +197,7 @@ def create_app(state: ViewerState) -> Flask:
             "total": total,
             "page": page,
             "per_page": per_page,
+            "has_more": has_more,
         })
 
     return app
