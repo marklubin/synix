@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from synix.sdk import ArtifactNotFoundError, Release
+from synix.sdk import ArtifactNotFoundError, Project, Release
 from synix.viewer._snippet import make_snippet
 
 logger = logging.getLogger(__name__)
@@ -23,16 +24,22 @@ STATIC_DIR = Path(__file__).parent / "static"
 class ViewerState:
     """Holds the bound release and pre-computed indexes."""
 
-    def __init__(self, release: Release, title: str):
+    def __init__(self, release: Release, title: str, *, project: Project | None = None):
         self.release = release
         self.title = title
+        self.project = project
         self.metadata_cache: dict[str, dict] = {}
         self.children_index: dict[str, list[str]] = {}
+        self._search_cache_key: tuple[str, str | None] = ("", None)
+        self._search_cache_results: list = []
         self._build_caches()
 
     def _build_caches(self) -> None:
         """Iterate every artifact once to populate caches."""
+        start = time.monotonic()
+        count = 0
         for art in self.release.artifacts():
+            count += 1
             label = art.label
             meta = art.metadata
             self.metadata_cache[label] = {
@@ -48,6 +55,30 @@ class ViewerState:
             for parent_label in art.provenance:
                 if parent_label != label:
                     self.children_index.setdefault(parent_label, []).append(label)
+        elapsed = time.monotonic() - start
+        logger.info("Viewer ready: %d artifacts cached in %.1fs", count, elapsed)
+
+    def cached_search(self, query: str, layer: str | None = None) -> list:
+        """Cache search results for pagination. Clears cache on query/layer change."""
+        key = (query, layer)
+        if key != self._search_cache_key:
+            layers_filter = [layer] if layer else None
+            self._search_cache_results = self.release.search(
+                query, mode="keyword", limit=500, layers=layers_filter,
+            )
+            self._search_cache_key = key
+        return self._search_cache_results
+
+    def switch_release(self, name: str) -> None:
+        """Switch to a different release and rebuild caches."""
+        if self.project is None:
+            raise ValueError("No project available for release switching")
+        self.release = self.project.release(name)
+        self.metadata_cache.clear()
+        self.children_index.clear()
+        self._search_cache_key = ("", None)
+        self._search_cache_results = []
+        self._build_caches()
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +109,7 @@ def create_app(state: ViewerState) -> Flask:
             "loaded": True,
             "title": state.title,
             "artifact_count": len(state.metadata_cache),
+            "release": state.release.name,
         })
 
     @app.route("/api/layers")
@@ -171,22 +203,11 @@ def create_app(state: ViewerState) -> Flask:
         page = max(1, request.args.get("page", 1, type=int))
         per_page = max(1, min(200, request.args.get("per_page", 20, type=int)))
 
-        layers_filter = [layer] if layer else None
-        # Fetch one extra result beyond the current page to detect if more exist.
-        fetch_limit = page * per_page + 1
-        all_results = state.release.search(
-            q,
-            mode="keyword",
-            limit=fetch_limit,
-            layers=layers_filter,
-        )
-
-        has_more = len(all_results) > page * per_page
+        all_results = state.cached_search(q, layer)
+        total = len(all_results)
         start = (page - 1) * per_page
         page_results = all_results[start : start + per_page]
-
-        # Only report a real total when we know we have all results.
-        total = len(all_results) if not has_more else None
+        has_more = start + per_page < total
 
         items = []
         for r in page_results:
@@ -204,6 +225,34 @@ def create_app(state: ViewerState) -> Flask:
             "page": page,
             "per_page": per_page,
             "has_more": has_more,
+        })
+
+    @app.route("/api/releases")
+    def api_releases():
+        if state.project is None:
+            return jsonify({"releases": [], "current": None})
+        names = state.project.releases()
+        current = state.release.name
+        return jsonify({"releases": names, "current": current})
+
+    @app.route("/api/switch", methods=["POST"])
+    def api_switch():
+        if state.project is None:
+            return jsonify({"error": "No project available"}), 400
+        body = request.get_json(silent=True) or {}
+        name = body.get("release", "").strip()
+        if not name:
+            return jsonify({"error": "release parameter required"}), 400
+        try:
+            state.switch_release(name)
+        except Exception as exc:
+            logger.error("Failed to switch release to %r: %s", name, exc)
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({
+            "loaded": True,
+            "title": state.title,
+            "artifact_count": len(state.metadata_cache),
+            "release": name,
         })
 
     return app

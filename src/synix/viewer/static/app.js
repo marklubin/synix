@@ -44,6 +44,7 @@ async function init() {
             state.loaded = true;
             document.getElementById('logo').textContent = status.title;
             document.title = status.title;
+            await loadReleases();
             await loadData();
             return;
         }
@@ -460,11 +461,13 @@ function renderSearchResults(data) {
         }).join('');
     }
 
-    document.querySelector('#list-header .title').textContent = `Search: "${state.searchQuery}"`;
+    document.querySelector('#list-header .title').textContent =
+        `Search: "${state.searchQuery}" (${data.total} results)`;
 
-    document.getElementById('page-info').textContent = `Page ${data.page}`;
+    const totalPages = Math.ceil(data.total / data.per_page) || 1;
+    document.getElementById('page-info').textContent = `${data.page} / ${totalPages}`;
     document.getElementById('prev-page').disabled = data.page <= 1;
-    document.getElementById('next-page').disabled = !data.has_more;
+    document.getElementById('next-page').disabled = data.page >= totalPages;
 }
 
 function backToBrowse() {
@@ -533,6 +536,52 @@ function escapeHtml(str) {
 function escapeAttr(str) {
     if (!str) return '';
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// --- Release switching ---
+
+async function loadReleases() {
+    try {
+        const data = await api('/api/releases');
+        if (data.releases.length > 0) {
+            const box = document.getElementById('release-box');
+            const sel = document.getElementById('release-select');
+            box.style.display = 'block';
+            sel.innerHTML = data.releases.map(name =>
+                `<option value="${escapeHtml(name)}" ${name === data.current ? 'selected' : ''}>${escapeHtml(name)}</option>`
+            ).join('');
+            sel.addEventListener('change', switchRelease);
+        }
+    } catch (err) {
+        console.error('Failed to load releases:', err);
+    }
+}
+
+async function switchRelease() {
+    const sel = document.getElementById('release-select');
+    const name = sel.value;
+
+    // Show loading state
+    document.getElementById('reader-body').innerHTML = '<div class="empty-state">Switching release...</div>';
+    document.getElementById('layer-nav').innerHTML = '<div style="padding:12px;color:var(--text-muted)">Loading...</div>';
+
+    try {
+        const result = await fetch('/api/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ release: name }),
+        });
+        if (!result.ok) {
+            const err = await result.json();
+            throw new Error(err.error || 'Switch failed');
+        }
+        // Reload everything
+        await loadData();
+    } catch (err) {
+        console.error('Failed to switch release:', err);
+        document.getElementById('reader-body').innerHTML =
+            `<div class="empty-state" style="color:var(--neon)">Error: ${escapeHtml(err.message)}</div>`;
+    }
 }
 
 // --- Boot ---

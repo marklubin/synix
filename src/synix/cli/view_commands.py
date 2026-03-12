@@ -35,4 +35,4 @@ def view(release_name: str, port: int, host: str, title: str) -> None:
             "suitable for production use."
         )
     console.print(f"Opening viewer for release [bold]{release_name}[/bold] on http://{host}:{port}")
-    serve(release, host=host, port=port, title=title)
+    serve(release, host=host, port=port, title=title, project=project)

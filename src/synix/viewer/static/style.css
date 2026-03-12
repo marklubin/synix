@@ -110,6 +110,35 @@ html, body {
     border-bottom: 1px solid var(--border);
 }
 
+/* Release picker */
+#release-box {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+#release-label {
+    font-size: var(--font-size-2xs);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+#release-select {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-bright);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-mono);
+    outline: none;
+}
+#release-select:focus {
+    border-color: var(--neon-dim);
+    box-shadow: 0 0 4px var(--neon-glow);
+}
+
 /* Layer nav */
 #layer-nav {
     padding: 12px 8px;
