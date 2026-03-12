@@ -38,6 +38,7 @@ mesh = [
 mcp = [
     "mcp[cli]>=1.0",
 ]
+viewer = ["flask>=3.0"]
 
 [project.scripts]
 synix = "synix.cli.main:cli"
@@ -65,6 +66,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.9.0",
     "mcp[cli]>=1.0",
+    "flask>=3.0",
     {include-group = "mesh-dev"},
 ]
 mesh-dev = [

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <nav id="sidebar">
+            <div id="logo">Viewer</div>
+            <div id="release-box" style="display:none">
+                <div id="release-label">Release</div>
+                <select id="release-select"></select>
+            </div>
+            <div id="layer-nav"></div>
+            <div id="search-box">
+                <input type="search" id="search-input" placeholder="Search artifacts...">
+                <select id="search-layer-filter">
+                    <option value="">All layers</option>
+                </select>
+            </div>
+        </nav>
+        <main id="content">
+            <div id="list-panel">
+                <div id="list-header">
+                    <span class="title">Artifacts</span>
+                    <select id="list-sort">
+                        <option value="date-desc">Date (newest)</option>
+                        <option value="date-asc">Date (oldest)</option>
+                        <option value="title-asc">Title (A-Z)</option>
+                        <option value="title-desc">Title (Z-A)</option>
+                    </select>
+                </div>
+                <div id="back-to-browse">
+                    <button id="back-to-browse-btn">Back to browse</button>
+                </div>
+                <div id="list-items"></div>
+                <div id="list-pagination">
+                    <button class="page-btn" id="prev-page">Prev</button>
+                    <span id="page-info"></span>
+                    <button class="page-btn" id="next-page">Next</button>
+                </div>
+            </div>
+            <div id="reader-panel">
+                <button id="meta-toggle">Meta</button>
+                <div id="reader-header">
+                    <div id="reader-header-left">
+                        <div class="artifact-title"></div>
+                        <div class="artifact-meta"></div>
+                    </div>
+                    <button id="copy-btn">Copy</button>
+                </div>
+                <div id="reader-body">
+                    <div class="empty-state">Select an artifact to view</div>
+                </div>
+                <div id="lineage-panel"></div>
+            </div>
+        </main>
+        <aside id="meta-panel">
+            <div id="meta-header">Metadata</div>
+            <div id="meta-content"></div>
+        </aside>
+    </div>
+    <script src="/static/marked.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

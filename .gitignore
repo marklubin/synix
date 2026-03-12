@@ -29,6 +29,9 @@ env/
 # Claude Code
 .claude/
 
+# Worktrees
+.worktrees/
+
 # IDE
 .idea/
 .vscode/
