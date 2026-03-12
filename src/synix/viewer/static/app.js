@@ -34,6 +34,29 @@ async function init() {
     });
     document.getElementById('list-sort').addEventListener('change', onSortChange);
 
+    // Event delegation for clickable items (no inline onclick handlers)
+    document.getElementById('list-items').addEventListener('click', (e) => {
+        const item = e.target.closest('[data-label]');
+        if (item) loadArtifact(item.dataset.label);
+    });
+    document.getElementById('lineage-panel').addEventListener('click', (e) => {
+        // Handle collapsible section toggles
+        const label = e.target.closest('.lineage-collapsible');
+        if (label) { toggleLineageSection(label); return; }
+        // Handle chip clicks
+        const chip = e.target.closest('[data-label]');
+        if (chip) loadArtifact(chip.dataset.label);
+    });
+    document.getElementById('layer-nav').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-layer]');
+        if (btn) selectLayer(btn.dataset.layer);
+    });
+    document.getElementById('prev-page').addEventListener('click', prevPage);
+    document.getElementById('next-page').addEventListener('click', nextPage);
+    document.getElementById('back-to-browse-btn').addEventListener('click', backToBrowse);
+    document.getElementById('meta-toggle').addEventListener('click', toggleMeta);
+    document.getElementById('copy-btn').addEventListener('click', copyContent);
+
     // Hash routing
     window.addEventListener('hashchange', handleHash);
 
@@ -133,10 +156,10 @@ function setHash(hash) {
 function renderLayerNav() {
     const nav = document.getElementById('layer-nav');
     nav.innerHTML = state.layers.map(layer => `
-        <button class="layer-btn" data-layer="${layer.name}" onclick="selectLayer('${layer.name}')">
+        <button class="layer-btn" data-layer="${escapeHtml(layer.name)}">
             <span style="display:flex;align-items:center">
                 <span class="layer-dot" style="background:var(--layer-${layer.level})"></span>
-                ${layer.name}
+                ${escapeHtml(layer.name)}
             </span>
             <span class="count">${layer.count}</span>
         </button>
@@ -146,7 +169,7 @@ function renderLayerNav() {
 function populateSearchFilter() {
     const sel = document.getElementById('search-layer-filter');
     sel.innerHTML = '<option value="">All layers</option>' +
-        state.layers.map(l => `<option value="${l.name}">${l.name}</option>`).join('');
+        state.layers.map(l => `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`).join('');
 }
 
 function selectLayer(name) {
@@ -169,7 +192,7 @@ function renderMetaBadges(metadata) {
     const skip = new Set(['title', 'layer_name', 'layer_level', 'created_at']);
     return Object.entries(metadata || {})
         .filter(([k, v]) => !skip.has(k) && v != null && v !== '')
-        .map(([k, v]) => `<span class="meta-badge">${k}: ${v}</span>`)
+        .map(([k, v]) => `<span class="meta-badge">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`)
         .join('');
 }
 
@@ -197,10 +220,10 @@ function renderArtifactList(data) {
     } else {
         listItems.innerHTML = data.items.map(item => `
             <div class="list-item ${item.label === state.currentLabel ? 'active' : ''}"
-                 onclick="loadArtifact('${escapeAttr(item.label)}')" title="${escapeHtml(item.title)}">
+                 data-label="${escapeHtml(item.label)}" title="${escapeHtml(item.title)}">
                 <div class="item-title">${escapeHtml(item.title)}</div>
                 <div class="item-meta">
-                    ${item.date ? `<span>${item.date}</span>` : ''}
+                    ${item.date ? `<span>${escapeHtml(item.date)}</span>` : ''}
                     ${renderMetaBadges(item.metadata)}
                 </div>
             </div>
@@ -261,7 +284,7 @@ async function loadArtifact(label) {
     lineage.style.display = 'none';
 
     document.querySelectorAll('.list-item').forEach(el => {
-        el.classList.toggle('active', el.getAttribute('onclick')?.includes(label));
+        el.classList.toggle('active', el.dataset.label === label);
     });
 
     try {
@@ -344,7 +367,7 @@ function renderLineage(data) {
         const collapsed = data.parents.length > 5;
         html += `
             <div class="lineage-section">
-                <div class="lineage-label" ${collapsed ? 'style="cursor:pointer" onclick="toggleLineageSection(this)"' : ''}>
+                <div class="lineage-label ${collapsed ? 'lineage-collapsible' : ''}">
                     Parents (${data.parents.length})${collapsed ? ' <span class="lineage-toggle">Show</span>' : ''}
                 </div>
                 <div class="lineage-chips ${collapsed ? 'lineage-collapsed' : ''}">
@@ -358,7 +381,7 @@ function renderLineage(data) {
         const collapsed = data.children.length > 5;
         html += `
             <div class="lineage-section">
-                <div class="lineage-label" ${collapsed ? 'style="cursor:pointer" onclick="toggleLineageSection(this)"' : ''}>
+                <div class="lineage-label ${collapsed ? 'lineage-collapsible' : ''}">
                     Children (${data.children.length})${collapsed ? ' <span class="lineage-toggle">Show</span>' : ''}
                 </div>
                 <div class="lineage-chips ${collapsed ? 'lineage-collapsed' : ''}">
@@ -380,7 +403,7 @@ function toggleLineageSection(labelEl) {
 
 function lineageChip(item) {
     return `<span class="lineage-chip layer-border-${item.level}"
-                 onclick="loadArtifact('${escapeAttr(item.label)}')"
+                 data-label="${escapeHtml(item.label)}"
                  title="${escapeHtml(item.label)}">
                 ${escapeHtml(item.title || item.label)}
             </span>`;
@@ -449,7 +472,7 @@ function renderSearchResults(data) {
             const title = meta.title || item.label;
             const date = meta.date || '';
             return `
-                <div class="list-item" onclick="loadArtifact('${escapeAttr(item.label)}')">
+                <div class="list-item" data-label="${escapeHtml(item.label)}">
                     <div class="item-title">${escapeHtml(title)}</div>
                     <div class="item-meta">
                         <span class="meta-badge">${escapeHtml(item.layer)}</span>
@@ -533,11 +556,6 @@ function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function escapeAttr(str) {
-    if (!str) return '';
-    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
 // --- Release switching ---
 
 async function loadReleases() {
@@ -592,6 +610,23 @@ document.addEventListener('DOMContentLoaded', () => {
             html(token) {
                 // Escape raw HTML blocks to prevent XSS
                 return escapeHtml(typeof token === 'string' ? token : token.text);
+            },
+            link(token) {
+                const href = token.href || '';
+                // Block javascript:, vbscript:, data: protocols
+                if (/^\s*(javascript|vbscript|data):/i.test(href)) {
+                    return token.text || escapeHtml(href);
+                }
+                const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+                return `<a href="${escapeHtml(href)}"${title} rel="noopener noreferrer">${token.text || ''}</a>`;
+            },
+            image(token) {
+                const src = token.href || '';
+                if (/^\s*(javascript|vbscript|data):/i.test(src)) {
+                    return escapeHtml(token.text || '');
+                }
+                const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+                return `<img src="${escapeHtml(src)}" alt="${escapeHtml(token.text || '')}"${title}>`;
             }
         }
     });

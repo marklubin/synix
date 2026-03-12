@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import click
 
-from synix.cli.main import console, main
+from synix.cli.main import console
 
 
-@main.command()
+@click.command()
 @click.argument("release_name", default="local")
 @click.option("--port", default=9471, type=int, help="Port to serve on")
 @click.option("--host", default="127.0.0.1", help="Host to bind to")

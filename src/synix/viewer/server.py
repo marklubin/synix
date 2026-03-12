@@ -70,15 +70,45 @@ class ViewerState:
         return self._search_cache_results
 
     def switch_release(self, name: str) -> None:
-        """Switch to a different release and rebuild caches."""
+        """Switch to a different release and rebuild caches atomically.
+
+        Builds new caches before swapping references so concurrent readers
+        never see partially-built state.
+        """
         if self.project is None:
             raise ValueError("No project available for release switching")
-        self.release = self.project.release(name)
-        self.metadata_cache.clear()
-        self.children_index.clear()
+        new_release = self.project.release(name)
+
+        # Build new caches before swapping
+        start = time.monotonic()
+        new_cache: dict[str, dict] = {}
+        new_children: dict[str, list[str]] = {}
+        count = 0
+        for art in new_release.artifacts():
+            count += 1
+            label = art.label
+            meta = art.metadata
+            new_cache[label] = {
+                "label": label,
+                "title": meta.get("title", label),
+                "date": meta.get("date") or meta.get("month", ""),
+                "artifact_type": art.artifact_type,
+                "layer": art.layer,
+                "level": art.layer_level,
+                "metadata": meta,
+            }
+            for parent_label in art.provenance:
+                if parent_label != label:
+                    new_children.setdefault(parent_label, []).append(label)
+
+        # Atomic swap — readers see either old or new state, never partial
+        self.release = new_release
+        self.metadata_cache = new_cache
+        self.children_index = new_children
         self._search_cache_key = ("", None)
         self._search_cache_results = []
-        self._build_caches()
+        elapsed = time.monotonic() - start
+        logger.info("Release switched to %r: %d artifacts cached in %.1fs", name, count, elapsed)
 
 
 # ---------------------------------------------------------------------------

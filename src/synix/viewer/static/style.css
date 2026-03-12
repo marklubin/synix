@@ -683,6 +683,10 @@ html, body {
     margin-bottom: 6px;
 }
 
+#lineage-panel .lineage-collapsible {
+    cursor: pointer;
+}
+
 .lineage-chips {
     display: flex;
     flex-wrap: wrap;

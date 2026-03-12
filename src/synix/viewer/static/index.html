@@ -34,23 +34,23 @@
                     </select>
                 </div>
                 <div id="back-to-browse">
-                    <button onclick="backToBrowse()">Back to browse</button>
+                    <button id="back-to-browse-btn">Back to browse</button>
                 </div>
                 <div id="list-items"></div>
                 <div id="list-pagination">
-                    <button class="page-btn" id="prev-page" onclick="prevPage()">Prev</button>
+                    <button class="page-btn" id="prev-page">Prev</button>
                     <span id="page-info"></span>
-                    <button class="page-btn" id="next-page" onclick="nextPage()">Next</button>
+                    <button class="page-btn" id="next-page">Next</button>
                 </div>
             </div>
             <div id="reader-panel">
-                <button id="meta-toggle" onclick="toggleMeta()">Meta</button>
+                <button id="meta-toggle">Meta</button>
                 <div id="reader-header">
                     <div id="reader-header-left">
                         <div class="artifact-title"></div>
                         <div class="artifact-meta"></div>
                     </div>
-                    <button id="copy-btn" onclick="copyContent()">Copy</button>
+                    <button id="copy-btn">Copy</button>
                 </div>
                 <div id="reader-body">
                     <div class="empty-state">Select an artifact to view</div>
