@@ -60,37 +60,56 @@ async function init() {
     // Hash routing
     window.addEventListener('hashchange', handleHash);
 
-    // Check if server already has data loaded
-    try {
-        const status = await api('/api/status');
-        if (status.loaded) {
-            state.loaded = true;
-            document.getElementById('logo').textContent = status.title;
-            document.title = status.title;
-            await loadReleases();
-            await loadData();
-            return;
-        }
-    } catch (err) {
-        console.error('Failed to check status:', err);
-    }
-
-    // No data loaded — show welcome state
-    showWelcome();
+    // Poll status until caches are ready (server builds them in background)
+    showLoading(0);
+    await waitForReady();
 }
 
-function showWelcome() {
+function showLoading(count) {
     document.getElementById('layer-nav').innerHTML = '';
     document.getElementById('list-items').innerHTML = '';
     document.getElementById('list-pagination').style.display = 'none';
+    const progress = count > 0 ? `<div id="loading-count" style="color:var(--neon);font-family:var(--font-mono);font-size:var(--font-size-sm)">${count} artifacts indexed...</div>` : '';
     document.getElementById('reader-body').innerHTML = `
         <div class="empty-state" style="flex-direction:column;gap:12px;text-align:center">
             <div style="font-size:32px;color:var(--neon);font-family:'JetBrains Mono',monospace;text-shadow:0 0 20px var(--neon-glow)">VIEWER</div>
             <div style="color:var(--text-muted);max-width:400px;line-height:1.6">
-                Loading...
+                Indexing release...
             </div>
+            ${progress}
         </div>
     `;
+}
+
+async function waitForReady() {
+    while (true) {
+        try {
+            const status = await api('/api/status');
+            if (status.error) {
+                document.getElementById('reader-body').innerHTML =
+                    `<div class="empty-state" style="color:var(--accent-error)">Error: ${escapeHtml(status.error)}</div>`;
+                return;
+            }
+            if (status.loaded) {
+                state.loaded = true;
+                document.getElementById('logo').textContent = status.title;
+                document.title = status.title;
+                await loadReleases();
+                await loadData();
+                return;
+            }
+            // Update progress counter in-place if element exists
+            const el = document.getElementById('loading-count');
+            if (el) {
+                el.textContent = `${status.cache_progress} artifacts indexed...`;
+            } else {
+                showLoading(status.cache_progress);
+            }
+        } catch (err) {
+            console.error('Status poll failed:', err);
+        }
+        await new Promise(r => setTimeout(r, 500));
+    }
 }
 
 async function loadData() {

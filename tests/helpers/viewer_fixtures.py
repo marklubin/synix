@@ -74,7 +74,21 @@ def viewer_release(tmp_path: Path):
 
 @pytest.fixture
 def viewer_client(viewer_release):
-    """Flask test client for the viewer."""
+    """Flask test client for the viewer.
+
+    Waits for background cache build to complete before returning so
+    tests get deterministic, fully-ready state.
+    """
     app = create_app(viewer_release, title="Test Viewer")
     app.config["TESTING"] = True
-    return app.test_client()
+    client = app.test_client()
+    # Poll /api/status until caches are ready (background thread)
+    import time
+    for _ in range(100):
+        resp = client.get("/api/status")
+        if resp.get_json().get("loaded"):
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("Viewer caches did not become ready within 5s")
+    return client

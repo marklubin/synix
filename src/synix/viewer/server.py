@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -32,31 +33,50 @@ class ViewerState:
         self.children_index: dict[str, list[str]] = {}
         self._search_cache_key: tuple[str, str | None] = ("", None)
         self._search_cache_results: list = []
-        self._build_caches()
+        self.ready = False
+        self.cache_progress = 0
+        self._cache_error: str | None = None
+
+    def start_background_cache(self) -> None:
+        """Start building caches in a background thread."""
+        thread = threading.Thread(target=self._build_caches, daemon=True)
+        thread.start()
 
     def _build_caches(self) -> None:
         """Iterate every artifact once to populate caches."""
-        start = time.monotonic()
-        count = 0
-        for art in self.release.artifacts():
-            count += 1
-            label = art.label
-            meta = art.metadata
-            self.metadata_cache[label] = {
-                "label": label,
-                "title": meta.get("title", label),
-                "date": meta.get("date") or meta.get("month", ""),
-                "artifact_type": art.artifact_type,
-                "layer": art.layer,
-                "level": art.layer_level,
-                "metadata": meta,
-            }
+        try:
+            start = time.monotonic()
+            new_cache: dict[str, dict] = {}
+            new_children: dict[str, list[str]] = {}
+            count = 0
+            for art in self.release.artifacts():
+                count += 1
+                label = art.label
+                meta = art.metadata
+                new_cache[label] = {
+                    "label": label,
+                    "title": meta.get("title", label),
+                    "date": meta.get("date") or meta.get("month", ""),
+                    "artifact_type": art.artifact_type,
+                    "layer": art.layer,
+                    "level": art.layer_level,
+                    "metadata": meta,
+                }
 
-            for parent_label in art.provenance:
-                if parent_label != label:
-                    self.children_index.setdefault(parent_label, []).append(label)
-        elapsed = time.monotonic() - start
-        logger.info("Viewer ready: %d artifacts cached in %.1fs", count, elapsed)
+                for parent_label in art.provenance:
+                    if parent_label != label:
+                        new_children.setdefault(parent_label, []).append(label)
+                self.cache_progress = count
+
+            # Atomic swap
+            self.metadata_cache = new_cache
+            self.children_index = new_children
+            self.ready = True
+            elapsed = time.monotonic() - start
+            logger.info("Viewer ready: %d artifacts cached in %.1fs", count, elapsed)
+        except Exception as exc:
+            logger.error("Failed to build caches: %s", exc)
+            self._cache_error = str(exc)
 
     def cached_search(self, query: str, layer: str | None = None) -> list:
         """Cache search results for pagination. Clears cache on query/layer change."""
@@ -136,10 +156,12 @@ def create_app(state: ViewerState) -> Flask:
     @app.route("/api/status")
     def api_status():
         return jsonify({
-            "loaded": True,
+            "loaded": state.ready,
             "title": state.title,
             "artifact_count": len(state.metadata_cache),
             "release": state.release.name,
+            "cache_progress": state.cache_progress,
+            "error": state._cache_error,
         })
 
     @app.route("/api/layers")
@@ -153,6 +175,8 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/artifacts")
     def api_artifacts():
+        if not state.ready:
+            return jsonify({"error": "Cache is still loading", "cache_progress": state.cache_progress}), 503
         layer = request.args.get("layer")
         if not layer:
             return jsonify({"error": "layer parameter is required"}), 400
@@ -202,6 +226,8 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/lineage/<label>")
     def api_lineage(label: str):
+        if not state.ready:
+            return jsonify({"error": "Cache is still loading"}), 503
         try:
             parents_raw = state.release.lineage(label)
         except ArtifactNotFoundError:
@@ -225,6 +251,8 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/search")
     def api_search():
+        if not state.ready:
+            return jsonify({"error": "Cache is still loading"}), 503
         q = request.args.get("q", "").strip()
         if not q:
             return jsonify({"error": "q parameter is required"}), 400

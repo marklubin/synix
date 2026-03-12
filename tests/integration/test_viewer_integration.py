@@ -73,7 +73,17 @@ def integration_client(tmp_path):
     release = project.release("integration")
     app = create_app(release, title="Integration Test")
     app.config["TESTING"] = True
-    return app.test_client()
+    client = app.test_client()
+    # Wait for background cache build to complete
+    import time
+    for _ in range(100):
+        resp = client.get("/api/status")
+        if resp.get_json().get("loaded"):
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("Viewer caches did not become ready within 5s")
+    return client
 
 
 class TestFullFlow:
