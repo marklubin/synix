@@ -110,6 +110,7 @@ class MeshConfig:
     deploy: DeployConfig = field(default_factory=DeployConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
     logging_config: LoggingConfig = field(default_factory=LoggingConfig)
+    post_build_callback: object | None = field(default=None, repr=False)
 
     @property
     def mesh_dir(self) -> Path:

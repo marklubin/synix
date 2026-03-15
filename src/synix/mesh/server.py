@@ -530,15 +530,16 @@ def create_app(config: MeshConfig) -> Starlette:
                 except Exception:
                     logger.error("Bundle creation failed", exc_info=True)
 
-                # 6. Release to 'local' so viewer picks up new artifacts
-                try:
-                    import synix as _synix
-
-                    project = _synix.open_project(str(server_dir))
-                    await asyncio.to_thread(project.release_to, "local")
-                    logger.info("Released build #%d to 'local'", local_build_count)
-                except Exception:
-                    logger.error("Release to 'local' failed", exc_info=True)
+                # 6. Post-build callback (e.g. release to viewer)
+                if config.post_build_callback is not None:
+                    try:
+                        cb = config.post_build_callback
+                        if asyncio.iscoroutinefunction(cb):
+                            await cb(build_dir, local_build_count)
+                        else:
+                            await asyncio.to_thread(cb, build_dir, local_build_count)
+                    except Exception:
+                        logger.error("Post-build callback failed", exc_info=True)
 
                 # 7. Mark only the pre-build snapshot as processed (not mid-build arrivals)
                 if pre_build_unprocessed:
