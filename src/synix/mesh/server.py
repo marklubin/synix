@@ -534,7 +534,7 @@ def create_app(config: MeshConfig) -> Starlette:
                 try:
                     import synix as _synix
 
-                    project = _synix.open_project(str(build_dir))
+                    project = _synix.open_project(str(server_dir))
                     await asyncio.to_thread(project.release_to, "local")
                     logger.info("Released build #%d to 'local'", local_build_count)
                 except Exception:
