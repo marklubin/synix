@@ -40,7 +40,18 @@ def register_adapter(extensions: list[str]):
 
 
 def get_adapter(filepath: Path) -> Callable[[Path], list[Artifact]] | None:
-    """Return the parser function for a file based on its extension, or None."""
+    """Return the parser function for a file based on its extension, or None.
+
+    Checks compound extensions first (e.g. '.jsonl.gz') then falls back
+    to the final suffix (e.g. '.gz').
+    """
+    # Try compound extension — ''.join(suffixes) gives e.g. '.jsonl.gz'
+    suffixes = filepath.suffixes
+    if len(suffixes) > 1:
+        compound = "".join(s.lower() for s in suffixes)
+        adapter = _ADAPTERS.get(compound)
+        if adapter is not None:
+            return adapter
     ext = filepath.suffix.lower()
     return _ADAPTERS.get(ext)
 
