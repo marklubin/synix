@@ -101,17 +101,20 @@ class SessionStore:
         submitted_by: str,
         subsession_seq: int = 0,
     ) -> bool:
-        """Submit a session file. Returns True if new, False if duplicate.
+        """Submit a session file. Returns True if new/updated, False if duplicate.
 
         Content is gzip-compressed and stored as
         sessions/{project_dir}/{session_id}_sub{seq:04d}.jsonl.gz.
         Deduplication is based on SHA256 of the raw content.
+
+        Uses an atomic upsert to avoid race conditions when multiple
+        clients submit the same session concurrently.
         """
         content_hash = hashlib.sha256(content).hexdigest()
 
         conn = self._get_conn()
 
-        # Check for duplicate by sha256
+        # Fast path: exact same content already exists anywhere — skip
         row = conn.execute("SELECT 1 FROM sessions WHERE jsonl_sha256 = ?", (content_hash,)).fetchone()
         if row is not None:
             logger.debug(
@@ -128,18 +131,35 @@ class SessionStore:
         gz_path = proj_dir / self._file_name(session_id, subsession_seq)
         gz_path.write_bytes(gzip.compress(content))
 
-        # Insert metadata
         now = datetime.now(UTC).isoformat()
-        conn.execute(
+
+        # Atomic upsert — if the primary key already exists (same session,
+        # different content), update the row. Eliminates the TOCTOU race
+        # between concurrent submissions from multiple clients.
+        cursor = conn.execute(
             """INSERT INTO sessions
                (session_id, project_dir, subsession_seq, submitted_by, jsonl_sha256, submitted_at, processed)
-               VALUES (?, ?, ?, ?, ?, ?, 0)""",
+               VALUES (?, ?, ?, ?, ?, ?, 0)
+               ON CONFLICT (session_id, project_dir, subsession_seq) DO UPDATE SET
+                   jsonl_sha256 = excluded.jsonl_sha256,
+                   submitted_by = excluded.submitted_by,
+                   submitted_at = excluded.submitted_at,
+                   processed = 0
+               WHERE excluded.jsonl_sha256 != sessions.jsonl_sha256""",
             (session_id, project_dir, subsession_seq, submitted_by, content_hash, now),
         )
         conn.commit()
 
-        logger.info("Submitted session %s seq=%d (sha256=%s)", session_id, subsession_seq, content_hash[:12])
-        return True
+        if cursor.rowcount > 0:
+            logger.info("Submitted session %s seq=%d (sha256=%s)", session_id, subsession_seq, content_hash[:12])
+            return True
+        else:
+            # ON CONFLICT matched but WHERE clause excluded it — same hash already stored
+            logger.debug(
+                "Session %s seq=%d already has same content (sha256=%s), skipping",
+                session_id, subsession_seq, content_hash[:12],
+            )
+            return False
 
     def get_unprocessed(self) -> list[dict]:
         """Return list of unprocessed session metadata dicts."""
