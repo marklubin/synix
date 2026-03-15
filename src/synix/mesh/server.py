@@ -441,6 +441,9 @@ def create_app(config: MeshConfig) -> Starlette:
 
         while True:
             build_start = time.time()
+            # Snapshot unprocessed sessions BEFORE the build so we only mark
+            # these as processed afterward — sessions arriving mid-build stay pending.
+            pre_build_unprocessed = store.get_unprocessed()
             try:
                 build_dir = server_dir / "build"
                 build_dir.mkdir(parents=True, exist_ok=True)
@@ -527,15 +530,25 @@ def create_app(config: MeshConfig) -> Starlette:
                 except Exception:
                     logger.error("Bundle creation failed", exc_info=True)
 
-                # 6. Mark sessions as processed
-                unprocessed = store.get_unprocessed()
-                if unprocessed:
+                # 6. Release to 'local' so viewer picks up new artifacts
+                try:
+                    import synix as _synix
+
+                    project = _synix.open_project(str(build_dir))
+                    await asyncio.to_thread(project.release_to, "local")
+                    logger.info("Released build #%d to 'local'", local_build_count)
+                except Exception:
+                    logger.error("Release to 'local' failed", exc_info=True)
+
+                # 7. Mark only the pre-build snapshot as processed (not mid-build arrivals)
+                if pre_build_unprocessed:
                     session_keys = [
-                        (s["session_id"], s["project_dir"], s.get("subsession_seq", 0)) for s in unprocessed
+                        (s["session_id"], s["project_dir"], s.get("subsession_seq", 0))
+                        for s in pre_build_unprocessed
                     ]
                     store.mark_processed(session_keys)
 
-                # 7. Send notification
+                # 8. Send notification
                 if config.notifications.webhook_url:
                     try:
                         from synix.mesh.notify import send_notification
@@ -557,7 +570,7 @@ def create_app(config: MeshConfig) -> Starlette:
             except Exception as exc:
                 mesh_event(logger, logging.ERROR, f"Build failed: {exc}", "build_failed", {"error": str(exc)})
 
-            # 8. Complete scheduler and check if another build is needed
+            # 9. Complete scheduler and check if another build is needed
             needs_another = await scheduler.complete_build()
             if not needs_another:
                 break
