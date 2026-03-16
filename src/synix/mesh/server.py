@@ -49,6 +49,9 @@ def create_app(config: MeshConfig) -> Starlette:
     _build_task: asyncio.Task | None = None  # tracked to prevent GC
     _state_lock = asyncio.Lock()
 
+    # Build phase state machine: idle → ingesting → building:<layer> → projecting → bundling → releasing → idle
+    build_phase: str = "idle"
+
     # Build history ring buffer — last 50 builds
     from collections import deque
     build_history: deque[dict] = deque(maxlen=50)
@@ -164,7 +167,9 @@ def create_app(config: MeshConfig) -> Starlette:
         )
 
     async def build_status(request: Request) -> JSONResponse:
-        return JSONResponse(scheduler.get_status())
+        status = scheduler.get_status()
+        status["phase"] = build_phase
+        return JSONResponse(status)
 
     async def trigger_build(request: Request) -> JSONResponse:
         nonlocal _build_task
@@ -462,7 +467,7 @@ def create_app(config: MeshConfig) -> Starlette:
         return JSONResponse({"entries": entries, "count": len(entries)})
 
     async def _run_build() -> None:
-        nonlocal build_count, current_bundle_etag, current_bundle_path
+        nonlocal build_count, build_phase, current_bundle_etag, current_bundle_path
 
         try:
             await scheduler.start_build()
@@ -483,6 +488,7 @@ def create_app(config: MeshConfig) -> Starlette:
 
         while True:
             build_start = time.time()
+            build_phase = "ingesting"
             # Snapshot unprocessed sessions BEFORE the build so we only mark
             # these as processed afterward — sessions arriving mid-build stay pending.
             pre_build_unprocessed = store.get_unprocessed()
@@ -501,6 +507,7 @@ def create_app(config: MeshConfig) -> Starlette:
                 source_dir = str(server_dir / "sessions")
 
                 # 3. Run build in a thread (sync build system)
+                build_phase = "building"
                 pipeline.build_dir = str(build_dir)
                 result = await asyncio.to_thread(run, pipeline, source_dir=source_dir)
 
@@ -509,16 +516,39 @@ def create_app(config: MeshConfig) -> Starlette:
                     local_build_count = build_count
 
                 build_duration = time.time() - build_start
+
+                # Extract rich per-layer data from run_log
+                run_log = result.run_log or {}
+                steps = run_log.get("steps", {})
+                layers_detail = []
+                for ls in result.layer_stats:
+                    step = steps.get(ls.name, {})
+                    layers_detail.append({
+                        "name": ls.name,
+                        "level": ls.level,
+                        "built": ls.built,
+                        "cached": ls.cached,
+                        "skipped": ls.skipped,
+                        "dlq_count": ls.dlq_count,
+                        "time": round(ls.time_seconds, 2),
+                        "rebuilt_ids": step.get("rebuilt_ids", []),
+                        "llm_calls": step.get("llm_calls", 0),
+                        "tokens": step.get("tokens_used", 0),
+                    })
+
+                total_new = sum(l["built"] for l in layers_detail)
+                total_cached = sum(l["cached"] for l in layers_detail)
+
                 mesh_event(
                     logger,
                     logging.INFO,
-                    f"Build #{local_build_count} completed: built={result.built} cached={result.cached}",
+                    f"Build #{local_build_count} completed: {total_new} new, {total_cached} cached",
                     "build_completed",
                     {
                         "build_number": local_build_count,
                         "duration": round(build_duration, 1),
-                        "built": result.built,
-                        "cached": result.cached,
+                        "total_new": total_new,
+                        "total_cached": total_cached,
                     },
                 )
                 build_history.append({
@@ -526,12 +556,21 @@ def create_app(config: MeshConfig) -> Starlette:
                     "status": "success",
                     "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
                     "duration": round(build_duration, 1),
-                    "built": result.built,
-                    "cached": result.cached,
                     "sessions_processed": len(pre_build_unprocessed),
+                    "layers": layers_detail,
+                    "total_new": total_new,
+                    "total_cached": total_cached,
+                    "total_llm_calls": run_log.get("total_llm_calls", 0),
+                    "total_tokens": run_log.get("total_tokens", 0),
+                    "cost_estimate": run_log.get("total_cost_estimate", 0.0),
+                    "dlq": [
+                        {"artifact": e.artifact_desc, "error": e.error_message, "layer": e.layer_name}
+                        for e in result.dlq.entries
+                    ] if len(result.dlq) > 0 else [],
                 })
 
                 # 4. Run server deploy hooks
+                build_phase = "deploying"
                 if config.deploy.server_commands:
                     try:
                         from synix.mesh.deploy import run_deploy_hooks
@@ -545,6 +584,7 @@ def create_app(config: MeshConfig) -> Starlette:
                         logger.error("Deploy hooks failed", exc_info=True)
 
                 # 5. Create bundle — pre-compute ETag (1E)
+                build_phase = "bundling"
                 try:
                     from synix.mesh.package import create_bundle
 
@@ -582,6 +622,7 @@ def create_app(config: MeshConfig) -> Starlette:
                     logger.error("Bundle creation failed", exc_info=True)
 
                 # 6. Post-build callback (e.g. release to viewer)
+                build_phase = "releasing"
                 if config.post_build_callback is not None:
                     try:
                         cb = config.post_build_callback
@@ -611,8 +652,8 @@ def create_app(config: MeshConfig) -> Starlette:
                             "build_complete",
                             {
                                 "build_number": local_build_count,
-                                "built": result.built,
-                                "cached": result.cached,
+                                "total_new": total_new,
+                                "total_cached": total_cached,
                                 "time": result.total_time,
                             },
                         )
@@ -620,7 +661,11 @@ def create_app(config: MeshConfig) -> Starlette:
                         logger.error("Notification failed", exc_info=True)
 
             except Exception as exc:
-                mesh_event(logger, logging.ERROR, f"Build failed: {exc}", "build_failed", {"error": str(exc)})
+                mesh_event(
+                    logger, logging.ERROR,
+                    f"Build failed: {exc}", "build_failed",
+                    {"error": str(exc)},
+                )
                 build_history.append({
                     "build_number": build_count + 1,
                     "status": "failed",
@@ -628,9 +673,13 @@ def create_app(config: MeshConfig) -> Starlette:
                     "duration": round(time.time() - build_start, 1),
                     "error": str(exc),
                     "sessions_processed": len(pre_build_unprocessed),
+                    "layers": [],
+                    "total_new": 0,
+                    "total_cached": 0,
                 })
 
             # 9. Complete scheduler and check if another build is needed
+            build_phase = "idle"
             needs_another = await scheduler.complete_build()
             if not needs_another:
                 break
