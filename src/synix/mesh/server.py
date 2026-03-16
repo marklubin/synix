@@ -509,7 +509,10 @@ def create_app(config: MeshConfig) -> Starlette:
                 # 3. Run build in a thread (sync build system)
                 build_phase = "building"
                 pipeline.build_dir = str(build_dir)
-                result = await asyncio.to_thread(run, pipeline, source_dir=source_dir)
+                result = await asyncio.to_thread(
+                    run, pipeline, source_dir=source_dir,
+                    accept_existing=config.server.accept_existing,
+                )
 
                 async with _state_lock:
                     build_count += 1

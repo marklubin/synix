@@ -106,6 +106,7 @@ def run(
     progress=None,
     validate: bool = False,
     error_classifier: ErrorClassifier | None = None,
+    accept_existing: bool = False,
 ) -> RunResult:
     """Execute the full pipeline — walk DAG, run transforms, materialize projections.
 
@@ -120,6 +121,10 @@ def run(
             (default), all LLM errors are fatal and abort the build. Pass
             ``LLMErrorClassifier()`` to enable DLQ — content-filter and
             input-too-large errors will be skipped instead of aborting.
+        accept_existing: When True, keep existing cached artifacts even if the
+            transform fingerprint changed (e.g. model swap). Only rebuilds
+            artifacts with new/changed inputs. Useful for incremental model
+            migration — existing work is preserved, new inputs use the new config.
 
     Returns:
         RunResult with build statistics.
@@ -199,7 +204,7 @@ def run(
             layer_built: list[Artifact] = []
             dlq_before = len(result.dlq)
 
-            if _layer_fully_cached(layer, inputs, store, transform_fp):
+            if _layer_fully_cached(layer, inputs, store, transform_fp, accept_existing=accept_existing):
                 # All cached — load existing artifacts
                 existing = store.list_artifacts(layer.name)
                 for art in existing:
@@ -226,17 +231,24 @@ def run(
                     _layer=layer,
                     _transform_fp=transform_fp,
                     _inputs=inputs,
+                    _accept_existing=accept_existing,
                 ) -> None:
                     effective_inputs = parent_inputs if parent_inputs is not None else _inputs
                     # Compute per-artifact build fingerprint
                     build_fp = compute_build_fingerprint(_transform_fp, artifact.input_ids)
 
-                    rebuild, _reasons = needs_rebuild(
-                        artifact.label,
-                        artifact.input_ids,
-                        store,
-                        current_build_fingerprint=build_fp,
-                    )
+                    # In accept_existing mode, skip fingerprint comparison —
+                    # only rebuild if the artifact doesn't exist at all.
+                    if _accept_existing:
+                        existing = store.load_artifact(artifact.label)
+                        rebuild = existing is None
+                    else:
+                        rebuild, _reasons = needs_rebuild(
+                            artifact.label,
+                            artifact.input_ids,
+                            store,
+                            current_build_fingerprint=build_fp,
+                        )
                     if rebuild:
                         artifact.metadata["layer_name"] = _layer.name
                         artifact.metadata["layer_level"] = _layer._level
@@ -288,12 +300,17 @@ def run(
                 existing_artifacts = store.list_artifacts(layer.name)
                 cached_by_inputs: dict[tuple[str, ...], list[Artifact]] = {}
                 for art in existing_artifacts:
-                    stored_tfp_data = art.metadata.get("transform_fingerprint")
-                    if stored_tfp_data is not None:
-                        stored_fp = Fingerprint.from_dict(stored_tfp_data)
-                        if transform_fp.matches(stored_fp):
-                            key = tuple(sorted(art.input_ids))
-                            cached_by_inputs.setdefault(key, []).append(art)
+                    if accept_existing:
+                        # Accept any existing artifact regardless of fingerprint
+                        key = tuple(sorted(art.input_ids))
+                        cached_by_inputs.setdefault(key, []).append(art)
+                    else:
+                        stored_tfp_data = art.metadata.get("transform_fingerprint")
+                        if stored_tfp_data is not None:
+                            stored_fp = Fingerprint.from_dict(stored_tfp_data)
+                            if transform_fp.matches(stored_fp):
+                                key = tuple(sorted(art.input_ids))
+                                cached_by_inputs.setdefault(key, []).append(art)
 
                 def _on_cached(cached_arts: list[Artifact], unit_inputs: list[Artifact]) -> None:
                     for cached_art in cached_arts:
@@ -658,14 +675,15 @@ def _layer_fully_cached(
     inputs: list[Artifact],
     store: SnapshotArtifactCache,
     transform_fp: Fingerprint | None = None,
+    accept_existing: bool = False,
 ) -> bool:
     """Check if a layer can be entirely skipped (all artifacts cached)."""
     existing = store.list_artifacts(layer.name)
     if not existing:
         return False
 
-    # Check transform identity via fingerprint
-    if transform_fp is not None:
+    # Check transform identity via fingerprint (skip when accept_existing)
+    if transform_fp is not None and not accept_existing:
         for art in existing:
             stored_tfp_data = art.metadata.get("transform_fingerprint")
             if stored_tfp_data is None:

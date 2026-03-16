@@ -36,6 +36,7 @@ class ServerConfig:
     build_min_interval: int = 300
     build_quiet_period: int = 60
     build_max_delay: int = 1800
+    accept_existing: bool = False
 
 
 @dataclass
@@ -185,6 +186,7 @@ def load_mesh_config(path: Path) -> MeshConfig:
         build_min_interval=srv.get("build_min_interval", ServerConfig.build_min_interval),
         build_quiet_period=quiet_period,
         build_max_delay=srv.get("build_max_delay", ServerConfig.build_max_delay),
+        accept_existing=srv.get("accept_existing", ServerConfig.accept_existing),
     )
 
     # Client config
