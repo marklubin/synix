@@ -49,6 +49,10 @@ def create_app(config: MeshConfig) -> Starlette:
     _build_task: asyncio.Task | None = None  # tracked to prevent GC
     _state_lock = asyncio.Lock()
 
+    # Build history ring buffer — last 50 builds
+    from collections import deque
+    build_history: deque[dict] = deque(maxlen=50)
+
     # --- Term fencing helper (1C) ---
     async def _check_term(request: Request) -> JSONResponse | None:
         """Check term from request headers. Returns 409 response if stale, None if OK."""
@@ -419,6 +423,44 @@ def create_app(config: MeshConfig) -> Starlette:
             },
         )
 
+    async def builds_history(request: Request) -> JSONResponse:
+        """Return build history (last 50 builds, newest first)."""
+        return JSONResponse({"builds": list(reversed(build_history))})
+
+    async def logs_tail(request: Request) -> JSONResponse:
+        """Return recent structured log entries from the JSON log file."""
+        limit = min(int(request.query_params.get("limit", "100")), 500)
+        level_filter = request.query_params.get("level", "").upper()
+        event_filter = request.query_params.get("event", "")
+
+        log_path = mesh_dir / "logs" / "server.log"
+        if not log_path.exists():
+            return JSONResponse({"entries": [], "log_file": str(log_path)})
+
+        # Read last N lines efficiently (read from end)
+        entries: list[dict] = []
+        try:
+            raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            for line in reversed(raw_lines):
+                if len(entries) >= limit:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if level_filter and entry.get("level", "") != level_filter:
+                    continue
+                if event_filter and entry.get("event", "") != event_filter:
+                    continue
+                entries.append(entry)
+        except OSError as exc:
+            return JSONResponse({"error": f"Cannot read log: {exc}"}, status_code=500)
+
+        return JSONResponse({"entries": entries, "count": len(entries)})
+
     async def _run_build() -> None:
         nonlocal build_count, current_bundle_etag, current_bundle_path
 
@@ -479,6 +521,15 @@ def create_app(config: MeshConfig) -> Starlette:
                         "cached": result.cached,
                     },
                 )
+                build_history.append({
+                    "build_number": local_build_count,
+                    "status": "success",
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
+                    "duration": round(build_duration, 1),
+                    "built": result.built,
+                    "cached": result.cached,
+                    "sessions_processed": len(pre_build_unprocessed),
+                })
 
                 # 4. Run server deploy hooks
                 if config.deploy.server_commands:
@@ -570,6 +621,14 @@ def create_app(config: MeshConfig) -> Starlette:
 
             except Exception as exc:
                 mesh_event(logger, logging.ERROR, f"Build failed: {exc}", "build_failed", {"error": str(exc)})
+                build_history.append({
+                    "build_number": build_count + 1,
+                    "status": "failed",
+                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
+                    "duration": round(time.time() - build_start, 1),
+                    "error": str(exc),
+                    "sessions_processed": len(pre_build_unprocessed),
+                })
 
             # 9. Complete scheduler and check if another build is needed
             needs_another = await scheduler.complete_build()
@@ -608,7 +667,9 @@ def create_app(config: MeshConfig) -> Starlette:
         Route("/api/v1/sessions/manifest", sessions_manifest),
         Route("/api/v1/sessions/{session_id}/file", session_file),
         Route("/api/v1/builds/status", build_status),
+        Route("/api/v1/builds/history", builds_history),
         Route("/api/v1/builds/trigger", trigger_build, methods=["POST"]),
+        Route("/api/v1/logs", logs_tail),
         Route("/api/v1/artifacts/manifest", artifact_manifest),
         Route("/api/v1/artifacts/bundle", artifact_bundle),
         Route("/api/v1/search", search, methods=["POST"]),
