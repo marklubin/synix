@@ -268,7 +268,13 @@ Drop files into `source_dir` — the parser auto-detects format by file structur
 | **ChatGPT** | `.json` | `conversations.json` exports. Handles regeneration branches via `current_node` |
 | **Claude** | `.json` | Claude conversation exports with `chat_messages` arrays |
 | **Claude Code** | `.jsonl` | Claude Code session transcripts. Extracts user/assistant turns, skips tool blocks |
+| **Codex** | `.jsonl` | Codex `history.jsonl` and rollout session traces. Emits transcript and transcript_turn artifacts |
 | **Text / Markdown** | `.txt`, `.md` | YAML frontmatter support. Auto-detects conversation turns (`User:` / `Assistant:` prefixes) |
+
+For `.jsonl` files, parser precedence is:
+1. Codex rollout envelope (`type` + `payload`)
+2. Codex `history.jsonl` row shape (`session_id`, `ts`, `text` in file named `history.jsonl`)
+3. Claude Code session JSONL fallback
 
 ## Projections
 

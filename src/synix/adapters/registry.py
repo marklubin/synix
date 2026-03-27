@@ -111,6 +111,20 @@ def _parse_json_autodetect(filepath: Path) -> list[Artifact]:
     return []
 
 
+def _parse_jsonl_autodetect(filepath: Path) -> list[Artifact]:
+    """Detect and parse a JSONL file as Codex rollout/history or Claude Code."""
+    from synix.adapters.claude_code import parse_claude_code
+    from synix.adapters.codex import parse_codex
+
+    # Try Codex first: supports both history.jsonl and rollout session JSONL.
+    codex_artifacts = parse_codex(filepath)
+    if codex_artifacts:
+        return codex_artifacts
+
+    # Fall back to Claude Code JSONL parser.
+    return parse_claude_code(filepath)
+
+
 # --- Register built-in adapters ---
 
 # JSON files use auto-detection (ChatGPT vs Claude)
@@ -122,7 +136,5 @@ from synix.adapters.text import parse_text  # noqa: E402
 
 register_adapter([".txt", ".md"])(parse_text)
 
-# Claude Code JSONL session files
-from synix.adapters.claude_code import parse_claude_code  # noqa: E402
-
-register_adapter([".jsonl"])(parse_claude_code)
+# JSONL files use auto-detection (Codex history/rollout vs Claude Code)
+register_adapter([".jsonl"])(_parse_jsonl_autodetect)
