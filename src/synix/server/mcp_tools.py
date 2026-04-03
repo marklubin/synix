@@ -60,6 +60,18 @@ def _resolve_bucket_dir(bucket_name: str) -> Path:
     return bucket_path
 
 
+def _safe_filename(filename: str) -> str:
+    """Sanitize filename to prevent path traversal.
+
+    Strips directory components and rejects empty or dot-only names.
+    """
+    # Take only the final path component — strips ../ and subdirectories
+    safe = Path(filename).name
+    if not safe or safe in (".", ".."):
+        raise ValueError(f"Invalid filename: {filename!r}")
+    return safe
+
+
 @server_mcp.tool()
 def ingest(bucket: str, content: str, filename: str) -> str:
     """Write content to a configured ingest bucket.
@@ -69,13 +81,14 @@ def ingest(bucket: str, content: str, filename: str) -> str:
         content: Text content to write.
         filename: Filename to create in the bucket directory.
     """
+    safe_name = _safe_filename(filename)
     bucket_dir = _resolve_bucket_dir(bucket)
     bucket_dir.mkdir(parents=True, exist_ok=True)
 
-    dest = bucket_dir / filename
+    dest = bucket_dir / safe_name
     dest.write_text(content, encoding="utf-8")
-    logger.info("Ingested %s into bucket %r", filename, bucket)
-    return f"Wrote {filename} to bucket {bucket!r} ({dest})"
+    logger.info("Ingested %s into bucket %r", safe_name, bucket)
+    return f"Wrote {safe_name} to bucket {bucket!r} ({dest})"
 
 
 @server_mcp.tool()

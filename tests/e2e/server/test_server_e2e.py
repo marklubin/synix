@@ -85,6 +85,29 @@ class TestIngestEndpoint:
         )
         assert resp.status_code == 400
 
+    def test_ingest_path_traversal_blocked(self, client, server_project):
+        """Path traversal in filename must be sanitized."""
+        project_dir, _ = server_project
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"content": "malicious", "filename": "../../etc/passwd"},
+        )
+        assert resp.status_code == 200
+        # File should land IN the bucket dir, not at ../../etc/passwd
+        assert not (Path(project_dir) / "etc" / "passwd").exists()
+        assert (Path(project_dir) / "sources" / "documents" / "passwd").exists()
+
+    def test_ingest_path_traversal_subdirectory(self, client, server_project):
+        """Subdirectory paths are stripped to just the filename."""
+        project_dir, _ = server_project
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"content": "test", "filename": "subdir/nested/file.md"},
+        )
+        assert resp.status_code == 200
+        # Only the filename part should be kept
+        assert (Path(project_dir) / "sources" / "documents" / "file.md").exists()
+
     def test_ingest_invalid_json_400(self, client):
         resp = client.post(
             "/api/v1/ingest/documents",
@@ -172,6 +195,16 @@ class TestMCPToolsIntegration:
             assert False, "Should have raised"
         except ValueError as e:
             assert "fake-bucket" in str(e)
+
+    def test_ingest_path_traversal_via_mcp(self, client, server_project):
+        from synix.server.mcp_tools import ingest
+
+        project_dir, _ = server_project
+        result = ingest("documents", "safe content", "../../../etc/shadow")
+        # Should write "shadow" in the bucket dir, not traverse
+        assert "shadow" in result
+        assert (Path(project_dir) / "sources" / "documents" / "shadow").exists()
+        assert not (Path(project_dir) / "etc").exists()
 
     def test_search_after_build(self, built_server):
         from synix.server.mcp_tools import _state, search
