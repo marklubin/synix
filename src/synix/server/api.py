@@ -16,15 +16,18 @@ logger = logging.getLogger(__name__)
 
 async def health(request: Request) -> Response:
     """GET /api/v1/health — basic health check."""
+    logger.debug("Health check from %s", request.client)
     return JSONResponse({"status": "ok"})
 
 
 async def get_flat_file(request: Request) -> Response:
     """GET /api/v1/flat-file/{name} — return flat file content as markdown."""
     name = request.path_params["name"]
+    logger.info("REST flat-file: name=%r", name)
     try:
         rel = _current_release()
         content = rel.flat_file(name)
+        logger.info("REST flat-file: returned %d chars for %r", len(content), name)
         return PlainTextResponse(content, media_type="text/markdown")
     except Exception as exc:
         logger.error("Failed to get flat file %r: %s", name, exc)

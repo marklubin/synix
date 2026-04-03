@@ -188,6 +188,21 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     import synix
     from synix.server.mcp_tools import _state
 
+    # Startup banner
+    logger.info("=" * 60)
+    logger.info("Synix Knowledge Server starting")
+    logger.info("  project:    %s", config.project_dir)
+    logger.info("  pipeline:   %s", config.pipeline_path)
+    logger.info("  MCP HTTP:   :%d", config.mcp_port)
+    if viewer:
+        logger.info("  Viewer:     :%d", config.viewer_port)
+    logger.info("  Buckets:    %s", ", ".join(b.name for b in config.buckets) or "(none)")
+    logger.info("  Auto-build: %s (scan %ds, cooldown %ds)",
+                "on" if config.auto_build.enabled else "off",
+                config.auto_build.scan_interval,
+                config.auto_build.cooldown)
+    logger.info("=" * 60)
+
     # Open project and configure MCP state
     project = synix.open_project(config.project_dir)
     _state["project"] = project
@@ -202,6 +217,16 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
             logger.info("Loaded pipeline from %s", pipeline_path)
         except Exception as exc:
             logger.warning("Could not load pipeline: %s", exc)
+
+    # Report existing state
+    try:
+        releases = project.releases()
+        if releases:
+            logger.info("Available releases: %s", ", ".join(releases))
+        else:
+            logger.info("No releases yet — first build will create one")
+    except Exception:
+        logger.info("No releases yet — first build will create one")
 
     loop = asyncio.get_event_loop()
     tasks = []

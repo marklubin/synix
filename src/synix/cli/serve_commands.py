@@ -18,14 +18,16 @@ import click
 )
 @click.option("--mcp-port", default=None, type=int, help="Override MCP HTTP port.")
 @click.option("--viewer/--no-viewer", default=True, help="Enable/disable viewer.")
-def serve(config_path: str, mcp_port: int | None, viewer: bool) -> None:
+@click.option("-v", "--verbose", is_flag=True, help="Debug-level logging.")
+def serve(config_path: str, mcp_port: int | None, viewer: bool, verbose: bool) -> None:
     """Start the synix knowledge server."""
     from synix.server.config import load_config
     from synix.server.serve import serve as run_serve
 
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)-5s %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
     )
 
     config = load_config(config_path)

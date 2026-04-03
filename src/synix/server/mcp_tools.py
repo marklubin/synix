@@ -129,6 +129,7 @@ def search(query: str, layers: str | None = None, limit: int = 10) -> str:
         layers: Comma-separated layer names to filter (optional).
         limit: Max results (default 10).
     """
+    logger.info("MCP search: query=%r layers=%s limit=%d", query, layers, limit)
     rel = _current_release()
 
     layers_list = None
@@ -136,6 +137,7 @@ def search(query: str, layers: str | None = None, limit: int = 10) -> str:
         layers_list = [l.strip() for l in layers.split(",") if l.strip()]
 
     results = rel.search(query, mode="keyword", limit=limit, layers=layers_list)
+    logger.info("MCP search: %d results for %r", len(results), query)
 
     if not results:
         return "No results found."
@@ -156,8 +158,11 @@ def get_context(name: str = "context-doc") -> str:
     Args:
         name: Projection name (default "context-doc").
     """
+    logger.info("MCP get_context: name=%r", name)
     rel = _current_release()
-    return rel.flat_file(name)
+    content = rel.flat_file(name)
+    logger.info("MCP get_context: returned %d chars", len(content))
+    return content
 
 
 @server_mcp.tool()
