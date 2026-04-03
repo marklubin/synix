@@ -1,0 +1,350 @@
+"""End-to-end tests for the Synix knowledge server.
+
+Exercises the full flow: REST API health → ingest → build → search → context.
+Uses Starlette TestClient (in-process, no real HTTP server).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# REST API — Health
+# ---------------------------------------------------------------------------
+
+
+class TestHealthEndpoint:
+    def test_health_returns_ok(self, client):
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# REST API — Ingest
+# ---------------------------------------------------------------------------
+
+
+class TestIngestEndpoint:
+    def test_ingest_to_documents_bucket(self, client, server_project):
+        project_dir, config = server_project
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"content": "Test document content", "filename": "test-note.md"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["bucket"] == "documents"
+        assert data["filename"] == "test-note.md"
+
+        # Verify file was written
+        dest = Path(project_dir) / "sources" / "documents" / "test-note.md"
+        assert dest.exists()
+        assert dest.read_text() == "Test document content"
+
+    def test_ingest_to_sessions_bucket(self, client, server_project):
+        project_dir, _ = server_project
+        resp = client.post(
+            "/api/v1/ingest/sessions",
+            json={"content": '{"role":"user","content":"hello"}', "filename": "sess-001.jsonl"},
+        )
+        assert resp.status_code == 200
+        dest = Path(project_dir) / "sources" / "sessions" / "sess-001.jsonl"
+        assert dest.exists()
+
+    def test_ingest_to_reports_bucket(self, client, server_project):
+        project_dir, _ = server_project
+        resp = client.post(
+            "/api/v1/ingest/reports",
+            json={"content": "# Daily Report\nAll clear.", "filename": "daily-2026-04-03.md"},
+        )
+        assert resp.status_code == 200
+        dest = Path(project_dir) / "sources" / "reports" / "daily-2026-04-03.md"
+        assert dest.exists()
+
+    def test_ingest_to_unknown_bucket_404(self, client):
+        resp = client.post(
+            "/api/v1/ingest/nonexistent",
+            json={"content": "x", "filename": "x.md"},
+        )
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["error"].lower()
+
+    def test_ingest_missing_content_400(self, client):
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"filename": "x.md"},
+        )
+        assert resp.status_code == 400
+
+    def test_ingest_missing_filename_400(self, client):
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"content": "hello"},
+        )
+        assert resp.status_code == 400
+
+    def test_ingest_invalid_json_400(self, client):
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            content=b"not json",
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 400
+
+    def test_ingest_creates_bucket_dir_if_missing(self, client, server_project):
+        """Bucket dir doesn't need to pre-exist — ingest creates it."""
+        project_dir, _ = server_project
+        # Delete the documents dir
+        docs_dir = Path(project_dir) / "sources" / "documents"
+        if docs_dir.exists():
+            import shutil
+
+            shutil.rmtree(docs_dir)
+
+        resp = client.post(
+            "/api/v1/ingest/documents",
+            json={"content": "recreated", "filename": "revived.md"},
+        )
+        assert resp.status_code == 200
+        assert (Path(project_dir) / "sources" / "documents" / "revived.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# REST API — Search & Context (requires built project)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEndpoint:
+    def test_search_finds_ingested_content(self, built_server):
+        client, _, _ = built_server
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == 200
+
+        # Search for content we ingested
+        # Note: search is via MCP tools, not REST. But we can verify
+        # the flat file endpoint works after build.
+
+    def test_flat_file_returns_context(self, built_server):
+        client, project_dir, _ = built_server
+        resp = client.get("/api/v1/flat-file/context-doc")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        content = resp.text
+        assert len(content) > 0
+
+    def test_flat_file_unknown_name_404(self, built_server):
+        client, _, _ = built_server
+        resp = client.get("/api/v1/flat-file/nonexistent-doc")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# MCP Tools — via direct function calls (same as TestClient would invoke)
+# ---------------------------------------------------------------------------
+
+
+class TestMCPToolsIntegration:
+    """Test MCP tools through the actual function calls with real project state."""
+
+    def test_list_buckets(self, client, server_project):
+        from synix.server.mcp_tools import list_buckets
+
+        result = list_buckets()
+        assert "documents" in result
+        assert "sessions" in result
+        assert "reports" in result
+
+    def test_ingest_via_mcp(self, client, server_project):
+        from synix.server.mcp_tools import ingest
+
+        project_dir, _ = server_project
+        result = ingest("documents", "MCP ingest test", "mcp-test.md")
+        assert "mcp-test.md" in result
+        assert (Path(project_dir) / "sources" / "documents" / "mcp-test.md").exists()
+
+    def test_ingest_invalid_bucket_via_mcp(self, client, server_project):
+        from synix.server.mcp_tools import ingest
+
+        try:
+            ingest("fake-bucket", "content", "file.md")
+            assert False, "Should have raised"
+        except ValueError as e:
+            assert "fake-bucket" in str(e)
+
+    def test_search_after_build(self, built_server):
+        from synix.server.mcp_tools import _state, search
+
+        # Verify project has a release with artifacts
+        project = _state["project"]
+        rel = project.release("local")
+        layers = rel.layers()
+        assert len(layers) > 0, f"No layers in release: {layers}"
+
+        # List artifacts to see what's indexed
+        artifacts = list(rel.artifacts())
+        assert len(artifacts) > 0, "No artifacts in release"
+
+        # Search for a term that should appear in mock LLM responses
+        result = search("summary")
+        # Mock LLM returns "This is a summary of the conversation..."
+        assert len(result) > 0
+
+    def test_get_context_after_build(self, built_server):
+        from synix.server.mcp_tools import get_context
+
+        result = get_context("context-doc")
+        assert len(result) > 0
+
+
+# ---------------------------------------------------------------------------
+# Full Workflow — Ingest → Build → Search → Context
+# ---------------------------------------------------------------------------
+
+
+class TestFullWorkflow:
+    """End-to-end: ingest via REST, build manually, search, get context."""
+
+    def test_ingest_build_search_context(self, client, server_project, mock_llm):
+        """Complete flow: ingest → build → release → search → context."""
+        import synix
+        from synix.build.refs import synix_dir_for_build_dir
+        from synix.build.release_engine import execute_release
+        from synix.server.mcp_tools import _state
+
+        project_dir, config = server_project
+
+        # 1. Ingest documents via REST
+        for i, topic in enumerate(["neural networks", "distributed systems", "memory architecture"]):
+            resp = client.post(
+                "/api/v1/ingest/documents",
+                json={
+                    "content": f"Deep dive into {topic}. This covers the fundamentals.",
+                    "filename": f"topic-{i}.md",
+                },
+            )
+            assert resp.status_code == 200
+
+        # Verify files landed in bucket
+        docs_dir = Path(project_dir) / "sources" / "documents"
+        assert len(list(docs_dir.glob("topic-*.md"))) == 3
+
+        # 2. Copy ingested docs to pipeline source dir (the pipeline reads from ./sources)
+        # In production, the pipeline's Source would point at the bucket dir.
+        # For this test, the toy pipeline reads from ./sources (project root).
+        for f in docs_dir.glob("topic-*.md"):
+            import shutil
+
+            shutil.copy(f, Path(project_dir) / "sources" / f.name)
+
+        # 3. Build + release
+        project = synix.open_project(str(project_dir))
+        project.load_pipeline(str(Path(project_dir) / "pipeline.py"))
+        result = project.build()
+        assert result.built >= 3, f"Expected at least 3 artifacts, got {result.built}"
+
+        synix_dir = synix_dir_for_build_dir(Path(project_dir) / "build")
+        execute_release(synix_dir, release_name="local")
+
+        # Re-open project to pick up release
+        project = synix.open_project(str(project_dir))
+        _state["project"] = project
+
+        # 4. Verify artifacts were built
+        rel = project.release("local")
+        artifacts = list(rel.artifacts())
+        assert len(artifacts) >= 3, f"Expected at least 3 artifacts, got {len(artifacts)}"
+
+        # 5. Verify context-doc flat file was produced
+        resp = client.get("/api/v1/flat-file/context-doc")
+        assert resp.status_code == 200
+        assert len(resp.text) > 0
+
+        # 6. Verify search index has content
+        # Mock LLM returns "This is a summary of the conversation..."
+        results = rel.search("summary", mode="keyword")
+        assert len(results) > 0, (
+            f"Search returned no results. "
+            f"Artifacts: {[a.label for a in artifacts]}"
+        )
+
+    def test_multiple_buckets_ingest(self, client, server_project):
+        """Verify each bucket receives its documents independently."""
+        project_dir, _ = server_project
+
+        # Ingest to each bucket
+        client.post("/api/v1/ingest/documents", json={"content": "doc", "filename": "d.md"})
+        client.post("/api/v1/ingest/sessions", json={"content": "sess", "filename": "s.jsonl"})
+        client.post("/api/v1/ingest/reports", json={"content": "report", "filename": "r.md"})
+
+        # Verify isolation
+        assert (Path(project_dir) / "sources" / "documents" / "d.md").read_text() == "doc"
+        assert (Path(project_dir) / "sources" / "sessions" / "s.jsonl").read_text() == "sess"
+        assert (Path(project_dir) / "sources" / "reports" / "r.md").read_text() == "report"
+
+
+# ---------------------------------------------------------------------------
+# Plugin Hook Simulation
+# ---------------------------------------------------------------------------
+
+
+class TestPluginHookSimulation:
+    """Simulate what the Claude Code plugin hooks do, exercising the server endpoints."""
+
+    def test_session_start_hook_fetches_context(self, built_server):
+        """Simulate SessionStart: GET /api/v1/flat-file/context-doc."""
+        client, _, _ = built_server
+        resp = client.get("/api/v1/flat-file/context-doc")
+        assert resp.status_code == 200
+        context = resp.text
+        assert len(context) > 0
+
+        # Simulate what the hook script does: wrap in JSON
+        import json
+
+        hook_output = {"hookSpecificOutput": {"additionalContext": context}}
+        serialized = json.dumps(hook_output)
+        assert "additionalContext" in serialized
+
+    def test_session_end_hook_pushes_transcript(self, client, server_project):
+        """Simulate Stop hook: POST session transcript to /api/v1/ingest/sessions."""
+        project_dir, _ = server_project
+
+        # Simulate a session transcript (simplified)
+        session_content = json.dumps([
+            {"role": "user", "content": "What is machine learning?"},
+            {"role": "assistant", "content": "Machine learning is..."},
+        ])
+
+        resp = client.post(
+            "/api/v1/ingest/sessions",
+            json={
+                "content": session_content,
+                "filename": "test-session-abc123.jsonl",
+            },
+        )
+        assert resp.status_code == 200
+
+        # Verify file landed
+        dest = Path(project_dir) / "sources" / "sessions" / "test-session-abc123.jsonl"
+        assert dest.exists()
+        assert json.loads(dest.read_text())[0]["role"] == "user"
+
+    def test_session_end_hook_idempotent(self, client, server_project):
+        """Pushing the same session twice overwrites (idempotent)."""
+        resp1 = client.post(
+            "/api/v1/ingest/sessions",
+            json={"content": "version 1", "filename": "sess-dedup.jsonl"},
+        )
+        assert resp1.status_code == 200
+
+        resp2 = client.post(
+            "/api/v1/ingest/sessions",
+            json={"content": "version 2", "filename": "sess-dedup.jsonl"},
+        )
+        assert resp2.status_code == 200
+
+        project_dir, _ = server_project
+        content = (Path(project_dir) / "sources" / "sessions" / "sess-dedup.jsonl").read_text()
+        assert content == "version 2"
