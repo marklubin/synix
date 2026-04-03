@@ -6,8 +6,8 @@
 │ Surfaces: 1  │
 │ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ team_dynamics (level 2)  <BUILD_COUNTS>  <TIME>
   ✓ final_report (level 3)  <BUILD_COUNTS>  <TIME>
@@ -16,8 +16,8 @@
 ╭───────────────┬──────────────┬───────┬────────┬──────────╮
 │ Layer         │    Level     │ Built │ Cached │  Skipped  │
 ├───────────────┼──────────────┼───────┼────────┼──────────┤
-│ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ project_brief │  <N>  │  <N>  │  <N>  │  <N>  │
+│ bios          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ work_styles   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ team_dynamics │  <N>  │  <N>  │  <N>  │  <N>  │
 │ final_report  │  <N>  │  <N>  │  <N>  │  <N>  │
