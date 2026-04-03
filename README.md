@@ -69,7 +69,9 @@ context = mem.flat_file("context-doc")
 
 Synix runs offline. Your agent reads the output at runtime. They're decoupled — Synix doesn't need to be running while your agent serves requests.
 
-**Other integration options:** [MCP server](docs/mcp.md) for Claude/Cursor, [CLI](docs/integration.md#option-3-cli-from-automation) for automation, or [direct SQLite access](docs/integration.md#option-4-direct-file-access) to `search.db`. See the [Integration Guide](docs/integration.md).
+**Agent integration:** For always-on memory, run [`synix serve`](docs/knowledge-server-architecture.md) — a knowledge server with bucket-based ingestion, search, and auto-builds over MCP HTTP. The [Claude Code plugin](plugin/README.md) auto-injects context on session start and pushes transcripts on session end.
+
+**Other options:** [Full MCP server](docs/mcp.md) for direct pipeline control, [CLI](docs/integration.md#option-3-cli-from-automation) for automation, or [direct SQLite access](docs/integration.md#option-4-direct-file-access) to `search.db`. See the [Integration Guide](docs/integration.md).
 
 ## Customize everything
 
@@ -117,7 +119,7 @@ from synix.transforms import MapSynthesis, GroupSynthesis, ReduceSynthesis, Fold
 | `MapSynthesis` | 1:1 | Each input gets its own LLM call |
 | `GroupSynthesis` | N:M | Group inputs by a metadata key, one output per group |
 | `ReduceSynthesis` | N:1 | All inputs become a single output |
-| `FoldSynthesis` | N:1 sequential | Accumulate through inputs one at a time |
+| `FoldSynthesis` | N:1 sequential | Accumulate through inputs one at a time (incremental — resumes from checkpoint) |
 | `Chunk` | 1:N | Split each input into smaller pieces (no LLM) |
 
 See [Pipeline API](docs/pipeline-api.md) for the full reference.
@@ -175,8 +177,8 @@ Synix is not a memory store. Mem0/Letta/Graphiti store and retrieve memories. Sy
 
 ## Current status
 
-- **Stable:** Pipeline definition, build, release, search, provenance, incremental rebuilds, CLI, Python SDK
-- **Works but early:** Templates, MCP server for agent integration
+- **Stable:** Pipeline definition, build, release, search, provenance, incremental rebuilds, CLI, Python SDK, incremental fold (checkpoint resume)
+- **Works but early:** Templates, knowledge server (`synix serve`), Claude Code plugin, MCP server
 - **Experimental:** Validation/repair, batch builds (OpenAI Batch API), distributed builds (mesh)
 - **Not built yet:** Real-time runtime, agent-driven memory evolution, multi-tenancy
 
@@ -214,6 +216,7 @@ uvx synix init --list    # see all templates
 | `uvx synix clean` | Remove release targets and work state |
 | `uvx synix validate` | *(Experimental)* Run validators |
 | `uvx synix batch-build run` | *(Experimental)* Batch build via OpenAI Batch API |
+| `uvx 'synix[server]' synix serve` | Start the knowledge server (MCP HTTP + viewer + auto-builder) |
 | `uvx 'synix[mesh]' mesh create` | *(Experimental)* Distributed builds via Tailscale |
 
 ## Architecture direction
@@ -231,8 +234,10 @@ See [docs/architecture.md](docs/architecture.md) for the full picture.
 | [Integration Guide](docs/integration.md) | How your agent uses Synix output — SDK, MCP, CLI, direct access |
 | [Pipeline API](docs/pipeline-api.md) | Full Python API — transforms, projections, validators, custom transforms |
 | [Python SDK](docs/sdk.md) | Programmatic access — init, build, release, search |
-| [MCP Server](docs/mcp.md) | Agent integration — 20 MCP tools, client configuration |
-| [Cache Semantics](docs/cache-semantics.md) | Fingerprint scheme, rebuild triggers |
+| [Knowledge Server](docs/knowledge-server-architecture.md) | `synix serve` — bucket-based ingestion, 4-tool MCP, auto-builder, viewer |
+| [Claude Code Plugin](plugin/README.md) | Plugin with session hooks, memory skill, and MCP integration |
+| [MCP Server (Full SDK)](docs/mcp.md) | Direct pipeline control — all SDK tools exposed via MCP |
+| [Cache Semantics](docs/cache-semantics.md) | Fingerprint scheme, rebuild triggers, incremental fold |
 | [Batch Build](docs/batch-build.md) | *(Experimental)* OpenAI Batch API — 50% cost reduction |
 | [Mesh](docs/mesh.md) | *(Experimental)* Distributed builds across machines |
 

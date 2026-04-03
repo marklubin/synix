@@ -38,6 +38,11 @@ mesh = [
 mcp = [
     "mcp[cli]>=1.0",
 ]
+server = [
+    "starlette>=0.40",
+    "uvicorn[standard]>=0.30",
+    "mcp[cli]>=1.0",
+]
 viewer = ["flask>=3.0"]
 
 [project.scripts]

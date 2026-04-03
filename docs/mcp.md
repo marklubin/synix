@@ -1,6 +1,10 @@
-# MCP Server
+# MCP Server (Full SDK)
 
 Synix exposes its full SDK as an [MCP](https://modelcontextprotocol.io) server. AI agents can manage pipelines, build memory, and search via structured tool calls over stdin/stdout.
+
+> **Two MCP surfaces exist:**
+> - **This server** (`synix.mcp`) — full pipeline control (28 tools). For power users and local development. Runs via stdio.
+> - **Knowledge server** (`synix serve`) — simplified agent interface (4 tools: `ingest`, `search`, `get_context`, `list_buckets`). For always-on deployment. Runs over HTTP. See [Knowledge Server](knowledge-server-architecture.md).
 
 ## Setup
 
