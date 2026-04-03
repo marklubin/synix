@@ -396,15 +396,39 @@ def run(
             _finish_layer(layer, stats, built)
         else:
             # Multiple independent layers — run concurrently
+            # Cap workers at concurrency setting to avoid oversubscription
+            # (transforms may also use threads internally)
+            max_workers = min(len(group), concurrency)
             logger.info(
-                "Level %d: running %d layers in parallel (%s)",
-                level, len(group), ", ".join(l.name for l in group),
+                "Level %d: running %d layers in parallel (%d workers: %s)",
+                level, len(group), max_workers, ", ".join(l.name for l in group),
             )
-            with ThreadPoolExecutor(max_workers=len(group)) as pool:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {pool.submit(_run_single_layer, layer): layer for layer in group}
+                completed = []
                 for future in as_completed(futures):
                     layer, stats, built = future.result()
-                    _finish_layer(layer, stats, built)
+                    # Update state but defer surface materialization
+                    layer_artifacts[layer.name] = built
+                    result.layer_stats.append(stats)
+                    result.built += stats.built
+                    result.cached += stats.cached
+                    result.skipped += stats.skipped
+                    logger.info(
+                        "Layer %s done — %d built, %d cached in %.1fs",
+                        layer.name, stats.built, stats.cached, stats.time_seconds,
+                    )
+                    slogger.layer_finish(layer.name, stats.built, stats.cached)
+                    with _txn_lock:
+                        write_layer_checkpoint(snapshot_txn, layer.name)
+                    completed.append(layer)
+
+            # Materialize search surfaces AFTER all same-level layers complete
+            # (surfaces may depend on multiple layers at this level)
+            for layer in completed:
+                _materialize_layer_search_surfaces(
+                    pipeline, layer.name, layer_artifacts, work_dir, logger=slogger,
+                )
 
     # Record projection declarations in the snapshot transaction
     logger.info("Recording projection declarations")
