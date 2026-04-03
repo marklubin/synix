@@ -21,7 +21,7 @@ from pathlib import Path
 from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
 from synix.adapters.registry import parse_claude_code, register_adapter
 from synix.core.models import Artifact
-from synix.transforms import CoreSynthesis, EpisodeSummary, FoldSynthesis
+from synix.transforms import Chunk, CoreSynthesis, EpisodeSummary, FoldSynthesis
 
 # ---------------------------------------------------------------------------
 # Adapters — session/export format handling
@@ -296,7 +296,7 @@ pipeline = Pipeline(
     build_dir="./build",
     llm_config={
         "provider": "anthropic",
-        "model": "claude-sonnet-4-6-20250514",
+        "model": "claude-sonnet-4-20250514",
         "temperature": 0.3,
         "max_tokens": 4096,
     },
@@ -314,7 +314,18 @@ pipeline.add(short_window, long_window, research_threads, open_threads, user_mod
 # Level 3 — synthesis
 pipeline.add(core, work_status)
 
-# Search — rollups + synthesis (default), reference (opt-in)
+# Chunk reference docs for useful semantic search
+reference_chunks = Chunk(
+    "reference-chunks",
+    depends_on=[reference],
+    strategy="separator",
+    separator="\n\n",
+    max_tokens=512,
+    overlap=50,
+)
+pipeline.add(reference_chunks)
+
+# Search — rollups + synthesis (default), reference chunks (opt-in)
 # Raw episodes and documents are NOT in search by default.
 main_surface = SearchSurface(
     "main",
@@ -322,13 +333,21 @@ main_surface = SearchSurface(
         core, work_status, user_model,
         short_window, long_window, research_threads, open_threads,
     ],
-    modes=["fulltext"],
+    modes=["fulltext", "semantic"],
+    embedding_config={
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+    },
 )
 
 reference_surface = SearchSurface(
     "reference",
-    sources=[reference],
-    modes=["fulltext"],
+    sources=[reference_chunks],
+    modes=["fulltext", "semantic"],
+    embedding_config={
+        "provider": "fastembed",
+        "model": "BAAI/bge-small-en-v1.5",
+    },
 )
 
 pipeline.add(main_surface, reference_surface)
