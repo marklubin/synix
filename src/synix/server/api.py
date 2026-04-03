@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from synix.server.mcp_tools import _require_project, _resolve_bucket_dir, _safe_filename
+from synix.server.mcp_tools import _atomic_write, _require_project, _resolve_bucket_dir, _safe_filename
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ async def ingest_to_bucket(request: Request) -> Response:
         bucket_dir = _resolve_bucket_dir(bucket)
         bucket_dir.mkdir(parents=True, exist_ok=True)
         dest = bucket_dir / safe_name
-        dest.write_text(content, encoding="utf-8")
+        _atomic_write(dest, content)
         logger.info("REST ingest: %s -> bucket %r", filename, bucket)
         return JSONResponse(
             {"status": "ok", "bucket": bucket, "filename": filename, "path": str(dest)}

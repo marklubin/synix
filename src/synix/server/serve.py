@@ -51,15 +51,18 @@ async def run_mcp_http(config: ServerConfig) -> None:
 
 
 async def run_auto_builder(config: ServerConfig) -> None:
-    """Watch bucket directories and trigger builds when new files appear.
+    """Watch bucket directories and trigger builds when content changes.
 
-    Scans buckets every ``scan_interval`` seconds. When the file count
-    changes, waits ``cooldown`` seconds, then runs build + release.
+    Scans buckets every ``scan_interval`` seconds. Detects changes via a
+    fingerprint of file paths and modification times — catches new files,
+    edits, renames, and deletions. Waits ``cooldown`` seconds after the
+    last change before building.
     """
     if not config.auto_build.enabled:
         logger.info("Auto-build: disabled in config")
         return
 
+    import hashlib
     from pathlib import Path
 
     scan_interval = config.auto_build.scan_interval
@@ -73,9 +76,12 @@ async def run_auto_builder(config: ServerConfig) -> None:
         cooldown,
     )
 
-    def _count_bucket_files() -> int:
-        """Count files matching bucket patterns."""
-        total = 0
+    def _bucket_fingerprint() -> str:
+        """Hash of (path, size, mtime) for all files in all buckets.
+
+        Detects: new files, deletions, renames, and content edits.
+        """
+        entries: list[str] = []
         for bucket in config.buckets:
             bucket_dir = Path(bucket.dir)
             if not bucket_dir.is_absolute():
@@ -83,8 +89,11 @@ async def run_auto_builder(config: ServerConfig) -> None:
             if not bucket_dir.exists():
                 continue
             for pattern in bucket.patterns:
-                total += sum(1 for _ in bucket_dir.glob(pattern))
-        return total
+                for f in sorted(bucket_dir.glob(pattern)):
+                    if f.is_file():
+                        stat = f.stat()
+                        entries.append(f"{f}:{stat.st_size}:{stat.st_mtime_ns}")
+        return hashlib.sha256("\n".join(entries).encode()).hexdigest()[:16]
 
     def _run_build() -> str:
         """Run build + release synchronously (called in executor)."""
@@ -98,43 +107,39 @@ async def run_auto_builder(config: ServerConfig) -> None:
         project.release_to("local")
         return f"{result.built} built, {result.cached} cached"
 
-    last_count = _count_bucket_files()
+    last_fingerprint = _bucket_fingerprint()
     last_build_time = 0.0
 
     while True:
         await asyncio.sleep(scan_interval)
 
-        current_count = _count_bucket_files()
-        if current_count == last_count:
+        current_fingerprint = _bucket_fingerprint()
+        if current_fingerprint == last_fingerprint:
             continue
 
-        # New files detected — wait for cooldown
+        # Changes detected — wait for cooldown
         now = time.monotonic()
         since_last = now - last_build_time if last_build_time > 0 else cooldown
         if since_last < cooldown:
             remaining = cooldown - since_last
             logger.info(
-                "Auto-build: %d new files, waiting %.0fs cooldown",
-                current_count - last_count,
+                "Auto-build: changes detected, waiting %.0fs cooldown",
                 remaining,
             )
             await asyncio.sleep(remaining)
 
-        logger.info(
-            "Auto-build: file count changed %d → %d, starting build",
-            last_count,
-            current_count,
-        )
+        logger.info("Auto-build: bucket content changed, starting build")
 
         try:
             loop = asyncio.get_event_loop()
             summary = await loop.run_in_executor(None, _run_build)
             last_build_time = time.monotonic()
-            last_count = _count_bucket_files()  # re-count after build
+            last_fingerprint = _bucket_fingerprint()  # re-fingerprint after build
             logger.info("Auto-build: complete (%s)", summary)
         except Exception as exc:
             logger.error("Auto-build: failed: %s", exc)
-            last_count = current_count  # update count to avoid retry loop
+            # Re-fingerprint so we retry on next actual change, not immediately
+            last_fingerprint = _bucket_fingerprint()
 
 
 def run_viewer(config: ServerConfig) -> None:

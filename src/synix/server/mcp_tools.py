@@ -60,6 +60,20 @@ def _resolve_bucket_dir(bucket_name: str) -> Path:
     return bucket_path
 
 
+def _atomic_write(dest: Path, content: str) -> None:
+    """Write content to dest via temp file + rename (atomic on same filesystem)."""
+    import tempfile
+
+    fd, tmp_path = tempfile.mkstemp(dir=dest.parent, suffix=".tmp")
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        Path(tmp_path).replace(dest)
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
+
+
 def _safe_filename(filename: str) -> str:
     """Sanitize filename to prevent path traversal.
 
@@ -86,7 +100,7 @@ def ingest(bucket: str, content: str, filename: str) -> str:
     bucket_dir.mkdir(parents=True, exist_ok=True)
 
     dest = bucket_dir / safe_name
-    dest.write_text(content, encoding="utf-8")
+    _atomic_write(dest, content)
     logger.info("Ingested %s into bucket %r", safe_name, bucket)
     return f"Wrote {safe_name} to bucket {bucket!r} ({dest})"
 
