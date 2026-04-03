@@ -15,6 +15,8 @@ Covers the full decision tree from docs/incremental-fold-design.md:
 
 from __future__ import annotations
 
+import hashlib
+
 from synix import Artifact
 from synix.transforms import FoldSynthesis
 
@@ -53,11 +55,15 @@ def _make_checkpoint_artifact(
     """Build a fake previous artifact with a valid checkpoint.
 
     ``seen_inputs`` should be the actual Artifact objects so we can derive
-    labels in the correct sorted order.
+    labels and artifact_ids in the correct sorted order.
     """
     fp = fold.compute_fingerprint(config or {})
     sorted_seen = fold._sort_inputs(seen_inputs)
-    seen_labels = [a.label for a in sorted_seen]
+    seen_entries = [
+        {"label": a.label, "artifact_id": a.artifact_id}
+        for a in sorted_seen
+    ]
+    content_hash = hashlib.sha256(accumulated.encode()).hexdigest()[:16]
     return Artifact(
         label=fold.label_value,
         artifact_type=fold.artifact_type,
@@ -65,13 +71,27 @@ def _make_checkpoint_artifact(
         input_ids=[],
         metadata={
             "_fold_checkpoint": {
-                "accumulated": accumulated,
-                "seen_input_labels": seen_labels,
+                "version": 1,
+                "content_hash": content_hash,
+                "seen_inputs": seen_entries,
                 "transform_fingerprint": fp.to_dict(),
             },
-            "input_count": len(seen_labels),
+            "input_count": len(seen_entries),
         },
     )
+
+
+def _seen_labels(checkpoint: dict) -> list[str]:
+    """Extract labels from checkpoint in either v0 or v1 format."""
+    entries = checkpoint.get("seen_inputs")
+    if entries is not None:
+        return [e["label"] for e in entries]
+    return checkpoint.get("seen_input_labels", [])
+
+
+def _accumulated(checkpoint: dict, artifact: Artifact) -> str:
+    """Get accumulated value — in v1, it's the artifact content itself."""
+    return artifact.content
 
 
 def _make_ctx_with_previous(previous: Artifact | None = None) -> dict:
@@ -104,8 +124,8 @@ class TestFirstBuild:
 
         checkpoint = results[0].metadata.get("_fold_checkpoint")
         assert checkpoint is not None
-        assert checkpoint["accumulated"] == results[0].content
-        assert len(checkpoint["seen_input_labels"]) == 3
+        assert _accumulated(checkpoint, results[0]) == results[0].content
+        assert len(_seen_labels(checkpoint)) == 3
         assert "transform_fingerprint" in checkpoint
 
     def test_seen_labels_match_sorted_inputs(self, mock_llm):
@@ -115,7 +135,7 @@ class TestFirstBuild:
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
         sorted_labels = [a.label for a in t._sort_inputs(inputs)]
-        assert checkpoint["seen_input_labels"] == sorted_labels
+        assert _seen_labels(checkpoint) == sorted_labels
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +191,8 @@ class TestIncrementalBuild:
         results = t.execute(inputs, _make_ctx_with_previous(prev))
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
-        assert len(checkpoint["seen_input_labels"]) == 3
-        assert "ep-2" in checkpoint["seen_input_labels"]
+        assert len(_seen_labels(checkpoint)) == 3
+        assert "ep-2" in _seen_labels(checkpoint)
 
     def test_step_numbering_continues(self, mock_llm):
         """Step numbers continue from where the checkpoint left off."""
@@ -270,10 +290,7 @@ class TestInputRemoved:
 
 class TestInputReplaced:
     def test_full_recompute_when_content_changes(self, mock_llm):
-        """Same labels, different content. Labels are still present so
-        the subset check passes. New ep-2 sorts after, so incremental
-        proceeds. Content changes within already-seen labels are not
-        detectable with label-only tracking — this is a known tradeoff."""
+        """Same label, different content → artifact_id changes → full recompute."""
         t = _make_fold(sort_by="date")
         seen = [
             _make_artifact("ep-0", "e0", date="2024-01"),
@@ -288,14 +305,11 @@ class TestInputReplaced:
         ]
         results = t.execute(inputs, _make_ctx_with_previous(prev))
 
-        # All labels are present, new input (ep-2) sorts after seen — incremental
-        # But ep-1's content changed. The fold will fold ep-2 onto prev state.
-        # This is acceptable: the label is the same, and content changes within
-        # already-seen labels are not detectable without tracking artifact_ids too.
-        # The design accepts this tradeoff — label-based tracking catches removals
-        # and reorderings but not in-place content edits.
-        # If content fidelity is critical, the user should change the label too.
-        assert len(results) == 1
+        # ep-1's content changed → different artifact_id → checkpoint detects it
+        assert len(mock_llm) == 3  # full recompute
+        # Should start from initial, not from checkpoint
+        first_prompt = mock_llm[0]["messages"][0]["content"]
+        assert "Empty." in first_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +331,8 @@ class TestEmptyInputs:
         results = t.execute([], _make_ctx_with_previous(None))
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
-        assert checkpoint["accumulated"] == "Empty."
-        assert checkpoint["seen_input_labels"] == []
+        assert _accumulated(checkpoint, results[0]) == "Empty."
+        assert _seen_labels(checkpoint) == []
 
 
 # ---------------------------------------------------------------------------
@@ -331,15 +345,16 @@ class TestCheckpointIntegrity:
         t = _make_fold(sort_by="date")
         fp = t.compute_fingerprint({})
 
-        # Create artifact where content != checkpoint accumulated
+        # Create artifact where content hash doesn't match actual content
         prev = Artifact(
             label="out",
             artifact_type="summary",
             content="artifact content",
             metadata={
                 "_fold_checkpoint": {
-                    "accumulated": "DIFFERENT from content",
-                    "seen_input_labels": ["ep-0"],
+                    "version": 1,
+                    "content_hash": "0000000000000000",  # wrong hash
+                    "seen_inputs": [{"label": "ep-0", "artifact_id": "sha256:fake"}],
                     "transform_fingerprint": fp.to_dict(),
                 },
             },
@@ -370,7 +385,7 @@ class TestDuplicateContent:
         results = t.execute(inputs, _make_ctx_with_previous(None))
 
         assert len(mock_llm) == 2  # both processed
-        labels = results[0].metadata["_fold_checkpoint"]["seen_input_labels"]
+        labels = _seen_labels(results[0].metadata["_fold_checkpoint"])
         assert "ep-a" in labels
         assert "ep-b" in labels
 
@@ -403,7 +418,7 @@ class TestCheckpointConsistency:
         results = t.execute(inputs, _make_ctx_with_previous(None))
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
-        assert checkpoint["accumulated"] == results[0].content
+        assert _accumulated(checkpoint, results[0]) == results[0].content
 
     def test_accumulated_equals_content_after_incremental(self, mock_llm):
         t = _make_fold(sort_by="date")
@@ -414,7 +429,7 @@ class TestCheckpointConsistency:
         results = t.execute(inputs, _make_ctx_with_previous(prev))
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
-        assert checkpoint["accumulated"] == results[0].content
+        assert _accumulated(checkpoint, results[0]) == results[0].content
 
 
 # ---------------------------------------------------------------------------
@@ -492,8 +507,8 @@ class TestConcurrentFolds:
         r1 = t1.execute(inputs, _make_ctx_with_previous(None))
         r2 = t2.execute(inputs, _make_ctx_with_previous(None))
 
-        assert r1[0].metadata["_fold_checkpoint"]["seen_input_labels"] == ["ep-0"]
-        assert r2[0].metadata["_fold_checkpoint"]["seen_input_labels"] == ["ep-0"]
+        assert _seen_labels(r1[0].metadata["_fold_checkpoint"]) == ["ep-0"]
+        assert _seen_labels(r2[0].metadata["_fold_checkpoint"]) == ["ep-0"]
         assert r1[0].label == "out-a"
         assert r2[0].label == "out-b"
 
@@ -548,7 +563,7 @@ class TestRapidSequential:
 
         # Final checkpoint should have all 5 labels
         checkpoint = r3[0].metadata["_fold_checkpoint"]
-        assert len(checkpoint["seen_input_labels"]) == 5
+        assert len(_seen_labels(checkpoint)) == 5
 
 
 # ---------------------------------------------------------------------------

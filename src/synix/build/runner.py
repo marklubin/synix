@@ -198,8 +198,8 @@ def run(
             transform_config = _build_transform_config(pipeline, layer, src_dir, work_dir)
             transform_ctx = _build_transform_context(pipeline, layer, src_dir, work_dir, transform_config)
 
-            # Inject previous artifact for N:1 transforms (fold checkpoint resume)
-            if hasattr(layer, "label_value"):
+            # Inject previous artifact for incremental N:1 transforms (fold checkpoint resume)
+            if getattr(layer, "_supports_incremental", False) and hasattr(layer, "label_value"):
                 _prev = store.load_artifact(layer.label_value)
                 if _prev is not None:
                     transform_ctx = transform_ctx.with_updates(
@@ -247,12 +247,12 @@ def run(
 
                     # In accept_existing mode, skip fingerprint comparison —
                     # only rebuild if the artifact doesn't exist at all.
-                    # Exception: N:1 transforms (with label_value) always write
+                    # Exception: incremental N:1 transforms always write
                     # because their output changes as inputs accumulate.
                     if _accept_existing:
                         existing = store.load_artifact(artifact.label)
-                        is_n_to_1 = hasattr(_layer, "label_value")
-                        rebuild = existing is None or is_n_to_1
+                        is_incremental = getattr(_layer, "_supports_incremental", False)
+                        rebuild = existing is None or is_incremental
                     else:
                         rebuild, _reasons = needs_rebuild(
                             artifact.label,

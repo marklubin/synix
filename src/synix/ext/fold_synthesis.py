@@ -40,6 +40,9 @@ class FoldSynthesis(Transform):
     ``{total}`` (total input count).
     """
 
+    # Explicit capability flag for runner to detect N:1 incremental transforms.
+    _supports_incremental = True
+
     def __init__(
         self,
         name: str,
@@ -157,13 +160,20 @@ class FoldSynthesis(Transform):
             accumulated = response.content
 
         # --- Persist checkpoint ---
-        all_input_labels = [a.label for a in sorted_inputs]
+        # Track (label, artifact_id) pairs so content edits are detected.
+        seen_input_entries = [
+            {"label": a.label, "artifact_id": a.artifact_id}
+            for a in sorted_inputs
+        ]
+        content_hash = hashlib.sha256(accumulated.encode()).hexdigest()[:16]
+
         output_metadata = {"input_count": len(inputs)}
         if self.metadata_fn is not None:
             output_metadata.update(self.metadata_fn(inputs))
         output_metadata["_fold_checkpoint"] = {
-            "accumulated": accumulated,
-            "seen_input_labels": all_input_labels,
+            "version": 1,
+            "content_hash": content_hash,
+            "seen_inputs": seen_input_entries,
             "transform_fingerprint": transform_fp.to_dict(),
         }
 
@@ -194,7 +204,7 @@ class FoldSynthesis(Transform):
             return None
 
         checkpoint = previous.metadata.get("_fold_checkpoint")
-        if checkpoint is None:
+        if not isinstance(checkpoint, dict):
             return None
 
         # 1. Transform fingerprint must match
@@ -203,42 +213,60 @@ class FoldSynthesis(Transform):
             logger.info("%s: transform changed, full recompute", self.name)
             return None
 
-        # 2. Checkpoint integrity: accumulated must equal artifact content
-        if checkpoint.get("accumulated") != previous.content:
-            logger.warning(
-                "%s: checkpoint inconsistent with artifact content, full recompute",
-                self.name,
-            )
-            return None
+        # 2. Content integrity: verify stored hash matches artifact content
+        stored_hash = checkpoint.get("content_hash")
+        if stored_hash is not None:
+            actual_hash = hashlib.sha256(previous.content.encode()).hexdigest()[:16]
+            if stored_hash != actual_hash:
+                logger.warning(
+                    "%s: checkpoint hash mismatch, full recompute",
+                    self.name,
+                )
+                return None
 
-        # 3. All previously-seen inputs must still be present
-        seen_labels = checkpoint.get("seen_input_labels", [])
-        seen_set = set(seen_labels)
-        current_set = set(a.label for a in sorted_inputs)
+        # 3. Load seen inputs — support both v1 (label+id pairs) and v0 (label-only)
+        seen_entries = checkpoint.get("seen_inputs")
+        if seen_entries is not None:
+            # v1: (label, artifact_id) pairs — detect content edits
+            seen_map = {e["label"]: e["artifact_id"] for e in seen_entries}
+        else:
+            # v0 fallback: label-only checkpoints from before this change
+            seen_labels_list = checkpoint.get("seen_input_labels", [])
+            seen_map = {label: None for label in seen_labels_list}
 
-        if not seen_set.issubset(current_set):
-            removed = seen_set - current_set
-            logger.info(
-                "%s: %d inputs removed (%s...), full recompute",
-                self.name,
-                len(removed),
-                list(removed)[:3],
-            )
-            return None
+        # 4. All previously-seen inputs must still be present with same content
+        current_map = {a.label: a.artifact_id for a in sorted_inputs}
 
-        # 4. Identify new inputs
-        new_inputs = [a for a in sorted_inputs if a.label not in seen_set]
+        for seen_label, seen_id in seen_map.items():
+            if seen_label not in current_map:
+                logger.info(
+                    "%s: input %r removed, full recompute",
+                    self.name,
+                    seen_label,
+                )
+                return None
+            if seen_id is not None and current_map[seen_label] != seen_id:
+                logger.info(
+                    "%s: input %r content changed, full recompute",
+                    self.name,
+                    seen_label,
+                )
+                return None
+
+        # 5. Identify new inputs
+        seen_label_set = set(seen_map)
+        new_inputs = [a for a in sorted_inputs if a.label not in seen_label_set]
 
         if not new_inputs:
-            return (None, previous.content, len(seen_labels))  # no change
+            return (None, previous.content, len(seen_map))  # no change
 
-        # 5. New inputs must all sort after seen inputs (no interleave)
+        # 6. New inputs must all sort after seen inputs (no interleave)
         last_seen_idx = max(
-            (i for i, a in enumerate(sorted_inputs) if a.label in seen_set),
+            (i for i, a in enumerate(sorted_inputs) if a.label in seen_label_set),
             default=-1,
         )
         first_new_idx = min(
-            i for i, a in enumerate(sorted_inputs) if a.label not in seen_set
+            i for i, a in enumerate(sorted_inputs) if a.label not in seen_label_set
         )
         if first_new_idx <= last_seen_idx:
             logger.info(
@@ -254,7 +282,7 @@ class FoldSynthesis(Transform):
             len(new_inputs),
             len(sorted_inputs),
         )
-        return (new_inputs, checkpoint["accumulated"], len(seen_labels))
+        return (new_inputs, previous.content, len(seen_map))
 
     def _make_prompt_id(self) -> str:
         hash_prefix = hashlib.sha256(self.prompt.encode()).hexdigest()[:8]
