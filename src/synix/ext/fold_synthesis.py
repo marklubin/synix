@@ -1,7 +1,8 @@
 """FoldSynthesis — configurable N:1 sequential accumulation transform.
 
 Processes inputs one at a time, building up an accumulated result through
-sequential LLM calls.
+sequential LLM calls. Supports incremental checkpoint resume: when new inputs
+arrive and the transform config hasn't changed, only the delta is folded.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import inspect
 import logging
 from collections.abc import Callable
 
+from synix.build.fingerprint import Fingerprint
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform, TransformContext
 from synix.ext._render import render_template
@@ -114,10 +116,29 @@ class FoldSynthesis(Transform):
         prompt_id = self._make_prompt_id()
 
         sorted_inputs = self._sort_inputs(inputs)
-        accumulated = self.initial
+        transform_fp = self.compute_fingerprint(
+            ctx.to_dict() if hasattr(ctx, "to_dict") else ctx
+        )
+
+        # --- Checkpoint resume logic ---
+        previous = ctx.get("_previous_artifact") if hasattr(ctx, "get") else None
+        resume = self._try_resume(previous, sorted_inputs, transform_fp)
+
+        if resume is not None:
+            new_inputs, accumulated, start_step = resume
+            if new_inputs is None:
+                # No new inputs — return previous artifact unchanged
+                return [previous]
+        else:
+            # No valid checkpoint — full compute
+            new_inputs = sorted_inputs
+            accumulated = self.initial
+            start_step = 0
+
         total = len(sorted_inputs)
 
-        for step, inp in enumerate(sorted_inputs, 1):
+        # --- Main fold loop (over new_inputs only) ---
+        for step, inp in enumerate(new_inputs, start_step + 1):
             rendered = render_template(
                 self.prompt,
                 accumulated=accumulated,
@@ -135,9 +156,16 @@ class FoldSynthesis(Transform):
             )
             accumulated = response.content
 
+        # --- Persist checkpoint ---
+        all_input_labels = [a.label for a in sorted_inputs]
         output_metadata = {"input_count": len(inputs)}
         if self.metadata_fn is not None:
             output_metadata.update(self.metadata_fn(inputs))
+        output_metadata["_fold_checkpoint"] = {
+            "accumulated": accumulated,
+            "seen_input_labels": all_input_labels,
+            "transform_fingerprint": transform_fp.to_dict(),
+        }
 
         return [
             Artifact(
@@ -150,6 +178,83 @@ class FoldSynthesis(Transform):
                 metadata=output_metadata,
             )
         ]
+
+    def _try_resume(
+        self,
+        previous: Artifact | None,
+        sorted_inputs: list[Artifact],
+        transform_fp: Fingerprint,
+    ) -> tuple[list[Artifact] | None, str, int] | None:
+        """Attempt checkpoint resume.
+
+        Returns ``(new_inputs, accumulated, start_step)`` or ``None`` if a full
+        recompute is needed.  ``new_inputs=None`` means nothing changed.
+        """
+        if previous is None:
+            return None
+
+        checkpoint = previous.metadata.get("_fold_checkpoint")
+        if checkpoint is None:
+            return None
+
+        # 1. Transform fingerprint must match
+        stored_fp = Fingerprint.from_dict(checkpoint.get("transform_fingerprint"))
+        if stored_fp is None or not transform_fp.matches(stored_fp):
+            logger.info("%s: transform changed, full recompute", self.name)
+            return None
+
+        # 2. Checkpoint integrity: accumulated must equal artifact content
+        if checkpoint.get("accumulated") != previous.content:
+            logger.warning(
+                "%s: checkpoint inconsistent with artifact content, full recompute",
+                self.name,
+            )
+            return None
+
+        # 3. All previously-seen inputs must still be present
+        seen_labels = checkpoint.get("seen_input_labels", [])
+        seen_set = set(seen_labels)
+        current_set = set(a.label for a in sorted_inputs)
+
+        if not seen_set.issubset(current_set):
+            removed = seen_set - current_set
+            logger.info(
+                "%s: %d inputs removed (%s...), full recompute",
+                self.name,
+                len(removed),
+                list(removed)[:3],
+            )
+            return None
+
+        # 4. Identify new inputs
+        new_inputs = [a for a in sorted_inputs if a.label not in seen_set]
+
+        if not new_inputs:
+            return (None, previous.content, len(seen_labels))  # no change
+
+        # 5. New inputs must all sort after seen inputs (no interleave)
+        last_seen_idx = max(
+            (i for i, a in enumerate(sorted_inputs) if a.label in seen_set),
+            default=-1,
+        )
+        first_new_idx = min(
+            i for i, a in enumerate(sorted_inputs) if a.label not in seen_set
+        )
+        if first_new_idx <= last_seen_idx:
+            logger.info(
+                "%s: new inputs interleave with seen inputs, full recompute",
+                self.name,
+            )
+            return None
+
+        # All checks passed — safe to resume
+        logger.info(
+            "%s: resuming from checkpoint, %d new inputs (of %d total)",
+            self.name,
+            len(new_inputs),
+            len(sorted_inputs),
+        )
+        return (new_inputs, checkpoint["accumulated"], len(seen_labels))
 
     def _make_prompt_id(self) -> str:
         hash_prefix = hashlib.sha256(self.prompt.encode()).hexdigest()[:8]
