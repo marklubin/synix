@@ -103,8 +103,10 @@ async def run_auto_builder(config: ServerConfig) -> None:
         pipeline_path = Path(config.project_dir) / config.pipeline_path
         if pipeline_path.exists():
             project.load_pipeline(str(pipeline_path))
+        from synix.server.mcp_tools import _RELEASE_NAME
+
         result = project.build()
-        project.release_to("local")
+        project.release_to(_RELEASE_NAME)
         return f"{result.built} built, {result.cached} cached"
 
     last_fingerprint = _bucket_fingerprint()
@@ -152,13 +154,15 @@ def run_viewer(config: ServerConfig) -> None:
         return
 
     try:
+        from synix.server.mcp_tools import _RELEASE_NAME
+
         project = synix.open_project(config.project_dir)
         names = project.releases()
         if not names:
             logger.warning("Viewer: no releases found — build and release first")
             return
 
-        release_name = "local" if "local" in names else names[0]
+        release_name = _RELEASE_NAME if _RELEASE_NAME in names else names[0]
         release = project.release(release_name)
         logger.info("Viewer: serving release %r", release_name)
         viewer_serve(

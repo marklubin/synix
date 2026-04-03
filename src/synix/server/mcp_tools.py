@@ -25,11 +25,26 @@ server_mcp = FastMCP(
 _state: dict = {"project": None, "config": None}
 
 
+_RELEASE_NAME = "local"  # internal — the server always builds and queries this release
+
+
 def _require_project():
     """Return the current project or raise with a clear message."""
     if _state["project"] is None:
         raise ValueError("No project open. Server not fully initialized.")
     return _state["project"]
+
+
+def _current_release():
+    """Return the current queryable release, or raise if none exists."""
+    project = _require_project()
+    try:
+        return project.release(_RELEASE_NAME)
+    except Exception as exc:
+        raise ValueError(
+            "No build available yet. Ingest some documents and wait for the auto-builder, "
+            "or trigger a build manually."
+        ) from exc
 
 
 def _require_config():
@@ -107,15 +122,14 @@ def ingest(bucket: str, content: str, filename: str) -> str:
 
 @server_mcp.tool()
 def search(query: str, layers: str | None = None, limit: int = 10) -> str:
-    """Search memory in the local release.
+    """Search the knowledge base.
 
     Args:
         query: Search query string.
         layers: Comma-separated layer names to filter (optional).
         limit: Max results (default 10).
     """
-    project = _require_project()
-    rel = project.release("local")
+    rel = _current_release()
 
     layers_list = None
     if layers:
@@ -137,13 +151,12 @@ def search(query: str, layers: str | None = None, limit: int = 10) -> str:
 
 @server_mcp.tool()
 def get_context(name: str = "context-doc") -> str:
-    """Retrieve a flat file projection's rendered markdown content.
+    """Retrieve a synthesized context document.
 
     Args:
-        name: Flat file projection name (default "context-doc").
+        name: Projection name (default "context-doc").
     """
-    project = _require_project()
-    rel = project.release("local")
+    rel = _current_release()
     return rel.flat_file(name)
 
 

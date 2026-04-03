@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from synix.server.mcp_tools import _atomic_write, _require_project, _resolve_bucket_dir, _safe_filename
+from synix.server.mcp_tools import _atomic_write, _current_release, _resolve_bucket_dir, _safe_filename
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ async def get_flat_file(request: Request) -> Response:
     """GET /api/v1/flat-file/{name} — return flat file content as markdown."""
     name = request.path_params["name"]
     try:
-        project = _require_project()
-        rel = project.release("local")
+        rel = _current_release()
         content = rel.flat_file(name)
         return PlainTextResponse(content, media_type="text/markdown")
     except Exception as exc:

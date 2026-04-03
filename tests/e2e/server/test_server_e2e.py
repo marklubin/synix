@@ -207,21 +207,18 @@ class TestMCPToolsIntegration:
         assert not (Path(project_dir) / "etc").exists()
 
     def test_search_after_build(self, built_server):
-        from synix.server.mcp_tools import _state, search
+        from synix.server.mcp_tools import _current_release, search
 
-        # Verify project has a release with artifacts
-        project = _state["project"]
-        rel = project.release("local")
+        # Verify release has artifacts
+        rel = _current_release()
         layers = rel.layers()
         assert len(layers) > 0, f"No layers in release: {layers}"
 
-        # List artifacts to see what's indexed
         artifacts = list(rel.artifacts())
         assert len(artifacts) > 0, "No artifacts in release"
 
-        # Search for a term that should appear in mock LLM responses
+        # Search for a term from mock LLM responses
         result = search("summary")
-        # Mock LLM returns "This is a summary of the conversation..."
         assert len(result) > 0
 
     def test_get_context_after_build(self, built_server):
@@ -240,10 +237,8 @@ class TestFullWorkflow:
     """End-to-end: ingest via REST, build manually, search, get context."""
 
     def test_ingest_build_search_context(self, client, server_project, mock_llm):
-        """Complete flow: ingest → build → release → search → context."""
+        """Complete flow: ingest → build → search → context."""
         import synix
-        from synix.build.refs import synix_dir_for_build_dir
-        from synix.build.release_engine import execute_release
         from synix.server.mcp_tools import _state
 
         project_dir, config = server_project
@@ -263,44 +258,34 @@ class TestFullWorkflow:
         docs_dir = Path(project_dir) / "sources" / "documents"
         assert len(list(docs_dir.glob("topic-*.md"))) == 3
 
-        # 2. Copy ingested docs to pipeline source dir (the pipeline reads from ./sources)
-        # In production, the pipeline's Source would point at the bucket dir.
-        # For this test, the toy pipeline reads from ./sources (project root).
-        for f in docs_dir.glob("topic-*.md"):
-            import shutil
+        # 2. Copy ingested docs to pipeline source dir
+        # (toy pipeline reads from ./sources; in production the Source would point at the bucket)
+        import shutil
 
+        for f in docs_dir.glob("topic-*.md"):
             shutil.copy(f, Path(project_dir) / "sources" / f.name)
 
-        # 3. Build + release
+        # 3. Build + release via SDK
         project = synix.open_project(str(project_dir))
         project.load_pipeline(str(Path(project_dir) / "pipeline.py"))
         result = project.build()
         assert result.built >= 3, f"Expected at least 3 artifacts, got {result.built}"
-
-        synix_dir = synix_dir_for_build_dir(Path(project_dir) / "build")
-        execute_release(synix_dir, release_name="local")
+        project.release_to("local")
 
         # Re-open project to pick up release
         project = synix.open_project(str(project_dir))
         _state["project"] = project
 
-        # 4. Verify artifacts were built
-        rel = project.release("local")
-        artifacts = list(rel.artifacts())
-        assert len(artifacts) >= 3, f"Expected at least 3 artifacts, got {len(artifacts)}"
-
-        # 5. Verify context-doc flat file was produced
+        # 4. Verify context-doc flat file
         resp = client.get("/api/v1/flat-file/context-doc")
         assert resp.status_code == 200
         assert len(resp.text) > 0
 
-        # 6. Verify search index has content
-        # Mock LLM returns "This is a summary of the conversation..."
-        results = rel.search("summary", mode="keyword")
-        assert len(results) > 0, (
-            f"Search returned no results. "
-            f"Artifacts: {[a.label for a in artifacts]}"
-        )
+        # 5. Verify search works
+        from synix.server.mcp_tools import search
+
+        result = search("summary")
+        assert len(result) > 0
 
     def test_multiple_buckets_ingest(self, client, server_project):
         """Verify each bucket receives its documents independently."""

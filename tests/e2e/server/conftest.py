@@ -115,8 +115,6 @@ def built_server(server_project, mock_llm):
     Ingests 3 documents, runs build + release, returns (client, project_dir, config).
     """
     import synix
-    from synix.build.refs import synix_dir_for_build_dir
-    from synix.build.release_engine import execute_release
 
     project_dir, config = server_project
 
@@ -145,14 +143,12 @@ def built_server(server_project, mock_llm):
     for f in notes_dir.glob("*.md"):
         shutil.copy(f, docs_dir / f.name)
 
-    # Open project, load pipeline, build, release
+    # Build and release via SDK (no build internals)
     project = synix.open_project(str(project_dir))
     project.load_pipeline(str(Path(project_dir) / "pipeline.py"))
     result = project.build()
     assert result.built > 0, f"Build produced no artifacts: {result}"
-
-    synix_dir = synix_dir_for_build_dir(Path(project_dir) / "build")
-    execute_release(synix_dir, release_name="local")
+    project.release_to("local")
 
     # Re-open to pick up release
     project = synix.open_project(str(project_dir))
