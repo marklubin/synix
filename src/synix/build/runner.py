@@ -163,6 +163,7 @@ def run(
     for layer in build_order:
         layer_start = time.time()
         stats = LayerStats(name=layer.name, level=layer._level)
+        logger.info("Layer %s (L%d) starting", layer.name, layer._level)
         slogger.layer_start(layer.name, layer._level)
 
         if isinstance(layer, Source):
@@ -387,18 +388,26 @@ def run(
         result.built += stats.built
         result.cached += stats.cached
         result.skipped += stats.skipped
+        logger.info(
+            "Layer %s done — %d built, %d cached in %.1fs",
+            layer.name, stats.built, stats.cached, stats.time_seconds,
+        )
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
         # Checkpoint after each layer so interrupted builds can recover
+        logger.info("Layer %s checkpointing", layer.name)
         write_layer_checkpoint(snapshot_txn, layer.name)
 
+        logger.info("Layer %s materializing search surfaces", layer.name)
         _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, work_dir, logger=slogger)
 
     # Record projection declarations in the snapshot transaction
+    logger.info("Recording projection declarations")
     _record_snapshot_projections(snapshot_txn, pipeline, layer_artifacts)
 
     # Refresh the in-memory cache with the current build's artifacts so
     # downstream consumers (validators, fixers) see newly built data.
+    logger.info("Updating in-memory cache")
     store.update_from_build(layer_artifacts)
 
     # Run domain validators if requested and declared
@@ -410,6 +419,7 @@ def run(
     # Non-validating builds still record a snapshot; validating builds only
     # advance snapshot refs when all validators pass.
     if result.validation is None or result.validation.passed:
+        logger.info("Committing build snapshot")
         # Persist DLQ entries in the manifest so post-build inspection
         # can explain missing artifacts.
         if len(result.dlq) > 0:
@@ -423,7 +433,9 @@ def run(
                 for e in result.dlq.entries
             ]
         snapshot_txn.assert_complete(layer_artifacts)
+        logger.info("Writing snapshot to object store")
         snapshot_info = commit_build_snapshot(snapshot_txn)
+        logger.info("Snapshot committed: %s", snapshot_info.get("snapshot_oid", "")[:12])
         result.snapshot_oid = snapshot_info["snapshot_oid"]
         result.manifest_oid = snapshot_info["manifest_oid"]
         result.head_ref = snapshot_info["head_ref"]
@@ -647,6 +659,9 @@ def _materialize_layer_search_surfaces(
     Search surfaces only materialize once their full source closure is
     available, so the on-disk DB always matches cache state.
     """
+    import logging as _logging
+
+    _runner_logger = _logging.getLogger(__name__)
     for surface in pipeline.surfaces:
         source_layer_names = [s.name for s in surface.sources]
         if layer_name not in source_layer_names:
@@ -656,6 +671,11 @@ def _materialize_layer_search_surfaces(
         if not search_surface_ready(surface, available_names):
             continue
 
+        total_arts = sum(len(layer_artifacts.get(n, [])) for n in source_layer_names)
+        _runner_logger.info(
+            "Materializing surface %r (%d artifacts from %s)",
+            surface.name, total_arts, source_layer_names,
+        )
         _materialize_search_surface(
             surface,
             layer_artifacts,

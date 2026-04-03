@@ -176,7 +176,12 @@ def execute_release(
     # 6. Dispatch adapters for each projection
     adapter_receipts: dict[str, dict[str, Any]] = {}
     try:
-        for proj_name, declaration in closure.projections.items():
+        total_projs = len(closure.projections)
+        for i, (proj_name, declaration) in enumerate(closure.projections.items(), 1):
+            logger.info(
+                "Release: applying projection %d/%d: %s (%s)",
+                i, total_projs, proj_name, declaration.adapter,
+            )
             adapter = get_adapter(declaration.adapter)
             prev = current_adapter_receipts.get(proj_name)
 
@@ -189,6 +194,7 @@ def execute_release(
                     f"projection {proj_name!r}. Release aborted."
                 )
 
+            logger.info("Release: projection %s done", proj_name)
             adapter_receipts[proj_name] = receipt.to_dict()
 
     except Exception:
