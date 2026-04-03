@@ -1,0 +1,37 @@
+# Synix Knowledge Server — salinas deployment config
+
+[server]
+project_dir = "/srv/synix/project"
+pipeline_path = "pipeline.py"
+mcp_port = 8200
+viewer_port = 9471
+
+[buckets.sessions]
+dir = "sources/sessions"
+patterns = ["**/*.jsonl.gz", "**/*.jsonl"]
+description = "Claude Code session transcripts"
+
+[buckets.exports]
+dir = "sources/exports"
+patterns = ["**/*.json"]
+description = "ChatGPT/Claude bulk conversation exports"
+
+[buckets.documents]
+dir = "sources/documents"
+patterns = ["**/*.md", "**/*.txt"]
+description = "Notes, receipts, active work, memos"
+
+[buckets.reports]
+dir = "sources/reports"
+patterns = ["**/*.md"]
+description = "Cron outputs and automated reports"
+
+[buckets.reference]
+dir = "sources/reference"
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+description = "Background material — specs, intel, papers (search only, not rolled up)"
+
+[auto_build]
+enabled = true
+scan_interval = 60
+cooldown = 300
