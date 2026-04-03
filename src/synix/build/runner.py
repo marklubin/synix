@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -153,21 +154,29 @@ def run(
     snapshot_txn = start_build_transaction(pipeline, build_dir, slogger.run_log.run_id)
     store = SnapshotArtifactCache(snapshot_txn.synix_dir)
 
-    # Resolve build order
+    # Resolve build order and group by level for parallel execution
     build_order = resolve_build_order(pipeline)
     slogger.run_start(pipeline.name, len(build_order))
+
+    # Group layers by level — layers at the same level are independent
+    level_groups: dict[int, list[Layer]] = {}
+    for layer in build_order:
+        level_groups.setdefault(layer._level, []).append(layer)
 
     # Artifacts produced per layer (layer_name -> list[Artifact])
     layer_artifacts: dict[str, list[Artifact]] = {}
 
-    for layer in build_order:
+    # Lock for shared mutable state (snapshot_txn writes, DLQ)
+    _txn_lock = threading.Lock()
+
+    def _run_single_layer(layer: Layer) -> tuple[Layer, LayerStats, list[Artifact]]:
+        """Execute a single layer. Thread-safe — uses _txn_lock for snapshot writes."""
         layer_start = time.time()
         stats = LayerStats(name=layer.name, level=layer._level)
         logger.info("Layer %s (L%d) starting", layer.name, layer._level)
         slogger.layer_start(layer.name, layer._level)
 
         if isinstance(layer, Source):
-            # Source layer — call load()
             source_config = _build_source_config(pipeline, layer, src_dir)
             source_config["_logger"] = slogger
             source_config["_layer_name"] = layer.name
@@ -177,60 +186,49 @@ def run(
             except Exception as exc:
                 raise RuntimeError(f"Source '{layer.name}' failed to load: {exc}") from exc
 
-            # Record source artifacts in snapshot
             for artifact in artifacts:
                 artifact.metadata["layer_name"] = layer.name
                 artifact.metadata["layer_level"] = layer._level
-                _record_snapshot_artifact(
-                    snapshot_txn,
-                    artifact,
-                    layer_name=layer.name,
-                    layer_level=layer._level,
-                    parent_labels=[],
-                )
+                with _txn_lock:
+                    _record_snapshot_artifact(
+                        snapshot_txn, artifact,
+                        layer_name=layer.name, layer_level=layer._level, parent_labels=[],
+                    )
                 stats.built += 1
                 slogger.artifact_built(layer.name, artifact.label)
 
-            layer_artifacts[layer.name] = artifacts
+            stats.time_seconds = time.time() - layer_start
+            return layer, stats, artifacts
 
         elif isinstance(layer, Transform):
-            # Transform layer — gather inputs, split, execute
             inputs = _gather_inputs(layer, layer_artifacts, store)
             transform_config = _build_transform_config(pipeline, layer, src_dir, work_dir)
             transform_ctx = _build_transform_context(pipeline, layer, src_dir, work_dir, transform_config)
 
-            # Inject previous artifact for incremental N:1 transforms (fold checkpoint resume)
             if getattr(layer, "_supports_incremental", False) and hasattr(layer, "label_value"):
                 _prev = store.load_artifact(layer.label_value)
                 if _prev is not None:
-                    transform_ctx = transform_ctx.with_updates(
-                        {"_previous_artifact": _prev}
-                    )
+                    transform_ctx = transform_ctx.with_updates({"_previous_artifact": _prev})
 
-            # Compute transform fingerprint
             transform_fp = layer.compute_fingerprint(transform_config)
-
             layer_built: list[Artifact] = []
             dlq_before = len(result.dlq)
 
             if _layer_fully_cached(layer, inputs, store, transform_fp, accept_existing=accept_existing):
-                # All cached — load existing artifacts
                 existing = store.list_artifacts(layer.name)
                 for art in existing:
                     art.metadata["layer_name"] = layer.name
                     art.metadata["layer_level"] = layer._level
                     layer_built.append(art)
-                    _record_snapshot_artifact(
-                        snapshot_txn,
-                        art,
-                        layer_name=layer.name,
-                        layer_level=layer._level,
-                        parent_labels=_snapshot_parent_labels(art, inputs, store),
-                    )
+                    with _txn_lock:
+                        _record_snapshot_artifact(
+                            snapshot_txn, art,
+                            layer_name=layer.name, layer_level=layer._level,
+                            parent_labels=_snapshot_parent_labels(art, inputs, store),
+                        )
                     stats.cached += 1
                     slogger.artifact_cached(layer.name, art.label)
             else:
-                # Execute transform
                 transform_ctx = transform_ctx.with_updates({"_logger": slogger, "_layer_name": layer.name})
 
                 def _save_artifact(
@@ -243,22 +241,15 @@ def run(
                     _accept_existing=accept_existing,
                 ) -> None:
                     effective_inputs = parent_inputs if parent_inputs is not None else _inputs
-                    # Compute per-artifact build fingerprint
                     build_fp = compute_build_fingerprint(_transform_fp, artifact.input_ids)
 
-                    # In accept_existing mode, skip fingerprint comparison —
-                    # only rebuild if the artifact doesn't exist at all.
-                    # Exception: incremental N:1 transforms always write
-                    # because their output changes as inputs accumulate.
                     if _accept_existing:
                         existing = store.load_artifact(artifact.label)
                         is_incremental = getattr(_layer, "_supports_incremental", False)
                         rebuild = existing is None or is_incremental
                     else:
                         rebuild, _reasons = needs_rebuild(
-                            artifact.label,
-                            artifact.input_ids,
-                            store,
+                            artifact.label, artifact.input_ids, store,
                             current_build_fingerprint=build_fp,
                         )
                     if rebuild:
@@ -269,13 +260,12 @@ def run(
                         parent_labels = _get_parent_labels(artifact, effective_inputs)
                         if not parent_labels:
                             parent_labels = [inp.label for inp in effective_inputs]
-                        _record_snapshot_artifact(
-                            snapshot_txn,
-                            artifact,
-                            layer_name=_layer.name,
-                            layer_level=_layer._level,
-                            parent_labels=parent_labels,
-                        )
+                        with _txn_lock:
+                            _record_snapshot_artifact(
+                                snapshot_txn, artifact,
+                                layer_name=_layer.name, layer_level=_layer._level,
+                                parent_labels=parent_labels,
+                            )
                         layer_built.append(artifact)
                         stats.built += 1
                         slogger.artifact_built(_layer.name, artifact.label)
@@ -285,22 +275,20 @@ def run(
                             cached.metadata["layer_name"] = _layer.name
                             cached.metadata["layer_level"] = _layer._level
                             layer_built.append(cached)
-                            _record_snapshot_artifact(
-                                snapshot_txn,
-                                cached,
-                                layer_name=_layer.name,
-                                layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(cached, effective_inputs, store),
-                            )
+                            with _txn_lock:
+                                _record_snapshot_artifact(
+                                    snapshot_txn, cached,
+                                    layer_name=_layer.name, layer_level=_layer._level,
+                                    parent_labels=_snapshot_parent_labels(cached, effective_inputs, store),
+                                )
                         else:
                             layer_built.append(artifact)
-                            _record_snapshot_artifact(
-                                snapshot_txn,
-                                artifact,
-                                layer_name=_layer.name,
-                                layer_level=_layer._level,
-                                parent_labels=_snapshot_parent_labels(artifact, effective_inputs, store),
-                            )
+                            with _txn_lock:
+                                _record_snapshot_artifact(
+                                    snapshot_txn, artifact,
+                                    layer_name=_layer.name, layer_level=_layer._level,
+                                    parent_labels=_snapshot_parent_labels(artifact, effective_inputs, store),
+                                )
                         stats.cached += 1
                         slogger.artifact_cached(_layer.name, artifact.label)
 
@@ -308,12 +296,10 @@ def run(
                     for artifact in artifacts:
                         _save_artifact(artifact, parent_inputs=unit_inputs)
 
-                # Build lookup of cached artifacts by sorted input_ids for per-unit cache checks
                 existing_artifacts = store.list_artifacts(layer.name)
                 cached_by_inputs: dict[tuple[str, ...], list[Artifact]] = {}
                 for art in existing_artifacts:
                     if accept_existing:
-                        # Accept any existing artifact regardless of fingerprint
                         key = tuple(sorted(art.input_ids))
                         cached_by_inputs.setdefault(key, []).append(art)
                     else:
@@ -329,26 +315,21 @@ def run(
                         cached_art.metadata["layer_name"] = layer.name
                         cached_art.metadata["layer_level"] = layer._level
                         layer_built.append(cached_art)
-                        _record_snapshot_artifact(
-                            snapshot_txn,
-                            cached_art,
-                            layer_name=layer.name,
-                            layer_level=layer._level,
-                            parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, store),
-                        )
+                        with _txn_lock:
+                            _record_snapshot_artifact(
+                                snapshot_txn, cached_art,
+                                layer_name=layer.name, layer_level=layer._level,
+                                parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, store),
+                            )
                         stats.cached += 1
                         slogger.artifact_cached(layer.name, cached_art.label)
 
-                # Split inputs into work units
                 units = _invoke_transform_split(layer, inputs, transform_ctx)
                 use_concurrent = concurrency > 1 and len(units) > 1
 
                 if use_concurrent:
                     _execute_transform_concurrent(
-                        layer,
-                        units,
-                        transform_ctx,
-                        concurrency,
+                        layer, units, transform_ctx, concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,
@@ -358,7 +339,6 @@ def run(
                     )
                 else:
                     for unit_inputs, config_extras in units:
-                        # Per-unit cache check
                         unit_input_ids = tuple(sorted(a.artifact_id for a in unit_inputs if a.artifact_id))
                         cached_arts = cached_by_inputs.get(unit_input_ids)
                         if cached_arts:
@@ -380,10 +360,17 @@ def run(
                             else:
                                 raise
 
-            layer_artifacts[layer.name] = layer_built
             stats.dlq_count = len(result.dlq) - dlq_before
+            stats.time_seconds = time.time() - layer_start
+            return layer, stats, layer_built
 
+        # Projection/surface layers — no artifacts to return
         stats.time_seconds = time.time() - layer_start
+        return layer, stats, []
+
+    def _finish_layer(layer: Layer, stats: LayerStats, built: list[Artifact]) -> None:
+        """Post-processing after a layer completes: update results, checkpoint, surfaces."""
+        layer_artifacts[layer.name] = built
         result.layer_stats.append(stats)
         result.built += stats.built
         result.cached += stats.cached
@@ -394,12 +381,30 @@ def run(
         )
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
-        # Checkpoint after each layer so interrupted builds can recover
-        logger.info("Layer %s checkpointing", layer.name)
-        write_layer_checkpoint(snapshot_txn, layer.name)
+        with _txn_lock:
+            write_layer_checkpoint(snapshot_txn, layer.name)
 
-        logger.info("Layer %s materializing search surfaces", layer.name)
         _materialize_layer_search_surfaces(pipeline, layer.name, layer_artifacts, work_dir, logger=slogger)
+
+    # Execute layers grouped by level — same-level layers run concurrently
+    for level in sorted(level_groups):
+        group = level_groups[level]
+
+        if len(group) == 1:
+            # Single layer at this level — run inline
+            layer, stats, built = _run_single_layer(group[0])
+            _finish_layer(layer, stats, built)
+        else:
+            # Multiple independent layers — run concurrently
+            logger.info(
+                "Level %d: running %d layers in parallel (%s)",
+                level, len(group), ", ".join(l.name for l in group),
+            )
+            with ThreadPoolExecutor(max_workers=len(group)) as pool:
+                futures = {pool.submit(_run_single_layer, layer): layer for layer in group}
+                for future in as_completed(futures):
+                    layer, stats, built = future.result()
+                    _finish_layer(layer, stats, built)
 
     # Record projection declarations in the snapshot transaction
     logger.info("Recording projection declarations")
