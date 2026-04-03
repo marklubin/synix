@@ -114,8 +114,9 @@ PROJECTIONS
   weekly-brief.md       latest weekly + open-threads
 ```
 
-Pipeline definitions are Python files, dynamically reloadable. Adding a new rollup
-layer reads from the existing episode pool — nothing upstream recomputes.
+Pipeline definitions are Python files. Adding a new rollup layer reads from the
+existing episode pool — nothing upstream recomputes. The server loads the pipeline
+on startup from the configured `pipeline_path`.
 
 ## Claude Code Plugin
 
