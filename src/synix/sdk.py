@@ -670,6 +670,7 @@ class Project:
         concurrency: int = 5,
         timeout: float | None = None,
         dry_run: bool = False,
+        accept_existing: bool = False,
     ) -> BuildResult:
         """Build the pipeline and produce a snapshot.
 
@@ -678,6 +679,10 @@ class Project:
             concurrency: Max parallel transform workers.
             timeout: Per-request LLM timeout in seconds. Overrides pipeline llm_config.timeout.
             dry_run: If True, return plan counts without building.
+            accept_existing: Keep cached artifacts even if the model/config changed.
+                Only rebuild artifacts with new or changed inputs. Useful for
+                model migration — existing work is preserved, new inputs use the
+                new config.
         """
         original = self._resolve_pipeline(pipeline)
 
@@ -723,7 +728,7 @@ class Project:
 
         from synix.build.runner import run
 
-        result = run(resolved, concurrency=concurrency)
+        result = run(resolved, concurrency=concurrency, accept_existing=accept_existing)
         return BuildResult(
             built=result.built,
             cached=result.cached,

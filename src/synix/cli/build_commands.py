@@ -134,6 +134,12 @@ def _surface_triggers(pipeline: Pipeline) -> dict[str, list[tuple[str, str, str]
     default=False,
     help="Enable dead letter queue: skip content-filter and input-too-large errors instead of aborting",
 )
+@click.option(
+    "--accept-existing",
+    is_flag=True,
+    default=False,
+    help="Keep cached artifacts even if model/config changed. Only rebuild new/changed inputs.",
+)
 def build(
     pipeline_path: str,
     source_dir: str | None,
@@ -143,6 +149,7 @@ def build(
     validate: bool,
     plain: bool,
     dlq: bool,
+    accept_existing: bool,
 ):
     """Build memory artifacts from a pipeline definition.
 
@@ -201,6 +208,7 @@ def build(
                 progress=progress,
                 validate=validate,
                 error_classifier=classifier,
+                accept_existing=accept_existing,
             )
         except Exception as e:
             console.print()
@@ -217,6 +225,7 @@ def build(
                     progress=progress,
                     validate=validate,
                     error_classifier=classifier,
+                    accept_existing=accept_existing,
                 )
         except Exception as e:
             console.print()

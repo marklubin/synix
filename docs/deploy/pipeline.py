@@ -296,7 +296,7 @@ pipeline = Pipeline(
     build_dir="./build",
     llm_config={
         "provider": "anthropic",
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6-20250514",
         "temperature": 0.3,
         "max_tokens": 4096,
     },
