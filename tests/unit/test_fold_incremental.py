@@ -15,12 +15,8 @@ Covers the full decision tree from docs/incremental-fold-design.md:
 
 from __future__ import annotations
 
-import pytest
-
 from synix import Artifact
-from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
 from synix.transforms import FoldSynthesis
-
 
 # ---------------------------------------------------------------------------
 # Helpers
