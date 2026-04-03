@@ -4,7 +4,7 @@
   "description": "Persistent memory for Claude Code — search, ingest, and context across sessions via a Synix knowledge server",
   "author": {
     "name": "Synix",
-    "email": "melubin@pm.me"
+    "email": "mark@synix.dev"
   },
   "repository": "https://github.com/marklubin/synix",
   "license": "MIT",
