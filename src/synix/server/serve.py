@@ -105,7 +105,7 @@ async def run_auto_builder(config: ServerConfig) -> None:
             project.load_pipeline(str(pipeline_path))
         from synix.server.mcp_tools import _RELEASE_NAME
 
-        result = project.build()
+        result = project.build(accept_existing=True)
         project.release_to(_RELEASE_NAME)
         return f"{result.built} built, {result.cached} cached"
 
