@@ -1,4 +1,4 @@
-<!-- updated: 2026-04-02 -->
+<!-- updated: 2026-04-03 -->
 # Synix Knowledge Server Architecture
 
 ## Problem
@@ -12,64 +12,82 @@ compute.
 
 ## Design
 
-One Synix server on salinas. One optional auth gateway on oxnard. A Claude Code
-plugin for ingest and retrieval. Cron outputs feed in as documents.
+One Synix server on salinas. A real Claude Code plugin for ingest and retrieval.
+Cron outputs feed in as documents. Everything goes through MCP or REST.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  ANY CLIENT (Claude Code, Cursor, scripts, crons)    │
+│  CLAUDE CODE (any machine)                           │
 │                                                      │
-│  MCP tools:                                          │
-│    source_add_text / source_add_file  → ingest       │
-│    search                             → query        │
-│    get_artifact / get_flat_file       → read         │
-│    build (manual trigger)             → rebuild      │
+│  synix plugin (real Claude Code plugin):             │
+│    ├─ MCP server → synix on salinas                  │
+│    │   tools: ingest, search, get_context            │
+│    ├─ SessionStart hook → inject context doc          │
+│    ├─ Stop hook → push session transcript             │
+│    └─ skills: memory (model-invoked)                 │
+└──────────────┬───────────────────────────────────────┘
+               │ Tailscale / HTTP
+               ▼
+┌──────────────────────────────────────────────────────┐
+│  SALINAS (synix serve)                               │
 │                                                      │
-│  Plugin hooks (Claude Code):                         │
-│    on_startup   → pull context-doc, inject prompt    │
-│    on_session_end → push session transcript          │
-└──────────────┬───────────────────────┬───────────────┘
-               │ Tailscale             │ Public
-               ▼                       ▼
-┌────────────────────────┐  ┌──────────────────────────┐
-│  SALINAS               │  │  OXNARD                  │
-│  (physical server)     │  │  (cloud VPS)             │
-│                        │◄─│  Caddy reverse proxy     │
-│  synix-server          │  │    auth (API key)        │
-│    ├ MCP HTTP :8200    │  │    mcp → sal:8200        │
-│    ├ Viewer   :9471    │  │    view → sal:9471       │
-│    ├ Auto-builder      │  └──────────────────────────┘
-│    └ Pipeline engine   │
-│                        │
-│  .synix/               │
-│    ├ objects/           │
-│    ├ refs/              │
-│    ├ releases/          │
-│    └ sources/           │
-│        ├ sessions/      │  ← Claude Code transcripts
-│        ├ documents/     │  ← manual ingest (md, text, pdf)
-│        └ reports/       │  ← cron outputs
-└────────────────────────┘
+│  MCP HTTP :8200                                      │
+│    tools:                                            │
+│      ingest(bucket, content, filename)               │
+│      search(query, layers?, limit?)                  │
+│      get_context(name?)                              │
+│      list_buckets()                                  │
+│                                                      │
+│  REST API :8200 (alongside MCP)                      │
+│    GET  /api/v1/health                               │
+│    GET  /api/v1/flat-file/{name}                     │
+│    POST /api/v1/ingest/{bucket}                      │
+│                                                      │
+│  Viewer :9471                                        │
+│  Auto-builder (watches buckets, triggers pipeline)   │
+│                                                      │
+│  Buckets (source endpoints):                         │
+│    sessions/   → .jsonl.gz adapter (decompress,      │
+│                   merge subsessions, sanitize)        │
+│    documents/  → passthrough (md, txt, pdf)           │
+│    reports/    → passthrough (cron outputs)            │
+│                                                      │
+│  Pipeline:                                           │
+│    sources → episodes → weekly/research/hypotheses/  │
+│    open-threads → core/work-status → search + flats  │
+└──────────────────────────────────────────────────────┘
 ```
 
-## Sources (format-based, not domain-based)
+## Buckets
 
-Three source types distinguished by format, not by content domain:
+Pre-declared ingestion endpoints, like S3 buckets. Each bucket maps to a source
+directory with format-specific conventions:
 
-| Source | What | Adapter |
-|--------|------|---------|
-| `sessions` | Claude Code session logs (.jsonl.gz) | Decompress, merge subsessions, sanitize JSON |
-| `documents` | Markdown, text, PDF — anything | Passthrough |
-| `reports` | Cron outputs (structured text) | Passthrough |
+| Bucket | Dir | Adapter | What goes in |
+|--------|-----|---------|-------------|
+| `sessions` | `sources/sessions/` | Decompress, merge subsessions, sanitize JSON | Claude Code session transcripts (.jsonl.gz) |
+| `documents` | `sources/documents/` | Passthrough | Notes, specs, memos, research (md, txt, pdf) |
+| `reports` | `sources/reports/` | Passthrough | Cron outputs, automated reports |
 
-Bulk conversation exports (ChatGPT JSON, Claude JSON) are a one-time backfill
-operation, not a live pipeline source.
+Buckets are declared in `synix-server.toml`. Adding a new bucket is a config change.
+
+## MCP Surface
+
+Four tools. Simple and agent-friendly:
+
+- **`ingest(bucket, content, filename)`** — put a document into a named bucket
+- **`search(query, layers?, limit?)`** — search the knowledge base
+- **`get_context(name?)`** — fetch a synthesized flat file (default: context-doc)
+- **`list_buckets()`** — list available buckets and descriptions
+
+This replaces the 28-tool MCP surface from the existing `synix.mcp.server`. The
+existing server stays for power-user/local-dev pipeline manipulation. The knowledge
+server exposes the simplified surface for agents.
 
 ## Pipeline
 
 All Level 2+ layers use incremental fold semantics: `prev_state + Δ(new episodes) → new_state`.
-Cost scales with delta, not corpus size. See `docs/incremental-fold-design.md` for the
-checkpoint mechanism.
+Cost scales with delta, not corpus size. See `docs/incremental-fold-design.md`.
 
 ```
 SOURCES
@@ -77,119 +95,92 @@ SOURCES
   ├─ documents/
   └─ reports/
 
-
 LEVEL 1 — EPISODES (1:1, MapSynthesis)
-
   episodes              one summary per source document
-                        existing artifacts untouched; only new sources summarize
 
-
-LEVEL 2 — ROLLUPS (all IncrementalFold: prev + Δ → new)
-
+LEVEL 2 — ROLLUPS (all FoldSynthesis with incremental checkpoint)
   weekly                one per ISO week, 9-week rolling window
   research              one per active research thread
-  hypotheses            one per hypothesis under test (ACTIVE/SUPPORTED/REFUTED/DORMANT)
-  open-threads          single doc — unresolved work, blockers, pending actions
+  hypotheses            one per hypothesis under test
+  open-threads          single doc — unresolved work, blockers, pending
 
-  (additional rollup layers added without recomputing upstream)
-
-
-LEVEL 3 — SYNTHESIS (IncrementalFold, reads from level 2)
-
+LEVEL 3 — SYNTHESIS (FoldSynthesis, reads from level 2)
   core                  persistent identity + context
   work-status           current priorities, blockers, next actions
 
-
 PROJECTIONS
-
   search                FTS5 + semantic over all layers
-  context-doc.md        core + work-status (injected into agent prompts on startup)
+  context-doc.md        core + work-status (injected into agent prompts)
   weekly-brief.md       latest weekly + open-threads
 ```
 
-Pipeline definitions are Python files, dynamically reloadable via `load_pipeline()`.
-Adding a new Level 2 rollup reads from the existing episode pool — nothing upstream
-recomputes.
+Pipeline definitions are Python files, dynamically reloadable. Adding a new rollup
+layer reads from the existing episode pool — nothing upstream recomputes.
 
 ## Claude Code Plugin
 
-Domain-agnostic. Ships with Synix. Three components:
-
-### 1. MCP Server Config
-Points to the remote Synix server. Gives agents search, ingest, and browse tools.
-
-```json
-{
-  "mcpServers": {
-    "synix": {
-      "url": "http://salinas:8200/mcp"
-    }
-  }
-}
-```
-
-### 2. Startup Hook
-Pulls the `context-doc` flat file from the server and injects it into the session
-context. This replaces manually-maintained CONTEXT.md files.
+Real Claude Code plugin at `plugin/` in the synix repo.
 
 ```
-synix context pull --server http://salinas:8200 --format claude-md
+plugin/
+├── .claude-plugin/plugin.json    # manifest
+├── .mcp.json                     # MCP server → synix on salinas
+├── hooks/
+│   ├── hooks.json                # SessionStart + Stop hooks
+│   ├── session_start.sh          # fetch context, inject into session
+│   └── session_end.sh            # push session transcript to server
+└── skills/
+    └── memory/
+        └── SKILL.md              # model-invoked memory skill
 ```
 
-### 3. Session-End Hook
-Pushes the completed session transcript to the server. Idempotent — deduplicates
-by session ID.
+**SessionStart hook**: fetches context-doc via REST, outputs JSON to inject
+it as additional context into the session.
 
-```
-synix session push --server http://salinas:8200
-```
+**Stop hook**: reads session ID from stdin, locates the `.jsonl` file, POSTs
+it to the server's ingest endpoint.
 
-## Cron Integration
+**Memory skill**: model-invoked — Claude autonomously searches memory when it
+needs context and ingests documents when the user mentions calls or decisions.
 
-Existing crons on salinas (email-triage, daily-intel, social tracking) redirect
-their output to `sources/reports/` instead of (or in addition to) the notify
-system. Reports become documents that flow through the pipeline like everything
-else.
+## Server Mode
 
-Downstream pipeline layers (e.g. `relationships`, `engagement`) can be defined
-over the report episodes to maintain rolling context for social tracking and
-outreach work.
+`synix serve` — a CLI command that runs three async services:
 
-## Synix Server Mode
-
-A simplification of synix-agent-mesh. Drops: mesh coordination, term fencing,
-member tracking, cluster protocol. Keeps: MCP HTTP transport, viewer, auto-builder,
-pipeline engine.
-
-Runs as a systemd service on salinas. Four async tasks:
-
-1. **MCP HTTP** (:8200) — streamable HTTP, all Synix tools
+1. **MCP HTTP** (:8200) — simplified tools + REST endpoints on one Starlette app
 2. **Viewer** (:9471) — Flask web UI for browsing and search
-3. **Auto-builder** — watches source dirs, triggers pipeline on changes
-4. **Pipeline engine** — runs whatever `pipeline.py` is loaded
+3. **Auto-builder** — watches bucket dirs, triggers pipeline on changes
+
+Config via `synix-server.toml`. Runs as a systemd service on salinas.
+
+## Backfill
+
+Three data sources migrate into the new server:
+
+1. **Existing artifact store** (3,554 objects from synix-agent-mesh) — copy `.synix/`
+   directly. Preserves episodes, rollups, fold checkpoints.
+
+2. **Session transcripts** (591 files from `~/unified-memory/sessions/`) — copy into
+   `sessions/` bucket. Matching episodes are already built, no recompute.
+
+3. **agent-memory-disco corpus** (359 .md files) — copy into `documents/` bucket.
+   These are new content — will generate ~359 new episode summaries on first build.
+   Rollup layers fully recompute (new prompts differ from agent-mesh prompts).
+
+After initial backfill, new content enters through:
+- **Sessions**: Stop hook pushes each session transcript automatically
+- **Documents**: `ingest("documents", content, filename)` via MCP during sessions
+- **Reports**: Crons write directly to `sources/reports/` on salinas
 
 ## Platform vs Domain Separation
 
-Everything described above as shipping with Synix is domain-agnostic:
-- The server, plugin, CLI commands, and transport are platform
-- Source types are format-based (sessions, documents, reports), not domain-based
-- IncrementalFold is a generic transform primitive
+**Platform (ships with synix):**
+- Server module, MCP tools, REST API, auto-builder, viewer
+- Bucket config system
+- Claude Code plugin structure
+- IncrementalFold transform
 
-Domain-specific configuration lives in `pipeline.py`:
+**Domain-specific (user's `pipeline.py`):**
 - Which rollup layers exist and their prompts
 - Which flat files get projected
 - Which layers feed into core synthesis
-- Cron report format expectations
-
-## Migration Path
-
-1. Build IncrementalFold into Synix core (see `docs/incremental-fold-design.md`)
-2. Extract synix-server from synix-agent-mesh (drop mesh, keep server/viewer/builder)
-3. Build `synix context pull` and `synix session push` CLI commands
-4. Build `synix setup claude-code` for plugin installation
-5. Deploy synix-server on salinas as systemd service
-6. Import existing .synix/objects/ (4,574 artifacts) to salinas
-7. Bulk ingest key documents from agent-memory-disco
-8. Point all MCP configs to salinas:8200
-9. Redirect cron outputs to sources/reports/
-10. Retire synix-agent-mesh

@@ -1,0 +1,13 @@
+{
+  "name": "synix",
+  "version": "0.21.0",
+  "description": "Persistent memory for Claude Code — search, ingest, and context across sessions via a Synix knowledge server",
+  "author": {
+    "name": "Synix",
+    "email": "melubin@pm.me"
+  },
+  "repository": "https://github.com/marklubin/synix",
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}

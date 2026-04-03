@@ -1,0 +1,6 @@
+{
+  "synix": {
+    "type": "streamable-http",
+    "url": "http://salinas:8200/mcp/"
+  }
+}
