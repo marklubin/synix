@@ -98,16 +98,27 @@ async def run_auto_builder(config: ServerConfig) -> None:
     def _run_build() -> str:
         """Run build + release synchronously (called in executor)."""
         import synix
+        from synix.server.mcp_tools import _RELEASE_NAME
 
         project = synix.open_project(config.project_dir)
         pipeline_path = Path(config.project_dir) / config.pipeline_path
         if pipeline_path.exists():
             project.load_pipeline(str(pipeline_path))
-        from synix.server.mcp_tools import _RELEASE_NAME
 
+        logger.info("Auto-build: starting pipeline execution")
         result = project.build(accept_existing=True)
+
+        layer_summary = ", ".join(
+            f"{s.name}({s.built}b/{s.cached}c)"
+            for s in result.layer_stats
+        )
+        logger.info("Auto-build: build done — %s", layer_summary)
+
+        logger.info("Auto-build: materializing release %r", _RELEASE_NAME)
         project.release_to(_RELEASE_NAME)
-        return f"{result.built} built, {result.cached} cached"
+        logger.info("Auto-build: release complete")
+
+        return f"{result.built} built, {result.cached} cached, {result.total_time:.1f}s"
 
     last_fingerprint = _bucket_fingerprint()
     last_build_time = 0.0

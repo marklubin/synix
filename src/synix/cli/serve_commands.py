@@ -30,6 +30,13 @@ def serve(config_path: str, mcp_port: int | None, viewer: bool, verbose: bool) -
         datefmt="%H:%M:%S",
     )
 
+    # Ensure synix build logs are visible (layer starts, artifact progress, etc.)
+    logging.getLogger("synix.build").setLevel(logging.INFO)
+    logging.getLogger("synix.server").setLevel(logging.INFO)
+    # Suppress noisy httpx request logging unless verbose
+    if not verbose:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+
     config = load_config(config_path)
 
     if mcp_port is not None:
