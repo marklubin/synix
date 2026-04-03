@@ -26,6 +26,18 @@ class TestHealthEndpoint:
 # ---------------------------------------------------------------------------
 
 
+class TestBucketsEndpoint:
+    def test_list_buckets(self, client):
+        resp = client.get("/api/v1/buckets")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["buckets"]) == 3
+        names = [b["name"] for b in data["buckets"]]
+        assert "documents" in names
+        assert "sessions" in names
+        assert "reports" in names
+
+
 class TestIngestEndpoint:
     def test_ingest_to_documents_bucket(self, client, server_project):
         project_dir, config = server_project
@@ -140,14 +152,24 @@ class TestIngestEndpoint:
 
 
 class TestSearchEndpoint:
-    def test_search_finds_ingested_content(self, built_server):
+    def test_search_returns_results(self, built_server):
         client, _, _ = built_server
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/v1/search?q=summary")
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] > 0
+        assert len(data["results"]) > 0
+        assert "label" in data["results"][0]
+        assert "score" in data["results"][0]
 
-        # Search for content we ingested
-        # Note: search is via MCP tools, not REST. But we can verify
-        # the flat file endpoint works after build.
+    def test_search_empty_query_400(self, client):
+        resp = client.get("/api/v1/search")
+        assert resp.status_code == 400
+
+    def test_search_no_build_returns_error(self, client):
+        resp = client.get("/api/v1/search?q=test")
+        assert resp.status_code in (500, 503)
+        assert "error" in resp.json()
 
     def test_flat_file_returns_context(self, built_server):
         client, project_dir, _ = built_server
