@@ -45,18 +45,24 @@ After completing a fold, persist in `artifact.metadata["_fold_checkpoint"]`:
 
 ```python
 {
-    "accumulated": str,              # the final accumulated value (= artifact content)
-    "seen_input_labels": list[str],  # labels of all inputs processed (ordered)
-    "transform_fingerprint": dict,   # fingerprint at time of fold (for validation)
+    "version": 1,                          # schema version for forward compatibility
+    "content_hash": str,                   # truncated SHA256 of accumulated content
+    "seen_inputs": list[dict],             # [{"label": str, "artifact_id": str}, ...]
+    "transform_fingerprint": dict,         # fingerprint at time of fold (for validation)
 }
 ```
 
 The `_` prefix signals this is engine-internal metadata, not user-facing.
 
-**Why `labels` not `artifact_ids`:** `artifact_id` is a content hash. Two artifacts
-with identical content share the same hash, causing the checkpoint to collapse them.
-Labels are unique per artifact and also capture identity changes (renames, metadata
-edits) that content hashes miss.
+**Why `(label, artifact_id)` pairs:** Tracking labels alone would miss content edits
+under the same label. Tracking artifact_ids alone would collapse duplicate-content
+inputs. The pair catches both: label presence validates the input still exists,
+artifact_id validates its content hasn't changed.
+
+**Why `content_hash` not full `accumulated`:** Storing the full accumulated text
+would double artifact storage. The hash validates integrity (detects manual edits
+or corruption) without the bloat. The actual accumulated value is always
+`previous.content`.
 
 ### Resume Decision Tree
 
@@ -71,11 +77,11 @@ Has checkpoint?
       ├─ NO → full recompute (prompt/config/model changed)
       └─ YES
           │
-          Checkpoint integrity valid? (accumulated == previous.content)
+          Checkpoint integrity valid? (content_hash matches previous.content)
           ├─ NO → full recompute (corrupt/repaired checkpoint)
           └─ YES
               │
-              All seen_input_labels still present in current inputs?
+              All seen inputs still present with same content?
               ├─ NO → full recompute (input removed or replaced)
               └─ YES
                   │
@@ -138,13 +144,18 @@ def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifac
         accumulated = response.content
 
     # --- Persist checkpoint ---
-    all_input_labels = [a.label for a in sorted_inputs]
+    seen_input_entries = [
+        {"label": a.label, "artifact_id": a.artifact_id}
+        for a in sorted_inputs
+    ]
+    content_hash = hashlib.sha256(accumulated.encode()).hexdigest()[:16]
     output_metadata = {"input_count": len(inputs)}
     if self.metadata_fn is not None:
         output_metadata.update(self.metadata_fn(inputs))
     output_metadata["_fold_checkpoint"] = {
-        "accumulated": accumulated,
-        "seen_input_labels": all_input_labels,
+        "version": 1,
+        "content_hash": content_hash,
+        "seen_inputs": seen_input_entries,
         "transform_fingerprint": transform_fp.to_dict(),
     }
 
@@ -181,45 +192,53 @@ def _try_resume(
         logger.info("%s: transform changed, full recompute", self.name)
         return None
 
-    # 2. Checkpoint integrity: accumulated must equal artifact content
-    if checkpoint.get("accumulated") != previous.content:
-        logger.warning("%s: checkpoint inconsistent with artifact content, full recompute", self.name)
-        return None
+    # 2. Checkpoint integrity: content hash must match artifact content
+    stored_hash = checkpoint.get("content_hash")
+    if stored_hash is not None:
+        actual_hash = hashlib.sha256(previous.content.encode()).hexdigest()[:16]
+        if stored_hash != actual_hash:
+            logger.warning("%s: checkpoint hash mismatch, full recompute", self.name)
+            return None
 
-    # 3. All previously-seen inputs must still be present
-    seen_labels = checkpoint.get("seen_input_labels", [])
-    seen_set = set(seen_labels)
-    current_labels = [a.label for a in sorted_inputs]
-    current_set = set(current_labels)
+    # 3. Load seen inputs — (label, artifact_id) pairs detect content edits
+    seen_entries = checkpoint.get("seen_inputs", [])
+    seen_map = {e["label"]: e["artifact_id"] for e in seen_entries}
 
-    if not seen_set.issubset(current_set):
-        removed = seen_set - current_set
-        logger.info("%s: %d inputs removed (%s...), full recompute",
-                    self.name, len(removed), list(removed)[:3])
-        return None
+    # 4. All previously-seen inputs must still be present with same content
+    current_map = {a.label: a.artifact_id for a in sorted_inputs}
+    for seen_label, seen_id in seen_map.items():
+        if seen_label not in current_map:
+            logger.info("%s: input %r removed, full recompute", self.name, seen_label)
+            return None
+        if seen_id is not None and current_map[seen_label] != seen_id:
+            logger.info("%s: input %r content changed, full recompute",
+                        self.name, seen_label)
+            return None
 
-    # 4. Identify new inputs
-    new_inputs = [a for a in sorted_inputs if a.label not in seen_set]
+    # 5. Identify new inputs
+    seen_label_set = set(seen_map)
+    new_inputs = [a for a in sorted_inputs if a.label not in seen_label_set]
 
     if not new_inputs:
-        return (None, previous.content, len(seen_labels))  # no change
+        return (None, previous.content, len(seen_map))  # no change
 
-    # 5. New inputs must all sort after seen inputs (no interleave)
+    # 6. New inputs must all sort after seen inputs (no interleave)
     last_seen_idx = max(
-        (i for i, a in enumerate(sorted_inputs) if a.label in seen_set),
+        (i for i, a in enumerate(sorted_inputs) if a.label in seen_label_set),
         default=-1,
     )
     first_new_idx = min(
-        i for i, a in enumerate(sorted_inputs) if a.label not in seen_set
+        i for i, a in enumerate(sorted_inputs) if a.label not in seen_label_set
     )
     if first_new_idx <= last_seen_idx:
-        logger.info("%s: new inputs interleave with seen inputs, full recompute", self.name)
+        logger.info("%s: new inputs interleave with seen inputs, full recompute",
+                    self.name)
         return None
 
     # All checks passed — safe to resume
     logger.info("%s: resuming from checkpoint, %d new inputs (of %d total)",
                 self.name, len(new_inputs), len(sorted_inputs))
-    return (new_inputs, checkpoint["accumulated"], len(seen_labels))
+    return (new_inputs, previous.content, len(seen_map))
 ```
 
 ### Runner Changes
@@ -230,34 +249,32 @@ Two changes to `runner.py`:
 
 ```python
 # In the transform execution block, after gathering inputs and building context:
-if isinstance(layer, Transform) and hasattr(layer, 'label_value'):
-    previous_artifact = store.load_artifact(layer.label_value)
-    if previous_artifact is not None:
-        transform_ctx = transform_ctx.with_updates({
-            "_previous_artifact": previous_artifact,
-        })
+if getattr(layer, "_supports_incremental", False) and hasattr(layer, "label_value"):
+    _prev = store.load_artifact(layer.label_value)
+    if _prev is not None:
+        transform_ctx = transform_ctx.with_updates({"_previous_artifact": _prev})
 ```
 
 ~5 lines. The `_previous_artifact` key is only set for transforms that declare
-a `label_value` (fold-style N:1 transforms).
+both `_supports_incremental = True` (explicit capability flag) and `label_value`.
 
-#### 2. Exclude N:1 stable-label transforms from `accept_existing` skip
+#### 2. Exclude incremental transforms from `accept_existing` skip
 
 The current `_save_artifact` logic with `accept_existing=True` checks if an artifact
 with the same label already exists and skips writing if it does. This is correct for
-1:1 transforms (same inputs → same outputs) but wrong for N:1 transforms where the
-output changes as inputs accumulate.
+1:1 transforms (same inputs → same outputs) but wrong for incremental N:1 transforms
+where the output changes as inputs accumulate.
 
 ```python
 # In _save_artifact, modify the accept_existing path:
 if _accept_existing:
     existing = store.load_artifact(artifact.label)
-    # N:1 transforms always write — their output changes with each new input
-    is_n_to_1 = hasattr(_layer, 'label_value')
-    rebuild = existing is None or is_n_to_1
+    is_incremental = getattr(_layer, "_supports_incremental", False)
+    rebuild = existing is None or is_incremental
 ```
 
-~3 lines changed.
+~3 lines changed. Uses the explicit `_supports_incremental` flag, not duck-typing
+on `label_value`.
 
 ### What Invalidates the Checkpoint
 
