@@ -146,10 +146,17 @@ source = "{name}"
     return load_mesh_config(config_path)
 
 
-def provision_role(name: str, role: str, server_url: str = "", mesh_root: Path | None = None) -> None:
+def provision_role(
+    name: str,
+    role: str,
+    server_url: str = "",
+    mesh_root: Path | None = None,
+    systemd: bool = True,
+) -> None:
     """Provision this machine for the given role in a mesh.
 
-    Creates data directories, updates state.json, and installs systemd units.
+    Creates data directories, updates state.json, and optionally installs systemd units.
+    Set systemd=False when the caller manages its own process lifecycle (e.g. sam join).
     """
     import socket
 
@@ -185,8 +192,9 @@ def provision_role(name: str, role: str, server_url: str = "", mesh_root: Path |
     }
     state_path.write_text(json.dumps(state, indent=2))
 
-    # Install systemd unit
-    _install_systemd_unit(name, role)
+    # Install systemd unit (skip when caller manages its own lifecycle)
+    if systemd:
+        _install_systemd_unit(name, role)
 
     logger.info("Provisioned %s as %s for mesh '%s'", hostname, role, name)
 

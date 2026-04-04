@@ -97,12 +97,16 @@ class MeshClient:
     # --- Watcher loop ---
     async def _watcher_loop(self):
         """Scan watch_dir for new files and submit to server."""
+        consecutive_failures = 0
         while self._running:
             try:
                 await self._scan_and_submit()
+                consecutive_failures = 0
             except Exception:
+                consecutive_failures += 1
                 logger.warning("Watcher scan failed", exc_info=True)
-            await asyncio.sleep(self.config.client.scan_interval)
+            backoff = min(self.config.client.scan_interval * (2 ** min(consecutive_failures, 5)), 300)
+            await asyncio.sleep(backoff)
 
     async def _scan_and_submit(self):
         """Scan watch_dir, dispatch to incremental or whole-file per file."""
@@ -266,17 +270,21 @@ class MeshClient:
 
         # Check flush condition: turn threshold
         if tracker.pending_turns >= self.config.source.min_turns:
-            # Package all bytes from last boundary end to new_offset
+            # Set offset tentatively for flush to read the right byte range,
+            # but roll back if flush fails so data isn't skipped on retry.
             tracker.byte_offset = new_offset
-            await self._flush_subsession(file_path, watch_dir, tracker)
+            success = await self._flush_subsession(file_path, watch_dir, tracker)
+            if not success:
+                # Revert offset so these bytes are retried on next scan
+                tracker.byte_offset = new_offset - consumed if consumed <= new_offset else 0
         else:
             # Just advance offset tracking but don't flush yet
             tracker.byte_offset = new_offset
 
         self._save_submitted_state()
 
-    async def _flush_subsession(self, file_path: Path, watch_dir: Path, tracker: FileTracker):
-        """Package and submit the pending subsession content."""
+    async def _flush_subsession(self, file_path: Path, watch_dir: Path, tracker: FileTracker) -> bool:
+        """Package and submit the pending subsession content. Returns True on success."""
         # Determine byte range for this subsession
         if tracker.boundaries:
             byte_start = tracker.boundaries[-1].byte_end
@@ -285,7 +293,7 @@ class MeshClient:
         byte_end = tracker.byte_offset
 
         if byte_end <= byte_start:
-            return  # Nothing to flush
+            return True  # Nothing to flush — not a failure
 
         # Read the subsession content
         try:
@@ -294,12 +302,13 @@ class MeshClient:
                 content = f.read(byte_end - byte_start)
         except OSError:
             logger.warning("Failed to read subsession from %s", file_path, exc_info=True)
-            return
+            return False
 
         if not content:
-            return
+            return True
 
         seq = tracker.subsession_seq
+        flushed_turns = tracker.pending_turns
 
         # Submit
         rel_path = file_path.relative_to(watch_dir)
@@ -331,9 +340,11 @@ class MeshClient:
                     "seq": seq,
                     "byte_start": byte_start,
                     "byte_end": byte_end,
-                    "turns": tracker.pending_turns,
+                    "turns": flushed_turns,
                 },
             )
+
+        return success
 
     async def _submit_subsession(
         self,
@@ -493,17 +504,21 @@ class MeshClient:
     # --- Puller loop ---
     async def _puller_loop(self):
         """Periodically check for new artifact bundles, then sync sessions."""
+        consecutive_failures = 0
         while self._running:
             try:
                 await self._pull_artifacts()
+                consecutive_failures = 0
             except Exception:
+                consecutive_failures += 1
                 logger.warning("Pull failed", exc_info=True)
             # Session sync — lower priority, runs after each pull cycle
             try:
                 await self._sync_sessions()
             except Exception:
                 logger.warning("Session sync failed", exc_info=True)
-            await asyncio.sleep(self.config.client.pull_interval)
+            backoff = min(self.config.client.pull_interval * (2 ** min(consecutive_failures, 5)), 600)
+            await asyncio.sleep(backoff)
 
     async def _pull_artifacts(self):
         """ETag check -> download bundle -> extract -> deploy."""
