@@ -85,8 +85,9 @@ async def search_api(request: Request) -> Response:
 
     limit = int(request.query_params.get("limit", "10"))
     layers_param = request.query_params.get("layers")
+    surface = request.query_params.get("surface", "search")
 
-    logger.info("REST search: q=%r layers=%s limit=%d", query, layers_param, limit)
+    logger.info("REST search: q=%r layers=%s surface=%s limit=%d", query, layers_param, surface, limit)
 
     try:
         rel = _current_release()
@@ -98,7 +99,7 @@ async def search_api(request: Request) -> Response:
         if layers_param:
             layers_list = [l.strip() for l in layers_param.split(",") if l.strip()]
 
-        results = rel.search(query, mode="keyword", limit=limit, layers=layers_list)
+        results = rel.search(query, mode="keyword", limit=limit, layers=layers_list, surface=surface)
         logger.info("REST search: %d results for %r", len(results), query)
 
         return JSONResponse({

@@ -121,22 +121,23 @@ def ingest(bucket: str, content: str, filename: str) -> str:
 
 
 @server_mcp.tool()
-def search(query: str, layers: str | None = None, limit: int = 10) -> str:
+def search(query: str, layers: str | None = None, limit: int = 10, surface: str = "search") -> str:
     """Search the knowledge base.
 
     Args:
         query: Search query string.
         layers: Comma-separated layer names to filter (optional).
         limit: Max results (default 10).
+        surface: Search surface name (default "search", use "reference" for reference docs).
     """
-    logger.info("MCP search: query=%r layers=%s limit=%d", query, layers, limit)
+    logger.info("MCP search: query=%r layers=%s surface=%s limit=%d", query, layers, surface, limit)
     rel = _current_release()
 
     layers_list = None
     if layers:
         layers_list = [l.strip() for l in layers.split(",") if l.strip()]
 
-    results = rel.search(query, mode="keyword", limit=limit, layers=layers_list)
+    results = rel.search(query, mode="keyword", limit=limit, layers=layers_list, surface=surface)
     logger.info("MCP search: %d results for %r", len(results), query)
 
     if not results:
