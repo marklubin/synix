@@ -305,10 +305,10 @@ class SnapshotArtifactCache:
                 try:
                     raw = obj_file.read_bytes()
                     obj = json.loads(raw)
-                except (json.JSONDecodeError, OSError):
+                except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                     continue
 
-                if obj.get("type") != "artifact":
+                if not isinstance(obj, dict) or obj.get("type") != "artifact":
                     continue
 
                 label = obj.get("label")
