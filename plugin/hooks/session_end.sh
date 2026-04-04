@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVER_URL="${SYNIX_SERVER_URL:-http://salinas:8200}"
+SERVER_URL="${CLAUDE_PLUGIN_OPTION_SERVER_URL:-${SYNIX_SERVER_URL:-http://salinas:8200}}"
 
 # Read hook input from stdin
 INPUT=$(cat)

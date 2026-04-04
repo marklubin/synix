@@ -1,0 +1,15 @@
+{
+  "name": "synix",
+  "owner": {
+    "name": "Synix",
+    "email": "mark@synix.dev",
+    "url": "https://github.com/marklubin/synix"
+  },
+  "plugins": [
+    {
+      "name": "synix",
+      "source": "./plugin",
+      "description": "Persistent memory for Claude Code via a Synix knowledge server"
+    }
+  ]
+}

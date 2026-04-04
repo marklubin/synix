@@ -66,35 +66,17 @@ If the server is reachable, Claude will call `list_buckets()` and return the con
 
 ## Configuration
 
-The plugin connects to a Synix knowledge server. The server URL defaults to `http://salinas:8200`.
+During installation, the plugin prompts for your Synix knowledge server URL. This is stored in your Claude Code settings and used by both hooks and the MCP server.
 
-To use a different server, set the `SYNIX_SERVER_URL` environment variable before launching Claude Code:
+The default server URL is `http://salinas:8200`.
 
-```bash
-export SYNIX_SERVER_URL="http://your-server:8200"
-claude
-```
-
-Or for a one-off:
+You can also override the server URL with the `SYNIX_SERVER_URL` environment variable:
 
 ```bash
 SYNIX_SERVER_URL="http://localhost:8200" claude
 ```
 
-### MCP endpoint
-
-The `.mcp.json` file configures the MCP server connection. If your server is at a different address, edit `.mcp.json`:
-
-```json
-{
-  "synix": {
-    "type": "streamable-http",
-    "url": "http://your-server:8200/mcp/"
-  }
-}
-```
-
-**Note**: Both the hooks and the MCP server need to reach the same Synix server. The hooks use `SYNIX_SERVER_URL` (with fallback), while the MCP connection uses the URL in `.mcp.json`. Make sure these point to the same server.
+The resolution order is: `CLAUDE_PLUGIN_OPTION_SERVER_URL` (plugin config) → `SYNIX_SERVER_URL` (env var) → `http://salinas:8200` (default).
 
 ## How It Works
 
