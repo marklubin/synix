@@ -107,12 +107,10 @@ async def run_auto_builder(config: ServerConfig) -> None:
 
         logger.info("Auto-build: starting pipeline execution")
         result = project.build(accept_existing=True)
-
-        layer_summary = ", ".join(
-            f"{s.name}({s.built}b/{s.cached}c)"
-            for s in result.layer_stats
+        logger.info(
+            "Auto-build: build done — %d built, %d cached in %.1fs",
+            result.built, result.cached, result.total_time,
         )
-        logger.info("Auto-build: build done — %s", layer_summary)
 
         logger.info("Auto-build: materializing release %r", _RELEASE_NAME)
         project.release_to(_RELEASE_NAME)
