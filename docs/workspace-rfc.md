@@ -14,6 +14,12 @@ This causes: 60 lines of manual wiring in serve.py, viewer can't start without a
 
 **Goal:** Define `Workspace` as the first-class unit — one namespace = pipeline + buckets + .synix state + releases + runtime services. Everything binds to a Workspace.
 
+## Scope and constraints
+
+- **Single-process model.** Like the current `_state` dict, one Workspace is active per process. Cross-process coordination (e.g. CLI while server is running) uses SQLite WAL and filesystem refs — same as today. This RFC does not introduce multi-workspace or multi-process serving.
+- **`Workspace` is not a god object.** It is a thin composition layer — identity + config + delegation to `Project`. It holds no build logic, no transform execution, no search indexing. Those stay in `Project`, `runner.py`, and `search/`.
+- **Buckets are a workspace concept, not a pipeline concept.** Buckets define how content enters the workspace (ingestion). `Pipeline.source_dir` defines where the pipeline reads from during build. These may overlap (buckets write to source_dir) but are distinct concerns.
+
 ---
 
 ## Design
@@ -29,18 +35,24 @@ class Workspace:
 
 Not a subclass — `Project` stays unchanged, `open_project()` keeps working. New `open_workspace()` returns `Workspace`.
 
+### When to use which
+
+- **`open_project(path)`** — SDK/library consumers doing programmatic builds. Returns `Project`. No config file needed. This is the low-level API for scripts, tests, and pipelines that manage their own configuration.
+- **`open_workspace(path)`** — Server, viewer, CLI `serve` command, and anything that needs the full configuration context (buckets, vllm, auto_build). Returns `Workspace`. Discovers and parses `synix.toml`.
+- **Rule of thumb:** If you're writing a pipeline.py or a test, use `Project`. If you're deploying or operating, use `Workspace`.
+
 ### Lifecycle states (computed, never persisted)
 
 ```python
 class WorkspaceState(Enum):
     FRESH = "fresh"           # .synix/ exists, no pipeline, no builds
     CONFIGURED = "configured" # pipeline loaded or buckets defined
-    BUILT = "built"           # at least one snapshot ref
-    RELEASED = "released"     # at least one release receipt
+    BUILT = "built"           # HEAD ref points to a valid snapshot
+    RELEASED = "released"     # at least one release receipt exists
     SERVING = "serving"       # runtime services active
 ```
 
-Derived from disk state on access. No manifest file.
+Derived from disk state on access. No manifest file. States describe *capability* — what operations are possible — not recency. A workspace with an old release is still RELEASED because search/viewer can serve it. Staleness is a separate concern (detectable by comparing HEAD ref timestamp to source mtimes).
 
 ### Config split: workspace vs server
 
@@ -72,9 +84,17 @@ viewer_port = 9471
 
 `project_dir` disappears from config — workspace knows its own root from discovery.
 
-### Config file naming
+### Config file discovery
 
-Discovery order: `synix.toml` → `synix-server.toml` (backward compat). Parser understands both old format (`[server].project_dir`) and new format (`[workspace].name`).
+Deterministic precedence (first match wins):
+1. Explicit `--config path` argument → use that file, error if missing
+2. `synix.toml` in project root → new format
+3. `synix-server.toml` in project root → old format (backward compat)
+4. No config file → bare workspace (just Project, no buckets/vllm/auto_build)
+
+**If both `synix.toml` and `synix-server.toml` exist:** `synix.toml` wins, `synix-server.toml` is ignored, a warning is logged. Users should migrate and delete the old file.
+
+**Old format handling:** When the parser finds `[server].project_dir`, it maps to the new schema: `project_dir` becomes implicit (the directory containing the config file), other fields map 1:1. No mixed-format support — a file is either old or new format based on presence of `[workspace]` section.
 
 ---
 
@@ -135,22 +155,37 @@ class WorkspaceRuntime:
 
 ### Phase 1: Add workspace.py (purely additive, nothing breaks)
 
-**New: `src/synix/workspace.py`** (~200 lines)
+**New: `src/synix/workspace.py`** (~250 lines)
 - `WorkspaceState` enum
-- `WorkspaceConfig` dataclass (imports `BucketConfig`, `BuildQueueConfig`, `VLLMConfig` from server/config.py)
+- `BucketConfig` dataclass (moved from server/config.py)
+- `BuildQueueConfig` dataclass (moved from server/config.py)
+- `VLLMConfig` dataclass (moved from server/config.py)
+- `WorkspaceConfig` dataclass (name, pipeline_path, buckets, auto_build, vllm)
 - `ServerBindings` dataclass (mcp_port, viewer_port, viewer_host, allowed_hosts)
 - `WorkspaceRuntime` dataclass
 - `Workspace` class
 - `open_workspace()`, `init_workspace()` factories
 - TOML parser handling both old and new formats
+- `load_server_bindings()` — parses just the `[server]` section
+
+**Modify: `src/synix/server/config.py`** — config types move to workspace.py. This file becomes a thin backward-compat layer:
+- Re-exports `BucketConfig`, `BuildQueueConfig`, `VLLMConfig` from `synix.workspace`
+- `ServerConfig` stays here (composes `WorkspaceConfig` + `ServerBindings`)
+- `load_config()` stays here, returns `ServerConfig` (calls workspace TOML parser internally)
+
+**Dependency direction:** `workspace.py` owns the config types. `server/config.py` imports from workspace. This is correct — workspace is the foundational abstraction, server is a consumer.
 
 **New: `tests/unit/test_workspace.py`** (~150 lines)
 - State computation for each lifecycle
-- TOML parsing (new format, old format, minimal)
+- TOML parsing (new format, old format, both files present, minimal, missing)
 - `open_workspace()` discovery
 - Delegation to Project
 - `bucket_dir()` resolution
 - `activate_runtime()` state transition
+
+**New: `tests/e2e/test_workspace_e2e.py`** (~100 lines)
+- Full path: `init_workspace() → load_pipeline → build → release_to → releases() → search`
+- Verifies Workspace delegates correctly through the entire lifecycle
 
 **Modify: `src/synix/__init__.py`** — add exports: `Workspace`, `open_workspace`
 
@@ -207,8 +242,9 @@ class WorkspaceRuntime:
 
 | File | Change | Size |
 |------|--------|------|
-| `src/synix/workspace.py` | NEW | ~200 lines |
-| `src/synix/__init__.py` | Add 2 exports | ~2 lines |
+| `src/synix/workspace.py` | NEW — config types, Workspace, factories | ~250 lines |
+| `src/synix/__init__.py` | Add exports: `Workspace`, `open_workspace` | ~2 lines |
+| `src/synix/server/config.py` | Re-export config types from workspace, slim down | ~40 lines changed |
 | `src/synix/server/serve.py` | Refactor serve() to use Workspace | ~60 lines changed |
 | `src/synix/server/mcp_tools.py` | Replace _state with _workspace | ~30 lines changed |
 | `src/synix/server/api.py` | Update state references | ~10 lines changed |
@@ -216,13 +252,30 @@ class WorkspaceRuntime:
 | `src/synix/viewer/server.py` | ViewerState.from_workspace | ~20 lines |
 | `src/synix/cli/serve_commands.py` | Use open_workspace | ~10 lines |
 | `deploy/synix-server.toml` | Add [workspace] section | ~3 lines |
-| `tests/unit/test_workspace.py` | NEW | ~150 lines |
-| `tests/unit/test_workspace_config.py` | NEW | ~100 lines |
+| `tests/unit/test_workspace.py` | NEW — state, config, discovery, delegation | ~150 lines |
+| `tests/unit/test_workspace_config.py` | NEW — TOML parsing, precedence, backward compat | ~100 lines |
+| `tests/e2e/test_workspace_e2e.py` | NEW — full lifecycle: init → build → release → search | ~100 lines |
 
 ## Verification
 
-1. `uv run pytest tests/unit/test_workspace.py tests/unit/test_workspace_config.py -v`
-2. `uv run pytest tests/ --ignore=tests/e2e/mesh -k "not test_truncation"` — full regression
-3. `uv run release` — full gate
-4. `podman build -t synix-server -f deploy/Containerfile . && bash deploy/smoke-test/run.sh` — container e2e
-5. Verify old `synix-server.toml` format still works with `synix serve --config synix-server.toml`
+1. `uv run pytest tests/unit/test_workspace.py tests/unit/test_workspace_config.py -v` — unit tests
+2. `uv run pytest tests/e2e/test_workspace_e2e.py -v` — full lifecycle e2e
+3. `uv run pytest tests/ --ignore=tests/e2e/mesh` — full regression
+4. `uv run release` — full gate (lint + test + demos)
+5. `podman build -t synix-server -f deploy/Containerfile . && bash deploy/smoke-test/run.sh` — container e2e
+6. Verify old `synix-server.toml` format still works: `synix serve --config synix-server.toml`
+
+## Decisions log
+
+Resolutions from review feedback:
+
+| Concern | Resolution |
+|---------|------------|
+| Config types in server/ (backwards coupling) | Types move to workspace.py, server/config.py re-exports for compat |
+| Both `open_project()` and `open_workspace()` exported | Documented guidance: Project for SDK/scripts, Workspace for operations |
+| Config precedence when both files exist | `synix.toml` wins, log warning, no mixed-format support |
+| God object risk | Workspace is composition only — no build/search/transform logic |
+| Multi-process safety | Single-process model (explicit constraint), same as current _state |
+| WorkspaceState misleading for stale releases | States describe capability not recency; staleness is a separate concern |
+| Missing e2e test | Added `tests/e2e/test_workspace_e2e.py` to plan |
+| `serve_from_config()` permanent or transitional? | Transitional — kept for one release cycle, then removed |
