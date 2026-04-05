@@ -9,7 +9,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from synix.server.api import api_routes
-from synix.server.config import BuildQueueConfig, BucketConfig, ServerConfig
+from synix.server.config import BucketConfig, BuildQueueConfig, ServerConfig
 from synix.server.mcp_tools import _state, server_mcp
 
 TOY_PIPELINE_DIR = Path(__file__).parent / "toy-pipeline"
