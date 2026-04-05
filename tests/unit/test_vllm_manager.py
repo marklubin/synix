@@ -32,7 +32,7 @@ class TestVLLMConfig:
     def test_config_defaults(self):
         cfg = VLLMConfig()
         assert cfg.enabled is False
-        assert cfg.model == "Qwen/Qwen2.5-3B-Instruct"
+        assert cfg.model == "Qwen/Qwen3.5-2B"
         assert cfg.gpu_device == 0
         assert cfg.port == 8100
         assert cfg.max_model_len == 4096

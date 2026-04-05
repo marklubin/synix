@@ -35,7 +35,7 @@ class VLLMConfig:
     """vLLM subprocess configuration."""
 
     enabled: bool = False
-    model: str = "Qwen/Qwen2.5-3B-Instruct"
+    model: str = "Qwen/Qwen3.5-2B"
     gpu_device: int = 0
     port: int = 8100
     max_model_len: int = 4096
@@ -105,7 +105,7 @@ def _parse_config(raw: dict) -> ServerConfig:
     vllm_raw = raw.get("vllm", {})
     vllm = VLLMConfig(
         enabled=vllm_raw.get("enabled", False),
-        model=vllm_raw.get("model", "Qwen/Qwen2.5-3B-Instruct"),
+        model=vllm_raw.get("model", "Qwen/Qwen3.5-2B"),
         gpu_device=int(vllm_raw.get("gpu_device", 0)),
         port=int(vllm_raw.get("port", 8100)),
         max_model_len=int(vllm_raw.get("max_model_len", 2048)),

@@ -19,7 +19,7 @@ class VLLMConfig:
     """vLLM server configuration."""
 
     enabled: bool = False
-    model: str = "Qwen/Qwen2.5-3B-Instruct"
+    model: str = "Qwen/Qwen3.5-2B"
     gpu_device: int = 0
     port: int = 8100
     max_model_len: int = 4096
