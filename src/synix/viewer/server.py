@@ -324,6 +324,24 @@ def create_app(state: ViewerState) -> Flask:
                 return None
         return app._prompt_store
 
+    # -- Helper: document queue ------------------------------------------------
+
+    def _get_queue():
+        """Get or create a DocumentQueue for reading."""
+        if not hasattr(app, '_queue'):
+            if state.project is None:
+                return None
+            try:
+                from synix.server.queue import DocumentQueue
+                queue_db = Path(state.project._synix_dir) / "queue.db"
+                if queue_db.exists():
+                    app._queue = DocumentQueue(queue_db)
+                else:
+                    return None
+            except Exception:
+                return None
+        return app._queue
+
     # -- Build status, DAG, Prompt management ---------------------------------
 
     @app.route("/api/build-status")
@@ -333,10 +351,8 @@ def create_app(state: ViewerState) -> Flask:
             return jsonify({"error": "No project"}), 503
 
         try:
-            from synix.server.queue import DocumentQueue
-
-            queue_db = Path(state.project._synix_dir) / "queue.db"
-            if not queue_db.exists():
+            queue = _get_queue()
+            if queue is None:
                 return jsonify({
                     "queue_depth": 0,
                     "active_build": None,
@@ -344,10 +360,8 @@ def create_app(state: ViewerState) -> Flask:
                     "stats": {"total_processed": 0, "avg_build_time_seconds": 0},
                 })
 
-            queue = DocumentQueue(queue_db)
             stats = queue.queue_stats()
             recent = queue.recent_history(limit=20)
-            queue.close()
 
             return jsonify({
                 "queue_depth": stats.get("pending_count", 0),

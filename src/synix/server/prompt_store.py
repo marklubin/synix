@@ -138,7 +138,7 @@ class PromptStore:
 
         Returns dict with key, version, content_hash, created_at.
         """
-        new_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+        new_hash = hashlib.sha256(content.encode()).hexdigest()
 
         # Check if latest version has the same hash — skip if so
         existing = self.get_with_meta(key)

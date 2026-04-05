@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from synix.server.vllm_manager import VLLMConfig, VLLMManager
+from synix.server.config import VLLMConfig
+from synix.server.vllm_manager import VLLMManager
 
 
 @pytest.fixture

@@ -849,8 +849,7 @@ async function loadPromptsTab() {
         html += '<div class="prompts-list">';
         for (const p of prompts) {
             html += `
-                <div class="prompt-item" data-key="${escapeHtml(p.key)}"
-                     onclick="loadPrompt('${escapeHtml(p.key)}')">
+                <div class="prompt-item" data-key="${escapeHtml(p.key)}">
                     <div class="prompt-key">${escapeHtml(p.key)}</div>
                     <div class="prompt-meta">v${p.version || p.versions_count || 1}</div>
                 </div>
@@ -865,6 +864,32 @@ async function loadPromptsTab() {
 
         html += '</div>';
         container.innerHTML = html;
+
+        // Event delegation for prompt list, buttons, and history entries
+        container.addEventListener('click', (e) => {
+            const item = e.target.closest('.prompt-item');
+            if (item) {
+                loadPrompt(item.dataset.key);
+                return;
+            }
+            const saveBtn = e.target.closest('.btn-save');
+            if (saveBtn && currentPromptKey) {
+                savePrompt(currentPromptKey);
+                return;
+            }
+            const histBtn = e.target.closest('.btn-history');
+            if (histBtn && currentPromptKey) {
+                loadPromptHistory(currentPromptKey);
+                return;
+            }
+            const histEntry = e.target.closest('.history-entry');
+            if (histEntry) {
+                const version = histEntry.dataset.version;
+                const key = histEntry.dataset.key;
+                if (version && key) loadPromptVersion(key, parseInt(version));
+                return;
+            }
+        });
 
     } catch (err) {
         container.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
@@ -891,14 +916,16 @@ async function loadPrompt(key) {
                 <h3>${escapeHtml(key)}</h3>
                 <span class="prompt-version">v${data.version} — ${escapeHtml(data.content_hash)}</span>
             </div>
-            <textarea id="prompt-textarea" class="prompt-textarea">${escapeHtml(data.content)}</textarea>
+            <textarea id="prompt-textarea" class="prompt-textarea"></textarea>
             <div class="prompt-actions">
-                <button class="btn-save" onclick="savePrompt('${escapeHtml(key)}')">Save</button>
-                <button class="btn-history" onclick="loadPromptHistory('${escapeHtml(key)}')">History</button>
+                <button class="btn-save">Save</button>
+                <button class="btn-history">History</button>
             </div>
             <div id="prompt-history-panel"></div>
         `;
         editor.innerHTML = html;
+        const textarea = document.getElementById('prompt-textarea');
+        if (textarea) textarea.value = data.content;
     } catch (err) {
         editor.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
     }
@@ -952,7 +979,7 @@ async function loadPromptHistory(key) {
         let html = '<div class="prompt-history"><h4>Version History</h4>';
         for (const v of versions) {
             html += `
-                <div class="history-entry" onclick="loadPromptVersion('${escapeHtml(key)}', ${v.version})">
+                <div class="history-entry" data-key="${escapeHtml(key)}" data-version="${v.version}">
                     <span class="history-version">v${v.version}</span>
                     <span class="history-date">${escapeHtml(v.created_at)}</span>
                     <span class="history-hash">${escapeHtml(v.content_hash)}</span>

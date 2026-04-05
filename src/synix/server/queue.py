@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +34,7 @@ class DocumentQueue:
 
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(
             str(db_path),
             check_same_thread=False,
@@ -92,31 +94,32 @@ class DocumentQueue:
 
         Returns the doc_id (new or existing).
         """
-        doc_id = uuid.uuid4().hex
-        now = _utcnow()
-        with self._conn:
-            self._conn.execute(
-                """INSERT OR IGNORE INTO document_queue
-                   (doc_id, bucket, filename, content_hash, file_path, client_id, status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
-                (doc_id, bucket, filename, content_hash, file_path, client_id, now),
-            )
-            row = self._conn.execute(
-                "SELECT doc_id FROM document_queue WHERE content_hash = ?",
-                (content_hash,),
-            ).fetchone()
-        actual_id = row["doc_id"]
-        if actual_id == doc_id:
-            logger.info(
-                "Enqueued doc %s: bucket=%s filename=%s hash=%s",
-                doc_id, bucket, filename, content_hash[:12],
-            )
-        else:
-            logger.info(
-                "Dedup hit for hash %s — returning existing doc %s",
-                content_hash[:12], actual_id,
-            )
-        return actual_id
+        with self._lock:
+            doc_id = uuid.uuid4().hex
+            now = _utcnow()
+            with self._conn:
+                self._conn.execute(
+                    """INSERT OR IGNORE INTO document_queue
+                       (doc_id, bucket, filename, content_hash, file_path, client_id, status, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
+                    (doc_id, bucket, filename, content_hash, file_path, client_id, now),
+                )
+                row = self._conn.execute(
+                    "SELECT doc_id FROM document_queue WHERE content_hash = ?",
+                    (content_hash,),
+                ).fetchone()
+            actual_id = row["doc_id"]
+            if actual_id == doc_id:
+                logger.info(
+                    "Enqueued doc %s: bucket=%s filename=%s hash=%s",
+                    doc_id, bucket, filename, content_hash[:12],
+                )
+            else:
+                logger.info(
+                    "Dedup hit for hash %s — returning existing doc %s",
+                    content_hash[:12], actual_id,
+                )
+            return actual_id
 
     def pending_count(self) -> int:
         """Return the number of documents with status='pending'."""
@@ -145,68 +148,71 @@ class DocumentQueue:
 
         Returns the list of claimed doc_ids.
         """
-        now = _utcnow()
-        with self._conn:
-            cur = self._conn.execute(
-                "SELECT doc_id FROM document_queue WHERE status = 'pending'"
-            )
-            doc_ids = [r["doc_id"] for r in cur.fetchall()]
+        with self._lock:
+            now = _utcnow()
+            with self._conn:
+                cur = self._conn.execute(
+                    "SELECT doc_id FROM document_queue WHERE status = 'pending'"
+                )
+                doc_ids = [r["doc_id"] for r in cur.fetchall()]
 
-            if not doc_ids:
-                logger.info("claim_pending_batch(%s): no pending documents", run_id)
-                return []
+                if not doc_ids:
+                    logger.info("claim_pending_batch(%s): no pending documents", run_id)
+                    return []
 
-            self._conn.execute(
-                """INSERT INTO build_runs (run_id, status, started_at, documents_count)
-                   VALUES (?, 'running', ?, ?)""",
-                (run_id, now, len(doc_ids)),
-            )
-            self._conn.execute(
-                """UPDATE document_queue
-                   SET status = 'processing',
-                       build_run_id = ?,
-                       processing_started_at = ?
-                   WHERE status = 'pending'""",
-                (run_id, now),
-            )
+                self._conn.execute(
+                    """INSERT INTO build_runs (run_id, status, started_at, documents_count)
+                       VALUES (?, 'running', ?, ?)""",
+                    (run_id, now, len(doc_ids)),
+                )
+                self._conn.execute(
+                    """UPDATE document_queue
+                       SET status = 'processing',
+                           build_run_id = ?,
+                           processing_started_at = ?
+                       WHERE status = 'pending'""",
+                    (run_id, now),
+                )
 
-        logger.info(
-            "claim_pending_batch(%s): claimed %d documents", run_id, len(doc_ids),
-        )
-        return doc_ids
+            logger.info(
+                "claim_pending_batch(%s): claimed %d documents", run_id, len(doc_ids),
+            )
+            return doc_ids
 
     def mark_built(self, run_id: str, built_count: int = 0, cached_count: int = 0) -> None:
         """Transition processing documents to built, complete the build run."""
-        now = _utcnow()
-        with self._conn:
-            self._conn.execute(
-                """UPDATE document_queue
-                   SET status = 'built', built_at = ?
-                   WHERE build_run_id = ? AND status = 'processing'""",
-                (now, run_id),
+        with self._lock:
+            now = _utcnow()
+            with self._conn:
+                self._conn.execute(
+                    """UPDATE document_queue
+                       SET status = 'built', built_at = ?
+                       WHERE build_run_id = ? AND status = 'processing'""",
+                    (now, run_id),
+                )
+                self._conn.execute(
+                    """UPDATE build_runs
+                       SET status = 'completed', completed_at = ?,
+                           built_count = ?, cached_count = ?
+                       WHERE run_id = ?""",
+                    (now, built_count, cached_count, run_id),
+                )
+            logger.info(
+                "mark_built(%s): built=%d cached=%d", run_id, built_count, cached_count,
             )
-            self._conn.execute(
-                """UPDATE build_runs
-                   SET status = 'completed', completed_at = ?,
-                       built_count = ?, cached_count = ?
-                   WHERE run_id = ?""",
-                (now, built_count, cached_count, run_id),
-            )
-        logger.info(
-            "mark_built(%s): built=%d cached=%d", run_id, built_count, cached_count,
-        )
 
     def mark_released(self, run_id: str) -> None:
         """Transition built documents to released."""
-        now = _utcnow()
-        with self._conn:
-            self._conn.execute(
-                """UPDATE document_queue
-                   SET status = 'released', released_at = ?
-                   WHERE build_run_id = ? AND status = 'built'""",
-                (now, run_id),
-            )
-        logger.info("mark_released(%s)", run_id)
+        with self._lock:
+            now = _utcnow()
+            with self._conn:
+                self._conn.execute(
+                    """UPDATE document_queue
+                       SET status = 'released', released_at = ?
+                       WHERE build_run_id = ? AND status = 'built'""",
+                    (now, run_id),
+                )
+            logger.info("mark_released(%s)", run_id)
 
     def mark_failed(self, run_id: str, error: str) -> None:
         """Requeue processing documents back to pending on build failure.
@@ -214,24 +220,25 @@ class DocumentQueue:
         Clears the build_run_id so documents can be claimed in a future run.
         Records the error on both the documents and the build_run.
         """
-        now = _utcnow()
-        with self._conn:
-            self._conn.execute(
-                """UPDATE document_queue
-                   SET status = 'pending',
-                       error_message = ?,
-                       build_run_id = NULL,
-                       processing_started_at = NULL
-                   WHERE build_run_id = ? AND status = 'processing'""",
-                (error, run_id),
-            )
-            self._conn.execute(
-                """UPDATE build_runs
-                   SET status = 'failed', completed_at = ?, error_message = ?
-                   WHERE run_id = ?""",
-                (now, error, run_id),
-            )
-        logger.info("mark_failed(%s): %s", run_id, error)
+        with self._lock:
+            now = _utcnow()
+            with self._conn:
+                self._conn.execute(
+                    """UPDATE document_queue
+                       SET status = 'pending',
+                           error_message = ?,
+                           build_run_id = NULL,
+                           processing_started_at = NULL
+                       WHERE build_run_id = ? AND status = 'processing'""",
+                    (error, run_id),
+                )
+                self._conn.execute(
+                    """UPDATE build_runs
+                       SET status = 'failed', completed_at = ?, error_message = ?
+                       WHERE run_id = ?""",
+                    (now, error, run_id),
+                )
+            logger.info("mark_failed(%s): %s", run_id, error)
 
     def document_status(self, doc_id: str) -> dict | None:
         """Return full status dict for a document, or None if not found.
@@ -295,5 +302,9 @@ class DocumentQueue:
             "released_count": counts["released_count"] or 0,
             "failed_count": counts["failed_count"] or 0,
             "total_processed": total_processed,
-            "avg_build_time": round(avg_build_time, 2) if avg_build_time is not None else None,
+            "avg_build_time_seconds": round(avg_build_time, 2) if avg_build_time is not None else None,
         }
+
+    def close(self) -> None:
+        """Close the database connection."""
+        self._conn.close()

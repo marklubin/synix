@@ -9,23 +9,10 @@ import os
 import signal
 import time
 import urllib.request
-from dataclasses import dataclass, field
+
+from synix.server.config import VLLMConfig
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class VLLMConfig:
-    """vLLM server configuration."""
-
-    enabled: bool = False
-    model: str = "Qwen/Qwen3.5-2B"
-    gpu_device: int = 0
-    port: int = 8100
-    max_model_len: int = 131072
-    gpu_memory_utilization: float = 0.90
-    extra_args: list[str] = field(default_factory=list)
-    startup_timeout: int = 120  # seconds to wait for health check
 
 
 class VLLMManager:
