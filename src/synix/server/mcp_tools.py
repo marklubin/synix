@@ -102,22 +102,75 @@ def _safe_filename(filename: str) -> str:
 
 
 @server_mcp.tool()
-def ingest(bucket: str, content: str, filename: str) -> str:
-    """Write content to a configured ingest bucket.
+def ingest(bucket: str, content: str, filename: str, client_id: str | None = None) -> str:
+    """Write content to a configured ingest bucket and queue for processing.
 
     Args:
         bucket: Bucket name (must be defined in server config).
         content: Text content to write.
         filename: Filename to create in the bucket directory.
+        client_id: Optional client identifier (e.g. "Claude@Salinas").
     """
+    import hashlib
+
     safe_name = _safe_filename(filename)
     bucket_dir = _resolve_bucket_dir(bucket)
     bucket_dir.mkdir(parents=True, exist_ok=True)
 
     dest = bucket_dir / safe_name
     _atomic_write(dest, content)
-    logger.info("Ingested %s into bucket %r", safe_name, bucket)
-    return f"Wrote {safe_name} to bucket {bucket!r} ({dest})"
+
+    # Enqueue for processing
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    queue = _state.get("queue")
+    doc_id = None
+    if queue is not None:
+        doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
+        logger.info("Ingested %s into bucket %r (doc_id: %s)", safe_name, bucket, doc_id)
+    else:
+        logger.info("Ingested %s into bucket %r (no queue)", safe_name, bucket)
+
+    result = f"Wrote {safe_name} to bucket {bucket!r} ({dest})"
+    if doc_id:
+        result += f"\nDocument ID: {doc_id}"
+    return result
+
+
+@server_mcp.tool()
+def document_status(doc_id: str) -> str:
+    """Check the processing status of an ingested document.
+
+    Args:
+        doc_id: Document ID returned by ingest().
+    """
+    queue = _state.get("queue")
+    if queue is None:
+        return "Document queue not initialized."
+
+    status = queue.document_status(doc_id)
+    if status is None:
+        return f"Document {doc_id} not found."
+
+    lines = [
+        f"Document: {doc_id}",
+        f"  Status: {status['status']}",
+        f"  Bucket: {status['bucket']}",
+        f"  File: {status['filename']}",
+        f"  Created: {status['created_at']}",
+    ]
+    if status.get("client_id"):
+        lines.append(f"  Client: {status['client_id']}")
+    if status.get("queue_position") is not None and status["status"] == "pending":
+        lines.append(f"  Queue position: {status['queue_position']}")
+    if status.get("processing_started_at"):
+        lines.append(f"  Processing started: {status['processing_started_at']}")
+    if status.get("built_at"):
+        lines.append(f"  Built: {status['built_at']}")
+    if status.get("released_at"):
+        lines.append(f"  Released: {status['released_at']}")
+    if status.get("error_message"):
+        lines.append(f"  Error: {status['error_message']}")
+    return "\n".join(lines)
 
 
 @server_mcp.tool()
@@ -181,3 +234,78 @@ def list_buckets() -> str:
         lines.append(f"  {b.name}: {b.dir} [{patterns}]{desc}")
 
     return "Configured buckets:\n" + "\n".join(lines)
+
+
+@server_mcp.tool()
+def list_prompts() -> str:
+    """List all prompt template keys with version info."""
+    store = _state.get("prompt_store")
+    if store is None:
+        return "Prompt store not initialized."
+
+    keys = store.list_keys()
+    if not keys:
+        return "No prompts stored."
+
+    lines = ["Prompt templates:"]
+    for key in keys:
+        meta = store.get_with_meta(key)
+        if meta:
+            lines.append(f"  {key} (v{meta['version']}, hash: {meta['content_hash']})")
+    return "\n".join(lines)
+
+
+@server_mcp.tool()
+def get_prompt(key: str, version: int | None = None) -> str:
+    """Get a prompt template by key.
+
+    Args:
+        key: Prompt template key.
+        version: Specific version number (latest if omitted).
+    """
+    store = _state.get("prompt_store")
+    if store is None:
+        return "Prompt store not initialized."
+
+    meta = store.get_with_meta(key, version=version)
+    if meta is None:
+        return f"Prompt '{key}' not found."
+
+    return f"--- {key} v{meta['version']} (hash: {meta['content_hash']}) ---\n{meta['content']}"
+
+
+@server_mcp.tool()
+def update_prompt(key: str, content: str) -> str:
+    """Create or update a prompt template.
+
+    Args:
+        key: Prompt template key.
+        content: New prompt content.
+    """
+    store = _state.get("prompt_store")
+    if store is None:
+        return "Prompt store not initialized."
+
+    result = store.put(key, content)
+    return f"Prompt '{key}' updated to v{result['version']} (hash: {result['content_hash']})"
+
+
+@server_mcp.tool()
+def prompt_history(key: str) -> str:
+    """Get version history for a prompt template.
+
+    Args:
+        key: Prompt template key.
+    """
+    store = _state.get("prompt_store")
+    if store is None:
+        return "Prompt store not initialized."
+
+    hist = store.history(key)
+    if not hist:
+        return f"No history for prompt '{key}'."
+
+    lines = [f"History for '{key}':"]
+    for entry in hist:
+        lines.append(f"  v{entry['version']} — {entry['created_at']} (hash: {entry['content_hash']})")
+    return "\n".join(lines)

@@ -23,39 +23,62 @@
             </div>
         </nav>
         <main id="content">
-            <div id="list-panel">
-                <div id="list-header">
-                    <span class="title">Artifacts</span>
-                    <select id="list-sort">
-                        <option value="date-desc">Date (newest)</option>
-                        <option value="date-asc">Date (oldest)</option>
-                        <option value="title-asc">Title (A-Z)</option>
-                        <option value="title-desc">Title (Z-A)</option>
-                    </select>
-                </div>
-                <div id="back-to-browse">
-                    <button id="back-to-browse-btn">Back to browse</button>
-                </div>
-                <div id="list-items"></div>
-                <div id="list-pagination">
-                    <button class="page-btn" id="prev-page">Prev</button>
-                    <span id="page-info"></span>
-                    <button class="page-btn" id="next-page">Next</button>
-                </div>
+            <div id="tab-bar">
+                <button class="tab active" data-tab="browse">Browse</button>
+                <button class="tab" data-tab="pipeline">Pipeline</button>
+                <button class="tab" data-tab="prompts">Prompts</button>
             </div>
-            <div id="reader-panel">
-                <button id="meta-toggle">Meta</button>
-                <div id="reader-header">
-                    <div id="reader-header-left">
-                        <div class="artifact-title"></div>
-                        <div class="artifact-meta"></div>
+            <div id="content-body">
+                <div id="list-panel">
+                    <div id="list-header">
+                        <span class="title">Artifacts</span>
+                        <select id="list-sort">
+                            <option value="date-desc">Date (newest)</option>
+                            <option value="date-asc">Date (oldest)</option>
+                            <option value="title-asc">Title (A-Z)</option>
+                            <option value="title-desc">Title (Z-A)</option>
+                        </select>
                     </div>
-                    <button id="copy-btn">Copy</button>
+                    <div id="back-to-browse">
+                        <button id="back-to-browse-btn">Back to browse</button>
+                    </div>
+                    <div id="list-items"></div>
+                    <div id="list-pagination">
+                        <button class="page-btn" id="prev-page">Prev</button>
+                        <span id="page-info"></span>
+                        <button class="page-btn" id="next-page">Next</button>
+                    </div>
                 </div>
-                <div id="reader-body">
-                    <div class="empty-state">Select an artifact to view</div>
+                <div id="reader-panel">
+                    <button id="meta-toggle">Meta</button>
+                    <div id="reader-header">
+                        <div id="reader-header-left">
+                            <div class="artifact-title"></div>
+                            <div class="artifact-meta"></div>
+                        </div>
+                        <button id="copy-btn">Copy</button>
+                    </div>
+                    <div id="reader-body">
+                        <div class="empty-state">Select an artifact to view</div>
+                    </div>
+                    <div id="lineage-panel"></div>
                 </div>
-                <div id="lineage-panel"></div>
+                <div id="pipeline-panel" class="tab-panel" style="display:none">
+                    <div class="tab-panel-inner">
+                        <h2>Pipeline</h2>
+                        <div id="pipeline-content">
+                            <div class="empty-state">Pipeline visualization loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="prompts-panel" class="tab-panel" style="display:none">
+                    <div class="tab-panel-inner">
+                        <h2>Prompts</h2>
+                        <div id="prompts-content">
+                            <div class="empty-state">Prompt management loading...</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
         <aside id="meta-panel">

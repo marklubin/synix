@@ -12,6 +12,7 @@ const state = {
     searchQuery: '',
     searchLayer: '',
     searchPage: 1,
+    activeTab: 'browse',
 };
 
 // --- API helpers ---
@@ -36,6 +37,16 @@ async function init() {
 
     // Event delegation for clickable items (no inline onclick handlers)
     document.getElementById('list-items').addEventListener('click', (e) => {
+        // Handle chunk group header toggles
+        const groupHeader = e.target.closest('.chunk-group-header');
+        if (groupHeader) {
+            const groupId = groupHeader.dataset.groupId;
+            const isExpanded = groupHeader.dataset.expanded === 'true';
+            groupHeader.dataset.expanded = isExpanded ? 'false' : 'true';
+            const items = groupHeader.parentElement.querySelector(`.chunk-group-items[data-group-id="${groupId}"]`);
+            if (items) items.dataset.collapsed = isExpanded ? 'true' : 'false';
+            return;
+        }
         const item = e.target.closest('[data-label]');
         if (item) loadArtifact(item.dataset.label);
     });
@@ -56,6 +67,13 @@ async function init() {
     document.getElementById('back-to-browse-btn').addEventListener('click', backToBrowse);
     document.getElementById('meta-toggle').addEventListener('click', toggleMeta);
     document.getElementById('copy-btn').addEventListener('click', copyContent);
+
+    // Tab switching
+    document.getElementById('tab-bar').addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab');
+        if (!btn) return;
+        switchTab(btn.dataset.tab);
+    });
 
     // Hash routing
     window.addEventListener('hashchange', handleHash);
@@ -179,13 +197,73 @@ function selectLayer(name) {
     loadArtifactList();
 }
 
+function switchTab(tabName) {
+    // Update tab button styles
+    document.querySelectorAll('#tab-bar .tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+
+    // Browse tab shows list-panel + reader-panel, hides other panels
+    const listPanel = document.getElementById('list-panel');
+    const readerPanel = document.getElementById('reader-panel');
+    const metaPanel = document.getElementById('meta-panel');
+    const pipelinePanel = document.getElementById('pipeline-panel');
+    const promptsPanel = document.getElementById('prompts-panel');
+
+    // Hide all tab panels
+    listPanel.style.display = 'none';
+    readerPanel.style.display = 'none';
+    metaPanel.style.display = 'none';
+    if (pipelinePanel) pipelinePanel.style.display = 'none';
+    if (promptsPanel) promptsPanel.style.display = 'none';
+
+    if (tabName === 'browse') {
+        listPanel.style.display = '';
+        readerPanel.style.display = '';
+        // Restore meta panel visibility based on previous toggle state
+        metaPanel.style.display = '';
+    } else if (tabName === 'pipeline') {
+        if (pipelinePanel) pipelinePanel.style.display = '';
+    } else if (tabName === 'prompts') {
+        if (promptsPanel) promptsPanel.style.display = '';
+    }
+
+    state.activeTab = tabName;
+
+    // Stop any existing pipeline refresh interval
+    if (pipelineRefreshInterval) {
+        clearInterval(pipelineRefreshInterval);
+        pipelineRefreshInterval = null;
+    }
+
+    if (tabName === 'pipeline') {
+        loadPipelineTab();
+        pipelineRefreshInterval = setInterval(refreshBuildStatus, 3000);
+    } else if (tabName === 'prompts') {
+        loadPromptsTab();
+    }
+}
+
 // --- Metadata badge rendering ---
+
+function formatMetaValue(v) {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (Array.isArray(v)) return v.length === 0 ? '[]' : `[${v.length} items]`;
+    if (typeof v === 'object') {
+        const keys = Object.keys(v);
+        if (keys.length === 0) return '{}';
+        const preview = keys.slice(0, 2).map(k => `${k}: ${String(v[k]).slice(0, 20)}`).join(', ');
+        return keys.length <= 2 ? `{${preview}}` : `{${preview}, +${keys.length - 2}}`;
+    }
+    return String(v);
+}
 
 function renderMetaBadges(metadata) {
     const skip = new Set(['title', 'layer_name', 'layer_level', 'created_at']);
     return Object.entries(metadata || {})
-        .filter(([k, v]) => !skip.has(k) && v != null && v !== '')
-        .map(([k, v]) => `<span class="meta-badge">${escapeHtml(k)}: ${escapeHtml(String(v))}</span>`)
+        .filter(([k, v]) => !skip.has(k) && v != null && v !== '' && !k.startsWith('_'))
+        .map(([k, v]) => `<span class="meta-badge">${escapeHtml(k)}: ${escapeHtml(formatMetaValue(v))}</span>`)
         .join('');
 }
 
@@ -211,16 +289,61 @@ function renderArtifactList(data) {
     if (data.items.length === 0) {
         listItems.innerHTML = '<div style="padding:20px;color:var(--text-muted)">No artifacts found</div>';
     } else {
-        listItems.innerHTML = data.items.map(item => `
-            <div class="list-item ${item.label === state.currentLabel ? 'active' : ''}"
-                 data-label="${escapeHtml(item.label)}" title="${escapeHtml(item.title)}">
-                <div class="item-title">${escapeHtml(item.title)}</div>
-                <div class="item-meta">
-                    ${item.date ? `<span>${escapeHtml(item.date)}</span>` : ''}
-                    ${renderMetaBadges(item.metadata)}
+        // Detect if items have source_label metadata (chunk layers)
+        const hasSourceLabel = data.items.some(item => item.metadata && item.metadata.source_label);
+
+        if (hasSourceLabel) {
+            // Group items by source_label
+            const groups = new Map();
+            for (const item of data.items) {
+                const key = (item.metadata && item.metadata.source_label) || '(unknown source)';
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(item);
+            }
+
+            let html = '';
+            for (const [sourceLabel, items] of groups) {
+                const groupId = 'chunk-group-' + sourceLabel.replace(/[^a-zA-Z0-9]/g, '-');
+                html += `<div class="chunk-group-header" data-expanded="true" data-group-id="${escapeHtml(groupId)}">
+                    <span class="toggle-icon">&#9660;</span>
+                    <span class="source-name">${escapeHtml(sourceLabel)}</span>
+                    <span class="chunk-count">${items.length} chunks</span>
+                </div>`;
+                html += `<div class="chunk-group-items" data-group-id="${escapeHtml(groupId)}">`;
+                html += items.map(item => {
+                    const meta = item.metadata || {};
+                    const chunkInfo = meta.chunk_index != null && meta.chunk_total != null
+                        ? `${meta.chunk_index + 1}/${meta.chunk_total}`
+                        : '';
+                    const preview = item.title || '';
+                    return `
+                        <div class="list-item ${item.label === state.currentLabel ? 'active' : ''}"
+                             data-label="${escapeHtml(item.label)}" title="${escapeHtml(item.title)}">
+                            <div class="item-title">
+                                ${chunkInfo ? `<span class="meta-badge">${escapeHtml(chunkInfo)}</span> ` : ''}${escapeHtml(preview)}
+                            </div>
+                            <div class="item-meta">
+                                ${item.date ? `<span>${escapeHtml(item.date)}</span>` : ''}
+                                ${renderMetaBadges(item.metadata)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                html += '</div>';
+            }
+            listItems.innerHTML = html;
+        } else {
+            listItems.innerHTML = data.items.map(item => `
+                <div class="list-item ${item.label === state.currentLabel ? 'active' : ''}"
+                     data-label="${escapeHtml(item.label)}" title="${escapeHtml(item.title)}">
+                    <div class="item-title">${escapeHtml(item.title)}</div>
+                    <div class="item-meta">
+                        ${item.date ? `<span>${escapeHtml(item.date)}</span>` : ''}
+                        ${renderMetaBadges(item.metadata)}
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `).join('');
+        }
     }
 
     document.querySelector('#list-header .title').textContent =
@@ -540,6 +663,319 @@ function renderTranscript(raw, metadata) {
     }).join('');
 
     return `<div class="chat-transcript">${html}</div>`;
+}
+
+// --- Pipeline tab ---
+
+let pipelineRefreshInterval = null;
+
+function renderDAG(data) {
+    const container = document.getElementById('pipeline-content');
+    if (!data.nodes || data.nodes.length === 0) {
+        container.innerHTML = '<div class="empty-state">No pipeline loaded</div>';
+        return;
+    }
+
+    // Group nodes by level
+    const levels = new Map();
+    for (const node of data.nodes) {
+        const level = node.level || 0;
+        if (!levels.has(level)) levels.set(level, []);
+        levels.get(level).push(node);
+    }
+
+    let html = '<div class="dag-container">';
+
+    // Build edge lookup for highlighting connections
+    const edgeMap = new Map(); // target -> [sources]
+    for (const edge of (data.edges || [])) {
+        if (!edgeMap.has(edge.target)) edgeMap.set(edge.target, []);
+        edgeMap.get(edge.target).push(edge.source);
+    }
+
+    const sortedLevels = [...levels.keys()].sort((a, b) => a - b);
+    for (const level of sortedLevels) {
+        const nodes = levels.get(level);
+        html += `<div class="dag-level">`;
+        html += `<div class="dag-level-label">L${level}</div>`;
+        html += `<div class="dag-level-nodes">`;
+        for (const node of nodes) {
+            const deps = edgeMap.get(node.id) || [];
+            const depsStr = deps.length ? `← ${deps.join(', ')}` : '';
+            html += `
+                <div class="dag-node" data-type="${escapeHtml(node.type)}">
+                    <div class="dag-node-name">${escapeHtml(node.id)}</div>
+                    <div class="dag-node-meta">
+                        <span class="dag-type-badge">${escapeHtml(node.type)}</span>
+                        <span class="dag-count">${node.count} artifacts</span>
+                    </div>
+                    ${depsStr ? `<div class="dag-node-deps">${escapeHtml(depsStr)}</div>` : ''}
+                </div>
+            `;
+        }
+        html += `</div></div>`;
+    }
+
+    // Projections section
+    if (data.projections && data.projections.length > 0) {
+        html += '<div class="dag-level"><div class="dag-level-label">Out</div><div class="dag-level-nodes">';
+        for (const proj of data.projections) {
+            const sources = proj.sources || [];
+            html += `
+                <div class="dag-node dag-projection">
+                    <div class="dag-node-name">${escapeHtml(proj.id)}</div>
+                    <div class="dag-node-meta">
+                        <span class="dag-type-badge">${escapeHtml(proj.type)}</span>
+                    </div>
+                    ${sources.length ? `<div class="dag-node-deps">← ${sources.map(s => escapeHtml(s)).join(', ')}</div>` : ''}
+                </div>
+            `;
+        }
+        html += '</div></div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderBuildStatus(data) {
+    let html = '<div class="build-status-container">';
+    html += '<h3>Build Queue</h3>';
+
+    // Stats bar
+    const stats = data.stats || {};
+    html += `<div class="build-stats">`;
+    html += `<span class="stat"><strong>${data.queue_depth || 0}</strong> pending</span>`;
+    html += `<span class="stat"><strong>${stats.total_processed || 0}</strong> processed</span>`;
+    if (stats.avg_build_time_seconds) {
+        html += `<span class="stat"><strong>${stats.avg_build_time_seconds.toFixed(1)}s</strong> avg build</span>`;
+    }
+    html += `</div>`;
+
+    // Recent documents
+    const recent = data.recent || [];
+    if (recent.length > 0) {
+        html += '<div class="build-recent"><h4>Recent</h4>';
+        html += '<div class="build-recent-list">';
+        for (const doc of recent) {
+            const statusClass = `status-${doc.status}`;
+            html += `
+                <div class="build-recent-item">
+                    <span class="build-status-dot ${statusClass}"></span>
+                    <span class="build-filename">${escapeHtml(doc.filename)}</span>
+                    <span class="build-bucket">${escapeHtml(doc.bucket)}</span>
+                    <span class="build-doc-status">${escapeHtml(doc.status)}</span>
+                    ${doc.client_id ? `<span class="build-client">${escapeHtml(doc.client_id)}</span>` : ''}
+                </div>
+            `;
+        }
+        html += '</div></div>';
+    } else {
+        html += '<div class="empty-state">No recent builds</div>';
+    }
+
+    html += '</div>';
+    return html;
+}
+
+async function loadPipelineTab() {
+    const container = document.getElementById('pipeline-content');
+    container.innerHTML = '<div class="empty-state">Loading pipeline...</div>';
+
+    try {
+        const [dagRes, statusRes] = await Promise.all([
+            fetch('/api/dag').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('/api/build-status').then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+
+        let html = '';
+        if (dagRes) {
+            // Render DAG into container, then capture the HTML
+            renderDAG(dagRes);
+            html = container.innerHTML;
+        } else {
+            html = '<div class="empty-state">No pipeline data available</div>';
+        }
+
+        if (statusRes) {
+            html += renderBuildStatus(statusRes);
+        }
+
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state">Error loading pipeline: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function refreshBuildStatus() {
+    try {
+        const res = await fetch('/api/build-status');
+        if (!res.ok) return;
+        const data = await res.json();
+        // Update just the build status section
+        const existing = document.querySelector('.build-status-container');
+        if (existing) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = renderBuildStatus(data);
+            existing.replaceWith(tmp.firstElementChild);
+        }
+    } catch (err) {
+        console.warn('Failed to refresh build status:', err);
+    }
+}
+
+// --- Prompts tab ---
+
+let currentPromptKey = null;
+
+async function loadPromptsTab() {
+    const container = document.getElementById('prompts-content');
+    container.innerHTML = '<div class="empty-state">Loading prompts...</div>';
+
+    try {
+        const res = await fetch('/api/prompts');
+        if (!res.ok) throw new Error('Failed to load prompts');
+        const data = await res.json();
+
+        const prompts = data.prompts || [];
+        if (prompts.length === 0) {
+            container.innerHTML = '<div class="empty-state">No prompts configured</div>';
+            return;
+        }
+
+        let html = '<div class="prompts-layout">';
+
+        // Prompt list (left sidebar)
+        html += '<div class="prompts-list">';
+        for (const p of prompts) {
+            html += `
+                <div class="prompt-item" data-key="${escapeHtml(p.key)}"
+                     onclick="loadPrompt('${escapeHtml(p.key)}')">
+                    <div class="prompt-key">${escapeHtml(p.key)}</div>
+                    <div class="prompt-meta">v${p.version || p.versions_count || 1}</div>
+                </div>
+            `;
+        }
+        html += '</div>';
+
+        // Editor (right panel)
+        html += '<div class="prompt-editor" id="prompt-editor">';
+        html += '<div class="empty-state">Select a prompt to edit</div>';
+        html += '</div>';
+
+        html += '</div>';
+        container.innerHTML = html;
+
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function loadPrompt(key) {
+    currentPromptKey = key;
+    const editor = document.getElementById('prompt-editor');
+    if (!editor) return;
+
+    // Highlight selected item
+    document.querySelectorAll('.prompt-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.key === key);
+    });
+
+    try {
+        const res = await fetch(`/api/prompts/${encodeURIComponent(key)}`);
+        if (!res.ok) throw new Error('Failed to load prompt');
+        const data = await res.json();
+
+        let html = `
+            <div class="prompt-editor-header">
+                <h3>${escapeHtml(key)}</h3>
+                <span class="prompt-version">v${data.version} — ${escapeHtml(data.content_hash)}</span>
+            </div>
+            <textarea id="prompt-textarea" class="prompt-textarea">${escapeHtml(data.content)}</textarea>
+            <div class="prompt-actions">
+                <button class="btn-save" onclick="savePrompt('${escapeHtml(key)}')">Save</button>
+                <button class="btn-history" onclick="loadPromptHistory('${escapeHtml(key)}')">History</button>
+            </div>
+            <div id="prompt-history-panel"></div>
+        `;
+        editor.innerHTML = html;
+    } catch (err) {
+        editor.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function savePrompt(key) {
+    const textarea = document.getElementById('prompt-textarea');
+    if (!textarea) return;
+
+    try {
+        const res = await fetch(`/api/prompts/${encodeURIComponent(key)}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content: textarea.value}),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        const data = await res.json();
+
+        // Update version display
+        const versionEl = document.querySelector('.prompt-version');
+        if (versionEl) {
+            versionEl.textContent = `v${data.version} — ${data.content_hash}`;
+        }
+
+        // Flash save confirmation
+        const btn = document.querySelector('.btn-save');
+        if (btn) {
+            btn.textContent = 'Saved!';
+            setTimeout(() => { btn.textContent = 'Save'; }, 1500);
+        }
+    } catch (err) {
+        alert('Failed to save: ' + err.message);
+    }
+}
+
+async function loadPromptHistory(key) {
+    const panel = document.getElementById('prompt-history-panel');
+    if (!panel) return;
+
+    try {
+        const res = await fetch(`/api/prompts/${encodeURIComponent(key)}/history`);
+        if (!res.ok) throw new Error('Failed to load history');
+        const data = await res.json();
+
+        const versions = data.versions || [];
+        if (versions.length === 0) {
+            panel.innerHTML = '<div class="empty-state">No version history</div>';
+            return;
+        }
+
+        let html = '<div class="prompt-history"><h4>Version History</h4>';
+        for (const v of versions) {
+            html += `
+                <div class="history-entry" onclick="loadPromptVersion('${escapeHtml(key)}', ${v.version})">
+                    <span class="history-version">v${v.version}</span>
+                    <span class="history-date">${escapeHtml(v.created_at)}</span>
+                    <span class="history-hash">${escapeHtml(v.content_hash)}</span>
+                </div>
+            `;
+        }
+        html += '</div>';
+        panel.innerHTML = html;
+    } catch (err) {
+        panel.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+async function loadPromptVersion(key, version) {
+    try {
+        const res = await fetch(`/api/prompts/${encodeURIComponent(key)}?version=${version}`);
+        if (!res.ok) throw new Error('Failed to load version');
+        const data = await res.json();
+        const textarea = document.getElementById('prompt-textarea');
+        if (textarea) textarea.value = data.content;
+    } catch (err) {
+        console.warn('Failed to load prompt version:', err);
+    }
 }
 
 // --- Utility ---

@@ -306,4 +306,167 @@ def create_app(state: ViewerState) -> Flask:
             "release": name,
         })
 
+    # -- Helper: prompt store ---------------------------------------------------
+
+    def _get_prompt_store():
+        """Get or create a PromptStore for reading."""
+        if not hasattr(app, '_prompt_store'):
+            if state.project is None:
+                return None
+            try:
+                from synix.server.prompt_store import PromptStore
+                prompts_db = Path(state.project._synix_dir) / "prompts.db"
+                if prompts_db.exists():
+                    app._prompt_store = PromptStore(prompts_db)
+                else:
+                    return None
+            except Exception:
+                return None
+        return app._prompt_store
+
+    # -- Build status, DAG, Prompt management ---------------------------------
+
+    @app.route("/api/build-status")
+    def build_status():
+        """Queue depth, active build, recent history, stats."""
+        if state.project is None:
+            return jsonify({"error": "No project"}), 503
+
+        try:
+            from synix.server.queue import DocumentQueue
+
+            queue_db = Path(state.project._synix_dir) / "queue.db"
+            if not queue_db.exists():
+                return jsonify({
+                    "queue_depth": 0,
+                    "active_build": None,
+                    "recent": [],
+                    "stats": {"total_processed": 0, "avg_build_time_seconds": 0},
+                })
+
+            queue = DocumentQueue(queue_db)
+            stats = queue.queue_stats()
+            recent = queue.recent_history(limit=20)
+            queue.close()
+
+            return jsonify({
+                "queue_depth": stats.get("pending_count", 0),
+                "active_build": None,  # TODO: track active build in queue
+                "recent": recent,
+                "stats": stats,
+            })
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/dag")
+    def dag():
+        """Pipeline layer DAG for visualization."""
+        if state.project is None or state.project._pipeline is None:
+            return jsonify({"error": "No pipeline loaded"}), 503
+
+        try:
+            pipeline = state.project._pipeline
+            nodes = []
+            edges = []
+
+            for layer in pipeline.layers:
+                node = {
+                    "id": layer.name,
+                    "type": type(layer).__name__,
+                    "level": getattr(layer, "_level", 0),
+                }
+                # Try to get artifact count
+                try:
+                    arts = state.release.artifacts(layer=layer.name)
+                    node["count"] = len(list(arts))
+                except Exception:
+                    node["count"] = 0
+                nodes.append(node)
+
+                # Build edges from depends_on
+                deps = getattr(layer, "depends_on", None) or []
+                for dep in deps:
+                    dep_name = dep.name if hasattr(dep, "name") else str(dep)
+                    edges.append({"source": dep_name, "target": layer.name})
+
+            # Projections
+            projections = []
+            for proj in getattr(pipeline, "projections", []):
+                proj_data = {
+                    "id": proj.name if hasattr(proj, "name") else str(proj),
+                    "type": type(proj).__name__,
+                }
+                sources = getattr(proj, "sources", None) or []
+                proj_data["sources"] = [s.name if hasattr(s, "name") else str(s) for s in sources]
+                # For SynixSearch, get the surface
+                surface = getattr(proj, "surface", None)
+                if surface and hasattr(surface, "name"):
+                    proj_data["surface"] = surface.name
+                projections.append(proj_data)
+
+            return jsonify({"nodes": nodes, "edges": edges, "projections": projections})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/prompts")
+    def list_prompts():
+        """List all prompt keys with latest version info."""
+        try:
+            store = _get_prompt_store()
+            if store is None:
+                return jsonify({"prompts": []})
+
+            keys = store.list_keys()
+            prompts = []
+            for key in keys:
+                meta = store.get_with_meta(key)
+                hist = store.history(key)
+                prompts.append({
+                    "key": key,
+                    "version": meta["version"] if meta else 0,
+                    "versions_count": len(hist),
+                    "content_hash": meta["content_hash"] if meta else "",
+                    "updated_at": meta["created_at"] if meta else "",
+                })
+            return jsonify({"prompts": prompts})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/prompts/<key>")
+    def get_prompt(key):
+        """Get prompt content by key."""
+        store = _get_prompt_store()
+        if store is None:
+            return jsonify({"error": "Prompt store not available"}), 503
+
+        version = request.args.get("version", type=int)
+        meta = store.get_with_meta(key, version=version)
+        if meta is None:
+            return jsonify({"error": f"Prompt '{key}' not found"}), 404
+        return jsonify(meta)
+
+    @app.route("/api/prompts/<key>", methods=["PUT"])
+    def update_prompt(key):
+        """Update prompt content (creates new version)."""
+        store = _get_prompt_store()
+        if store is None:
+            return jsonify({"error": "Prompt store not available"}), 503
+
+        data = request.get_json(silent=True)
+        if not data or "content" not in data:
+            return jsonify({"error": "'content' field is required"}), 400
+
+        result = store.put(key, data["content"])
+        return jsonify(result)
+
+    @app.route("/api/prompts/<key>/history")
+    def prompt_history(key):
+        """Get version history for a prompt."""
+        store = _get_prompt_store()
+        if store is None:
+            return jsonify({"error": "Prompt store not available"}), 503
+
+        hist = store.history(key)
+        return jsonify({"key": key, "versions": hist})
+
     return app

@@ -7,8 +7,10 @@ import contextlib
 import logging
 import signal
 import time
+import uuid
 
 from synix.server.config import ServerConfig
+from synix.server.queue import DocumentQueue
 
 logger = logging.getLogger(__name__)
 
@@ -50,107 +52,109 @@ async def run_mcp_http(config: ServerConfig) -> None:
     await server.serve()
 
 
-async def run_auto_builder(config: ServerConfig) -> None:
-    """Watch bucket directories and trigger builds when content changes.
-
-    Scans buckets every ``scan_interval`` seconds. Detects changes via a
-    fingerprint of file paths and modification times — catches new files,
-    edits, renames, and deletions. Waits ``cooldown`` seconds after the
-    last change before building.
-    """
-    if not config.auto_build.enabled:
-        logger.info("Auto-build: disabled in config")
-        return
-
-    import hashlib
+def _run_build(config: ServerConfig):
+    """Run build synchronously (called in executor)."""
     from pathlib import Path
 
-    scan_interval = config.auto_build.scan_interval
-    cooldown = config.auto_build.cooldown
+    from synix.server.mcp_tools import _state
+
+    project = _state["project"]
+    pipeline_path = Path(config.project_dir) / config.pipeline_path
+    if pipeline_path.exists() and project._pipeline is None:
+        project.load_pipeline(str(pipeline_path))
+
+    logger.info("Build queue: starting pipeline execution")
+    result = project.build(accept_existing=True)
+    logger.info(
+        "Build queue: build done — %d built, %d cached in %.1fs",
+        result.built, result.cached, result.total_time,
+    )
+    return result
+
+
+def _run_release(config: ServerConfig):
+    """Run release synchronously (called in executor)."""
+    from synix.server.mcp_tools import _RELEASE_NAME, _state
+
+    project = _state["project"]
+    logger.info("Build queue: materializing release %r", _RELEASE_NAME)
+    project.release_to(_RELEASE_NAME)
+    logger.info("Build queue: release complete")
+
+
+async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_lock: asyncio.Lock) -> None:
+    """Event-driven build worker. Watches queue, triggers builds on window expiry.
+
+    First pending document starts a timer. All documents arriving within
+    ``config.auto_build.window`` seconds form one batch. Documents arriving
+    during a build accumulate and trigger the next window after completion.
+    """
+    if not config.auto_build.enabled:
+        logger.info("Build queue: disabled in config")
+        return
+
+    window = config.auto_build.window
 
     # Let the rest of the server start first
     await asyncio.sleep(5)
-    logger.info(
-        "Auto-build: watching buckets (scan every %ds, cooldown %ds)",
-        scan_interval,
-        cooldown,
-    )
+    logger.info("Build queue: watching (window %ds)", window)
 
-    def _bucket_fingerprint() -> str:
-        """Hash of (path, size, mtime) for all files in all buckets.
-
-        Detects: new files, deletions, renames, and content edits.
-        """
-        entries: list[str] = []
-        for bucket in config.buckets:
-            bucket_dir = Path(bucket.dir)
-            if not bucket_dir.is_absolute():
-                bucket_dir = Path(config.project_dir) / bucket_dir
-            if not bucket_dir.exists():
-                continue
-            for pattern in bucket.patterns:
-                for f in sorted(bucket_dir.glob(pattern)):
-                    if f.is_file():
-                        stat = f.stat()
-                        entries.append(f"{f}:{stat.st_size}:{stat.st_mtime_ns}")
-        return hashlib.sha256("\n".join(entries).encode()).hexdigest()[:16]
-
-    def _run_build() -> str:
-        """Run build + release synchronously (called in executor)."""
-        import synix
-        from synix.server.mcp_tools import _RELEASE_NAME
-
-        project = synix.open_project(config.project_dir)
-        pipeline_path = Path(config.project_dir) / config.pipeline_path
-        if pipeline_path.exists():
-            project.load_pipeline(str(pipeline_path))
-
-        logger.info("Auto-build: starting pipeline execution")
-        result = project.build(accept_existing=True)
-        logger.info(
-            "Auto-build: build done — %d built, %d cached in %.1fs",
-            result.built, result.cached, result.total_time,
-        )
-
-        logger.info("Auto-build: materializing release %r", _RELEASE_NAME)
-        project.release_to(_RELEASE_NAME)
-        logger.info("Auto-build: release complete")
-
-        return f"{result.built} built, {result.cached} cached, {result.total_time:.1f}s"
-
-    last_fingerprint = _bucket_fingerprint()
-    last_build_time = 0.0
+    window_start: float | None = None
 
     while True:
-        await asyncio.sleep(scan_interval)
+        await asyncio.sleep(2)
 
-        current_fingerprint = _bucket_fingerprint()
-        if current_fingerprint == last_fingerprint:
+        pending = queue.pending_count()
+        if pending == 0:
+            window_start = None
             continue
 
-        # Changes detected — wait for cooldown
-        now = time.monotonic()
-        since_last = now - last_build_time if last_build_time > 0 else cooldown
-        if since_last < cooldown:
-            remaining = cooldown - since_last
-            logger.info(
-                "Auto-build: changes detected, waiting %.0fs cooldown",
-                remaining,
-            )
-            await asyncio.sleep(remaining)
+        # Start window timer on first pending doc
+        if window_start is None:
+            window_start = time.monotonic()
+            logger.info("Build queue: %d pending, window started (%ds)", pending, window)
+            continue
 
-        logger.info("Auto-build: bucket content changed, starting build")
+        # Wait for window to expire
+        elapsed = time.monotonic() - window_start
+        if elapsed < window:
+            continue
 
-        try:
-            loop = asyncio.get_event_loop()
-            summary = await loop.run_in_executor(None, _run_build)
-            last_build_time = time.monotonic()
-            last_fingerprint = _bucket_fingerprint()  # re-fingerprint after build
-            logger.info("Auto-build: complete (%s)", summary)
-        except Exception as exc:
-            logger.error("Auto-build: failed: %s", exc)
-            # Re-fingerprint so we retry on next actual change, not immediately
-            last_fingerprint = _bucket_fingerprint()
+        # Window expired — trigger build
+        run_id = uuid.uuid4().hex
+        claimed = queue.claim_pending_batch(run_id)
+        if not claimed:
+            window_start = None
+            continue
+
+        logger.info("Build queue: batch of %d docs (run %s)", len(claimed), run_id[:8])
+
+        async with build_lock:
+            try:
+                loop = asyncio.get_event_loop()
+
+                # Apply LLM config override if vLLM is managing inference
+                from synix.server.mcp_tools import _state
+                llm_override = _state.get("llm_config_override")
+                project = _state["project"]
+                if llm_override and project._pipeline:
+                    project._pipeline.llm_config = llm_override
+
+                result = await loop.run_in_executor(None, _run_build, config)
+                queue.mark_built(run_id, result.built, result.cached)
+
+                await loop.run_in_executor(None, _run_release, config)
+                queue.mark_released(run_id)
+
+                logger.info(
+                    "Build queue: run %s complete — %d built, %d cached",
+                    run_id[:8], result.built, result.cached,
+                )
+            except Exception as exc:
+                queue.mark_failed(run_id, str(exc))
+                logger.error("Build queue: run %s failed: %s", run_id[:8], exc)
+
+        window_start = None
 
 
 def run_viewer(config: ServerConfig) -> None:
@@ -206,10 +210,9 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     if viewer:
         logger.info("  Viewer:     :%d", config.viewer_port)
     logger.info("  Buckets:    %s", ", ".join(b.name for b in config.buckets) or "(none)")
-    logger.info("  Auto-build: %s (scan %ds, cooldown %ds)",
+    logger.info("  Build queue: %s (window %ds)",
                 "on" if config.auto_build.enabled else "off",
-                config.auto_build.scan_interval,
-                config.auto_build.cooldown)
+                config.auto_build.window)
     logger.info("=" * 60)
 
     # Open project and configure MCP state
@@ -227,6 +230,50 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
         except Exception as exc:
             logger.warning("Could not load pipeline: %s", exc)
 
+    # Initialize document queue
+    queue_db = Path(config.project_dir) / ".synix" / "queue.db"
+    queue = DocumentQueue(queue_db)
+    _state["queue"] = queue
+    build_lock = asyncio.Lock()
+    _state["build_lock"] = build_lock
+    logger.info("Document queue initialized at %s", queue_db)
+
+    # Initialize prompt store
+    from synix.server.prompt_store import PromptStore
+
+    prompts_db = Path(config.project_dir) / ".synix" / "prompts.db"
+    prompt_store = PromptStore(prompts_db)
+    _state["prompt_store"] = prompt_store
+    # Seed from bundled prompt templates
+    try:
+        from synix.build.transforms import PROMPTS_DIR
+        seeded = prompt_store.seed_from_files(PROMPTS_DIR)
+        if seeded:
+            logger.info("Seeded %d prompts from %s", seeded, PROMPTS_DIR)
+    except Exception as exc:
+        logger.warning("Could not seed prompts: %s", exc)
+
+    # Start vLLM if configured
+    vllm_manager = None
+    if config.vllm.enabled:
+        from synix.server.vllm_manager import VLLMManager
+
+        vllm_manager = VLLMManager(config.vllm)
+        logger.info("Starting vLLM: %s on GPU %d", config.vllm.model, config.vllm.gpu_device)
+        await vllm_manager.start()
+        await vllm_manager.measure_throughput()
+
+        # Override pipeline LLM config to use local vLLM
+        _state["llm_config_override"] = {
+            "provider": "openai-compatible",
+            "model": config.vllm.model,
+            "base_url": vllm_manager.base_url,
+            "api_key": "not-needed",
+            "temperature": 0.3,
+            "max_tokens": 4096,
+        }
+        logger.info("LLM config override set: %s via %s", config.vllm.model, vllm_manager.base_url)
+
     # Report existing state
     try:
         releases = project.releases()
@@ -243,8 +290,8 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     # MCP HTTP + REST API (async)
     tasks.append(asyncio.create_task(run_mcp_http(config)))
 
-    # Auto-builder (async)
-    tasks.append(asyncio.create_task(run_auto_builder(config)))
+    # Build queue worker (async)
+    tasks.append(asyncio.create_task(run_build_worker(config, queue, build_lock)))
 
     # Viewer (threaded Flask)
     if viewer:
@@ -262,5 +309,10 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _signal_handler)
 
-    with contextlib.suppress(asyncio.CancelledError):
-        await asyncio.gather(*tasks)
+    try:
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(*tasks)
+    finally:
+        if vllm_manager is not None:
+            logger.info("Stopping vLLM...")
+            await vllm_manager.stop()

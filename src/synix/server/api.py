@@ -41,10 +41,9 @@ async def get_flat_file(request: Request) -> Response:
 
 
 async def ingest_to_bucket(request: Request) -> Response:
-    """POST /api/v1/ingest/{bucket} — write content to a bucket.
+    """POST /api/v1/ingest/{bucket} — write content to a bucket and queue for processing."""
+    import hashlib
 
-    Expects JSON body with "content" and "filename" fields.
-    """
     bucket = request.path_params["bucket"]
     try:
         body = await request.json()
@@ -53,6 +52,7 @@ async def ingest_to_bucket(request: Request) -> Response:
 
     content = body.get("content")
     filename = body.get("filename")
+    client_id = body.get("client_id") or request.headers.get("X-Client-Id")
 
     if not content or not filename:
         return JSONResponse(
@@ -66,10 +66,20 @@ async def ingest_to_bucket(request: Request) -> Response:
         bucket_dir.mkdir(parents=True, exist_ok=True)
         dest = bucket_dir / safe_name
         _atomic_write(dest, content)
-        logger.info("REST ingest: %s -> bucket %r", filename, bucket)
-        return JSONResponse(
-            {"status": "ok", "bucket": bucket, "filename": filename, "path": str(dest)}
-        )
+
+        # Enqueue for processing
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        doc_id = None
+        from synix.server.mcp_tools import _state
+        queue = _state.get("queue")
+        if queue is not None:
+            doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
+
+        logger.info("REST ingest: %s -> bucket %r (doc_id: %s)", filename, bucket, doc_id)
+        response_data = {"status": "ok", "bucket": bucket, "filename": filename, "path": str(dest)}
+        if doc_id:
+            response_data["doc_id"] = doc_id
+        return JSONResponse(response_data)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
     except Exception as exc:
@@ -138,10 +148,96 @@ async def list_buckets_api(request: Request) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+async def document_status_api(request: Request) -> Response:
+    """GET /api/v1/document/{doc_id} — check document processing status."""
+    doc_id = request.path_params["doc_id"]
+    from synix.server.mcp_tools import _state
+
+    queue = _state.get("queue")
+    if queue is None:
+        return JSONResponse({"error": "Document queue not initialized"}, status_code=503)
+
+    status = queue.document_status(doc_id)
+    if status is None:
+        return JSONResponse({"error": f"Document {doc_id} not found"}, status_code=404)
+
+    return JSONResponse(status)
+
+
+async def list_prompts_api(request: Request) -> Response:
+    """GET /api/v1/prompts — list prompt template keys."""
+    from synix.server.mcp_tools import _state
+    store = _state.get("prompt_store")
+    if store is None:
+        return JSONResponse({"prompts": []})
+
+    keys = store.list_keys()
+    prompts = []
+    for key in keys:
+        meta = store.get_with_meta(key)
+        prompts.append(meta)
+    return JSONResponse({"prompts": prompts})
+
+
+async def get_prompt_api(request: Request) -> Response:
+    """GET /api/v1/prompts/{key} — get prompt content."""
+    key = request.path_params["key"]
+    from synix.server.mcp_tools import _state
+    store = _state.get("prompt_store")
+    if store is None:
+        return JSONResponse({"error": "Prompt store not available"}, status_code=503)
+
+    version_str = request.query_params.get("version")
+    version = int(version_str) if version_str else None
+
+    meta = store.get_with_meta(key, version=version)
+    if meta is None:
+        return JSONResponse({"error": f"Prompt '{key}' not found"}, status_code=404)
+    return JSONResponse(meta)
+
+
+async def update_prompt_api(request: Request) -> Response:
+    """PUT /api/v1/prompts/{key} — update prompt content."""
+    key = request.path_params["key"]
+    from synix.server.mcp_tools import _state
+    store = _state.get("prompt_store")
+    if store is None:
+        return JSONResponse({"error": "Prompt store not available"}, status_code=503)
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    content = body.get("content")
+    if not content:
+        return JSONResponse({"error": "'content' field is required"}, status_code=400)
+
+    result = store.put(key, content)
+    return JSONResponse(result)
+
+
+async def prompt_history_api(request: Request) -> Response:
+    """GET /api/v1/prompts/{key}/history — prompt version history."""
+    key = request.path_params["key"]
+    from synix.server.mcp_tools import _state
+    store = _state.get("prompt_store")
+    if store is None:
+        return JSONResponse({"error": "Prompt store not available"}, status_code=503)
+
+    hist = store.history(key)
+    return JSONResponse({"key": key, "versions": hist})
+
+
 api_routes = [
     Route("/api/v1/health", health, methods=["GET"]),
     Route("/api/v1/flat-file/{name:path}", get_flat_file, methods=["GET"]),
     Route("/api/v1/ingest/{bucket}", ingest_to_bucket, methods=["POST"]),
     Route("/api/v1/search", search_api, methods=["GET"]),
     Route("/api/v1/buckets", list_buckets_api, methods=["GET"]),
+    Route("/api/v1/document/{doc_id}", document_status_api, methods=["GET"]),
+    Route("/api/v1/prompts", list_prompts_api, methods=["GET"]),
+    Route("/api/v1/prompts/{key:path}/history", prompt_history_api, methods=["GET"]),
+    Route("/api/v1/prompts/{key:path}", get_prompt_api, methods=["GET"]),
+    Route("/api/v1/prompts/{key:path}", update_prompt_api, methods=["PUT"]),
 ]

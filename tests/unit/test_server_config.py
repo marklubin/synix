@@ -74,12 +74,11 @@ def test_bucket_parsing(toml_file: Path):
 
 
 def test_auto_build_config(toml_file: Path):
-    """Auto-build section is parsed correctly."""
+    """Auto-build section is parsed correctly (backward-compatible)."""
     cfg = load_config(str(toml_file))
 
     assert cfg.auto_build.enabled is True
-    assert cfg.auto_build.scan_interval == 60
-    assert cfg.auto_build.cooldown == 300
+    assert cfg.auto_build.window == 30  # default, old keys ignored
 
 
 def test_defaults_when_optional_missing(tmp_path: Path):
@@ -100,8 +99,9 @@ def test_defaults_when_optional_missing(tmp_path: Path):
     assert cfg.viewer_host == "0.0.0.0"
     assert cfg.buckets == []
     assert cfg.auto_build.enabled is True
-    assert cfg.auto_build.scan_interval == 60
-    assert cfg.auto_build.cooldown == 300
+    assert cfg.auto_build.window == 30
+    assert cfg.vllm.enabled is False
+    assert cfg.vllm.model == "QuantTrio/Qwen3.5-9B-AWQ"
     assert cfg.allowed_hosts == []
 
 
@@ -141,3 +141,49 @@ def test_bucket_default_patterns(tmp_path: Path):
     assert cfg.buckets[0].name == "misc"
     assert cfg.buckets[0].patterns == ["**/*"]
     assert cfg.buckets[0].description == ""
+
+
+def test_vllm_config(tmp_path: Path):
+    """vLLM section is parsed correctly."""
+    content = textwrap.dedent("""\
+        [server]
+        project_dir = "/tmp/test"
+
+        [vllm]
+        enabled = true
+        model = "QuantTrio/Qwen3.5-9B-AWQ"
+        gpu_device = 0
+        port = 8100
+        max_model_len = 2048
+        gpu_memory_utilization = 0.85
+        startup_timeout = 90
+    """)
+    p = tmp_path / "cfg.toml"
+    p.write_text(content)
+
+    cfg = load_config(str(p))
+    assert cfg.vllm.enabled is True
+    assert cfg.vllm.model == "QuantTrio/Qwen3.5-9B-AWQ"
+    assert cfg.vllm.gpu_device == 0
+    assert cfg.vllm.port == 8100
+    assert cfg.vllm.max_model_len == 2048
+    assert cfg.vllm.gpu_memory_utilization == 0.85
+    assert cfg.vllm.startup_timeout == 90
+
+
+def test_build_queue_window(tmp_path: Path):
+    """Build queue window setting is parsed correctly."""
+    content = textwrap.dedent("""\
+        [server]
+        project_dir = "/tmp/test"
+
+        [auto_build]
+        enabled = true
+        window = 60
+    """)
+    p = tmp_path / "cfg.toml"
+    p.write_text(content)
+
+    cfg = load_config(str(p))
+    assert cfg.auto_build.enabled is True
+    assert cfg.auto_build.window == 60
