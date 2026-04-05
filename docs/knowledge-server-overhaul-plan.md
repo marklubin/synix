@@ -4,7 +4,7 @@
 
 The deployed server at `/srv/synix/project/` uses Anthropic Haiku (expensive, cloud-dependent), a polling auto-builder with no per-document tracking, a viewer with rendering bugs (`[Object object]` metadata, flat chunk display), hardcoded inline prompts, and no build progress visibility.
 
-This plan: replaces inference with local vLLM (Qwen3.5-9B-AWQ, RTX 3060), replaces polling with an event-driven SQLite queue with durable status tracking, adds a standalone prompt management system (colocated but independent of synix core), fixes viewer bugs systematically, adds build status + pipeline DAG + prompt editing tabs.
+This plan: replaces inference with local vLLM (Qwen3.5-2B, RTX 3060), replaces polling with an event-driven SQLite queue with durable status tracking, adds a standalone prompt management system (colocated but independent of synix core), fixes viewer bugs systematically, adds build status + pipeline DAG + prompt editing tabs.
 
 ---
 
@@ -26,7 +26,7 @@ This plan: replaces inference with local vLLM (Qwen3.5-9B-AWQ, RTX 3060), replac
                                 │         │                          │
                                 │         ▼                          │
                                 │    vLLM (localhost:8100)           │
-                                │    Qwen3.5-9B-AWQ, thinking=off   │
+                                │    Qwen3.5-2B, thinking=off   │
                                 │                                    │
   viewer (:9471)                │                                    │
   ◄─ /api/build-status ────────│  queue.db (read-only)              │
@@ -168,7 +168,7 @@ In `serve()` (line 187+): init `DocumentQueue(.synix/queue.db)`, store in `_stat
 @dataclass
 class VLLMConfig:
     enabled: bool = False
-    model: str = "QuantTrio/Qwen3.5-9B-AWQ"
+    model: str = "Qwen/Qwen3.5-2B"
     gpu_device: int = 0
     port: int = 8100
     max_model_len: int = 2048      # conservative for 12GB VRAM
@@ -222,7 +222,7 @@ In `serve()`:
 ```toml
 [vllm]
 enabled = true
-model = "QuantTrio/Qwen3.5-9B-AWQ"
+model = "Qwen/Qwen3.5-2B"
 gpu_device = 0
 port = 8100
 max_model_len = 2048
@@ -353,4 +353,4 @@ Phase 5: B4 | G1
 2. `uv run pytest tests/e2e/test_queue_integration.py -v`
 3. `uv run release`
 4. Manual: viewer tabs, vLLM tok/s, queue status transitions, prompt editing, DAG rendering
-5. Full rebuild with Qwen3.5-9B-AWQ after backup + wipe
+5. Full rebuild with Qwen3.5-2B after backup + wipe

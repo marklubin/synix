@@ -866,6 +866,9 @@ async function loadPromptsTab() {
         container.innerHTML = html;
 
         // Event delegation for prompt list, buttons, and history entries
+        // Guard against stacking listeners on repeated tab switches
+        if (container.dataset.delegated) return;
+        container.dataset.delegated = 'true';
         container.addEventListener('click', (e) => {
             const item = e.target.closest('.prompt-item');
             if (item) {

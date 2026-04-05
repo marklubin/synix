@@ -65,7 +65,7 @@ class VLLMManager:
         )
 
         # Background task to drain stdout/stderr so the pipe buffers don't fill up
-        self._drain_task = asyncio.get_event_loop().create_task(self._drain_output())
+        self._drain_task = asyncio.get_running_loop().create_task(self._drain_output())
 
         # Poll health check until ready or timeout
         deadline = time.monotonic() + cfg.startup_timeout
@@ -88,7 +88,7 @@ class VLLMManager:
 
     async def health_check(self) -> bool:
         """Return True if the vLLM server responds 200 on /health."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             url = f"http://localhost:{self.config.port}/health"
             req = urllib.request.Request(url, method="GET")
@@ -136,7 +136,7 @@ class VLLMManager:
         ``elapsed_seconds`` on success, or ``tok_per_sec: 0`` plus ``error``
         on failure.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             url = f"http://localhost:{self.config.port}/v1/chat/completions"
             payload = json.dumps(

@@ -136,7 +136,7 @@ async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_loc
 
         async with build_lock:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
 
                 # Apply LLM config override if vLLM is managing inference
                 from synix.server.mcp_tools import _state
@@ -298,7 +298,7 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     except Exception:
         logger.info("No releases yet — first build will create one")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     tasks = []
 
     # MCP HTTP + REST API (async)
