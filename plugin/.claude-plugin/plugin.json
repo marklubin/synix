@@ -10,7 +10,9 @@
   "license": "MIT",
   "userConfig": {
     "server_url": {
+      "title": "Server URL",
       "description": "Synix knowledge server URL (e.g. http://salinas:8200)",
+      "type": "string",
       "sensitive": false
     }
   },
