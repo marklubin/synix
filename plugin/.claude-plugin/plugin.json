@@ -18,8 +18,9 @@
   },
   "mcpServers": {
     "synix": {
-      "type": "streamable-http",
-      "url": "${user_config.server_url}/mcp"
+      "type": "stdio",
+      "command": "bash",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp_proxy.sh"]
     }
   }
 }
