@@ -394,6 +394,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
     normalized = joined.splitlines()
     # Sort consecutive groups of spinner (⟳) lines to absorb concurrency non-determinism
     normalized = _sort_consecutive_spinner_lines(normalized)
+    # Sort consecutive same-level build progress lines to absorb DAG ordering non-determinism
+    normalized = _sort_consecutive_level_lines(normalized)
     # Collapse Python tracebacks to just File lines + exception (body varies by Python version)
     normalized = _collapse_tracebacks(normalized)
     return "\n".join(normalized)
@@ -421,6 +423,43 @@ def _sort_consecutive_spinner_lines(lines: list[str]) -> list[str]:
             group.append(line)
         else:
             flush()
+            result.append(line)
+    flush()
+    return result
+
+
+def _sort_consecutive_level_lines(lines: list[str]) -> list[str]:
+    """Sort consecutive build progress lines that share the same DAG level.
+
+    Concurrent execution of same-level layers produces non-deterministic
+    orderings like:
+        ✓ policies (level 0)  <BUILD_COUNTS>  <TIME>
+        ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
+    Sorting these groups removes DAG-ordering non-determinism.
+    """
+    _level_re = re.compile(r"\(level (\d+)\)")
+    result: list[str] = []
+    group: list[str] = []
+    group_level: str | None = None
+
+    def flush():
+        if group:
+            result.extend(sorted(group))
+            group.clear()
+
+    for line in lines:
+        m = _level_re.search(line)
+        if m:
+            level = m.group(1)
+            if group_level == level:
+                group.append(line)
+            else:
+                flush()
+                group_level = level
+                group.append(line)
+        else:
+            flush()
+            group_level = None
             result.append(line)
     flush()
     return result

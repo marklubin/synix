@@ -7,8 +7,8 @@
 │ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
   ✓ competitor_docs (level 0)  <BUILD_COUNTS>  <TIME>
-  ✓ product_specs (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ deal_context (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ product_specs (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ win_reports (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ competitive_intel (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ strategy (level 2)  <BUILD_COUNTS>  <TIME>
@@ -18,10 +18,10 @@
 ╭───────────────────┬──────────────┬───────┬────────┬──────────╮
 │ Layer             │    Level     │ Built │ Cached │  Skipped  │
 ├───────────────────┼──────────────┼───────┼────────┼──────────┤
-│ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ product_specs     │  <N>  │  <N>  │  <N>  │  <N>  │
-│ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
 │ win_reports       │  <N>  │  <N>  │  <N>  │  <N>  │
+│ deal_context      │  <N>  │  <N>  │  <N>  │  <N>  │
+│ competitor_docs   │  <N>  │  <N>  │  <N>  │  <N>  │
 │ competitive_intel │  <N>  │  <N>  │  <N>  │  <N>  │
 │ strategy          │  <N>  │  <N>  │  <N>  │  <N>  │
 │ call_prep         │  <N>  │  <N>  │  <N>  │  <N>  │

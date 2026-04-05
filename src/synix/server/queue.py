@@ -112,20 +112,22 @@ class DocumentQueue:
             if actual_id == doc_id:
                 logger.info(
                     "Enqueued doc %s: bucket=%s filename=%s hash=%s",
-                    doc_id, bucket, filename, content_hash[:12],
+                    doc_id,
+                    bucket,
+                    filename,
+                    content_hash[:12],
                 )
             else:
                 logger.info(
                     "Dedup hit for hash %s — returning existing doc %s",
-                    content_hash[:12], actual_id,
+                    content_hash[:12],
+                    actual_id,
                 )
             return actual_id
 
     def pending_count(self) -> int:
         """Return the number of documents with status='pending'."""
-        row = self._conn.execute(
-            "SELECT COUNT(*) AS cnt FROM document_queue WHERE status = 'pending'"
-        ).fetchone()
+        row = self._conn.execute("SELECT COUNT(*) AS cnt FROM document_queue WHERE status = 'pending'").fetchone()
         return row["cnt"]
 
     def last_enqueue_time(self) -> float | None:
@@ -151,9 +153,7 @@ class DocumentQueue:
         with self._lock:
             now = _utcnow()
             with self._conn:
-                cur = self._conn.execute(
-                    "SELECT doc_id FROM document_queue WHERE status = 'pending'"
-                )
+                cur = self._conn.execute("SELECT doc_id FROM document_queue WHERE status = 'pending'")
                 doc_ids = [r["doc_id"] for r in cur.fetchall()]
 
                 if not doc_ids:
@@ -175,7 +175,9 @@ class DocumentQueue:
                 )
 
             logger.info(
-                "claim_pending_batch(%s): claimed %d documents", run_id, len(doc_ids),
+                "claim_pending_batch(%s): claimed %d documents",
+                run_id,
+                len(doc_ids),
             )
             return doc_ids
 
@@ -198,7 +200,10 @@ class DocumentQueue:
                     (now, built_count, cached_count, run_id),
                 )
             logger.info(
-                "mark_built(%s): built=%d cached=%d", run_id, built_count, cached_count,
+                "mark_built(%s): built=%d cached=%d",
+                run_id,
+                built_count,
+                cached_count,
             )
 
     def mark_released(self, run_id: str) -> None:
@@ -248,9 +253,7 @@ class DocumentQueue:
         Includes a ``queue_position`` field: the 1-based position among pending
         documents ordered by created_at, or None if the document is not pending.
         """
-        row = self._conn.execute(
-            "SELECT * FROM document_queue WHERE doc_id = ?", (doc_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM document_queue WHERE doc_id = ?", (doc_id,)).fetchone()
         if row is None:
             return None
         result = dict(row)

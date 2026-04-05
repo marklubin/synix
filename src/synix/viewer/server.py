@@ -50,15 +50,17 @@ class ViewerState:
             items: list[dict] = []
             for art in self.release.artifacts(layer=layer):
                 meta = art.metadata
-                items.append({
-                    "label": art.label,
-                    "title": meta.get("title", art.label),
-                    "date": meta.get("date") or meta.get("month", ""),
-                    "artifact_type": art.artifact_type,
-                    "layer": art.layer,
-                    "level": art.layer_level,
-                    "metadata": meta,
-                })
+                items.append(
+                    {
+                        "label": art.label,
+                        "title": meta.get("title", art.label),
+                        "date": meta.get("date") or meta.get("month", ""),
+                        "artifact_type": art.artifact_type,
+                        "layer": art.layer,
+                        "level": art.layer_level,
+                        "metadata": meta,
+                    }
+                )
             self._layer_cache[layer] = items
             elapsed = time.monotonic() - start
             logger.info("Layer %r: %d artifacts cached in %.1fs", layer, len(items), elapsed)
@@ -94,7 +96,10 @@ class ViewerState:
         if key != self._search_cache_key:
             layers_filter = [layer] if layer else None
             self._search_cache_results = self.release.search(
-                query, mode="keyword", limit=500, layers=layers_filter,
+                query,
+                mode="keyword",
+                limit=500,
+                layers=layers_filter,
             )
             self._search_cache_key = key
         return self._search_cache_results
@@ -135,12 +140,14 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/status")
     def api_status():
-        return jsonify({
-            "loaded": True,
-            "title": state.title,
-            "artifact_count": state.artifact_count,
-            "release": state.release.name,
-        })
+        return jsonify(
+            {
+                "loaded": True,
+                "title": state.title,
+                "artifact_count": state.artifact_count,
+                "release": state.release.name,
+            }
+        )
 
     @app.route("/api/layers")
     def api_layers():
@@ -175,12 +182,14 @@ def create_app(state: ViewerState) -> Flask:
         start = (page - 1) * per_page
         page_items = items[start : start + per_page]
 
-        return jsonify({
-            "items": page_items,
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-        })
+        return jsonify(
+            {
+                "items": page_items,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+            }
+        )
 
     @app.route("/api/artifact/<label>")
     def api_artifact(label: str):
@@ -189,16 +198,18 @@ def create_app(state: ViewerState) -> Flask:
         except ArtifactNotFoundError:
             return jsonify({"error": f"Artifact {label!r} not found"}), 404
 
-        return jsonify({
-            "label": art.label,
-            "artifact_type": art.artifact_type,
-            "content": art.content,
-            "artifact_id": art.artifact_id,
-            "layer": art.layer,
-            "layer_level": art.layer_level,
-            "provenance": art.provenance,
-            "metadata": art.metadata,
-        })
+        return jsonify(
+            {
+                "label": art.label,
+                "artifact_type": art.artifact_type,
+                "content": art.content,
+                "artifact_id": art.artifact_id,
+                "layer": art.layer,
+                "layer_level": art.layer_level,
+                "provenance": art.provenance,
+                "metadata": art.metadata,
+            }
+        )
 
     @app.route("/api/lineage/<label>")
     def api_lineage(label: str):
@@ -262,21 +273,25 @@ def create_app(state: ViewerState) -> Flask:
 
         items = []
         for r in page_results:
-            items.append({
-                "label": r.label,
-                "layer": r.layer,
-                "score": r.score,
-                "snippet": make_snippet(r.content, q),
-                "metadata": r.metadata,
-            })
+            items.append(
+                {
+                    "label": r.label,
+                    "layer": r.layer,
+                    "score": r.score,
+                    "snippet": make_snippet(r.content, q),
+                    "metadata": r.metadata,
+                }
+            )
 
-        return jsonify({
-            "items": items,
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-            "has_more": has_more,
-        })
+        return jsonify(
+            {
+                "items": items,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "has_more": has_more,
+            }
+        )
 
     @app.route("/api/releases")
     def api_releases():
@@ -299,22 +314,25 @@ def create_app(state: ViewerState) -> Flask:
         except Exception as exc:
             logger.error("Failed to switch release to %r: %s", name, exc)
             return jsonify({"error": str(exc)}), 400
-        return jsonify({
-            "loaded": True,
-            "title": state.title,
-            "artifact_count": state.artifact_count,
-            "release": name,
-        })
+        return jsonify(
+            {
+                "loaded": True,
+                "title": state.title,
+                "artifact_count": state.artifact_count,
+                "release": name,
+            }
+        )
 
     # -- Helper: prompt store ---------------------------------------------------
 
     def _get_prompt_store():
         """Get or create a PromptStore for reading."""
-        if not hasattr(app, '_prompt_store'):
+        if not hasattr(app, "_prompt_store"):
             if state.project is None:
                 return None
             try:
                 from synix.server.prompt_store import PromptStore
+
                 prompts_db = Path(state.project._synix_dir) / "prompts.db"
                 if prompts_db.exists():
                     app._prompt_store = PromptStore(prompts_db)
@@ -328,11 +346,12 @@ def create_app(state: ViewerState) -> Flask:
 
     def _get_queue():
         """Get or create a DocumentQueue for reading."""
-        if not hasattr(app, '_queue'):
+        if not hasattr(app, "_queue"):
             if state.project is None:
                 return None
             try:
                 from synix.server.queue import DocumentQueue
+
                 queue_db = Path(state.project._synix_dir) / "queue.db"
                 if queue_db.exists():
                     app._queue = DocumentQueue(queue_db)
@@ -353,22 +372,26 @@ def create_app(state: ViewerState) -> Flask:
         try:
             queue = _get_queue()
             if queue is None:
-                return jsonify({
-                    "queue_depth": 0,
-                    "active_build": None,
-                    "recent": [],
-                    "stats": {"total_processed": 0, "avg_build_time_seconds": 0},
-                })
+                return jsonify(
+                    {
+                        "queue_depth": 0,
+                        "active_build": None,
+                        "recent": [],
+                        "stats": {"total_processed": 0, "avg_build_time_seconds": 0},
+                    }
+                )
 
             stats = queue.queue_stats()
             recent = queue.recent_history(limit=20)
 
-            return jsonify({
-                "queue_depth": stats.get("pending_count", 0),
-                "active_build": None,  # TODO: track active build in queue
-                "recent": recent,
-                "stats": stats,
-            })
+            return jsonify(
+                {
+                    "queue_depth": stats.get("pending_count", 0),
+                    "active_build": None,  # TODO: track active build in queue
+                    "recent": recent,
+                    "stats": stats,
+                }
+            )
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 
@@ -435,13 +458,15 @@ def create_app(state: ViewerState) -> Flask:
             for key in keys:
                 meta = store.get_with_meta(key)
                 hist = store.history(key)
-                prompts.append({
-                    "key": key,
-                    "version": meta["version"] if meta else 0,
-                    "versions_count": len(hist),
-                    "content_hash": meta["content_hash"] if meta else "",
-                    "updated_at": meta["created_at"] if meta else "",
-                })
+                prompts.append(
+                    {
+                        "key": key,
+                        "version": meta["version"] if meta else 0,
+                        "versions_count": len(hist),
+                        "content_hash": meta["content_hash"] if meta else "",
+                        "updated_at": meta["created_at"] if meta else "",
+                    }
+                )
             return jsonify({"prompts": prompts})
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500

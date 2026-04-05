@@ -71,6 +71,7 @@ async def ingest_to_bucket(request: Request) -> Response:
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         doc_id = None
         from synix.server.mcp_tools import _state
+
         queue = _state.get("queue")
         if queue is not None:
             try:
@@ -115,19 +116,21 @@ async def search_api(request: Request) -> Response:
         results = rel.search(query, mode="keyword", limit=limit, layers=layers_list, surface=surface)
         logger.info("REST search: %d results for %r", len(results), query)
 
-        return JSONResponse({
-            "query": query,
-            "count": len(results),
-            "results": [
-                {
-                    "label": r.label,
-                    "layer": r.layer,
-                    "score": round(r.score, 3),
-                    "content": r.content[:500],
-                }
-                for r in results
-            ],
-        })
+        return JSONResponse(
+            {
+                "query": query,
+                "count": len(results),
+                "results": [
+                    {
+                        "label": r.label,
+                        "layer": r.layer,
+                        "score": round(r.score, 3),
+                        "content": r.content[:500],
+                    }
+                    for r in results
+                ],
+            }
+        )
     except Exception as exc:
         logger.error("REST search failed: %s", exc)
         return JSONResponse({"error": str(exc)}, status_code=500)
@@ -170,6 +173,7 @@ async def document_status_api(request: Request) -> Response:
 async def list_prompts_api(request: Request) -> Response:
     """GET /api/v1/prompts — list prompt template keys."""
     from synix.server.mcp_tools import _state
+
     store = _state.get("prompt_store")
     if store is None:
         return JSONResponse({"prompts": []})
@@ -186,6 +190,7 @@ async def get_prompt_api(request: Request) -> Response:
     """GET /api/v1/prompts/{key} — get prompt content."""
     key = request.path_params["key"]
     from synix.server.mcp_tools import _state
+
     store = _state.get("prompt_store")
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)
@@ -203,6 +208,7 @@ async def update_prompt_api(request: Request) -> Response:
     """PUT /api/v1/prompts/{key} — update prompt content."""
     key = request.path_params["key"]
     from synix.server.mcp_tools import _state
+
     store = _state.get("prompt_store")
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)
@@ -224,6 +230,7 @@ async def prompt_history_api(request: Request) -> Response:
     """GET /api/v1/prompts/{key}/history — prompt version history."""
     key = request.path_params["key"]
     from synix.server.mcp_tools import _state
+
     store = _state.get("prompt_store")
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)

@@ -46,7 +46,10 @@ async def run_mcp_http(config: ServerConfig) -> None:
     app.routes.extend(api_routes)
 
     uv_config = uvicorn.Config(
-        app, host="0.0.0.0", port=config.mcp_port, log_level="info",
+        app,
+        host="0.0.0.0",
+        port=config.mcp_port,
+        log_level="info",
     )
     server = uvicorn.Server(uv_config)
     await server.serve()
@@ -67,7 +70,9 @@ def _run_build(config: ServerConfig):
     result = project.build(accept_existing=True)
     logger.info(
         "Build queue: build done — %d built, %d cached in %.1fs",
-        result.built, result.cached, result.total_time,
+        result.built,
+        result.cached,
+        result.total_time,
     )
     return result
 
@@ -135,6 +140,7 @@ async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_loc
 
                 # Apply LLM config override if vLLM is managing inference
                 from synix.server.mcp_tools import _state
+
                 llm_override = _state.get("llm_config_override")
                 project = _state["project"]
                 if llm_override and project._pipeline:
@@ -153,7 +159,9 @@ async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_loc
                     queue.mark_released(run_id)
                     logger.info(
                         "Build queue: run %s complete — %d built, %d cached",
-                        run_id[:8], result.built, result.cached,
+                        run_id[:8],
+                        result.built,
+                        result.cached,
                     )
             except Exception as exc:
                 queue.mark_failed(run_id, str(exc))
@@ -215,9 +223,9 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     if viewer:
         logger.info("  Viewer:     :%d", config.viewer_port)
     logger.info("  Buckets:    %s", ", ".join(b.name for b in config.buckets) or "(none)")
-    logger.info("  Build queue: %s (window %ds)",
-                "on" if config.auto_build.enabled else "off",
-                config.auto_build.window)
+    logger.info(
+        "  Build queue: %s (window %ds)", "on" if config.auto_build.enabled else "off", config.auto_build.window
+    )
     logger.info("=" * 60)
 
     # Open project and configure MCP state
@@ -252,6 +260,7 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     # Seed from bundled prompt templates
     try:
         from synix.build.transforms import PROMPTS_DIR
+
         seeded = prompt_store.seed_from_files(PROMPTS_DIR)
         if seeded:
             logger.info("Seeded %d prompts from %s", seeded, PROMPTS_DIR)

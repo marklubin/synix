@@ -157,8 +157,11 @@ class TestIngestToQueueLifecycle:
 
     def test_client_id_tracking(self, queue: DocumentQueue) -> None:
         doc_id = queue.enqueue(
-            "sessions", "session.jsonl.gz", "sesshash",
-            "/tmp/session.jsonl.gz", client_id="Claude@Salinas",
+            "sessions",
+            "session.jsonl.gz",
+            "sesshash",
+            "/tmp/session.jsonl.gz",
+            client_id="Claude@Salinas",
         )
         status = queue.document_status(doc_id)
         assert status["client_id"] == "Claude@Salinas"

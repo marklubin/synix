@@ -49,7 +49,6 @@ class TestRefsListE2E:
         assert result.exit_code == 0, result.output
         assert "No snapshot store found" in result.output
 
-
     def test_refs_list_shows_plan_refs(self, tmp_path):
         """refs list includes refs/plans/ prefix."""
         synix_dir = create_test_snapshot(tmp_path, {"episodes": [_make_artifact("ep-1", "Content")]})

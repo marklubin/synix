@@ -37,12 +37,19 @@ class VLLMManager:
         cfg = self.config
 
         cmd = [
-            "vllm", "serve", cfg.model,
-            "--port", str(cfg.port),
-            "--tensor-parallel-size", "1",
-            "--gpu-memory-utilization", str(cfg.gpu_memory_utilization),
-            "--max-model-len", str(cfg.max_model_len),
-            "--default-chat-template-kwargs", json.dumps({"enable_thinking": False}),
+            "vllm",
+            "serve",
+            cfg.model,
+            "--port",
+            str(cfg.port),
+            "--tensor-parallel-size",
+            "1",
+            "--gpu-memory-utilization",
+            str(cfg.gpu_memory_utilization),
+            "--max-model-len",
+            str(cfg.max_model_len),
+            "--default-chat-template-kwargs",
+            json.dumps({"enable_thinking": False}),
             "--enable-prefix-caching",
             *cfg.extra_args,
         ]
@@ -64,13 +71,13 @@ class VLLMManager:
         deadline = time.monotonic() + cfg.startup_timeout
         while time.monotonic() < deadline:
             if self._process.returncode is not None:
-                raise RuntimeError(
-                    f"vLLM process exited unexpectedly with code {self._process.returncode}"
-                )
+                raise RuntimeError(f"vLLM process exited unexpectedly with code {self._process.returncode}")
             if await self.health_check():
                 logger.info(
                     "vLLM started: %s on GPU %d, port %d",
-                    cfg.model, cfg.gpu_device, cfg.port,
+                    cfg.model,
+                    cfg.gpu_device,
+                    cfg.port,
                 )
                 return
             await asyncio.sleep(2)
@@ -132,14 +139,18 @@ class VLLMManager:
         loop = asyncio.get_event_loop()
         try:
             url = f"http://localhost:{self.config.port}/v1/chat/completions"
-            payload = json.dumps({
-                "model": self.config.model,
-                "messages": [{"role": "user", "content": "Count from 1 to 20."}],
-                "max_tokens": 100,
-                "temperature": 0,
-            }).encode()
+            payload = json.dumps(
+                {
+                    "model": self.config.model,
+                    "messages": [{"role": "user", "content": "Count from 1 to 20."}],
+                    "max_tokens": 100,
+                    "temperature": 0,
+                }
+            ).encode()
             req = urllib.request.Request(
-                url, data=payload, method="POST",
+                url,
+                data=payload,
+                method="POST",
                 headers={"Content-Type": "application/json"},
             )
 
@@ -157,7 +168,9 @@ class VLLMManager:
 
             logger.info(
                 "vLLM throughput: %.1f tok/s (%d tokens in %.1fs)",
-                tok_per_sec, completion_tokens, elapsed,
+                tok_per_sec,
+                completion_tokens,
+                elapsed,
             )
             return {
                 "tok_per_sec": tok_per_sec,
@@ -200,7 +213,8 @@ class VLLMManager:
         # Process ended — log if unexpected
         if proc.returncode is not None and proc.returncode != 0:
             logger.error(
-                "vLLM process exited unexpectedly with code %d", proc.returncode,
+                "vLLM process exited unexpectedly with code %d",
+                proc.returncode,
             )
 
     async def _kill_process(self) -> None:

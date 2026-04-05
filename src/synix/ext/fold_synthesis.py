@@ -119,9 +119,7 @@ class FoldSynthesis(Transform):
         prompt_id = self._make_prompt_id()
 
         sorted_inputs = self._sort_inputs(inputs)
-        transform_fp = self.compute_fingerprint(
-            ctx.to_dict() if hasattr(ctx, "to_dict") else ctx
-        )
+        transform_fp = self.compute_fingerprint(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx)
 
         # --- Checkpoint resume logic ---
         previous = ctx.get("_previous_artifact") if hasattr(ctx, "get") else None
@@ -161,10 +159,7 @@ class FoldSynthesis(Transform):
 
         # --- Persist checkpoint ---
         # Track (label, artifact_id) pairs so content edits are detected.
-        seen_input_entries = [
-            {"label": a.label, "artifact_id": a.artifact_id}
-            for a in sorted_inputs
-        ]
+        seen_input_entries = [{"label": a.label, "artifact_id": a.artifact_id} for a in sorted_inputs]
         content_hash = hashlib.sha256(accumulated.encode()).hexdigest()[:16]
 
         output_metadata = {"input_count": len(inputs)}
@@ -265,9 +260,7 @@ class FoldSynthesis(Transform):
             (i for i, a in enumerate(sorted_inputs) if a.label in seen_label_set),
             default=-1,
         )
-        first_new_idx = min(
-            i for i, a in enumerate(sorted_inputs) if a.label not in seen_label_set
-        )
+        first_new_idx = min(i for i, a in enumerate(sorted_inputs) if a.label not in seen_label_set)
         if first_new_idx <= last_seen_idx:
             logger.info(
                 "%s: new inputs interleave with seen inputs, full recompute",

@@ -650,10 +650,7 @@ def plan_batch(pipeline: Pipeline) -> list[dict]:
             info["batch_param"] = layer.batch
 
             # Estimate work units using DAG-aware cardinality tracking
-            dep_counts = sum(
-                layer_cardinality.get(dep.name, 1)
-                for dep in layer.depends_on
-            )
+            dep_counts = sum(layer_cardinality.get(dep.name, 1) for dep in layer.depends_on)
             if dep_counts == 0:
                 dep_counts = 1
             info["estimated_requests"] = layer.estimate_output_count(dep_counts)

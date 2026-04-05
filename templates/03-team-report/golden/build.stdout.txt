@@ -6,8 +6,8 @@
 │ Surfaces: 1  │
 │ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ bios (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ project_brief (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ work_styles (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ team_dynamics (level 2)  <BUILD_COUNTS>  <TIME>
   ✓ final_report (level 3)  <BUILD_COUNTS>  <TIME>

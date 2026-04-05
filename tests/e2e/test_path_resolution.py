@@ -104,7 +104,6 @@ class TestRelativeSourceDirResolution:
         synix_dir = project_dir / ".synix"
         assert synix_dir.exists(), f".synix not found at {synix_dir}"
 
-
     def test_source_with_dir_override_resolves_relative_to_pipeline(self, runner, tmp_path):
         """Source(dir='./custom_sources') resolves against pipeline file, not cwd."""
         project_dir = tmp_path / "project"
@@ -140,6 +139,7 @@ pipeline.add(transcripts, episodes)
 
         assert result.exit_code == 0, f"Plan failed:\n{result.output}"
         import json as json_mod
+
         plan_data = json_mod.loads(result.output)
         transcript_step = next(s for s in plan_data["steps"] if s["name"] == "transcripts")
         assert transcript_step["artifact_count"] > 0, (
@@ -168,11 +168,10 @@ pipeline.add(transcripts, episodes)
 
         assert result.exit_code == 0, f"Plan failed:\n{result.output}"
         import json as json_mod
+
         plan_data = json_mod.loads(result.output)
         transcript_step = next(s for s in plan_data["steps"] if s["name"] == "transcripts")
-        assert transcript_step["artifact_count"] > 0, (
-            f"--source-dir override found 0 artifacts. Full plan: {plan_data}"
-        )
+        assert transcript_step["artifact_count"] > 0, f"--source-dir override found 0 artifacts. Full plan: {plan_data}"
 
 
 class TestBuildDirOverride:
@@ -216,8 +215,7 @@ class TestBuildDirOverride:
         # .synix should NOT exist at the original location
         original_synix_dir = project_dir / ".synix"
         assert not original_synix_dir.exists(), (
-            f".synix was created at the original location {original_synix_dir} "
-            f"despite --build-dir override"
+            f".synix was created at the original location {original_synix_dir} despite --build-dir override"
         )
 
 
@@ -258,7 +256,6 @@ class TestInfoWithSynixDir:
         assert info_result.exit_code == 0, f"Info failed:\n{info_result.output}"
         # Should contain build status (artifacts count, layer names)
         assert "Artifacts" in info_result.output or "Build Status" in info_result.output
-
 
     def test_info_with_build_dir_override(self, runner, tmp_path):
         """info --build-dir finds .synix even when not in the project directory."""

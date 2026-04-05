@@ -728,7 +728,16 @@ class TestResponseSchemas:
         release("local")
         arts = list_artifacts("local")
         art = get_artifact(arts[0]["label"], "local")
-        expected_keys = {"label", "artifact_type", "content", "artifact_id", "layer", "layer_level", "provenance", "metadata"}
+        expected_keys = {
+            "label",
+            "artifact_type",
+            "content",
+            "artifact_id",
+            "layer",
+            "layer_level",
+            "provenance",
+            "metadata",
+        }
         assert set(art.keys()) == expected_keys
 
     def test_lineage_schema(self, project_dir):

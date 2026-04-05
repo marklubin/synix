@@ -74,8 +74,7 @@ class PromptStore:
         """Return prompt with version metadata, or None if not found."""
         if version is not None:
             row = self._conn.execute(
-                "SELECT key, version, content, content_hash, created_at "
-                "FROM prompts WHERE key = ? AND version = ?",
+                "SELECT key, version, content, content_hash, created_at FROM prompts WHERE key = ? AND version = ?",
                 (key, version),
             ).fetchone()
         else:
@@ -96,16 +95,13 @@ class PromptStore:
 
     def list_keys(self) -> list[str]:
         """Return all unique prompt keys, sorted alphabetically."""
-        rows = self._conn.execute(
-            "SELECT DISTINCT key FROM prompts ORDER BY key"
-        ).fetchall()
+        rows = self._conn.execute("SELECT DISTINCT key FROM prompts ORDER BY key").fetchall()
         return [r["key"] for r in rows]
 
     def history(self, key: str) -> list[dict]:
         """Return version history for a key, newest first."""
         rows = self._conn.execute(
-            "SELECT key, version, content_hash, created_at "
-            "FROM prompts WHERE key = ? ORDER BY version DESC",
+            "SELECT key, version, content_hash, created_at FROM prompts WHERE key = ? ORDER BY version DESC",
             (key,),
         ).fetchall()
         return [
@@ -157,8 +153,7 @@ class PromptStore:
 
         with self._conn:
             self._conn.execute(
-                "INSERT INTO prompts (key, version, content, content_hash, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO prompts (key, version, content, content_hash, created_at) VALUES (?, ?, ?, ?, ?)",
                 (key, next_version, content, new_hash, now),
             )
 

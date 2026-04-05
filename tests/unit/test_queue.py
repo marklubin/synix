@@ -59,9 +59,7 @@ class TestClaimPendingBatch:
         assert q.pending_count() == 0
 
         # Build run was created
-        row = q._conn.execute(
-            "SELECT * FROM build_runs WHERE run_id = 'run-1'"
-        ).fetchone()
+        row = q._conn.execute("SELECT * FROM build_runs WHERE run_id = 'run-1'").fetchone()
         assert row is not None
         assert row["status"] == "running"
         assert row["documents_count"] == 2
@@ -83,9 +81,7 @@ class TestMarkBuilt:
         assert status["status"] == "built"
         assert status["built_at"] is not None
 
-        run_row = q._conn.execute(
-            "SELECT * FROM build_runs WHERE run_id = 'run-1'"
-        ).fetchone()
+        run_row = q._conn.execute("SELECT * FROM build_runs WHERE run_id = 'run-1'").fetchone()
         assert run_row["status"] == "completed"
         assert run_row["built_count"] == 1
         assert run_row["cached_count"] == 0
@@ -118,9 +114,7 @@ class TestMarkFailed:
         assert status["processing_started_at"] is None
         assert q.pending_count() == 1
 
-        run_row = q._conn.execute(
-            "SELECT * FROM build_runs WHERE run_id = 'run-1'"
-        ).fetchone()
+        run_row = q._conn.execute("SELECT * FROM build_runs WHERE run_id = 'run-1'").fetchone()
         assert run_row["status"] == "failed"
         assert run_row["error_message"] == "LLM timeout"
 

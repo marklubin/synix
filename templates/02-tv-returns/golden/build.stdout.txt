@@ -6,8 +6,8 @@
 │ Surfaces: 1  │
 │ Concurrency: 5 threads  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ policies (level 0)  <BUILD_COUNTS>  <TIME>
+  ✓ product_offers (level 0)  <BUILD_COUNTS>  <TIME>
   ✓ policy_index (level 1)  <BUILD_COUNTS>  <TIME>
   ✓ cs_product_brief (level 2)  <BUILD_COUNTS>  <TIME>
     └─ cs-search  <MATERIALIZED>

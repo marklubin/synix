@@ -244,10 +244,12 @@ class TestMeasureThroughput:
     @pytest.mark.asyncio
     async def test_measure_throughput_success(self, manager):
         """Successful throughput measurement returns tok_per_sec and timing."""
-        response_body = json.dumps({
-            "usage": {"completion_tokens": 50, "prompt_tokens": 10, "total_tokens": 60},
-            "choices": [{"message": {"content": "1 2 3 ..."}}],
-        }).encode()
+        response_body = json.dumps(
+            {
+                "usage": {"completion_tokens": 50, "prompt_tokens": 10, "total_tokens": 60},
+                "choices": [{"message": {"content": "1 2 3 ..."}}],
+            }
+        ).encode()
 
         fake_resp = MagicMock()
         fake_resp.read.return_value = response_body

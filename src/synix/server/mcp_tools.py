@@ -42,8 +42,7 @@ def _current_release():
         return project.release(_RELEASE_NAME)
     except Exception as exc:
         raise ValueError(
-            "No build available yet. Ingest some documents and wait for the auto-builder, "
-            "or trigger a build manually."
+            "No build available yet. Ingest some documents and wait for the auto-builder, or trigger a build manually."
         ) from exc
 
 
@@ -63,10 +62,7 @@ def _resolve_bucket_dir(bucket_name: str) -> Path:
             bucket = b
             break
     if bucket is None:
-        raise ValueError(
-            f"Bucket {bucket_name!r} not found. "
-            f"Available: {[b.name for b in config.buckets]}"
-        )
+        raise ValueError(f"Bucket {bucket_name!r} not found. Available: {[b.name for b in config.buckets]}")
 
     bucket_path = Path(bucket.dir)
     if not bucket_path.is_absolute():

@@ -54,6 +54,7 @@ def create_app(config: MeshConfig) -> Starlette:
 
     # Build history ring buffer — last 50 builds
     from collections import deque
+
     build_history: deque[dict] = deque(maxlen=50)
 
     # --- Term fencing helper (1C) ---
@@ -510,7 +511,9 @@ def create_app(config: MeshConfig) -> Starlette:
                 build_phase = "building"
                 pipeline.build_dir = str(build_dir)
                 result = await asyncio.to_thread(
-                    run, pipeline, source_dir=source_dir,
+                    run,
+                    pipeline,
+                    source_dir=source_dir,
                     accept_existing=config.server.accept_existing,
                 )
 
@@ -526,18 +529,20 @@ def create_app(config: MeshConfig) -> Starlette:
                 layers_detail = []
                 for ls in result.layer_stats:
                     step = steps.get(ls.name, {})
-                    layers_detail.append({
-                        "name": ls.name,
-                        "level": ls.level,
-                        "built": ls.built,
-                        "cached": ls.cached,
-                        "skipped": ls.skipped,
-                        "dlq_count": ls.dlq_count,
-                        "time": round(ls.time_seconds, 2),
-                        "rebuilt_ids": step.get("rebuilt_ids", []),
-                        "llm_calls": step.get("llm_calls", 0),
-                        "tokens": step.get("tokens_used", 0),
-                    })
+                    layers_detail.append(
+                        {
+                            "name": ls.name,
+                            "level": ls.level,
+                            "built": ls.built,
+                            "cached": ls.cached,
+                            "skipped": ls.skipped,
+                            "dlq_count": ls.dlq_count,
+                            "time": round(ls.time_seconds, 2),
+                            "rebuilt_ids": step.get("rebuilt_ids", []),
+                            "llm_calls": step.get("llm_calls", 0),
+                            "tokens": step.get("tokens_used", 0),
+                        }
+                    )
 
                 total_new = sum(l["built"] for l in layers_detail)
                 total_cached = sum(l["cached"] for l in layers_detail)
@@ -554,23 +559,27 @@ def create_app(config: MeshConfig) -> Starlette:
                         "total_cached": total_cached,
                     },
                 )
-                build_history.append({
-                    "build_number": local_build_count,
-                    "status": "success",
-                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
-                    "duration": round(build_duration, 1),
-                    "sessions_processed": len(pre_build_unprocessed),
-                    "layers": layers_detail,
-                    "total_new": total_new,
-                    "total_cached": total_cached,
-                    "total_llm_calls": run_log.get("total_llm_calls", 0),
-                    "total_tokens": run_log.get("total_tokens", 0),
-                    "cost_estimate": run_log.get("total_cost_estimate", 0.0),
-                    "dlq": [
-                        {"artifact": e.artifact_desc, "error": e.error_message, "layer": e.layer_name}
-                        for e in result.dlq.entries
-                    ] if len(result.dlq) > 0 else [],
-                })
+                build_history.append(
+                    {
+                        "build_number": local_build_count,
+                        "status": "success",
+                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
+                        "duration": round(build_duration, 1),
+                        "sessions_processed": len(pre_build_unprocessed),
+                        "layers": layers_detail,
+                        "total_new": total_new,
+                        "total_cached": total_cached,
+                        "total_llm_calls": run_log.get("total_llm_calls", 0),
+                        "total_tokens": run_log.get("total_tokens", 0),
+                        "cost_estimate": run_log.get("total_cost_estimate", 0.0),
+                        "dlq": [
+                            {"artifact": e.artifact_desc, "error": e.error_message, "layer": e.layer_name}
+                            for e in result.dlq.entries
+                        ]
+                        if len(result.dlq) > 0
+                        else [],
+                    }
+                )
 
                 # 4. Run server deploy hooks
                 build_phase = "deploying"
@@ -639,8 +648,7 @@ def create_app(config: MeshConfig) -> Starlette:
                 # 7. Mark only the pre-build snapshot as processed (not mid-build arrivals)
                 if pre_build_unprocessed:
                     session_keys = [
-                        (s["session_id"], s["project_dir"], s.get("subsession_seq", 0))
-                        for s in pre_build_unprocessed
+                        (s["session_id"], s["project_dir"], s.get("subsession_seq", 0)) for s in pre_build_unprocessed
                     ]
                     store.mark_processed(session_keys)
 
@@ -665,21 +673,25 @@ def create_app(config: MeshConfig) -> Starlette:
 
             except Exception as exc:
                 mesh_event(
-                    logger, logging.ERROR,
-                    f"Build failed: {exc}", "build_failed",
+                    logger,
+                    logging.ERROR,
+                    f"Build failed: {exc}",
+                    "build_failed",
                     {"error": str(exc)},
                 )
-                build_history.append({
-                    "build_number": build_count + 1,
-                    "status": "failed",
-                    "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
-                    "duration": round(time.time() - build_start, 1),
-                    "error": str(exc),
-                    "sessions_processed": len(pre_build_unprocessed),
-                    "layers": [],
-                    "total_new": 0,
-                    "total_cached": 0,
-                })
+                build_history.append(
+                    {
+                        "build_number": build_count + 1,
+                        "status": "failed",
+                        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(build_start)),
+                        "duration": round(time.time() - build_start, 1),
+                        "error": str(exc),
+                        "sessions_processed": len(pre_build_unprocessed),
+                        "layers": [],
+                        "total_new": 0,
+                        "total_cached": 0,
+                    }
+                )
 
             # 9. Complete scheduler and check if another build is needed
             build_phase = "idle"

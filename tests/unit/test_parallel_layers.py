@@ -122,8 +122,7 @@ class TestParallelLayers:
 
         source = Source("src")
         layers = [
-            SlowTransform(f"fold-{i}", depends_on=[source], sleep_time=0.05, label=f"fold-{i}-out")
-            for i in range(5)
+            SlowTransform(f"fold-{i}", depends_on=[source], sleep_time=0.05, label=f"fold-{i}-out") for i in range(5)
         ]
 
         pipeline = Pipeline(
