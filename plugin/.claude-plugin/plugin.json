@@ -1,6 +1,6 @@
 {
   "name": "synix",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Persistent memory for Claude Code — search, ingest, and context across sessions via a Synix knowledge server",
   "author": {
     "name": "Synix",
@@ -14,6 +14,12 @@
       "description": "Synix knowledge server URL (e.g. http://salinas:8200)",
       "type": "string",
       "sensitive": false
+    }
+  },
+  "mcpServers": {
+    "synix": {
+      "type": "streamable-http",
+      "url": "${user_config.server_url}/mcp"
     }
   }
 }
