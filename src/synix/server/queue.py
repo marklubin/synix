@@ -215,10 +215,11 @@ class DocumentQueue:
             logger.info("mark_released(%s)", run_id)
 
     def mark_failed(self, run_id: str, error: str) -> None:
-        """Requeue processing documents back to pending on build failure.
+        """Requeue documents back to pending on build or release failure.
 
-        Clears the build_run_id so documents can be claimed in a future run.
-        Records the error on both the documents and the build_run.
+        Handles docs in either 'processing' or 'built' state (release can
+        fail after a successful build). Clears the build_run_id so documents
+        can be claimed in a future run.
         """
         with self._lock:
             now = _utcnow()
@@ -228,8 +229,9 @@ class DocumentQueue:
                        SET status = 'pending',
                            error_message = ?,
                            build_run_id = NULL,
-                           processing_started_at = NULL
-                       WHERE build_run_id = ? AND status = 'processing'""",
+                           processing_started_at = NULL,
+                           built_at = NULL
+                       WHERE build_run_id = ? AND status IN ('processing', 'built')""",
                     (error, run_id),
                 )
                 self._conn.execute(

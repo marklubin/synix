@@ -101,18 +101,26 @@ def _parse_config(raw: dict) -> ServerConfig:
         window=int(auto_build_raw.get("window", 30)),
     )
 
-    # vLLM
+    # vLLM — only pass fields present in TOML, let dataclass defaults handle the rest
     vllm_raw = raw.get("vllm", {})
-    vllm = VLLMConfig(
-        enabled=vllm_raw.get("enabled", False),
-        model=vllm_raw.get("model", "Qwen/Qwen3.5-2B"),
-        gpu_device=int(vllm_raw.get("gpu_device", 0)),
-        port=int(vllm_raw.get("port", 8100)),
-        max_model_len=int(vllm_raw.get("max_model_len", 2048)),
-        gpu_memory_utilization=float(vllm_raw.get("gpu_memory_utilization", 0.85)),
-        extra_args=vllm_raw.get("extra_args", []),
-        startup_timeout=int(vllm_raw.get("startup_timeout", 120)),
-    )
+    vllm_kwargs: dict = {}
+    if "enabled" in vllm_raw:
+        vllm_kwargs["enabled"] = vllm_raw["enabled"]
+    if "model" in vllm_raw:
+        vllm_kwargs["model"] = vllm_raw["model"]
+    if "gpu_device" in vllm_raw:
+        vllm_kwargs["gpu_device"] = int(vllm_raw["gpu_device"])
+    if "port" in vllm_raw:
+        vllm_kwargs["port"] = int(vllm_raw["port"])
+    if "max_model_len" in vllm_raw:
+        vllm_kwargs["max_model_len"] = int(vllm_raw["max_model_len"])
+    if "gpu_memory_utilization" in vllm_raw:
+        vllm_kwargs["gpu_memory_utilization"] = float(vllm_raw["gpu_memory_utilization"])
+    if "extra_args" in vllm_raw:
+        vllm_kwargs["extra_args"] = vllm_raw["extra_args"]
+    if "startup_timeout" in vllm_raw:
+        vllm_kwargs["startup_timeout"] = int(vllm_raw["startup_timeout"])
+    vllm = VLLMConfig(**vllm_kwargs)
 
     # Allowed hosts
     allowed_hosts = server_raw.get("allowed_hosts", [])

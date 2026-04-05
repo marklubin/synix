@@ -67,6 +67,27 @@ class TestIngestToQueueLifecycle:
         assert status["status"] == "released"
         assert status["released_at"] is not None
 
+    def test_release_failure_requeues_built_documents(self, queue: DocumentQueue) -> None:
+        """If release fails after successful build, docs go back to pending."""
+        doc_id = queue.enqueue("docs", "file.md", "hashreleasefail", "/tmp/file.md")
+        run_id = "release-fail-run"
+        queue.claim_pending_batch(run_id)
+        queue.mark_built(run_id, built_count=1, cached_count=0)
+
+        # Verify doc is in 'built' state
+        status = queue.document_status(doc_id)
+        assert status["status"] == "built"
+
+        # Release fails — mark_failed should handle 'built' state too
+        queue.mark_failed(run_id, "release failed: disk full")
+        status = queue.document_status(doc_id)
+        assert status["status"] == "pending"  # requeued from built
+        assert "release failed" in status["error_message"]
+
+        # Can be claimed again
+        claimed = queue.claim_pending_batch("retry-run")
+        assert len(claimed) == 1
+
     def test_failed_build_requeues_documents(self, queue: DocumentQueue) -> None:
         doc_id = queue.enqueue("docs", "file.md", "hash2", "/tmp/file.md")
         run_id = "fail-run"

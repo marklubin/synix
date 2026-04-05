@@ -143,13 +143,18 @@ async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_loc
                 result = await loop.run_in_executor(None, _run_build, config)
                 queue.mark_built(run_id, result.built, result.cached)
 
-                await loop.run_in_executor(None, _run_release, config)
-                queue.mark_released(run_id)
-
-                logger.info(
-                    "Build queue: run %s complete — %d built, %d cached",
-                    run_id[:8], result.built, result.cached,
-                )
+                try:
+                    await loop.run_in_executor(None, _run_release, config)
+                except Exception as release_exc:
+                    # Release failed after successful build — requeue docs
+                    queue.mark_failed(run_id, f"release failed: {release_exc}")
+                    logger.error("Build queue: release failed for run %s: %s", run_id[:8], release_exc)
+                else:
+                    queue.mark_released(run_id)
+                    logger.info(
+                        "Build queue: run %s complete — %d built, %d cached",
+                        run_id[:8], result.built, result.cached,
+                    )
             except Exception as exc:
                 queue.mark_failed(run_id, str(exc))
                 logger.error("Build queue: run %s failed: %s", run_id[:8], exc)

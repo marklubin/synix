@@ -73,7 +73,10 @@ async def ingest_to_bucket(request: Request) -> Response:
         from synix.server.mcp_tools import _state
         queue = _state.get("queue")
         if queue is not None:
-            doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
+            try:
+                doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
+            except Exception as q_exc:
+                logger.error("REST ingest: file written but queue insert failed: %s", q_exc)
 
         logger.info("REST ingest: %s -> bucket %r (doc_id: %s)", filename, bucket, doc_id)
         response_data = {"status": "ok", "bucket": bucket, "filename": filename, "path": str(dest)}

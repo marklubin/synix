@@ -125,8 +125,11 @@ def ingest(bucket: str, content: str, filename: str, client_id: str | None = Non
     queue = _state.get("queue")
     doc_id = None
     if queue is not None:
-        doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
-        logger.info("Ingested %s into bucket %r (doc_id: %s)", safe_name, bucket, doc_id)
+        try:
+            doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
+            logger.info("Ingested %s into bucket %r (doc_id: %s)", safe_name, bucket, doc_id)
+        except Exception as exc:
+            logger.error("Ingested %s but queue insert failed: %s", safe_name, exc)
     else:
         logger.info("Ingested %s into bucket %r (no queue)", safe_name, bucket)
 
