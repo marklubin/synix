@@ -16,6 +16,5 @@
       "sensitive": false
     }
   },
-  "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json"
 }
