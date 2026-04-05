@@ -23,6 +23,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "synix" / "fixtures"
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def runner():
     return CliRunner()
@@ -60,6 +61,7 @@ def _mock_response(text: str):
 # ---------------------------------------------------------------------------
 # Helpers — snapshot-based (no real build needed)
 # ---------------------------------------------------------------------------
+
 
 def _make_artifact(label, content, atype="episode", layer_name="episodes"):
     return Artifact(
@@ -115,6 +117,7 @@ def _setup_snapshot_with_projections(
 # ---------------------------------------------------------------------------
 # Helpers — full CLI build (for info/status/clean that need a real build_dir)
 # ---------------------------------------------------------------------------
+
 
 def _write_pipeline(path: Path, source_dir: str, build_dir: str) -> Path:
     """Write a pipeline file with both SynixSearch and FlatFile projections."""
@@ -186,9 +189,7 @@ def _build_project(runner, project_dir: Path) -> Path:
     return synix_dir
 
 
-def _build_project_custom_filename(
-    runner, project_dir: Path, output_filename: str = "memory.md"
-) -> Path:
+def _build_project_custom_filename(runner, project_dir: Path, output_filename: str = "memory.md") -> Path:
     """Build a project with a custom flat-file filename and return the synix_dir."""
     sources_dir = project_dir / "sources"
     sources_dir.mkdir(parents=True, exist_ok=True)
@@ -225,9 +226,7 @@ class TestReleaseTargetCreatesDir:
         external_target = tmp_path / "external" / "output"
         assert not external_target.exists(), "Precondition: target dir should not exist yet"
 
-        receipt = execute_release(
-            synix_dir, release_name="custom", target=external_target
-        )
+        receipt = execute_release(synix_dir, release_name="custom", target=external_target)
 
         # Target directory was created
         assert external_target.exists(), "execute_release should create the target dir"
@@ -258,9 +257,7 @@ class TestReleaseTargetWithFlatFile:
         synix_dir = _setup_snapshot_with_projections(tmp_path)
 
         external_target = tmp_path / "ext" / "release"
-        receipt = execute_release(
-            synix_dir, release_name="dual", target=external_target
-        )
+        receipt = execute_release(synix_dir, release_name="dual", target=external_target)
 
         # Both outputs should exist in the external target
         assert (external_target / "search.db").exists(), "search.db missing from external target"
@@ -277,14 +274,10 @@ class TestReleaseCustomFlatFileFilename:
 
     def test_custom_filename_via_snapshot_factory(self, tmp_path):
         """Snapshot-based test: custom output_path in projection config."""
-        synix_dir = _setup_snapshot_with_projections(
-            tmp_path, flat_file_config={"output_path": "memory.md"}
-        )
+        synix_dir = _setup_snapshot_with_projections(tmp_path, flat_file_config={"output_path": "memory.md"})
 
         external_target = tmp_path / "custom-filename-out"
-        receipt = execute_release(
-            synix_dir, release_name="custom-fn", target=external_target
-        )
+        receipt = execute_release(synix_dir, release_name="custom-fn", target=external_target)
 
         # memory.md should exist (not context.md)
         assert (external_target / "memory.md").exists(), "memory.md should exist with custom output_path"
@@ -306,9 +299,7 @@ class TestReleaseCustomFlatFileFilename:
         synix_dir = _build_project_custom_filename(runner, project_dir, output_filename="memory.md")
 
         external_target = tmp_path / "custom-build-out"
-        receipt = execute_release(
-            synix_dir, release_name="custom-build", target=external_target
-        )
+        receipt = execute_release(synix_dir, release_name="custom-build", target=external_target)
 
         assert (external_target / "memory.md").exists(), "memory.md should exist in external target"
         assert not (external_target / "context.md").exists(), "context.md should NOT exist"
@@ -340,9 +331,7 @@ class TestInfoAfterExternalTargetRelease:
         assert result.exit_code == 0, f"info failed:\n{result.output}"
 
         # Output should show the release name
-        assert "ext-info" in result.output, (
-            f"info should mention release name 'ext-info'.\nOutput:\n{result.output}"
-        )
+        assert "ext-info" in result.output, f"info should mention release name 'ext-info'.\nOutput:\n{result.output}"
 
         # For external targets, info shows the full path (not just a short filename).
         # Rich may truncate or wrap long paths, so we verify the receipt data directly
@@ -352,12 +341,8 @@ class TestInfoAfterExternalTargetRelease:
         collapsed = result.output.replace(" ", "").replace("\n", "")
         # The info output for internal releases shows short filenames like "search.db".
         # For external targets, the path should contain more than just the filename.
-        assert "flat_file:" in result.output, (
-            f"info should show flat_file adapter.\nOutput:\n{result.output}"
-        )
-        assert "synix_search:" in result.output, (
-            f"info should show synix_search adapter.\nOutput:\n{result.output}"
-        )
+        assert "flat_file:" in result.output, f"info should show flat_file adapter.\nOutput:\n{result.output}"
+        assert "synix_search:" in result.output, f"info should show synix_search adapter.\nOutput:\n{result.output}"
 
 
 class TestStatusAfterExternalTargetRelease:
@@ -394,8 +379,7 @@ class TestStatusAfterExternalTargetRelease:
         # Rich may wrap paths across lines, so collapse whitespace to verify.
         collapsed = result.output.replace(" ", "").replace("\n", "")
         assert "extstatus" in collapsed, (
-            f"status should show external target path (after whitespace collapse).\n"
-            f"Output:\n{result.output}"
+            f"status should show external target path (after whitespace collapse).\nOutput:\n{result.output}"
         )
 
 
@@ -428,12 +412,8 @@ class TestCleanWarnsAboutExternalTargets:
         )
 
         # External files should NOT be deleted (clean only removes the receipt dir)
-        assert (external_target / "search.db").exists(), (
-            "search.db in external target should survive clean"
-        )
-        assert (external_target / "context.md").exists(), (
-            "context.md in external target should survive clean"
-        )
+        assert (external_target / "search.db").exists(), "search.db in external target should survive clean"
+        assert (external_target / "context.md").exists(), "context.md in external target should survive clean"
 
         # The release directory inside .synix should be removed
         assert not (synix_dir / "releases" / "ext-clean").exists(), (

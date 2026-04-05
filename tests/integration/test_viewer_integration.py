@@ -19,7 +19,7 @@ def integration_client(tmp_path):
             label=f"t-{i:03d}",
             artifact_type="transcript",
             content=f"user: Question {i} about {'memory' if i % 2 == 0 else 'agents'}?\nassistant: Answer {i} about the topic.",
-            metadata={"layer_level": 0, "title": f"Conversation {i}", "date": f"2026-01-{10+i:02d}"},
+            metadata={"layer_level": 0, "title": f"Conversation {i}", "date": f"2026-01-{10 + i:02d}"},
         )
         for i in range(1, 7)
     ]

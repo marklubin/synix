@@ -106,9 +106,7 @@ def _show_pipeline_info() -> None:
     console.print(table)
 
 
-def _discover_synix_dir(
-    build_dir: str | None = None, synix_dir_opt: str | None = None
-) -> Path | None:
+def _discover_synix_dir(build_dir: str | None = None, synix_dir_opt: str | None = None) -> Path | None:
     """Discover the .synix directory from explicit options or convention.
 
     Priority:
@@ -166,9 +164,7 @@ def _discover_synix_dir(
     return None
 
 
-def _show_build_status(
-    build_dir: str | None = None, synix_dir_opt: str | None = None
-) -> None:
+def _show_build_status(build_dir: str | None = None, synix_dir_opt: str | None = None) -> None:
     """Show build status if a .synix snapshot store exists."""
     from synix.build.snapshot_view import SnapshotView
 
@@ -237,9 +233,7 @@ def _show_build_status(
                     else:
                         short = target
                     outputs.append(f"{adapter_type}:{short} ({count})")
-                release_parts.append(
-                    f"[green]{release_path.name}[/green]: {', '.join(outputs)}"
-                )
+                release_parts.append(f"[green]{release_path.name}[/green]: {', '.join(outputs)}")
         if release_parts:
             table.add_row("Releases", "  ".join(release_parts))
 

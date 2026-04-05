@@ -59,10 +59,7 @@ def _make_checkpoint_artifact(
     """
     fp = fold.compute_fingerprint(config or {})
     sorted_seen = fold._sort_inputs(seen_inputs)
-    seen_entries = [
-        {"label": a.label, "artifact_id": a.artifact_id}
-        for a in sorted_seen
-    ]
+    seen_entries = [{"label": a.label, "artifact_id": a.artifact_id} for a in sorted_seen]
     content_hash = hashlib.sha256(accumulated.encode()).hexdigest()[:16]
     return Artifact(
         label=fold.label_value,
@@ -414,7 +411,7 @@ class TestDuplicateContent:
 class TestCheckpointConsistency:
     def test_accumulated_equals_content(self, mock_llm):
         t = _make_fold(sort_by="date")
-        inputs = [_make_artifact(f"ep-{i}", f"event {i}", date=f"2024-0{i+1}") for i in range(3)]
+        inputs = [_make_artifact(f"ep-{i}", f"event {i}", date=f"2024-0{i + 1}") for i in range(3)]
         results = t.execute(inputs, _make_ctx_with_previous(None))
 
         checkpoint = results[0].metadata["_fold_checkpoint"]
@@ -545,7 +542,7 @@ class TestRapidSequential:
         t = _make_fold(sort_by="date")
 
         # Build 1: fold [ep-0, ep-1, ep-2]
-        inputs1 = [_make_artifact(f"ep-{i}", f"event {i}", date=f"2024-0{i+1}") for i in range(3)]
+        inputs1 = [_make_artifact(f"ep-{i}", f"event {i}", date=f"2024-0{i + 1}") for i in range(3)]
         r1 = t.execute(inputs1, _make_ctx_with_previous(None))
         assert len(mock_llm) == 3
         mock_llm.clear()

@@ -55,8 +55,7 @@ class TestBuildWithBadSourceExitsNonzero:
 
         result = runner.invoke(main, ["build", str(pipeline_file), "--plain"])
         assert result.exit_code != 0, (
-            f"Expected nonzero exit code for build with bad source, got 0.\n"
-            f"Output: {result.output}"
+            f"Expected nonzero exit code for build with bad source, got 0.\nOutput: {result.output}"
         )
 
     def test_build_with_bad_source_no_snapshot_committed(self, runner, bad_source_pipeline):
@@ -68,9 +67,7 @@ class TestBuildWithBadSourceExitsNonzero:
         # No .synix/refs/heads/main should exist
         synix_dir = tmp_path / ".synix"
         heads_main = synix_dir / "refs" / "heads" / "main"
-        assert not heads_main.exists(), (
-            f"Expected no snapshot committed, but refs/heads/main exists at {heads_main}"
-        )
+        assert not heads_main.exists(), f"Expected no snapshot committed, but refs/heads/main exists at {heads_main}"
 
 
 class TestPlanWithBadSourceShowsErrorStatus:
@@ -79,9 +76,7 @@ class TestPlanWithBadSourceShowsErrorStatus:
         pipeline_file, tmp_path = bad_source_pipeline
 
         result = runner.invoke(main, ["plan", str(pipeline_file), "--json"])
-        assert result.exit_code == 0, (
-            f"Plan should succeed (report errors, not crash).\nOutput: {result.output}"
-        )
+        assert result.exit_code == 0, f"Plan should succeed (report errors, not crash).\nOutput: {result.output}"
 
         parsed = json.loads(result.output)
         steps = parsed["steps"]

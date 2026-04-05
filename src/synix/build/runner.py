@@ -191,8 +191,11 @@ def run(
                 artifact.metadata["layer_level"] = layer._level
                 with _txn_lock:
                     _record_snapshot_artifact(
-                        snapshot_txn, artifact,
-                        layer_name=layer.name, layer_level=layer._level, parent_labels=[],
+                        snapshot_txn,
+                        artifact,
+                        layer_name=layer.name,
+                        layer_level=layer._level,
+                        parent_labels=[],
                     )
                 stats.built += 1
                 slogger.artifact_built(layer.name, artifact.label)
@@ -222,8 +225,10 @@ def run(
                     layer_built.append(art)
                     with _txn_lock:
                         _record_snapshot_artifact(
-                            snapshot_txn, art,
-                            layer_name=layer.name, layer_level=layer._level,
+                            snapshot_txn,
+                            art,
+                            layer_name=layer.name,
+                            layer_level=layer._level,
                             parent_labels=_snapshot_parent_labels(art, inputs, store),
                         )
                     stats.cached += 1
@@ -249,7 +254,9 @@ def run(
                         rebuild = existing is None or is_incremental
                     else:
                         rebuild, _reasons = needs_rebuild(
-                            artifact.label, artifact.input_ids, store,
+                            artifact.label,
+                            artifact.input_ids,
+                            store,
                             current_build_fingerprint=build_fp,
                         )
                     if rebuild:
@@ -262,8 +269,10 @@ def run(
                             parent_labels = [inp.label for inp in effective_inputs]
                         with _txn_lock:
                             _record_snapshot_artifact(
-                                snapshot_txn, artifact,
-                                layer_name=_layer.name, layer_level=_layer._level,
+                                snapshot_txn,
+                                artifact,
+                                layer_name=_layer.name,
+                                layer_level=_layer._level,
                                 parent_labels=parent_labels,
                             )
                         layer_built.append(artifact)
@@ -277,16 +286,20 @@ def run(
                             layer_built.append(cached)
                             with _txn_lock:
                                 _record_snapshot_artifact(
-                                    snapshot_txn, cached,
-                                    layer_name=_layer.name, layer_level=_layer._level,
+                                    snapshot_txn,
+                                    cached,
+                                    layer_name=_layer.name,
+                                    layer_level=_layer._level,
                                     parent_labels=_snapshot_parent_labels(cached, effective_inputs, store),
                                 )
                         else:
                             layer_built.append(artifact)
                             with _txn_lock:
                                 _record_snapshot_artifact(
-                                    snapshot_txn, artifact,
-                                    layer_name=_layer.name, layer_level=_layer._level,
+                                    snapshot_txn,
+                                    artifact,
+                                    layer_name=_layer.name,
+                                    layer_level=_layer._level,
                                     parent_labels=_snapshot_parent_labels(artifact, effective_inputs, store),
                                 )
                         stats.cached += 1
@@ -317,8 +330,10 @@ def run(
                         layer_built.append(cached_art)
                         with _txn_lock:
                             _record_snapshot_artifact(
-                                snapshot_txn, cached_art,
-                                layer_name=layer.name, layer_level=layer._level,
+                                snapshot_txn,
+                                cached_art,
+                                layer_name=layer.name,
+                                layer_level=layer._level,
                                 parent_labels=_snapshot_parent_labels(cached_art, unit_inputs, store),
                             )
                         stats.cached += 1
@@ -329,7 +344,10 @@ def run(
 
                 if use_concurrent:
                     _execute_transform_concurrent(
-                        layer, units, transform_ctx, concurrency,
+                        layer,
+                        units,
+                        transform_ctx,
+                        concurrency,
                         on_complete=_on_batch_complete,
                         cached_by_inputs=cached_by_inputs,
                         on_cached=_on_cached,
@@ -377,7 +395,10 @@ def run(
         result.skipped += stats.skipped
         logger.info(
             "Layer %s done — %d built, %d cached in %.1fs",
-            layer.name, stats.built, stats.cached, stats.time_seconds,
+            layer.name,
+            stats.built,
+            stats.cached,
+            stats.time_seconds,
         )
         slogger.layer_finish(layer.name, stats.built, stats.cached)
 
@@ -401,7 +422,10 @@ def run(
             max_workers = min(len(group), concurrency)
             logger.info(
                 "Level %d: running %d layers in parallel (%d workers: %s)",
-                level, len(group), max_workers, ", ".join(l.name for l in group),
+                level,
+                len(group),
+                max_workers,
+                ", ".join(l.name for l in group),
             )
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
                 futures = {pool.submit(_run_single_layer, layer): layer for layer in group}
@@ -416,7 +440,10 @@ def run(
                     result.skipped += stats.skipped
                     logger.info(
                         "Layer %s done — %d built, %d cached in %.1fs",
-                        layer.name, stats.built, stats.cached, stats.time_seconds,
+                        layer.name,
+                        stats.built,
+                        stats.cached,
+                        stats.time_seconds,
                     )
                     slogger.layer_finish(layer.name, stats.built, stats.cached)
                     with _txn_lock:
@@ -427,7 +454,11 @@ def run(
             # (surfaces may depend on multiple layers at this level)
             for layer in completed:
                 _materialize_layer_search_surfaces(
-                    pipeline, layer.name, layer_artifacts, work_dir, logger=slogger,
+                    pipeline,
+                    layer.name,
+                    layer_artifacts,
+                    work_dir,
+                    logger=slogger,
                 )
 
     # Record projection declarations in the snapshot transaction
@@ -703,7 +734,9 @@ def _materialize_layer_search_surfaces(
         total_arts = sum(len(layer_artifacts.get(n, [])) for n in source_layer_names)
         _runner_logger.info(
             "Materializing surface %r (%d artifacts from %s)",
-            surface.name, total_arts, source_layer_names,
+            surface.name,
+            total_arts,
+            source_layer_names,
         )
         _materialize_search_surface(
             surface,

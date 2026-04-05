@@ -108,7 +108,11 @@ def test_search_with_mock_project():
 
     mock_project.release.assert_called_once_with("local")
     mock_release.search.assert_called_once_with(
-        "test query", mode="keyword", limit=10, layers=None, surface="search",
+        "test query",
+        mode="keyword",
+        limit=10,
+        layers=None,
+        surface="search",
     )
     assert "0.950" in result
     assert "episodes" in result
@@ -144,7 +148,11 @@ def test_search_with_layers_filter():
     search("query", layers="episodes, topics")
 
     mock_release.search.assert_called_once_with(
-        "query", mode="keyword", limit=10, layers=["episodes", "topics"], surface="search",
+        "query",
+        mode="keyword",
+        limit=10,
+        layers=["episodes", "topics"],
+        surface="search",
     )
 
 

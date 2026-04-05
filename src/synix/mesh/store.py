@@ -157,7 +157,9 @@ class SessionStore:
             # ON CONFLICT matched but WHERE clause excluded it — same hash already stored
             logger.debug(
                 "Session %s seq=%d already has same content (sha256=%s), skipping",
-                session_id, subsession_seq, content_hash[:12],
+                session_id,
+                subsession_seq,
+                content_hash[:12],
             )
             return False
 

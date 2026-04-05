@@ -180,7 +180,10 @@ def execute_release(
         for i, (proj_name, declaration) in enumerate(closure.projections.items(), 1):
             logger.info(
                 "Release: applying projection %d/%d: %s (%s)",
-                i, total_projs, proj_name, declaration.adapter,
+                i,
+                total_projs,
+                proj_name,
+                declaration.adapter,
             )
             adapter = get_adapter(declaration.adapter)
             prev = current_adapter_receipts.get(proj_name)

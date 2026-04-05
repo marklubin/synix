@@ -1146,6 +1146,5 @@ class TestReduceDownstreamCount:
 
         # Downstream MapSynthesis (1:1) should see 1 input, NOT the transcript count
         assert downstream_step.artifact_count == 1, (
-            f"Downstream should see 1 artifact from reduce, "
-            f"but got {downstream_step.artifact_count}"
+            f"Downstream should see 1 artifact from reduce, but got {downstream_step.artifact_count}"
         )

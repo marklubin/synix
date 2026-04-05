@@ -352,10 +352,12 @@ class TestPluginHookSimulation:
         project_dir, _ = server_project
 
         # Simulate a session transcript (simplified)
-        session_content = json.dumps([
-            {"role": "user", "content": "What is machine learning?"},
-            {"role": "assistant", "content": "Machine learning is..."},
-        ])
+        session_content = json.dumps(
+            [
+                {"role": "user", "content": "What is machine learning?"},
+                {"role": "assistant", "content": "Machine learning is..."},
+            ]
+        )
 
         resp = client.post(
             "/api/v1/ingest/sessions",

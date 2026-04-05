@@ -118,8 +118,7 @@ class ScenarioLog:
 
     def assert_tool_used(self, tool_name: str, msg: str = ""):
         assert tool_name in self.tool_names, (
-            f"Expected tool {tool_name!r} to be called. "
-            f"Actual calls: {self.tool_names}. {msg}"
+            f"Expected tool {tool_name!r} to be called. Actual calls: {self.tool_names}. {msg}"
         )
 
     def assert_order(self, *tool_names: str):
@@ -132,8 +131,7 @@ class ScenarioLog:
                 raise AssertionError(f"Tool {name!r} never called. Calls: {self.tool_names}") from None
             indices.append(idx)
         assert indices == sorted(indices), (
-            f"Expected order {list(tool_names)} but got indices {indices}. "
-            f"Full call log: {self.tool_names}"
+            f"Expected order {list(tool_names)} but got indices {indices}. Full call log: {self.tool_names}"
         )
 
 
@@ -337,11 +335,14 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
             await call("source_add_file", {"source_name": "docs", "file_path": str(ext_file)})
 
             # 6. source_add_text
-            await call("source_add_text", {
-                "source_name": "docs",
-                "content": PYTHON_DOC,
-                "filename": "python-tips.md",
-            })
+            await call(
+                "source_add_text",
+                {
+                    "source_name": "docs",
+                    "content": PYTHON_DOC,
+                    "filename": "python-tips.md",
+                },
+            )
 
             # 7. source_list (verify both)
             result = await call("source_list", {"source_name": "docs"})
@@ -368,11 +369,14 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
             # --- Phase 4: Search ---
 
             # 10. search
-            result = await call("search", {
-                "query": "chocolate cake",
-                "release_name": "local",
-                "mode": "keyword",
-            })
+            result = await call(
+                "search",
+                {
+                    "query": "chocolate cake",
+                    "release_name": "local",
+                    "mode": "keyword",
+                },
+            )
             search_results = _parse_artifacts(result)
             assert len(search_results) > 0
             first = search_results[0]
@@ -480,12 +484,25 @@ async def test_mcp_protocol_lifecycle(mcp_project_scratch):
 
             # --- Final: verify all 20 tools were called ---
             ALL_TOOLS = {
-                "init_project", "open_project", "load_pipeline",
-                "source_list", "source_add_text", "source_add_file",
-                "source_remove", "source_clear",
-                "build", "release", "search",
-                "get_artifact", "list_artifacts", "list_layers", "lineage",
-                "list_releases", "show_release", "get_flat_file", "list_refs",
+                "init_project",
+                "open_project",
+                "load_pipeline",
+                "source_list",
+                "source_add_text",
+                "source_add_file",
+                "source_remove",
+                "source_clear",
+                "build",
+                "release",
+                "search",
+                "get_artifact",
+                "list_artifacts",
+                "list_layers",
+                "lineage",
+                "list_releases",
+                "show_release",
+                "get_flat_file",
+                "list_refs",
                 "clean",
             }
             missing = ALL_TOOLS - tools_called
@@ -577,14 +594,19 @@ async def _run_openai_agent(session, task, mcp_tools, validator, model, max_turn
 
             logger.info(
                 "Turn %d: %s(%s) -> %s",
-                turn, fn.name, json.dumps(args, default=str)[:100], result_text[:200],
+                turn,
+                fn.name,
+                json.dumps(args, default=str)[:100],
+                result_text[:200],
             )
 
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": result_text,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result_text,
+                }
+            )
     else:
         raise AssertionError(f"Agent did not finish within {max_turns} turns. Calls: {log.tool_names}")
 
@@ -602,7 +624,10 @@ async def _run_anthropic_agent(session, task, mcp_tools, validator, model, max_t
 
     for turn in range(max_turns):
         response = client.messages.create(
-            model=model, tools=tools, messages=messages, max_tokens=4096,
+            model=model,
+            tools=tools,
+            messages=messages,
+            max_tokens=4096,
         )
 
         if response.stop_reason == "end_turn":
@@ -624,14 +649,19 @@ async def _run_anthropic_agent(session, task, mcp_tools, validator, model, max_t
 
             logger.info(
                 "Turn %d: %s(%s) -> %s",
-                turn, block.name, json.dumps(block.input, default=str)[:100], result_text[:200],
+                turn,
+                block.name,
+                json.dumps(block.input, default=str)[:100],
+                result_text[:200],
             )
 
-            tool_result_blocks.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": result_text,
-            })
+            tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_text,
+                }
+            )
 
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_result_blocks})
@@ -769,28 +799,36 @@ PHASE 7 — Final cleanup:
 
 Report what you found at each phase."""
 
-            log = await run_agent_scenario(
-                session, task, validator=validator, max_turns=40
-            )
+            log = await run_agent_scenario(session, task, validator=validator, max_turns=40)
 
             # --- Post-run assertions: all 20 tools must be called ---
 
             ALL_TOOLS = {
-                "init_project", "open_project", "load_pipeline",
-                "source_list", "source_add_text", "source_add_file",
-                "source_remove", "source_clear",
-                "build", "release", "search",
-                "get_artifact", "list_artifacts", "list_layers", "lineage",
-                "list_releases", "show_release", "get_flat_file", "list_refs",
+                "init_project",
+                "open_project",
+                "load_pipeline",
+                "source_list",
+                "source_add_text",
+                "source_add_file",
+                "source_remove",
+                "source_clear",
+                "build",
+                "release",
+                "search",
+                "get_artifact",
+                "list_artifacts",
+                "list_layers",
+                "lineage",
+                "list_releases",
+                "show_release",
+                "get_flat_file",
+                "list_refs",
                 "clean",
             }
 
             actual_tools = set(log.tool_names)
             missing = ALL_TOOLS - actual_tools
-            assert not missing, (
-                f"Agent missed {len(missing)} tools: {sorted(missing)}. "
-                f"Called: {sorted(actual_tools)}"
-            )
+            assert not missing, f"Agent missed {len(missing)} tools: {sorted(missing)}. Called: {sorted(actual_tools)}"
 
             # Ordering constraints
             log.assert_order("init_project", "load_pipeline", "build", "release", "search")
@@ -799,10 +837,9 @@ Report what you found at each phase."""
             # Search returned relevant content
             search_calls = log.calls_for("search")
             assert len(search_calls) >= 2, f"Expected 2+ search calls, got {len(search_calls)}"
-            assert any(
-                "chocolate" in c.result.lower() or "pytest" in c.result.lower()
-                for c in search_calls
-            ), "Agent searches returned no relevant content"
+            assert any("chocolate" in c.result.lower() or "pytest" in c.result.lower() for c in search_calls), (
+                "Agent searches returned no relevant content"
+            )
 
             # source_add_text + source_add_file both used
             assert len(log.calls_for("source_add_text")) >= 1

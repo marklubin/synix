@@ -9,7 +9,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from synix.server.api import api_routes
-from synix.server.config import AutoBuildConfig, BucketConfig, ServerConfig
+from synix.server.config import BucketConfig, BuildQueueConfig, ServerConfig
 from synix.server.mcp_tools import _state, server_mcp
 
 TOY_PIPELINE_DIR = Path(__file__).parent / "toy-pipeline"
@@ -70,7 +70,7 @@ def server_project(tmp_path, mock_llm):
                 description="Automated reports",
             ),
         ],
-        auto_build=AutoBuildConfig(enabled=False),
+        auto_build=BuildQueueConfig(enabled=False),
     )
 
     return project_dir, config

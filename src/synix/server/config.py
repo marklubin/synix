@@ -18,12 +18,30 @@ class BucketConfig:
 
 
 @dataclass
-class AutoBuildConfig:
-    """Auto-build settings for the knowledge server."""
+class BuildQueueConfig:
+    """Event-driven build queue settings.
+
+    First new document starts an N-second window timer.  All documents
+    arriving within the window form one batch.  Documents arriving after
+    are blocked until the current build releases its lock.
+    """
 
     enabled: bool = True
-    scan_interval: int = 60  # seconds between source scans
-    cooldown: int = 300  # seconds between builds
+    window: int = 30  # seconds — batch window after first enqueue
+
+
+@dataclass
+class VLLMConfig:
+    """vLLM subprocess configuration."""
+
+    enabled: bool = False
+    model: str = "Qwen/Qwen3.5-2B"
+    gpu_device: int = 0
+    port: int = 8100
+    max_model_len: int = 131072
+    gpu_memory_utilization: float = 0.90
+    extra_args: list[str] = field(default_factory=list)
+    startup_timeout: int = 120
 
 
 @dataclass
@@ -36,7 +54,8 @@ class ServerConfig:
     viewer_port: int = 9471
     viewer_host: str = "0.0.0.0"
     buckets: list[BucketConfig] = field(default_factory=list)
-    auto_build: AutoBuildConfig = field(default_factory=AutoBuildConfig)
+    auto_build: BuildQueueConfig = field(default_factory=BuildQueueConfig)
+    vllm: VLLMConfig = field(default_factory=VLLMConfig)
     allowed_hosts: list[str] = field(default_factory=list)
 
 
@@ -75,13 +94,33 @@ def _parse_config(raw: dict) -> ServerConfig:
             )
         )
 
-    # Auto-build
+    # Build queue (backward-compatible with old auto_build keys)
     auto_build_raw = raw.get("auto_build", {})
-    auto_build = AutoBuildConfig(
+    auto_build = BuildQueueConfig(
         enabled=auto_build_raw.get("enabled", True),
-        scan_interval=int(auto_build_raw.get("scan_interval", 60)),
-        cooldown=int(auto_build_raw.get("cooldown", 300)),
+        window=int(auto_build_raw.get("window", 30)),
     )
+
+    # vLLM — only pass fields present in TOML, let dataclass defaults handle the rest
+    vllm_raw = raw.get("vllm", {})
+    vllm_kwargs: dict = {}
+    if "enabled" in vllm_raw:
+        vllm_kwargs["enabled"] = vllm_raw["enabled"]
+    if "model" in vllm_raw:
+        vllm_kwargs["model"] = vllm_raw["model"]
+    if "gpu_device" in vllm_raw:
+        vllm_kwargs["gpu_device"] = int(vllm_raw["gpu_device"])
+    if "port" in vllm_raw:
+        vllm_kwargs["port"] = int(vllm_raw["port"])
+    if "max_model_len" in vllm_raw:
+        vllm_kwargs["max_model_len"] = int(vllm_raw["max_model_len"])
+    if "gpu_memory_utilization" in vllm_raw:
+        vllm_kwargs["gpu_memory_utilization"] = float(vllm_raw["gpu_memory_utilization"])
+    if "extra_args" in vllm_raw:
+        vllm_kwargs["extra_args"] = vllm_raw["extra_args"]
+    if "startup_timeout" in vllm_raw:
+        vllm_kwargs["startup_timeout"] = int(vllm_raw["startup_timeout"])
+    vllm = VLLMConfig(**vllm_kwargs)
 
     # Allowed hosts
     allowed_hosts = server_raw.get("allowed_hosts", [])
@@ -94,5 +133,6 @@ def _parse_config(raw: dict) -> ServerConfig:
         viewer_host=server_raw.get("viewer_host", "0.0.0.0"),
         buckets=buckets,
         auto_build=auto_build,
+        vllm=vllm,
         allowed_hosts=allowed_hosts,
     )
