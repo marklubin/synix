@@ -15,6 +15,5 @@
       "type": "string",
       "sensitive": false
     }
-  },
-  "mcpServers": "./.mcp.json"
+  }
 }
