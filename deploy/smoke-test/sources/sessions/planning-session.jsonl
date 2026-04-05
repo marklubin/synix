@@ -1,0 +1,5 @@
+{"role":"user","content":"Let's plan the Q2 roadmap. We need to ship the prompt management system and get the Docker deployment working."}
+{"role":"assistant","content":"For the prompt management system, the key decisions are: SQLite-backed versioned storage, standalone from core transforms, and a viewer tab for editing. For Docker, we need GPU passthrough via CDI and volume mounts for source data."}
+{"role":"user","content":"Right. And we should prioritize the event-driven build queue over the prompt system since that's blocking the server from being useful."}
+{"role":"assistant","content":"Agreed. The queue replaces the polling auto-builder with durable status tracking. Documents go through pending → processing → built → released. Content-hash dedup prevents reprocessing."}
+{"role":"user","content":"Ship the queue first, then prompts, then Docker. Each should have full test coverage."}

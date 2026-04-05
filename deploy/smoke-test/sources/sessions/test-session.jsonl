@@ -1,0 +1,7 @@
+{"role":"user","content":"I've been working on the Synix project — it's a build system for agent memory. Think of it like make or dbt but for AI conversations."}
+{"role":"assistant","content":"That's a fascinating concept. So you take raw conversations as input and produce searchable, hierarchical memory as output? How do you handle the transformation pipeline?"}
+{"role":"user","content":"Exactly. Declarative pipelines define the DAG. Sources at the bottom, transforms in the middle (like EpisodeSummary, FoldSynthesis), and search surfaces as projections at the top. Content-addressed storage means everything is immutable with full provenance."}
+{"role":"assistant","content":"The content-addressing is smart — you get caching for free since unchanged inputs produce the same hash. And FoldSynthesis for sequential accumulation makes sense for rolling status reports. What's the deployment model?"}
+{"role":"user","content":"A knowledge server with an event-driven build queue. Documents get ingested one-by-one, queued up, and processed in batches. Local GPU inference via vLLM so we don't depend on cloud APIs."}
+{"role":"assistant","content":"Local inference is a good call for a memory system — you want it always available and fast. What model are you running?"}
+{"role":"user","content":"Qwen3.5-2B on an RTX 3060. Gets about 79 tok/s with 128K context thanks to the GDN architecture having constant KV cache memory."}

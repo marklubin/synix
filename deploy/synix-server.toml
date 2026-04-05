@@ -1,0 +1,47 @@
+# Synix Knowledge Server — container deployment config
+#
+# Paths are relative to project_dir (/data inside container).
+# Source buckets and .synix/ are volume-mounted from the host.
+
+[server]
+project_dir = "/data"
+pipeline_path = "pipeline.py"
+mcp_port = 8200
+viewer_port = 9471
+
+[buckets.sessions]
+dir = "sources/sessions"
+patterns = ["**/*.jsonl.gz", "**/*.jsonl"]
+description = "Claude Code session transcripts"
+
+[buckets.exports]
+dir = "sources/exports"
+patterns = ["**/*.json"]
+description = "ChatGPT/Claude bulk conversation exports"
+
+[buckets.documents]
+dir = "sources/documents"
+patterns = ["**/*.md", "**/*.txt"]
+description = "Notes, receipts, active work, memos"
+
+[buckets.reports]
+dir = "sources/reports"
+patterns = ["**/*.md"]
+description = "Cron outputs and automated reports"
+
+[buckets.reference]
+dir = "sources/reference"
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+description = "Background material — specs, intel, papers (search only, not rolled up)"
+
+[auto_build]
+enabled = true
+window = 30
+
+[vllm]
+enabled = true
+model = "Qwen/Qwen3.5-2B"
+gpu_device = 0
+port = 8100
+max_model_len = 131072
+gpu_memory_utilization = 0.90

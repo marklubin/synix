@@ -1,0 +1,31 @@
+# Synix Knowledge Server — podman-compose deployment
+#
+# Usage:
+#   cd deploy/
+#   podman-compose up -d
+#   podman-compose logs -f
+#   podman-compose down
+#
+# First run: model downloads to /srv/synix/models (~5GB for Qwen3.5-2B)
+# GPU: requires NVIDIA CDI configured (nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml)
+
+services:
+  synix-server:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+    container_name: synix-server
+    network_mode: host
+    devices:
+      - nvidia.com/gpu=0
+    volumes:
+      # Source data buckets — the actual user data (read-write)
+      - /srv/synix/project/sources:/data/sources:z
+      # Persistent build state — objects, refs, releases, queue, prompts
+      - /srv/synix/data:/data/.synix:z
+      # HuggingFace model cache — persisted so models aren't re-downloaded
+      - /srv/synix/models:/models:z
+    environment:
+      - CUDA_DEVICE_ORDER=PCI_BUS_ID
+      - NVIDIA_VISIBLE_DEVICES=0
+    restart: unless-stopped

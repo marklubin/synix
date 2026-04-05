@@ -267,17 +267,15 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
     except Exception as exc:
         logger.warning("Could not seed prompts: %s", exc)
 
-    # Start vLLM if configured
+    # Start vLLM if configured (non-blocking — runs in background)
     vllm_manager = None
     if config.vllm.enabled:
         from synix.server.vllm_manager import VLLMManager
 
         vllm_manager = VLLMManager(config.vllm)
-        logger.info("Starting vLLM: %s on GPU %d", config.vllm.model, config.vllm.gpu_device)
-        await vllm_manager.start()
-        await vllm_manager.measure_throughput()
 
-        # Override pipeline LLM config to use local vLLM
+        # Set LLM config override immediately so build worker knows to use vLLM
+        # (builds will wait for vLLM health before running via the build worker)
         _state["llm_config_override"] = {
             "provider": "openai-compatible",
             "model": config.vllm.model,
@@ -286,7 +284,18 @@ async def serve(config: ServerConfig, *, viewer: bool = True) -> None:
             "temperature": 0.3,
             "max_tokens": 4096,
         }
-        logger.info("LLM config override set: %s via %s", config.vllm.model, vllm_manager.base_url)
+        _state["vllm_manager"] = vllm_manager
+
+        async def _start_vllm():
+            logger.info("Starting vLLM: %s on GPU %d", config.vllm.model, config.vllm.gpu_device)
+            try:
+                await vllm_manager.start()
+                await vllm_manager.measure_throughput()
+                logger.info("vLLM ready: %s via %s", config.vllm.model, vllm_manager.base_url)
+            except Exception as exc:
+                logger.error("vLLM failed to start: %s", exc)
+
+        asyncio.create_task(_start_vllm())
 
     # Report existing state
     try:

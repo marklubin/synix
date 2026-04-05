@@ -1,0 +1,51 @@
+# Synix Knowledge Server — GPU-accelerated container
+#
+# Uses the official vLLM image as base (already has CUDA + torch + vLLM)
+# and installs synix on top. Saves ~15GB of image build overhead.
+#
+# Build:
+#   podman build -t synix-server -f deploy/Containerfile .
+#
+# Run:
+#   podman run --network=host --device nvidia.com/gpu=0 \
+#     -v /srv/synix/project/sources:/data/sources:z \
+#     -v /srv/synix/data:/data/.synix:z \
+#     -v /srv/synix/models:/models:z \
+#     synix-server
+
+FROM vllm/vllm-openai:v0.19.0
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install uv for fast dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Install synix with server + mcp extras + fastembed
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ src/
+
+RUN uv pip install --system -e ".[server,mcp]" && \
+    uv pip install --system fastembed
+
+# HuggingFace cache inside the models volume
+ENV HF_HOME=/models
+ENV TRANSFORMERS_CACHE=/models
+
+# Deploy template files
+COPY deploy/pipeline.py /data/pipeline.py
+COPY deploy/synix-server.toml /data/synix-server.toml
+
+RUN mkdir -p /data/.synix /data/sources
+
+EXPOSE 8200 9471 8100
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD curl -sf http://localhost:8200/health || exit 1
+
+WORKDIR /data
+
+# Override vLLM's default entrypoint
+ENTRYPOINT ["synix", "serve", "--config", "/data/synix-server.toml"]

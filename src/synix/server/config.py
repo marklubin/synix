@@ -41,7 +41,7 @@ class VLLMConfig:
     max_model_len: int = 131072
     gpu_memory_utilization: float = 0.90
     extra_args: list[str] = field(default_factory=list)
-    startup_timeout: int = 120
+    startup_timeout: int = 300  # vLLM needs 2-5 min for CUDA kernel compilation on first run
 
 
 @dataclass
