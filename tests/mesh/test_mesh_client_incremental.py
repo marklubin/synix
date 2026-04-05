@@ -209,6 +209,11 @@ class TestIncrementalScan:
         f = watch_dir / "session.jsonl"
         f.write_bytes(_make_jsonl_lines(pairs=5))
 
+        # Mock a successful submit so byte_offset advances past the flush
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        client._http.post = AsyncMock(return_value=mock_response)
+
         await client._scan_incremental(f, watch_dir, time.time())
         assert client._file_trackers[str(f)].byte_offset > 0
 

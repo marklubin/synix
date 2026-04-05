@@ -396,6 +396,8 @@ def _normalize_output(text: str, case_path: Path) -> str:
     normalized = _sort_consecutive_spinner_lines(normalized)
     # Sort consecutive same-level build progress lines to absorb DAG ordering non-determinism
     normalized = _sort_consecutive_level_lines(normalized)
+    # Sort consecutive table rows sharing the same level column (Build Summary table)
+    normalized = _sort_consecutive_table_rows(normalized)
     # Collapse Python tracebacks to just File lines + exception (body varies by Python version)
     normalized = _collapse_tracebacks(normalized)
     return "\n".join(normalized)
@@ -451,6 +453,48 @@ def _sort_consecutive_level_lines(lines: list[str]) -> list[str]:
         m = _level_re.search(line)
         if m:
             level = m.group(1)
+            if group_level == level:
+                group.append(line)
+            else:
+                flush()
+                group_level = level
+                group.append(line)
+        else:
+            flush()
+            group_level = None
+            result.append(line)
+    flush()
+    return result
+
+
+def _sort_consecutive_table_rows(lines: list[str]) -> list[str]:
+    """Sort consecutive Build Summary table rows that share the same level cell.
+
+    Rich table rows like ``│ policies │  <N>  │ ...`` at the same level may
+    appear in non-deterministic order. Group consecutive data rows by their
+    second cell value (the Level column after normalization) and sort within
+    each group.
+    """
+    _table_data_re = re.compile(r"^│\s+\S+\s+│")
+    result: list[str] = []
+    group: list[str] = []
+    group_level: str | None = None
+
+    def _extract_level(line: str) -> str | None:
+        """Extract the second │-delimited cell (the Level column)."""
+        cells = line.split("│")
+        if len(cells) >= 3:
+            return cells[2].strip()
+        return None
+
+    def flush():
+        if group:
+            result.extend(sorted(group))
+            group.clear()
+
+    for line in lines:
+        if _table_data_re.match(line):
+            level = _extract_level(line)
             if group_level == level:
                 group.append(line)
             else:

@@ -15,10 +15,10 @@
 ╭──────────────────┬──────────────┬───────┬────────┬──────────╮
 │ Layer            │    Level     │ Built │ Cached │  Skipped  │
 ├──────────────────┼──────────────┼───────┼────────┼──────────┤
-│ product_offers   │  <N>  │  <N>  │  <N>  │  <N>  │
+│ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policies         │  <N>  │  <N>  │  <N>  │  <N>  │
 │ policy_index     │  <N>  │  <N>  │  <N>  │  <N>  │
-│ cs_product_brief │  <N>  │  <N>  │  <N>  │  <N>  │
+│ product_offers   │  <N>  │  <N>  │  <N>  │  <N>  │
 │   → search       │ synix_search │       │        │ complete  │
 ╰──────────────────┴──────────────┴───────┴────────┴──────────╯
 

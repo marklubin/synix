@@ -15,8 +15,8 @@
 │ Layer        │    Level     │ Built │ Cached │  Skipped  │
 ├──────────────┼──────────────┼───────┼────────┼──────────┤
 │ bios         │  <N>  │  <N>  │  <N>  │  <N>  │
-│ work_styles  │  <N>  │  <N>  │  <N>  │  <N>  │
 │ team_summary │  <N>  │  <N>  │  <N>  │  <N>  │
+│ work_styles  │  <N>  │  <N>  │  <N>  │  <N>  │
 │   → search   │ synix_search │       │        │ complete  │
 ╰──────────────┴──────────────┴───────┴────────┴──────────╯
 
