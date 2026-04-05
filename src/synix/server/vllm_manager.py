@@ -22,7 +22,7 @@ class VLLMConfig:
     model: str = "Qwen/Qwen3.5-2B"
     gpu_device: int = 0
     port: int = 8100
-    max_model_len: int = 4096
+    max_model_len: int = 131072
     gpu_memory_utilization: float = 0.90
     extra_args: list[str] = field(default_factory=list)
     startup_timeout: int = 120  # seconds to wait for health check

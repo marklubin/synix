@@ -35,7 +35,7 @@ class TestVLLMConfig:
         assert cfg.model == "Qwen/Qwen3.5-2B"
         assert cfg.gpu_device == 0
         assert cfg.port == 8100
-        assert cfg.max_model_len == 4096
+        assert cfg.max_model_len == 131072
         assert cfg.gpu_memory_utilization == 0.90
         assert cfg.extra_args == []
         assert cfg.startup_timeout == 120
