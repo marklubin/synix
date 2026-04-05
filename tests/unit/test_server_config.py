@@ -101,7 +101,7 @@ def test_defaults_when_optional_missing(tmp_path: Path):
     assert cfg.auto_build.enabled is True
     assert cfg.auto_build.window == 30
     assert cfg.vllm.enabled is False
-    assert cfg.vllm.model == "QuantTrio/Qwen3.5-9B-AWQ"
+    assert cfg.vllm.model == "Qwen/Qwen2.5-3B-Instruct"
     assert cfg.allowed_hosts == []
 
 
@@ -151,7 +151,7 @@ def test_vllm_config(tmp_path: Path):
 
         [vllm]
         enabled = true
-        model = "QuantTrio/Qwen3.5-9B-AWQ"
+        model = "Qwen/Qwen2.5-3B-Instruct"
         gpu_device = 0
         port = 8100
         max_model_len = 2048
@@ -163,7 +163,7 @@ def test_vllm_config(tmp_path: Path):
 
     cfg = load_config(str(p))
     assert cfg.vllm.enabled is True
-    assert cfg.vllm.model == "QuantTrio/Qwen3.5-9B-AWQ"
+    assert cfg.vllm.model == "Qwen/Qwen2.5-3B-Instruct"
     assert cfg.vllm.gpu_device == 0
     assert cfg.vllm.port == 8100
     assert cfg.vllm.max_model_len == 2048

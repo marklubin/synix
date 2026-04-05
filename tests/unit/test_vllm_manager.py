@@ -32,11 +32,11 @@ class TestVLLMConfig:
     def test_config_defaults(self):
         cfg = VLLMConfig()
         assert cfg.enabled is False
-        assert cfg.model == "QuantTrio/Qwen3.5-9B-AWQ"
+        assert cfg.model == "Qwen/Qwen2.5-3B-Instruct"
         assert cfg.gpu_device == 0
         assert cfg.port == 8100
-        assert cfg.max_model_len == 2048
-        assert cfg.gpu_memory_utilization == 0.85
+        assert cfg.max_model_len == 4096
+        assert cfg.gpu_memory_utilization == 0.90
         assert cfg.extra_args == []
         assert cfg.startup_timeout == 120
 
@@ -56,7 +56,7 @@ class TestVLLMConfig:
 class TestStart:
     @pytest.mark.asyncio
     async def test_start_builds_correct_command(self, manager):
-        """Verify the vllm command includes model, port, quantization, thinking disabled, prefix caching."""
+        """Verify the vllm command includes model, port, thinking disabled, prefix caching."""
         captured_args = {}
 
         async def fake_exec(*args, **kwargs):
@@ -81,8 +81,6 @@ class TestStart:
         assert manager.config.model in cmd
         assert "--port" in cmd
         assert str(manager.config.port) in cmd
-        assert "--quantization" in cmd
-        assert "awq" in cmd
         assert "--enable-prefix-caching" in cmd
         # Thinking disabled via default-chat-template-kwargs
         assert "--default-chat-template-kwargs" in cmd

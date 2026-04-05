@@ -35,11 +35,11 @@ class VLLMConfig:
     """vLLM subprocess configuration."""
 
     enabled: bool = False
-    model: str = "QuantTrio/Qwen3.5-9B-AWQ"
+    model: str = "Qwen/Qwen2.5-3B-Instruct"
     gpu_device: int = 0
     port: int = 8100
-    max_model_len: int = 2048
-    gpu_memory_utilization: float = 0.85
+    max_model_len: int = 4096
+    gpu_memory_utilization: float = 0.90
     extra_args: list[str] = field(default_factory=list)
     startup_timeout: int = 120
 
@@ -105,7 +105,7 @@ def _parse_config(raw: dict) -> ServerConfig:
     vllm_raw = raw.get("vllm", {})
     vllm = VLLMConfig(
         enabled=vllm_raw.get("enabled", False),
-        model=vllm_raw.get("model", "QuantTrio/Qwen3.5-9B-AWQ"),
+        model=vllm_raw.get("model", "Qwen/Qwen2.5-3B-Instruct"),
         gpu_device=int(vllm_raw.get("gpu_device", 0)),
         port=int(vllm_raw.get("port", 8100)),
         max_model_len=int(vllm_raw.get("max_model_len", 2048)),
