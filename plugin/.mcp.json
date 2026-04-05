@@ -1,6 +1,0 @@
-{
-  "synix": {
-    "type": "streamable-http",
-    "url": "${user_config.server_url}/mcp"
-  }
-}
