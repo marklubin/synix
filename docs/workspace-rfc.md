@@ -100,6 +100,90 @@ my-project/
 
 ---
 
+## User workflow
+
+### Create
+
+```bash
+$ synix init agent-memory
+
+Created workspace: agent-memory/
+  synix.toml       (edit buckets, vllm, etc.)
+  pipeline.py      (edit your pipeline DAG)
+  sources/         (put content here)
+  .synix/          (build state)
+```
+
+`synix init` scaffolds everything — config, pipeline template, source directories, `.synix/` state. One command, complete workspace.
+
+### Disk layout
+
+```
+agent-memory/
+├── synix.toml              ← workspace config
+├── pipeline.py             ← pipeline DAG (Python)
+├── sources/                ← bucket directories
+│   ├── sessions/
+│   ├── documents/
+│   ├── reference/
+│   ├── exports/
+│   └── reports/
+└── .synix/                 ← build state (managed by synix)
+    ├── objects/            ← content-addressed artifacts
+    ├── refs/               ← build + release refs
+    ├── releases/           ← materialized projections
+    ├── queue.db            ← document ingestion queue
+    ├── prompts.db          ← versioned prompt templates
+    └── HEAD
+```
+
+### Serve
+
+```bash
+$ cd agent-memory/
+$ synix serve               # starts vLLM + MCP + viewer + build queue
+```
+
+Or containerized:
+```bash
+$ podman run --network=host --device nvidia.com/gpu=0 \
+    -v /srv/synix/agent-memory:/workspace:z \
+    -v /srv/synix/models:/models:z \
+    synix-server
+```
+
+### Ingest → Build → Query
+
+Content enters via buckets (drop files or use API):
+```bash
+# Ingest via API
+$ curl -X POST localhost:8200/api/v1/ingest/documents \
+    -d '{"content":"...", "filename":"note.md"}'
+# → {"doc_id": "abc123"}
+
+# Track processing
+$ curl localhost:8200/api/v1/document/abc123
+# → {"status": "released"}
+
+# Search
+$ curl localhost:8200/api/v1/search?q=synix
+# → {"count": 5, "results": [...]}
+
+# Or use the viewer
+$ open http://localhost:9471
+```
+
+### Inspect
+
+```bash
+$ synix status              # workspace state + release info + queue depth
+$ synix plan pipeline.py    # dry-run build plan
+$ synix list                # all artifacts
+$ synix lineage <id>        # provenance tree
+```
+
+---
+
 ## API
 
 ```python
