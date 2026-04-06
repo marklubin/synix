@@ -36,7 +36,7 @@ ENV TRANSFORMERS_CACHE=/models
 
 # Deploy template files
 COPY deploy/pipeline.py /data/pipeline.py
-COPY deploy/synix-server.toml /data/synix-server.toml
+COPY deploy/synix.toml /data/synix.toml
 
 RUN mkdir -p /data/.synix /data/sources
 
@@ -48,4 +48,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
 WORKDIR /data
 
 # Override vLLM's default entrypoint
-ENTRYPOINT ["synix", "serve", "--config", "/data/synix-server.toml"]
+ENTRYPOINT ["synix", "serve", "--config", "/data/synix.toml"]

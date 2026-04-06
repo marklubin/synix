@@ -1,0 +1,3 @@
+[workspace]
+name = "claude-sessions"
+pipeline_path = "pipeline.py"

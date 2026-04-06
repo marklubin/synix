@@ -1,0 +1,3 @@
+[workspace]
+name = "agent-memory"
+pipeline_path = "pipeline.py"

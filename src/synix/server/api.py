@@ -70,9 +70,9 @@ async def ingest_to_bucket(request: Request) -> Response:
         # Enqueue for processing
         content_hash = hashlib.sha256(content.encode()).hexdigest()
         doc_id = None
-        from synix.server.mcp_tools import _state
+        from synix.server.mcp_tools import _workspace
 
-        queue = _state.get("queue")
+        queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
         if queue is not None:
             try:
                 doc_id = queue.enqueue(bucket, safe_name, content_hash, str(dest), client_id=client_id)
@@ -157,9 +157,9 @@ async def list_buckets_api(request: Request) -> Response:
 async def document_status_api(request: Request) -> Response:
     """GET /api/v1/document/{doc_id} — check document processing status."""
     doc_id = request.path_params["doc_id"]
-    from synix.server.mcp_tools import _state
+    from synix.server.mcp_tools import _workspace
 
-    queue = _state.get("queue")
+    queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
     if queue is None:
         return JSONResponse({"error": "Document queue not initialized"}, status_code=503)
 
@@ -172,9 +172,9 @@ async def document_status_api(request: Request) -> Response:
 
 async def list_prompts_api(request: Request) -> Response:
     """GET /api/v1/prompts — list prompt template keys."""
-    from synix.server.mcp_tools import _state
+    from synix.server.mcp_tools import _workspace
 
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return JSONResponse({"prompts": []})
 
@@ -189,9 +189,9 @@ async def list_prompts_api(request: Request) -> Response:
 async def get_prompt_api(request: Request) -> Response:
     """GET /api/v1/prompts/{key} — get prompt content."""
     key = request.path_params["key"]
-    from synix.server.mcp_tools import _state
+    from synix.server.mcp_tools import _workspace
 
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)
 
@@ -207,9 +207,9 @@ async def get_prompt_api(request: Request) -> Response:
 async def update_prompt_api(request: Request) -> Response:
     """PUT /api/v1/prompts/{key} — update prompt content."""
     key = request.path_params["key"]
-    from synix.server.mcp_tools import _state
+    from synix.server.mcp_tools import _workspace
 
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)
 
@@ -229,9 +229,9 @@ async def update_prompt_api(request: Request) -> Response:
 async def prompt_history_api(request: Request) -> Response:
     """GET /api/v1/prompts/{key}/history — prompt version history."""
     key = request.path_params["key"]
-    from synix.server.mcp_tools import _state
+    from synix.server.mcp_tools import _workspace
 
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return JSONResponse({"error": "Prompt store not available"}, status_code=503)
 

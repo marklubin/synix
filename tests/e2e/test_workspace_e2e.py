@@ -36,14 +36,14 @@ class TestWorkspaceLifecycle:
         assert ws.name == "test-workspace"
 
         # 2. Write pipeline + source data
-        (ws_dir / "pipeline.py").write_text(textwrap.dedent("""\
+        (ws_dir / "pipeline.py").write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test-lifecycle", source_dir="./sources")
             pipeline.add(Source("notes"))
-        """))
-        (ws_dir / "sources" / "hello.md").write_text(
-            "Today I learned about workspace abstractions in build systems."
+        """)
         )
+        (ws_dir / "sources" / "hello.md").write_text("Today I learned about workspace abstractions in build systems.")
 
         # 3. Load pipeline → CONFIGURED
         ws.load_pipeline()
@@ -68,11 +68,13 @@ class TestWorkspaceLifecycle:
     def test_reopen_workspace_preserves_state(self, ws_dir: Path, mock_llm) -> None:
         # Build and release
         ws = init_workspace(ws_dir)
-        (ws_dir / "pipeline.py").write_text(textwrap.dedent("""\
+        (ws_dir / "pipeline.py").write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test", source_dir="./sources")
             pipeline.add(Source("notes"))
-        """))
+        """)
+        )
         (ws_dir / "sources" / "note.md").write_text("content")
         ws.load_pipeline()
         ws.build()
@@ -89,7 +91,8 @@ class TestWorkspaceLifecycle:
         ws = init_workspace(ws_dir)
 
         # Write custom config
-        (ws_dir / "synix.toml").write_text(textwrap.dedent("""\
+        (ws_dir / "synix.toml").write_text(
+            textwrap.dedent("""\
             [workspace]
             name = "my-agent-memory"
             pipeline_path = "pipeline.py"
@@ -102,7 +105,8 @@ class TestWorkspaceLifecycle:
             [buckets.sessions]
             dir = "sources/sessions"
             patterns = ["**/*.jsonl"]
-        """))
+        """)
+        )
 
         # Reopen to pick up config
         ws = open_workspace(str(ws_dir))
@@ -111,11 +115,13 @@ class TestWorkspaceLifecycle:
         assert ws.bucket_dir("documents") == ws_dir / "sources" / "documents"
 
         # Write pipeline + data + build
-        (ws_dir / "pipeline.py").write_text(textwrap.dedent("""\
+        (ws_dir / "pipeline.py").write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("agent-memory", source_dir="./sources/documents")
             pipeline.add(Source("docs"))
-        """))
+        """)
+        )
         docs_dir = ws_dir / "sources" / "documents"
         docs_dir.mkdir(parents=True, exist_ok=True)
         (docs_dir / "goals.md").write_text("Ship the workspace abstraction.")
@@ -144,11 +150,13 @@ class TestWorkspaceLifecycle:
     def test_workspace_delegates_build_correctly(self, ws_dir: Path, mock_llm) -> None:
         """Build through workspace produces same results as through Project."""
         ws = init_workspace(ws_dir)
-        (ws_dir / "pipeline.py").write_text(textwrap.dedent("""\
+        (ws_dir / "pipeline.py").write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test", source_dir="./sources")
             pipeline.add(Source("notes"))
-        """))
+        """)
+        )
         (ws_dir / "sources" / "a.md").write_text("Note A")
         (ws_dir / "sources" / "b.md").write_text("Note B")
         ws.load_pipeline()

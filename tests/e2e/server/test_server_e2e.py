@@ -261,7 +261,7 @@ class TestFullWorkflow:
     def test_ingest_build_search_context(self, client, server_project, mock_llm):
         """Complete flow: ingest → build → search → context."""
         import synix
-        from synix.server.mcp_tools import _state
+        from synix.server import mcp_tools
 
         project_dir, config = server_project
 
@@ -296,7 +296,7 @@ class TestFullWorkflow:
 
         # Re-open project to pick up release
         project = synix.open_project(str(project_dir))
-        _state["project"] = project
+        mcp_tools._workspace._project = project
 
         # 4. Verify context-doc flat file
         resp = client.get("/api/v1/flat-file/context-doc")

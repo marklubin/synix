@@ -83,8 +83,13 @@ async function init() {
         const status = await api('/api/status');
         if (status.loaded) {
             state.loaded = true;
-            document.getElementById('logo').textContent = status.title;
-            document.title = status.title;
+            if (status.workspace) {
+                document.getElementById('logo').textContent = status.workspace;
+                document.title = status.workspace + ' — ' + status.title;
+            } else {
+                document.getElementById('logo').textContent = status.title;
+                document.title = status.title;
+            }
             await loadReleases();
             await loadData();
             return;

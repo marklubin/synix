@@ -11,6 +11,8 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from synix.workspace import Workspace
+
 logger = logging.getLogger(__name__)
 
 server_mcp = FastMCP(
@@ -21,8 +23,8 @@ server_mcp = FastMCP(
     ),
 )
 
-# Global state — set by serve.py on startup
-_state: dict = {"project": None, "config": None}
+# Global workspace — set by serve.py on startup (replaces old _state dict)
+_workspace: Workspace | None = None
 
 
 _RELEASE_NAME = "local"  # internal — the server always builds and queries this release
@@ -30,9 +32,9 @@ _RELEASE_NAME = "local"  # internal — the server always builds and queries thi
 
 def _require_project():
     """Return the current project or raise with a clear message."""
-    if _state["project"] is None:
+    if _workspace is None:
         raise ValueError("No project open. Server not fully initialized.")
-    return _state["project"]
+    return _workspace.project
 
 
 def _current_release():
@@ -48,27 +50,16 @@ def _current_release():
 
 def _require_config():
     """Return the current config or raise with a clear message."""
-    if _state["config"] is None:
+    if _workspace is None:
         raise ValueError("No config loaded. Server not fully initialized.")
-    return _state["config"]
+    return _workspace.config
 
 
 def _resolve_bucket_dir(bucket_name: str) -> Path:
     """Resolve a bucket's directory path, relative to project_dir if not absolute."""
-    config = _require_config()
-    bucket = None
-    for b in config.buckets:
-        if b.name == bucket_name:
-            bucket = b
-            break
-    if bucket is None:
-        raise ValueError(f"Bucket {bucket_name!r} not found. Available: {[b.name for b in config.buckets]}")
-
-    bucket_path = Path(bucket.dir)
-    if not bucket_path.is_absolute():
-        bucket_path = Path(config.project_dir) / bucket_path
-
-    return bucket_path
+    if _workspace is None:
+        raise ValueError("No workspace initialized. Server not fully initialized.")
+    return _workspace.bucket_dir(bucket_name)
 
 
 def _atomic_write(dest: Path, content: str) -> None:
@@ -118,7 +109,7 @@ def ingest(bucket: str, content: str, filename: str, client_id: str | None = Non
 
     # Enqueue for processing
     content_hash = hashlib.sha256(content.encode()).hexdigest()
-    queue = _state.get("queue")
+    queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
     doc_id = None
     if queue is not None:
         try:
@@ -142,7 +133,7 @@ def document_status(doc_id: str) -> str:
     Args:
         doc_id: Document ID returned by ingest().
     """
-    queue = _state.get("queue")
+    queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
     if queue is None:
         return "Document queue not initialized."
 
@@ -238,7 +229,7 @@ def list_buckets() -> str:
 @server_mcp.tool()
 def list_prompts() -> str:
     """List all prompt template keys with version info."""
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return "Prompt store not initialized."
 
@@ -262,7 +253,7 @@ def get_prompt(key: str, version: int | None = None) -> str:
         key: Prompt template key.
         version: Specific version number (latest if omitted).
     """
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return "Prompt store not initialized."
 
@@ -281,7 +272,7 @@ def update_prompt(key: str, content: str) -> str:
         key: Prompt template key.
         content: New prompt content.
     """
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return "Prompt store not initialized."
 
@@ -296,7 +287,7 @@ def prompt_history(key: str) -> str:
     Args:
         key: Prompt template key.
     """
-    store = _state.get("prompt_store")
+    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
     if store is None:
         return "Prompt store not initialized."
 

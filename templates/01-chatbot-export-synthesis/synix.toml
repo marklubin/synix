@@ -1,0 +1,3 @@
+[workspace]
+name = "chatbot-export-synthesis"
+pipeline_path = "pipeline_monthly.py"
