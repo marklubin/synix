@@ -269,6 +269,28 @@ class TestPromptStillRequired:
             FoldSynthesis("f", label="out", agent=agent)
 
 
+class TestEmptyFingerprintRejected:
+    """RFC requires: empty fingerprint_value() must raise at construction."""
+
+    def test_map_rejects_empty_fingerprint(self):
+        class EmptyFpAgent:
+            def write(self, request):
+                return AgentResult(content="x")
+            def fingerprint_value(self):
+                return ""
+        with pytest.raises(ValueError, match="empty fingerprint"):
+            MapSynthesis("m", prompt="p", agent=EmptyFpAgent())
+
+    def test_fold_rejects_empty_fingerprint(self):
+        class EmptyFpAgent:
+            def write(self, request):
+                return AgentResult(content="x")
+            def fingerprint_value(self):
+                return ""
+        with pytest.raises(ValueError, match="empty fingerprint"):
+            FoldSynthesis("f", prompt="p", label="out", agent=EmptyFpAgent())
+
+
 # ---------------------------------------------------------------------------
 # Backward compatibility (agent=None)
 # ---------------------------------------------------------------------------

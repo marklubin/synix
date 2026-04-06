@@ -68,6 +68,13 @@ class GroupSynthesis(Transform):
         self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
         self.agent = agent
+        if agent is not None:
+            fp = agent.fingerprint_value()
+            if not fp:
+                raise ValueError(
+                    f"Agent for transform {name!r} returned empty fingerprint"
+                    " — cache correctness requires a non-empty value"
+                )
         if on_missing not in ("group", "skip", "error"):
             raise ValueError(f"on_missing must be 'group', 'skip', or 'error', got {on_missing!r}")
         self.on_missing = on_missing

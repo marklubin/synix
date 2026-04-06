@@ -71,6 +71,13 @@ class FoldSynthesis(Transform):
         self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
         self.agent = agent
+        if agent is not None:
+            fp = agent.fingerprint_value()
+            if not fp:
+                raise ValueError(
+                    f"Agent for transform {name!r} returned empty fingerprint"
+                    " — cache correctness requires a non-empty value"
+                )
 
     def get_cache_key(self, config: dict) -> str:
         """Include prompt, initial, sort_by, artifact_type, metadata_fn, and agent in cache key."""
