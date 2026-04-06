@@ -94,6 +94,7 @@ _FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
 _OPTIONAL_FIELD_TYPES: dict[str, dict[str, type | tuple[type, ...]]] = {
     "artifact": {
         "prompt_id": (str, type(None)),
+        "agent_fingerprint": (str, type(None)),
         "model_config": (dict, type(None)),
         "created_at": str,
         "parent_labels": list,

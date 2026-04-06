@@ -75,6 +75,9 @@ class SdkArtifact:
     layer_level: int
     provenance: list[str]
     metadata: dict
+    prompt_id: str | None = None
+    agent_fingerprint: str | None = None
+    model_config: dict | None = None
 
     @classmethod
     def _from_resolved(cls, art) -> SdkArtifact:
@@ -88,6 +91,9 @@ class SdkArtifact:
             layer_level=art.layer_level,
             provenance=list(art.provenance_chain),
             metadata=dict(art.metadata),
+            prompt_id=getattr(art, "prompt_id", None),
+            agent_fingerprint=getattr(art, "agent_fingerprint", None),
+            model_config=getattr(art, "model_config", None),
         )
 
 

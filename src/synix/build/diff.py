@@ -25,6 +25,7 @@ def _artifact_from_view_data(data: dict) -> Artifact:
         "artifact_id": data["artifact_id"],
         "input_ids": data.get("input_ids", []),
         "prompt_id": data.get("prompt_id"),
+        "agent_fingerprint": data.get("agent_fingerprint"),
         "model_config": data.get("model_config"),
         "content": data["content"],
         "metadata": data.get("metadata", {}),
@@ -47,6 +48,8 @@ class ArtifactDiff:
     new_hash: str | None = None
     old_prompt_id: str | None = None
     new_prompt_id: str | None = None
+    old_agent_fingerprint: str | None = None
+    new_agent_fingerprint: str | None = None
 
 
 @dataclass
@@ -87,7 +90,11 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
             metadata_diff[key] = {"old": old_val, "new": new_val}
 
     has_changes = bool(
-        content_diff or metadata_diff or old.artifact_id != new.artifact_id or old.prompt_id != new.prompt_id
+        content_diff
+        or metadata_diff
+        or old.artifact_id != new.artifact_id
+        or old.prompt_id != new.prompt_id
+        or old.agent_fingerprint != new.agent_fingerprint
     )
 
     return ArtifactDiff(
@@ -99,6 +106,8 @@ def diff_artifact(old: Artifact, new: Artifact) -> ArtifactDiff:
         new_hash=new.artifact_id,
         old_prompt_id=old.prompt_id,
         new_prompt_id=new.prompt_id,
+        old_agent_fingerprint=old.agent_fingerprint,
+        new_agent_fingerprint=new.agent_fingerprint,
     )
 
 
@@ -216,6 +225,7 @@ def diff_artifact_by_label(
         artifact_id=data["artifact_id"],
         input_ids=data.get("input_ids", []),
         prompt_id=data.get("prompt_id"),
+        agent_fingerprint=data.get("agent_fingerprint"),
         model_config=data.get("model_config"),
         created_at=datetime.fromisoformat(data["created_at"]),
         content=data["content"],
