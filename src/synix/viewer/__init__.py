@@ -11,11 +11,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def create_app(release: Release, *, title: str = "Viewer", project: Project | None = None):
+def create_app(
+    release: Release | None = None,
+    *,
+    title: str = "Viewer",
+    project: Project | None = None,
+):
     """Create a Flask app for browsing a synix release.
 
-    Data is loaded lazily from the SDK — nothing is preloaded at init,
-    so the server starts instantly regardless of release size.
+    Can be started with just a *project* and no release — the viewer
+    will show a "waiting for first build" state and discover the release
+    once one becomes available.
     """
     from synix.viewer.server import ViewerState
     from synix.viewer.server import create_app as _create_app
@@ -25,14 +31,18 @@ def create_app(release: Release, *, title: str = "Viewer", project: Project | No
 
 
 def serve(
-    release: Release,
+    release: Release | None = None,
     *,
     host: str = "127.0.0.1",
     port: int = 9471,
     title: str = "Viewer",
     project: Project | None = None,
 ):
-    """Start the viewer dev server."""
+    """Start the viewer dev server.
+
+    If *release* is None but *project* is provided, the viewer starts
+    immediately and discovers the release when the first build completes.
+    """
     app = create_app(release, title=title, project=project)
     logger.info("Viewer starting on http://%s:%d", host, port)
     app.run(host=host, port=port)

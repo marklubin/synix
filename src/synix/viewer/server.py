@@ -24,12 +24,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 class ViewerState:
     """Holds the bound release with lazy, per-layer caching.
 
-    Nothing is loaded at init.  Layer metadata is fetched from the SDK
-    on first access.  The children index (reverse provenance) is built
-    lazily on first lineage request.
+    Can start with ``release=None`` if only a project is provided.
+    In that state, ``has_release`` returns False and data endpoints
+    return empty results.  Call ``try_discover_release()`` to check
+    if a release has become available (e.g. after the first build).
     """
 
-    def __init__(self, release: Release, title: str, *, project: Project | None = None):
+    def __init__(self, release: Release | None, title: str, *, project: Project | None = None):
         self.release = release
         self.title = title
         self.project = project
@@ -39,8 +40,35 @@ class ViewerState:
         self._search_cache_results: list = []
 
     @property
+    def has_release(self) -> bool:
+        return self.release is not None
+
+    def try_discover_release(self) -> bool:
+        """Try to discover a release from the project.  Returns True if found."""
+        if self.release is not None:
+            return True
+        if self.project is None:
+            return False
+        try:
+            # Re-open to pick up refs created since server start
+            import synix as _synix
+            project = _synix.open_project(str(self.project.project_root))
+            names = project.releases()
+            if names:
+                target = "local" if "local" in names else names[0]
+                self.release = project.release(target)
+                self.project = project
+                logger.info("Viewer discovered release %r", target)
+                return True
+        except Exception as exc:
+            logger.debug("Release discovery failed: %s", exc)
+        return False
+
+    @property
     def artifact_count(self) -> int:
         """Total artifact count derived from layer metadata (no iteration)."""
+        if not self.has_release:
+            return 0
         return sum(layer.count for layer in self.release.layers())
 
     def layer_items(self, layer: str) -> list[dict]:
@@ -136,21 +164,38 @@ def create_app(state: ViewerState) -> Flask:
     def static_files(filename: str):
         return send_from_directory(str(STATIC_DIR), filename)
 
+    # -- Release discovery ----------------------------------------------------
+
+    @app.before_request
+    def _try_discover():
+        """On each request, try to discover a release if we don't have one yet."""
+        if not state.has_release:
+            state.try_discover_release()
+
+    def _require_release():
+        """Return 503 JSON if no release is available yet."""
+        if not state.has_release:
+            return jsonify({"error": "No release available yet — waiting for first build"}), 503
+        return None
+
     # -- API ------------------------------------------------------------------
 
     @app.route("/api/status")
     def api_status():
         return jsonify(
             {
-                "loaded": True,
+                "loaded": state.has_release,
                 "title": state.title,
                 "artifact_count": state.artifact_count,
-                "release": state.release.name,
+                "release": state.release.name if state.has_release else None,
             }
         )
 
     @app.route("/api/layers")
     def api_layers():
+        err = _require_release()
+        if err:
+            return err
         layers = state.release.layers()
         result = sorted(
             [{"name": layer.name, "level": layer.level, "count": layer.count} for layer in layers],
@@ -160,6 +205,9 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/artifacts")
     def api_artifacts():
+        err = _require_release()
+        if err:
+            return err
         layer = request.args.get("layer")
         if not layer:
             return jsonify({"error": "layer parameter is required"}), 400
@@ -193,6 +241,9 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/artifact/<label>")
     def api_artifact(label: str):
+        err = _require_release()
+        if err:
+            return err
         try:
             art = state.release.artifact(label)
         except ArtifactNotFoundError:
@@ -213,6 +264,9 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/lineage/<label>")
     def api_lineage(label: str):
+        err = _require_release()
+        if err:
+            return err
         try:
             parents_raw = state.release.lineage(label)
         except ArtifactNotFoundError:
@@ -254,6 +308,9 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/search")
     def api_search():
+        err = _require_release()
+        if err:
+            return err
         q = request.args.get("q", "").strip()
         if not q:
             return jsonify({"error": "q parameter is required"}), 400
