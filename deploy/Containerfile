@@ -27,7 +27,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ src/
 
-RUN uv pip install --system -e ".[server,mcp]" && \
+RUN uv pip install --system -e ".[server,mcp,viewer]" && \
     uv pip install --system fastembed
 
 # HuggingFace cache inside the models volume

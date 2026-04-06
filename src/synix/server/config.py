@@ -62,25 +62,30 @@ class ServerConfig:
 def load_config(path: str) -> ServerConfig:
     """Load server config from TOML file.
 
-    Raises FileNotFoundError if path does not exist.
-    Raises KeyError if required fields are missing.
+    Supports both old format ([server].project_dir required) and
+    new workspace format ([workspace] section, project_dir defaults
+    to the directory containing the config file).
     """
-    config_path = Path(path)
+    config_path = Path(path).resolve()
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
     with open(config_path, "rb") as f:
         raw = tomllib.load(f)
 
-    return _parse_config(raw)
+    return _parse_config(raw, config_dir=config_path.parent)
 
 
-def _parse_config(raw: dict) -> ServerConfig:
+def _parse_config(raw: dict, config_dir: Path | None = None) -> ServerConfig:
     """Parse raw TOML dict into ServerConfig."""
     server_raw = raw.get("server", {})
 
+    # New workspace format: project_dir defaults to config file's directory
     if "project_dir" not in server_raw:
-        raise KeyError("server.project_dir is required in config")
+        if "workspace" in raw and config_dir is not None:
+            server_raw = {**server_raw, "project_dir": str(config_dir)}
+        else:
+            raise KeyError("server.project_dir is required in config")
 
     # Buckets
     buckets = []
