@@ -1,5 +1,54 @@
 """Unit tests for the synix viewer server."""
 
+import json
+
+import pytest
+
+from synix.viewer.server import ViewerState, create_app
+
+# ---------------------------------------------------------------------------
+# Fixtures for build-log tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def build_log_client(viewer_release, tmp_path):
+    """Flask test client with a project that has JSONL build logs."""
+
+    # Create a mock project that has _synix_dir pointing to tmp_path
+    class MockProject:
+        _synix_dir = tmp_path / ".synix"
+        _pipeline = None
+
+    mock_project = MockProject()
+    (mock_project._synix_dir / "logs").mkdir(parents=True, exist_ok=True)
+
+    # Write a sample JSONL log
+    log_events = [
+        {"event": "run_start", "pipeline": "demo", "layer_count": 3, "timestamp": "2026-04-06T04:11:36Z"},
+        {"event": "layer_start", "layer": "conversations", "level": 0, "timestamp": "2026-04-06T04:11:36.001Z"},
+        {"event": "artifact_built", "layer": "conversations", "label": "t-text-foo", "timestamp": "2026-04-06T04:11:36.010Z"},
+        {"event": "artifact_built", "layer": "conversations", "label": "t-text-bar", "timestamp": "2026-04-06T04:11:36.020Z"},
+        {"event": "layer_finish", "layer": "conversations", "built": 2, "cached": 0, "time_seconds": 0.034, "timestamp": "2026-04-06T04:11:36.034Z"},
+        {"event": "layer_start", "layer": "episodes", "level": 1, "timestamp": "2026-04-06T04:11:36.035Z"},
+        {"event": "llm_call_start", "layer": "episodes", "artifact_desc": "episode ep-foo", "model": "Qwen/Qwen3.5-2B", "timestamp": "2026-04-06T04:11:36.036Z"},
+        {"event": "llm_call_finish", "layer": "episodes", "artifact_desc": "episode ep-foo", "duration_seconds": 4.5, "input_tokens": 168, "output_tokens": 295, "timestamp": "2026-04-06T04:11:40.536Z"},
+        {"event": "artifact_built", "layer": "episodes", "label": "ep-foo", "timestamp": "2026-04-06T04:11:40.540Z"},
+        {"event": "layer_finish", "layer": "episodes", "built": 1, "cached": 0, "time_seconds": 4.505, "timestamp": "2026-04-06T04:11:40.540Z"},
+        {"event": "run_finish", "total_time": 4.54, "total_llm_calls": 1, "total_tokens": 463, "total_cost_estimate": 0.003, "timestamp": "2026-04-06T04:11:40.540Z"},
+    ]
+
+    run_id = "20260406T041136000000Z-abcd1234"
+    log_path = mock_project._synix_dir / "logs" / f"{run_id}.jsonl"
+    with open(log_path, "w") as f:
+        for event in log_events:
+            f.write(json.dumps(event) + "\n")
+
+    state = ViewerState(viewer_release, "Test Viewer", project=mock_project)
+    app = create_app(state)
+    app.config["TESTING"] = True
+    return app.test_client()
+
 
 class TestStatus:
     def test_returns_loaded(self, viewer_client):
@@ -173,3 +222,79 @@ class TestStatic:
     def test_static_js(self, viewer_client):
         resp = viewer_client.get("/static/app.js")
         assert resp.status_code == 200
+
+
+class TestBuildLogs:
+    """Tests for the /api/build-logs and /api/build-log endpoints."""
+
+    def test_build_logs_list(self, build_log_client):
+        resp = build_log_client.get("/api/build-logs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "logs" in data
+        assert len(data["logs"]) == 1
+        log_entry = data["logs"][0]
+        assert log_entry["run_id"] == "20260406T041136000000Z-abcd1234"
+        assert log_entry["size_bytes"] > 0
+        assert "timestamp" in log_entry
+
+    def test_build_logs_empty_without_project(self, viewer_client):
+        resp = viewer_client.get("/api/build-logs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["logs"] == []
+
+    def test_build_log_detail_by_run_id(self, build_log_client):
+        resp = build_log_client.get("/api/build-log?run_id=20260406T041136000000Z-abcd1234")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["pipeline"] == "demo"
+        assert data["total_time"] == 4.54
+        assert len(data["layers"]) == 2
+
+        # Check layer details
+        conv = data["layers"][0]
+        assert conv["name"] == "conversations"
+        assert conv["level"] == 0
+        assert conv["built"] == 2
+        assert conv["cached"] == 0
+        assert len(conv["artifacts"]) == 2
+        assert "t-text-foo" in conv["artifacts"]
+
+        ep = data["layers"][1]
+        assert ep["name"] == "episodes"
+        assert ep["level"] == 1
+        assert ep["built"] == 1
+        assert len(ep["llm_calls"]) == 1
+        llm_call = ep["llm_calls"][0]
+        assert llm_call["artifact"] == "episode ep-foo"
+        assert llm_call["duration"] == 4.5
+        assert llm_call["input_tokens"] == 168
+        assert llm_call["output_tokens"] == 295
+        assert llm_call["model"] == "Qwen/Qwen3.5-2B"
+
+        # Summary
+        assert data["summary"]["total_llm_calls"] == 1
+        assert data["summary"]["total_tokens"] == 463
+        assert data["summary"]["layers_count"] == 2
+
+    def test_build_log_detail_most_recent(self, build_log_client):
+        """When no run_id is provided, returns the most recent log."""
+        resp = build_log_client.get("/api/build-log")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["pipeline"] == "demo"
+
+    def test_build_log_not_found(self, build_log_client):
+        resp = build_log_client.get("/api/build-log?run_id=nonexistent")
+        assert resp.status_code == 404
+
+    def test_build_log_no_project(self, viewer_client):
+        resp = viewer_client.get("/api/build-log")
+        assert resp.status_code == 404
+
+    def test_build_log_timestamps(self, build_log_client):
+        resp = build_log_client.get("/api/build-log?run_id=20260406T041136000000Z-abcd1234")
+        data = resp.get_json()
+        assert data["started_at"] == "2026-04-06T04:11:36Z"
+        assert data["completed_at"] == "2026-04-06T04:11:40.540Z"

@@ -952,6 +952,46 @@ html, body {
 .build-client { color: var(--text-muted); font-size: 0.7rem; font-style: italic; }
 
 /* ============================================================
+   BUILD HISTORY & LOG DETAIL
+   ============================================================ */
+.build-history { margin-top: 1.5rem; }
+.build-history h3 { color: var(--neon); margin: 0 0 1rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.9rem; }
+.build-history-list { display: flex; flex-direction: column; }
+.build-run-item { display: flex; gap: 1rem; padding: 0.5rem 0.6rem; cursor: pointer; border-bottom: 1px solid var(--border); align-items: center; transition: background 0.15s; }
+.build-run-item:hover { background: var(--bg-elevated); }
+.build-run-item.active { border-left: 3px solid var(--neon); background: var(--bg-elevated); }
+.build-run-id { font-family: var(--font-mono); font-size: 0.75rem; color: var(--neon); min-width: 160px; }
+.build-run-ts { font-size: 0.8rem; color: var(--text-muted); flex: 1; }
+.build-run-size { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Build log detail */
+.build-log-detail { margin-top: 1rem; }
+.build-log-header { display: flex; gap: 1rem; align-items: baseline; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+.build-log-pipeline { font-weight: 600; color: var(--text-bright); font-size: 0.95rem; }
+.build-log-time { font-size: 0.8rem; color: var(--text-muted); }
+.build-log-duration { font-size: 0.8rem; color: var(--neon); font-family: var(--font-mono); }
+
+.build-log-layers { display: flex; flex-direction: column; }
+.layer-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-size: 0.85rem; }
+.layer-level { min-width: 2rem; color: var(--neon); font-weight: bold; font-size: 0.8rem; }
+.layer-name { min-width: 120px; font-weight: 600; color: var(--text-bright); }
+.layer-stats { color: var(--text-muted); font-size: 0.8rem; min-width: 120px; }
+.layer-time { min-width: 60px; text-align: right; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text); }
+.layer-llm { color: var(--text-muted); font-size: 0.75rem; }
+.layer-llm-toggle { cursor: pointer; transition: color 0.15s; }
+.layer-llm-toggle:hover, .layer-llm-toggle.expanded { color: var(--neon); }
+
+.llm-detail { padding: 0.3rem 0 0.5rem 2.5rem; font-size: 0.75rem; color: var(--text-muted); border-left: 1px solid var(--border); margin-left: 1rem; }
+.llm-detail-row { display: flex; gap: 0.75rem; padding: 0.2rem 0; align-items: baseline; }
+.llm-artifact { color: var(--text); min-width: 180px; }
+.llm-duration { font-family: var(--font-mono); min-width: 50px; text-align: right; }
+.llm-tokens { color: var(--text-muted); font-size: 0.7rem; }
+.llm-model { color: var(--neon-dim); font-size: 0.7rem; font-family: var(--font-mono); }
+
+.build-summary { margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid var(--border); font-size: 0.85rem; display: flex; gap: 1.5rem; }
+.build-summary .stat strong { color: var(--text-bright); }
+
+/* ============================================================
    PROMPTS
    ============================================================ */
 .prompts-layout { display: flex; gap: 1rem; height: calc(100vh - 200px); }

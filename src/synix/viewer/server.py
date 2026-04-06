@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -536,6 +537,205 @@ def create_app(state: ViewerState) -> Flask:
             return jsonify({"nodes": nodes, "edges": edges, "projections": projections})
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+
+    # -- Build logs (JSONL) ----------------------------------------------------
+
+    def _get_logs_dir() -> Path | None:
+        """Return the logs directory, or None if not available."""
+        if state._workspace and hasattr(state._workspace, "synix_dir"):
+            return Path(state._workspace.synix_dir) / "logs"
+        if state.project and hasattr(state.project, "_synix_dir"):
+            return Path(state.project._synix_dir) / "logs"
+        return None
+
+    def _parse_build_log(log_path: Path) -> dict:
+        """Parse a JSONL build log file into structured JSON."""
+        events: list[dict] = []
+        try:
+            with open(log_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            events.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            logger.warning("Skipping malformed JSONL line in %s", log_path)
+        except OSError as exc:
+            logger.warning("Failed to read log file %s: %s", log_path, exc)
+            return {"error": f"Failed to read log: {exc}"}
+
+        run_id = log_path.stem
+        pipeline_name = ""
+        started_at = ""
+        completed_at = ""
+        total_time = 0.0
+        total_llm_calls = 0
+        total_tokens = 0
+
+        # Accumulate per-layer data
+        layers_data: dict[str, dict] = {}  # name -> layer dict
+        layer_order: list[str] = []  # preserve order
+
+        for ev in events:
+            event_type = ev.get("event", "")
+            ts = ev.get("timestamp", "")
+
+            if event_type == "run_start":
+                pipeline_name = ev.get("pipeline", "")
+                started_at = ts
+
+            elif event_type == "run_finish":
+                completed_at = ts
+                total_time = ev.get("total_time", 0.0)
+                total_llm_calls = ev.get("total_llm_calls", 0)
+                total_tokens = ev.get("total_tokens", 0)
+
+            elif event_type == "layer_start":
+                name = ev.get("layer", "")
+                if name and name not in layers_data:
+                    layers_data[name] = {
+                        "name": name,
+                        "level": ev.get("level", 0),
+                        "built": 0,
+                        "cached": 0,
+                        "time_seconds": 0.0,
+                        "started_at": ts,
+                        "finished_at": "",
+                        "artifacts": [],
+                        "llm_calls": [],
+                    }
+                    layer_order.append(name)
+                elif name in layers_data:
+                    layers_data[name]["started_at"] = ts
+
+            elif event_type == "layer_finish":
+                name = ev.get("layer", "")
+                if name in layers_data:
+                    layers_data[name]["built"] = ev.get("built", 0)
+                    layers_data[name]["cached"] = ev.get("cached", 0)
+                    layers_data[name]["time_seconds"] = ev.get("time_seconds", 0.0)
+                    layers_data[name]["finished_at"] = ts
+
+            elif event_type == "artifact_built" or event_type == "artifact_cached":
+                name = ev.get("layer", "")
+                label = ev.get("label", "")
+                if name in layers_data and label:
+                    layers_data[name]["artifacts"].append(label)
+
+            elif event_type == "llm_call_finish":
+                name = ev.get("layer", "")
+                if name in layers_data:
+                    layers_data[name]["llm_calls"].append({
+                        "artifact": ev.get("artifact_desc", ""),
+                        "duration": ev.get("duration_seconds", 0.0),
+                        "input_tokens": ev.get("input_tokens", 0),
+                        "output_tokens": ev.get("output_tokens", 0),
+                        "model": "",  # model is on llm_call_start, not finish
+                    })
+
+            elif event_type == "llm_call_start":
+                # Stash model info — will be paired by the next llm_call_finish
+                name = ev.get("layer", "")
+                model = ev.get("model", "")
+                if name in layers_data and model:
+                    # Tag the layer with last-seen model for upcoming finish events
+                    layers_data[name].setdefault("_pending_model", model)
+
+        # Backfill model on llm_call entries from llm_call_start events
+        # Re-parse start events to pair with finishes
+        pending_models: dict[str, list[str]] = {}  # layer -> [model, ...]
+        for ev in events:
+            event_type = ev.get("event", "")
+            name = ev.get("layer", "")
+            if event_type == "llm_call_start" and name:
+                pending_models.setdefault(name, []).append(ev.get("model", ""))
+        for name, layer in layers_data.items():
+            models = pending_models.get(name, [])
+            for i, call in enumerate(layer.get("llm_calls", [])):
+                if i < len(models):
+                    call["model"] = models[i]
+            # Clean up internal state
+            layer.pop("_pending_model", None)
+
+        layers_list = [layers_data[n] for n in layer_order if n in layers_data]
+
+        return {
+            "run_id": run_id,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "total_time": total_time,
+            "pipeline": pipeline_name,
+            "layers": layers_list,
+            "summary": {
+                "total_llm_calls": total_llm_calls,
+                "total_tokens": total_tokens,
+                "layers_count": len(layers_list),
+            },
+        }
+
+    @app.route("/api/build-logs")
+    def build_logs_list():
+        """List available JSONL build log files with basic metadata."""
+        logs_dir = _get_logs_dir()
+        if logs_dir is None or not logs_dir.exists():
+            return jsonify({"logs": []})
+
+        log_files = sorted(logs_dir.glob("*.jsonl"), reverse=True)
+        logs = []
+        for lf in log_files[:50]:  # Cap at 50 most recent
+            try:
+                size = lf.stat().st_size
+            except OSError:
+                size = 0
+            # Extract timestamp from run_id filename (format: YYYYMMDDTHHMMSSffffffZ-hexhex)
+            run_id = lf.stem
+            # Parse the timestamp prefix
+            ts_str = ""
+            try:
+                # e.g. 20260406T041136123456Z-abcd1234
+                ts_part = run_id.split("-")[0]  # 20260406T041136123456Z
+                if ts_part.endswith("Z") and "T" in ts_part:
+                    # Reformat to ISO 8601
+                    date_part = ts_part[:8]  # 20260406
+                    time_part = ts_part[9:-1]  # 041136123456
+                    ts_str = (
+                        f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}T"
+                        f"{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}Z"
+                    )
+            except (IndexError, ValueError):
+                ts_str = run_id
+
+            logs.append({
+                "run_id": run_id,
+                "timestamp": ts_str,
+                "size_bytes": size,
+            })
+
+        return jsonify({"logs": logs})
+
+    @app.route("/api/build-log")
+    def build_log_detail():
+        """Parse and return a specific build log, or the most recent one."""
+        logs_dir = _get_logs_dir()
+        if logs_dir is None or not logs_dir.exists():
+            return jsonify({"error": "No logs directory found"}), 404
+
+        run_id = request.args.get("run_id", "").strip()
+        if run_id:
+            log_path = logs_dir / f"{run_id}.jsonl"
+            if not log_path.exists():
+                return jsonify({"error": f"Log file not found: {run_id}"}), 404
+        else:
+            # Find most recent
+            log_files = sorted(logs_dir.glob("*.jsonl"), reverse=True)
+            if not log_files:
+                return jsonify({"error": "No build logs found"}), 404
+            log_path = log_files[0]
+
+        result = _parse_build_log(log_path)
+        if "error" in result and len(result) == 1:
+            return jsonify(result), 500
+        return jsonify(result)
 
     @app.route("/api/prompts")
     def list_prompts():

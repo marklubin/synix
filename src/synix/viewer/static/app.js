@@ -783,14 +783,134 @@ function renderBuildStatus(data) {
     return html;
 }
 
+// --- Build history & log detail ---
+
+function formatTimestamp(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return d.toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    } catch { return isoStr; }
+}
+
+function shortRunId(runId) {
+    if (!runId) return '';
+    // Show first 15 chars (YYYYMMDDTHHMMSS) + last 8 (hex suffix)
+    if (runId.length > 24) {
+        return runId.slice(0, 15) + '...' + runId.slice(-8);
+    }
+    return runId;
+}
+
+function renderBuildHistory(logs) {
+    if (!logs || logs.length === 0) {
+        return '<div class="build-history"><h3>Build History</h3><div class="empty-state">No build logs found</div></div>';
+    }
+
+    let html = '<div class="build-history">';
+    html += '<h3>Build History</h3>';
+    html += '<div class="build-history-list">';
+    for (const log of logs) {
+        const ts = formatTimestamp(log.timestamp);
+        const sizeKb = log.size_bytes ? (log.size_bytes / 1024).toFixed(1) + ' KB' : '';
+        html += `
+            <div class="build-run-item" data-run-id="${escapeHtml(log.run_id)}">
+                <span class="build-run-id">${escapeHtml(shortRunId(log.run_id))}</span>
+                <span class="build-run-ts">${escapeHtml(ts)}</span>
+                <span class="build-run-size">${escapeHtml(sizeKb)}</span>
+            </div>
+        `;
+    }
+    html += '</div>';
+    html += '<div id="build-log-detail"></div>';
+    html += '</div>';
+    return html;
+}
+
+function renderBuildLogDetail(log) {
+    if (!log || log.error) {
+        return `<div class="empty-state">${escapeHtml(log?.error || 'Failed to load build log')}</div>`;
+    }
+
+    let html = '<div class="build-log-detail">';
+
+    // Header
+    html += '<div class="build-log-header">';
+    html += `<span class="build-log-pipeline">${escapeHtml(log.pipeline || 'pipeline')}</span>`;
+    html += `<span class="build-log-time">${formatTimestamp(log.started_at)}</span>`;
+    if (log.total_time) {
+        html += `<span class="build-log-duration">${log.total_time.toFixed(1)}s total</span>`;
+    }
+    html += '</div>';
+
+    // Layer timeline
+    const layers = log.layers || [];
+    if (layers.length > 0) {
+        html += '<div class="build-log-layers">';
+        for (const layer of layers) {
+            const llmCalls = layer.llm_calls || [];
+            const llmCount = llmCalls.length;
+            const llmTokens = llmCalls.reduce((sum, c) => sum + (c.input_tokens || 0) + (c.output_tokens || 0), 0);
+            const hasLlm = llmCount > 0;
+            const expandId = 'llm-detail-' + layer.name.replace(/[^a-zA-Z0-9]/g, '-');
+
+            html += `<div class="layer-row">`;
+            html += `<span class="layer-level">L${layer.level}</span>`;
+            html += `<span class="layer-name">${escapeHtml(layer.name)}</span>`;
+            html += `<span class="layer-stats">${layer.built} built, ${layer.cached} cached</span>`;
+            html += `<span class="layer-time">${layer.time_seconds != null ? layer.time_seconds.toFixed(2) + 's' : ''}</span>`;
+            if (hasLlm) {
+                html += `<span class="layer-llm layer-llm-toggle" data-expand="${expandId}">${llmCount} LLM call${llmCount !== 1 ? 's' : ''}, ${llmTokens} tok</span>`;
+            }
+            html += `</div>`;
+
+            // Expandable LLM detail
+            if (hasLlm) {
+                html += `<div class="llm-detail" id="${expandId}" style="display:none;">`;
+                for (const call of llmCalls) {
+                    const callTokens = (call.input_tokens || 0) + (call.output_tokens || 0);
+                    html += `<div class="llm-detail-row">`;
+                    html += `<span class="llm-artifact">${escapeHtml(call.artifact || '')}</span>`;
+                    html += `<span class="llm-duration">${call.duration != null ? call.duration.toFixed(1) + 's' : ''}</span>`;
+                    html += `<span class="llm-tokens">${call.input_tokens || 0} in / ${call.output_tokens || 0} out (${callTokens} tok)</span>`;
+                    if (call.model) {
+                        html += `<span class="llm-model">${escapeHtml(call.model)}</span>`;
+                    }
+                    html += `</div>`;
+                }
+                html += '</div>';
+            }
+        }
+        html += '</div>';
+    }
+
+    // Summary
+    const summary = log.summary || {};
+    html += '<div class="build-summary">';
+    html += `<span class="stat"><strong>${summary.layers_count || 0}</strong> layers</span>`;
+    html += `<span class="stat"><strong>${summary.total_llm_calls || 0}</strong> LLM calls</span>`;
+    html += `<span class="stat"><strong>${summary.total_tokens || 0}</strong> tokens</span>`;
+    if (log.total_time) {
+        html += `<span class="stat"><strong>${log.total_time.toFixed(1)}s</strong> total time</span>`;
+    }
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+}
+
 async function loadPipelineTab() {
     const container = document.getElementById('pipeline-content');
     container.innerHTML = '<div class="empty-state">Loading pipeline...</div>';
 
     try {
-        const [dagRes, statusRes] = await Promise.all([
+        const [dagRes, statusRes, logsRes] = await Promise.all([
             fetch('/api/dag').then(r => r.ok ? r.json() : null).catch(() => null),
             fetch('/api/build-status').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('/api/build-logs').then(r => r.ok ? r.json() : null).catch(() => null),
         ]);
 
         let html = '';
@@ -806,10 +926,76 @@ async function loadPipelineTab() {
             html += renderBuildStatus(statusRes);
         }
 
+        if (logsRes) {
+            html += renderBuildHistory(logsRes.logs || []);
+        }
+
         container.innerHTML = html;
+
+        // Wire up click handlers for build history items and LLM detail toggles
+        _wirePipelineEvents(container);
+
+        // Auto-load the most recent build log detail
+        const firstRunItem = container.querySelector('.build-run-item');
+        if (firstRunItem) {
+            firstRunItem.click();
+        }
     } catch (err) {
         container.innerHTML = `<div class="empty-state">Error loading pipeline: ${escapeHtml(err.message)}</div>`;
     }
+}
+
+function _wirePipelineEvents(container) {
+    container.addEventListener('click', async (e) => {
+        // Build run item click — load detail
+        const runItem = e.target.closest('.build-run-item');
+        if (runItem) {
+            const runId = runItem.dataset.runId;
+            if (!runId) return;
+
+            // Mark active
+            container.querySelectorAll('.build-run-item').forEach(el => {
+                el.classList.toggle('active', el === runItem);
+            });
+
+            const detailEl = document.getElementById('build-log-detail');
+            if (detailEl) {
+                detailEl.innerHTML = '<div class="empty-state">Loading build log...</div>';
+                try {
+                    const res = await fetch(`/api/build-log?run_id=${encodeURIComponent(runId)}`);
+                    const data = await res.json();
+                    detailEl.innerHTML = renderBuildLogDetail(data);
+                    // Wire LLM toggle events within the detail
+                    _wireLlmToggles(detailEl);
+                } catch (err) {
+                    detailEl.innerHTML = `<div class="empty-state">Error: ${escapeHtml(err.message)}</div>`;
+                }
+            }
+            return;
+        }
+
+        // LLM detail toggle
+        const llmToggle = e.target.closest('.layer-llm-toggle');
+        if (llmToggle) {
+            _handleLlmToggle(llmToggle);
+        }
+    });
+}
+
+function _wireLlmToggles(container) {
+    container.querySelectorAll('.layer-llm-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => _handleLlmToggle(toggle));
+    });
+}
+
+function _handleLlmToggle(toggle) {
+    const expandId = toggle.dataset.expand;
+    if (!expandId) return;
+    const detail = document.getElementById(expandId);
+    if (!detail) return;
+    const isVisible = detail.style.display !== 'none';
+    detail.style.display = isVisible ? 'none' : 'block';
+    toggle.classList.toggle('expanded', !isVisible);
 }
 
 async function refreshBuildStatus() {
