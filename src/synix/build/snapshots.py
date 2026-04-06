@@ -210,6 +210,7 @@ class BuildTransaction:
                 content_oid=content_oid,
                 input_ids=list(artifact.input_ids),
                 prompt_id=artifact.prompt_id,
+                agent_fingerprint=artifact.agent_fingerprint,
                 model_config=artifact.model_config,
                 metadata=snapshot_metadata,
                 parent_labels=parent_labels,

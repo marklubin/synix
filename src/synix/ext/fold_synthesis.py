@@ -11,12 +11,16 @@ import hashlib
 import inspect
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from synix.build.fingerprint import Fingerprint
 from synix.build.llm_transforms import _get_llm_client, _logged_complete
 from synix.core.models import Artifact, Transform, TransformContext
 from synix.ext._render import render_template
 from synix.ext._util import stable_callable_repr
+
+if TYPE_CHECKING:
+    from synix.agents import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,7 @@ class FoldSynthesis(Transform):
         label: str,
         metadata_fn: Callable | None = None,
         artifact_type: str = "summary",
+        agent: Agent | None = None,
         config: dict | None = None,
     ):
         # FoldSynthesis is inherently sequential, never batch
@@ -65,34 +70,49 @@ class FoldSynthesis(Transform):
         self.label_value = label
         self.metadata_fn = metadata_fn
         self.artifact_type = artifact_type
+        self.agent = agent
 
     def get_cache_key(self, config: dict) -> str:
-        """Include prompt, initial, sort_by, artifact_type, and metadata_fn in cache key."""
+        """Include prompt, initial, sort_by, artifact_type, metadata_fn, and agent in cache key."""
         sort_by_str = ""
         if self.sort_by is not None:
             sort_by_str = self.sort_by if isinstance(self.sort_by, str) else stable_callable_repr(self.sort_by)
         metadata_fn_str = stable_callable_repr(self.metadata_fn) if self.metadata_fn is not None else ""
-        combined = f"{self.prompt}\x00{self.initial}\x00{sort_by_str}\x00{self.artifact_type}\x00{metadata_fn_str}"
+        agent_str = self.agent.fingerprint_value() if self.agent is not None else ""
+        combined = (
+            f"{self.prompt}\x00{self.initial}\x00{sort_by_str}"
+            f"\x00{self.artifact_type}\x00{metadata_fn_str}\x00{agent_str}"
+        )
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
     def compute_fingerprint(self, config: dict):
-        """Add callable fingerprint components for sort_by and metadata_fn."""
+        """Add callable fingerprint components for sort_by, metadata_fn, and agent."""
         fp = super().compute_fingerprint(config)
+        from synix.build.fingerprint import Fingerprint as FP
+        from synix.build.fingerprint import compute_digest, fingerprint_value
+
+        components = dict(fp.components)
+        modified = False
+
         callables = {}
         if self.sort_by is not None and callable(self.sort_by) and not isinstance(self.sort_by, str):
             callables["sort_by"] = self.sort_by
         if self.metadata_fn is not None:
             callables["metadata_fn"] = self.metadata_fn
-        if callables:
-            from synix.build.fingerprint import Fingerprint, compute_digest, fingerprint_value
+        for key, fn in callables.items():
+            modified = True
+            try:
+                components[key] = fingerprint_value(inspect.getsource(fn))
+            except (OSError, TypeError):
+                components[key] = fingerprint_value(repr(fn))
 
-            components = dict(fp.components)
-            for key, fn in callables.items():
-                try:
-                    components[key] = fingerprint_value(inspect.getsource(fn))
-                except (OSError, TypeError):
-                    components[key] = fingerprint_value(repr(fn))
-            return Fingerprint(scheme=fp.scheme, digest=compute_digest(components), components=components)
+        if self.agent is not None:
+            modified = True
+            components["agent"] = self.agent.fingerprint_value()
+            components.pop("model", None)
+
+        if modified:
+            return FP(scheme=fp.scheme, digest=compute_digest(components), components=components)
         return fp
 
     def split(self, inputs: list[Artifact], ctx: TransformContext) -> list[tuple[list[Artifact], dict]]:
@@ -114,9 +134,17 @@ class FoldSynthesis(Transform):
 
     def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         ctx = self.get_context(ctx)
-        client = _get_llm_client(ctx)
-        model_config = ctx.llm_config
         prompt_id = self._make_prompt_id()
+
+        # Resolve LLM client only when needed (agent=None path)
+        if self.agent is None:
+            client = _get_llm_client(ctx)
+            model_config = ctx.llm_config
+            agent_fingerprint = None
+        else:
+            client = None
+            model_config = None
+            agent_fingerprint = self.agent.fingerprint_value()
 
         sorted_inputs = self._sort_inputs(inputs)
         transform_fp = self.compute_fingerprint(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx)
@@ -149,13 +177,28 @@ class FoldSynthesis(Transform):
                 total=str(total),
             )
 
-            response = _logged_complete(
-                client,
-                ctx,
-                messages=[{"role": "user", "content": rendered}],
-                artifact_desc=f"{self.name} step {step}/{total}",
-            )
-            accumulated = response.content
+            if self.agent is not None:
+                from synix.agents import AgentRequest
+
+                result = self.agent.write(AgentRequest(
+                    prompt=rendered,
+                    metadata={
+                        "transform_name": self.name,
+                        "shape": "fold",
+                        "step": step,
+                        "total": total,
+                        "input_label": inp.label,
+                    },
+                ))
+                accumulated = result.content
+            else:
+                response = _logged_complete(
+                    client,
+                    ctx,
+                    messages=[{"role": "user", "content": rendered}],
+                    artifact_desc=f"{self.name} step {step}/{total}",
+                )
+                accumulated = response.content
 
         # --- Persist checkpoint ---
         # Track (label, artifact_id) pairs so content edits are detected.
@@ -180,6 +223,7 @@ class FoldSynthesis(Transform):
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
                 model_config=model_config,
+                agent_fingerprint=agent_fingerprint,
                 metadata=output_metadata,
             )
         ]

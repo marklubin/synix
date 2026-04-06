@@ -25,6 +25,9 @@ class ResolvedArtifact:
     layer_level: int
     provenance_chain: list[str]  # BFS walk from parent_labels
     metadata: dict
+    prompt_id: str | None = None
+    agent_fingerprint: str | None = None
+    model_config: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +121,9 @@ class ReleaseClosure:
                 layer_level=metadata.get("layer_level", 0),
                 provenance_chain=provenance_chain,
                 metadata=metadata,
+                prompt_id=art_obj.get("prompt_id"),
+                agent_fingerprint=art_obj.get("agent_fingerprint"),
+                model_config=art_obj.get("model_config"),
             )
 
         # Parse projection declarations
