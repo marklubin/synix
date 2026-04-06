@@ -21,13 +21,6 @@ from synix.core.search_handles import (  # noqa: F401
     SearchSurfaceLookupError,
     SearchSurfaceUnavailableError,
 )
-from synix.workspace import (  # noqa: F401
-    Workspace,
-    WorkspaceConfig,
-    WorkspaceState,
-    init_workspace,
-    open_workspace,
-)
 from synix.sdk import (  # noqa: F401
     SDK_VERSION,
     ArtifactNotFoundError,
@@ -46,4 +39,11 @@ from synix.sdk import (  # noqa: F401
     SynixNotFoundError,
     init,
     open_project,
+)
+from synix.workspace import (  # noqa: F401
+    Workspace,
+    WorkspaceConfig,
+    WorkspaceState,
+    init_workspace,
+    open_workspace,
 )
