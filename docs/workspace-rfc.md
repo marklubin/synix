@@ -84,17 +84,19 @@ viewer_port = 9471
 
 `project_dir` disappears from config — workspace knows its own root from discovery.
 
-### Config file discovery
+### Config file
 
-Deterministic precedence (first match wins):
-1. Explicit `--config path` argument → use that file, error if missing
-2. `synix.toml` in project root → new format
-3. `synix-server.toml` in project root → old format (backward compat)
-4. No config file → bare workspace (just Project, no buckets/vllm/auto_build)
+One well-known location: **`synix.toml`** at the workspace root. No fallback chain, no precedence rules, no discovery logic.
 
-**If both `synix.toml` and `synix-server.toml` exist:** `synix.toml` wins, `synix-server.toml` is ignored, a warning is logged. Users should migrate and delete the old file.
+```
+my-project/
+├── synix.toml        ← workspace config (required for serve/viewer)
+├── pipeline.py       ← pipeline definition
+├── sources/          ← bucket directories
+└── .synix/           ← build state
+```
 
-**Old format handling:** When the parser finds `[server].project_dir`, it maps to the new schema: `project_dir` becomes implicit (the directory containing the config file), other fields map 1:1. No mixed-format support — a file is either old or new format based on presence of `[workspace]` section.
+`open_workspace()` looks for `synix.toml` in the project root. If it doesn't exist, the workspace has no config (bare mode — just a Project with .synix/). The old `synix-server.toml` format is handled by a one-time migration: `synix migrate-config` renames and restructures the file.
 
 ---
 
@@ -231,9 +233,28 @@ class WorkspaceRuntime:
 - `try_discover_release()` uses `workspace.releases()` instead of re-opening project
 - No route handler changes needed — they already use `state.release` and `state.project`
 
-### Phase 5: Deploy config update
+### Phase 5: Viewer shows workspace identity
 
-**Modify: `deploy/synix-server.toml`** — add `[workspace]` section, keep `[server]` for ports
+The viewer becomes workspace-aware in the UI:
+
+**Header/sidebar:** Shows workspace name and state badge (FRESH / CONFIGURED / BUILT / RELEASED / SERVING). Replaces the generic "Viewer" logo text.
+
+**Pipeline tab:** Shows workspace config summary — name, pipeline path, buckets list, vllm model, auto_build window. This is the "what am I looking at" context that's currently invisible.
+
+**Status API:** `GET /api/status` returns workspace identity:
+```json
+{
+  "workspace": "my-agent-memory",
+  "state": "released",
+  "loaded": true,
+  "artifact_count": 42,
+  "release": "local"
+}
+```
+
+### Phase 6: Deploy config update
+
+**Rename: `deploy/synix-server.toml` → `deploy/synix.toml`**
 **Modify: `deploy/pipeline.py`** — no changes needed (pipeline is workspace-independent)
 
 ---
@@ -273,7 +294,7 @@ Resolutions from review feedback:
 |---------|------------|
 | Config types in server/ (backwards coupling) | Types move to workspace.py, server/config.py re-exports for compat |
 | Both `open_project()` and `open_workspace()` exported | Documented guidance: Project for SDK/scripts, Workspace for operations |
-| Config precedence when both files exist | `synix.toml` wins, log warning, no mixed-format support |
+| Config precedence complexity | Single well-known location: `synix.toml`. No fallback chain. Migration CLI for old format. |
 | God object risk | Workspace is composition only — no build/search/transform logic |
 | Multi-process safety | Single-process model (explicit constraint), same as current _state |
 | WorkspaceState misleading for stale releases | States describe capability not recency; staleness is a separate concern |
