@@ -160,6 +160,19 @@ Every PR must link to the GitHub issues it addresses:
 4. **Reference without closing** (`#N`) for issues only partially addressed
 5. **PR body format**: `Closes #N` directives at the top, then `## Summary` with bullet points linking each feature back to its issue number
 
+## PR Review Loop (mandatory)
+
+After creating or pushing to a PR, **always run the full review loop automatically** — do not wait for the user to ask:
+
+1. **Wait for CI**: `gh pr checks <number> --watch` — wait until all checks complete
+2. **Read reviews**: `gh api repos/marklubin/synix/issues/<number>/comments` — read the latest Claude and OpenAI reviews
+3. **Fix actionable issues**: Address legitimate bugs, test gaps, and correctness concerns. Ignore repeated design feedback that was already acknowledged in prior rounds.
+4. **Commit and push** fixes
+5. **Repeat from step 1** until CI is green and no new actionable review findings remain
+6. **Report** the final status to the user: "CI green, reviews addressed, ready to merge" or "Blocked on X"
+
+This loop is the default — every `git push` to a PR triggers it. Do not stop after pushing and wait for the user to say "check CI."
+
 ## Critical Rules
 
 - **Customer-facing docs** (READMEs, templates, `synix init` output) must use `uvx synix` for all CLI commands. Internal dev docs (CLAUDE.md, test files) use `uv run synix`.
