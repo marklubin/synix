@@ -38,12 +38,11 @@ class ViewerState:
         self._children_index: dict[str, list[str]] | None = None
         self._search_cache_key: tuple[str, str | None] = ("", None)
         self._search_cache_results: list = []
+        self._last_discovery_attempt: float = 0.0
 
     @property
     def has_release(self) -> bool:
         return self.release is not None
-
-    _last_discovery_attempt: float = 0.0
 
     def try_discover_release(self) -> bool:
         """Try to discover a release from the project.  Returns True if found.

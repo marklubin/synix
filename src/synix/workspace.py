@@ -164,6 +164,9 @@ class Workspace:
             return WorkspaceState.BUILT
         if self._project.pipeline is not None or self._config.buckets:
             return WorkspaceState.CONFIGURED
+        # Check if pipeline file exists on disk (even if not loaded yet)
+        if self._config.pipeline_path and (self.root / self._config.pipeline_path).exists():
+            return WorkspaceState.CONFIGURED
         return WorkspaceState.FRESH
 
     # --- Delegation to Project ---
