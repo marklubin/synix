@@ -336,10 +336,57 @@ The viewer becomes workspace-aware in the UI:
 }
 ```
 
-### Phase 6: Deploy config update
+### Phase 6: Migrate all templates to workspaces
+
+Every demo template becomes a proper workspace with `synix.toml`.
+
+**For each template** (`01-chatbot-export-synthesis` through `08-agent-memory`):
+1. Add `synix.toml` with `[workspace]` name + `pipeline_path`
+2. `case.py` steps that pass `PIPELINE` explicitly continue to work (backward compat) — but new demos can omit it since the workspace config specifies `pipeline_path`
+3. Regenerate all golden files (`synix demo run <template> --update-goldens`)
+4. Sync templates to `src/synix/templates/` via `scripts/sync-templates`
+
+**Template synix.toml example** (02-tv-returns):
+```toml
+[workspace]
+name = "tv-returns"
+pipeline_path = "pipeline.py"
+```
+
+Templates don't need `[buckets]`, `[vllm]`, or `[server]` — those are operational concerns. The workspace config in templates is minimal (just identity + pipeline pointer).
+
+**`synix init` scaffolding update:**
+- `synix init my-workspace` now generates `synix.toml` alongside `pipeline.py` and `.synix/`
+- Template selection (if any) copies the template's `synix.toml`
+
+### Phase 7: E2e test for full workspace lifecycle
+
+**New: `tests/e2e/test_workspace_e2e.py`** (~150 lines)
+
+Tests the complete user flow from the "User workflow" section:
+1. `init_workspace("test-ws")` — verify synix.toml, pipeline.py, sources/, .synix/ created
+2. Load pipeline, add source files to sources/
+3. `workspace.build()` — verify artifacts produced
+4. `workspace.release_to("local")` — verify release materialized
+5. `workspace.release("local").search("query")` — verify search works
+6. Verify `workspace.state` transitions: FRESH → CONFIGURED → BUILT → RELEASED
+7. Verify `workspace.name`, `workspace.root`, `workspace.synix_dir` correct
+8. Verify `workspace.buckets` parsed from synix.toml
+9. Test bare workspace (no synix.toml) — state is FRESH, buckets empty
+
+**New: `tests/e2e/test_workspace_serve.py`** (~100 lines)
+
+Tests the server integration (with mocked LLM):
+1. Create workspace with synix.toml (buckets + auto_build)
+2. `workspace.activate_runtime(queue, prompt_store, lock)`
+3. Verify state is SERVING
+4. Ingest via `queue.enqueue()` → verify queue tracks it
+5. Verify `workspace.runtime.queue`, `.prompt_store`, `.build_lock` accessible
+
+### Phase 8: Deploy config update
 
 **Rename: `deploy/synix-server.toml` → `deploy/synix.toml`**
-**Modify: `deploy/pipeline.py`** — no changes needed (pipeline is workspace-independent)
+**Move deployment to: `/srv/synix/agent-memory/`**
 
 ---
 
@@ -354,21 +401,23 @@ The viewer becomes workspace-aware in the UI:
 | `src/synix/server/mcp_tools.py` | Replace _state with _workspace | ~30 lines changed |
 | `src/synix/server/api.py` | Update state references | ~10 lines changed |
 | `src/synix/viewer/__init__.py` | Accept workspace param | ~10 lines |
-| `src/synix/viewer/server.py` | ViewerState.from_workspace | ~20 lines |
+| `src/synix/viewer/server.py` | ViewerState.from_workspace, workspace identity in status | ~30 lines |
 | `src/synix/cli/serve_commands.py` | Use open_workspace | ~10 lines |
-| `deploy/synix-server.toml` | Add [workspace] section | ~3 lines |
+| `templates/*/synix.toml` | NEW — workspace config for each template (6 files) | ~5 lines each |
+| `templates/*/golden/*.txt` | Regenerated — all goldens updated for workspace output | varies |
+| `deploy/synix.toml` | Renamed from synix-server.toml, new format | ~30 lines |
 | `tests/unit/test_workspace.py` | NEW — state, config, discovery, delegation | ~150 lines |
-| `tests/unit/test_workspace_config.py` | NEW — TOML parsing, precedence, backward compat | ~100 lines |
-| `tests/e2e/test_workspace_e2e.py` | NEW — full lifecycle: init → build → release → search | ~100 lines |
+| `tests/unit/test_workspace_config.py` | NEW — TOML parsing, bare mode, migration | ~100 lines |
+| `tests/e2e/test_workspace_e2e.py` | NEW — full lifecycle: init → build → release → search | ~150 lines |
+| `tests/e2e/test_workspace_serve.py` | NEW — server integration: runtime, queue, prompts | ~100 lines |
 
 ## Verification
 
 1. `uv run pytest tests/unit/test_workspace.py tests/unit/test_workspace_config.py -v` — unit tests
-2. `uv run pytest tests/e2e/test_workspace_e2e.py -v` — full lifecycle e2e
-3. `uv run pytest tests/ --ignore=tests/e2e/mesh` — full regression
-4. `uv run release` — full gate (lint + test + demos)
-5. `podman build -t synix-server -f deploy/Containerfile . && bash deploy/smoke-test/run.sh` — container e2e
-6. Verify old `synix-server.toml` format still works: `synix serve --config synix-server.toml`
+2. `uv run pytest tests/e2e/test_workspace_e2e.py tests/e2e/test_workspace_serve.py -v` — lifecycle + server e2e
+3. `uv run release` — full gate (lint + test + all 6 demos with updated goldens)
+4. `podman build -t synix-server -f deploy/Containerfile . && bash deploy/smoke-test/run.sh` — container e2e
+5. `synix init test-workspace && ls test-workspace/` — verify scaffold includes synix.toml
 
 ## Decisions log
 
@@ -384,3 +433,6 @@ Resolutions from review feedback:
 | WorkspaceState misleading for stale releases | States describe capability not recency; staleness is a separate concern |
 | Missing e2e test | Added `tests/e2e/test_workspace_e2e.py` to plan |
 | `serve_from_config()` permanent or transitional? | Transitional — kept for one release cycle, then removed |
+| Templates need workspaces? | Yes — every template gets `synix.toml`, goldens regenerated |
+| Deploy path | `/srv/synix/agent-memory/` (named after what it does) |
+| `synix init` scaffolding | Generates synix.toml + pipeline.py + sources/ + .synix/ in one command |
