@@ -171,7 +171,11 @@ async def run_build_worker(config: ServerConfig, queue: DocumentQueue, build_loc
 
 
 def run_viewer(config: ServerConfig) -> None:
-    """Start the synix viewer Flask app (blocking, meant for thread)."""
+    """Start the synix viewer Flask app (blocking, meant for thread).
+
+    Starts immediately with just the project — the viewer discovers
+    releases lazily via before_request hook.
+    """
     try:
         import synix
         from synix.viewer import serve as viewer_serve
@@ -183,14 +187,17 @@ def run_viewer(config: ServerConfig) -> None:
         from synix.server.mcp_tools import _RELEASE_NAME
 
         project = synix.open_project(config.project_dir)
-        names = project.releases()
-        if not names:
-            logger.warning("Viewer: no releases found — build and release first")
-            return
 
-        release_name = _RELEASE_NAME if _RELEASE_NAME in names else names[0]
-        release = project.release(release_name)
-        logger.info("Viewer: serving release %r", release_name)
+        # Try to bind to an existing release, but start either way
+        release = None
+        names = project.releases()
+        if names:
+            release_name = _RELEASE_NAME if _RELEASE_NAME in names else names[0]
+            release = project.release(release_name)
+            logger.info("Viewer: serving release %r", release_name)
+        else:
+            logger.info("Viewer: no release yet — starting in discovery mode")
+
         viewer_serve(
             release,
             host=config.viewer_host,

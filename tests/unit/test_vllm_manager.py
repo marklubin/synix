@@ -39,7 +39,7 @@ class TestVLLMConfig:
         assert cfg.max_model_len == 131072
         assert cfg.gpu_memory_utilization == 0.90
         assert cfg.extra_args == []
-        assert cfg.startup_timeout == 120
+        assert cfg.startup_timeout == 300
 
     def test_config_base_url(self, manager):
         assert manager.base_url == "http://localhost:8100/v1"

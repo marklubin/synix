@@ -40,3 +40,10 @@ from synix.sdk import (  # noqa: F401
     init,
     open_project,
 )
+from synix.workspace import (  # noqa: F401
+    Workspace,
+    WorkspaceConfig,
+    WorkspaceState,
+    init_workspace,
+    open_workspace,
+)
