@@ -43,12 +43,22 @@ class ViewerState:
     def has_release(self) -> bool:
         return self.release is not None
 
+    _last_discovery_attempt: float = 0.0
+
     def try_discover_release(self) -> bool:
-        """Try to discover a release from the project.  Returns True if found."""
+        """Try to discover a release from the project.  Returns True if found.
+
+        Attempts at most once every 5 seconds to avoid per-request filesystem churn.
+        """
         if self.release is not None:
             return True
         if self.project is None:
             return False
+        # Cooldown: don't re-check more than once per 5 seconds
+        now = time.monotonic()
+        if now - self._last_discovery_attempt < 5.0:
+            return False
+        self._last_discovery_attempt = now
         try:
             # Re-open to pick up refs created since server start
             import synix as _synix

@@ -230,12 +230,21 @@ class Workspace:
     # --- Private helpers ---
 
     def _has_snapshots(self) -> bool:
+        """Check if any build snapshot exists by resolving HEAD → ref → OID."""
         try:
-            from synix.build.refs import RefStore
-
-            ref_store = RefStore(self.synix_dir)
-            oid = ref_store.read_ref("refs/heads/main")
-            return oid is not None
+            head_path = self.synix_dir / "HEAD"
+            if not head_path.exists():
+                return False
+            head_content = head_path.read_text().strip()
+            # HEAD is "ref: refs/heads/main" — follow the indirection
+            if head_content.startswith("ref: "):
+                ref_name = head_content[5:]
+                from synix.build.refs import RefStore
+                ref_store = RefStore(self.synix_dir)
+                oid = ref_store.read_ref(ref_name)
+                return oid is not None
+            # HEAD is a direct OID
+            return len(head_content) >= 40
         except Exception:
             return False
 

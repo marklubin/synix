@@ -155,15 +155,16 @@ class TestBuckets:
         d = configured_workspace.bucket_dir("docs")
         assert d == configured_workspace.root / "sources" / "docs"
 
-    def test_bucket_dir_absolute(self) -> None:
+    def test_bucket_dir_absolute(self, tmp_path: Path) -> None:
+        abs_path = str(tmp_path / "absolute-bucket")
         config = WorkspaceConfig(
-            buckets=[BucketConfig(name="abs", dir="/tmp/absolute-bucket")]
+            buckets=[BucketConfig(name="abs", dir=abs_path)]
         )
         import synix
 
-        project = synix.init("/tmp/test-abs-bucket-ws")
+        project = synix.init(str(tmp_path / "abs-bucket-ws"))
         ws = Workspace(project, config)
-        assert ws.bucket_dir("abs") == Path("/tmp/absolute-bucket")
+        assert ws.bucket_dir("abs") == Path(abs_path)
 
     def test_bucket_dir_not_found(self, configured_workspace: Workspace) -> None:
         with pytest.raises(ValueError, match="not found"):
