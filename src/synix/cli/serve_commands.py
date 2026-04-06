@@ -22,7 +22,7 @@ import click
 def serve(config_path: str, mcp_port: int | None, viewer: bool, verbose: bool) -> None:
     """Start the synix knowledge server."""
     from synix.server.config import load_config
-    from synix.server.serve import serve as run_serve
+    from synix.server.serve import serve_from_config as run_serve
 
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,

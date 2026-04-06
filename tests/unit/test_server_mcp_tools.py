@@ -8,27 +8,36 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from synix.server.config import BucketConfig, ServerConfig
-from synix.server.mcp_tools import _state, get_context, ingest, list_buckets, search
+from synix.server import mcp_tools
+from synix.server.mcp_tools import get_context, ingest, list_buckets, search
+from synix.workspace import BucketConfig, Workspace, WorkspaceConfig
 
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    """Reset global MCP state before each test."""
-    old_project = _state["project"]
-    old_config = _state["config"]
-    _state["project"] = None
-    _state["config"] = None
+    """Reset global MCP workspace before each test."""
+    old_workspace = mcp_tools._workspace
+    mcp_tools._workspace = None
     yield
-    _state["project"] = old_project
-    _state["config"] = old_config
+    mcp_tools._workspace = old_workspace
+
+
+def _make_workspace(project, tmp_path: Path, buckets: list[BucketConfig] | None = None) -> Workspace:
+    """Helper: create a Workspace for tests with the given project and buckets."""
+    if buckets is None:
+        buckets = []
+    config = WorkspaceConfig(name="test", buckets=buckets)
+    ws = Workspace(project, config)
+    # Ensure bucket_dir resolves relative to tmp_path (the mock project root)
+    ws._project.project_root = tmp_path
+    return ws
 
 
 @pytest.fixture()
-def server_config(tmp_path: Path) -> ServerConfig:
-    """Create a ServerConfig with a real temp directory."""
-    return ServerConfig(
-        project_dir=str(tmp_path),
+def ws_config(tmp_path: Path) -> WorkspaceConfig:
+    """Create a WorkspaceConfig with a real temp directory."""
+    return WorkspaceConfig(
+        name="test",
         buckets=[
             BucketConfig(
                 name="sessions",
@@ -46,9 +55,11 @@ def server_config(tmp_path: Path) -> ServerConfig:
     )
 
 
-def test_ingest_writes_file(tmp_path: Path, server_config: ServerConfig):
+def test_ingest_writes_file(tmp_path: Path, ws_config: WorkspaceConfig):
     """ingest() creates the file in the correct bucket directory."""
-    _state["config"] = server_config
+    mock_project = MagicMock()
+    mock_project.project_root = tmp_path
+    mcp_tools._workspace = Workspace(mock_project, ws_config)
 
     result = ingest("sessions", "hello world", "test.jsonl")
 
@@ -59,17 +70,21 @@ def test_ingest_writes_file(tmp_path: Path, server_config: ServerConfig):
     assert "sessions" in result
 
 
-def test_ingest_invalid_bucket(server_config: ServerConfig):
+def test_ingest_invalid_bucket(tmp_path: Path, ws_config: WorkspaceConfig):
     """ingest() raises ValueError for unknown bucket."""
-    _state["config"] = server_config
+    mock_project = MagicMock()
+    mock_project.project_root = tmp_path
+    mcp_tools._workspace = Workspace(mock_project, ws_config)
 
     with pytest.raises(ValueError, match="nonexistent"):
         ingest("nonexistent", "content", "file.txt")
 
 
-def test_list_buckets_shows_configured(server_config: ServerConfig):
+def test_list_buckets_shows_configured(tmp_path: Path, ws_config: WorkspaceConfig):
     """list_buckets() returns all configured bucket names and descriptions."""
-    _state["config"] = server_config
+    mock_project = MagicMock()
+    mock_project.project_root = tmp_path
+    mcp_tools._workspace = Workspace(mock_project, ws_config)
 
     result = list_buckets()
 
@@ -79,15 +94,17 @@ def test_list_buckets_shows_configured(server_config: ServerConfig):
     assert "Notes and specs" in result
 
 
-def test_list_buckets_empty():
+def test_list_buckets_empty(tmp_path: Path):
     """list_buckets() handles no configured buckets."""
-    _state["config"] = ServerConfig(project_dir="/tmp/test", buckets=[])
+    mock_project = MagicMock()
+    mock_project.project_root = tmp_path
+    mcp_tools._workspace = Workspace(mock_project, WorkspaceConfig(name="test", buckets=[]))
 
     result = list_buckets()
     assert "No buckets configured" in result
 
 
-def test_search_with_mock_project():
+def test_search_with_mock_project(tmp_path: Path):
     """search() calls project.release('local').search() and formats results."""
     mock_result = SimpleNamespace(
         score=0.95,
@@ -100,9 +117,9 @@ def test_search_with_mock_project():
 
     mock_project = MagicMock()
     mock_project.release.return_value = mock_release
+    mock_project.project_root = tmp_path
 
-    _state["project"] = mock_project
-    _state["config"] = ServerConfig(project_dir="/tmp/test")
+    mcp_tools._workspace = Workspace(mock_project, WorkspaceConfig(name="test"))
 
     result = search("test query")
 
@@ -119,31 +136,31 @@ def test_search_with_mock_project():
     assert "Test search result content" in result
 
 
-def test_search_no_results():
+def test_search_no_results(tmp_path: Path):
     """search() returns 'No results' when nothing matches."""
     mock_release = MagicMock()
     mock_release.search.return_value = []
 
     mock_project = MagicMock()
     mock_project.release.return_value = mock_release
+    mock_project.project_root = tmp_path
 
-    _state["project"] = mock_project
-    _state["config"] = ServerConfig(project_dir="/tmp/test")
+    mcp_tools._workspace = Workspace(mock_project, WorkspaceConfig(name="test"))
 
     result = search("nothing matches")
     assert "No results found" in result
 
 
-def test_search_with_layers_filter():
+def test_search_with_layers_filter(tmp_path: Path):
     """search() parses comma-separated layers string into a list."""
     mock_release = MagicMock()
     mock_release.search.return_value = []
 
     mock_project = MagicMock()
     mock_project.release.return_value = mock_release
+    mock_project.project_root = tmp_path
 
-    _state["project"] = mock_project
-    _state["config"] = ServerConfig(project_dir="/tmp/test")
+    mcp_tools._workspace = Workspace(mock_project, WorkspaceConfig(name="test"))
 
     search("query", layers="episodes, topics")
 
@@ -156,16 +173,16 @@ def test_search_with_layers_filter():
     )
 
 
-def test_get_context_with_mock_project():
+def test_get_context_with_mock_project(tmp_path: Path):
     """get_context() calls flat_file on the local release."""
     mock_release = MagicMock()
     mock_release.flat_file.return_value = "# Context\nSome content here."
 
     mock_project = MagicMock()
     mock_project.release.return_value = mock_release
+    mock_project.project_root = tmp_path
 
-    _state["project"] = mock_project
-    _state["config"] = ServerConfig(project_dir="/tmp/test")
+    mcp_tools._workspace = Workspace(mock_project, WorkspaceConfig(name="test"))
 
     result = get_context("context-doc")
 
@@ -176,7 +193,7 @@ def test_get_context_with_mock_project():
 
 def test_search_requires_project():
     """search() raises ValueError when no project is open."""
-    _state["project"] = None
+    mcp_tools._workspace = None
 
     with pytest.raises(ValueError, match="No project open"):
         search("test")
@@ -184,7 +201,7 @@ def test_search_requires_project():
 
 def test_get_context_requires_project():
     """get_context() raises ValueError when no project is open."""
-    _state["project"] = None
+    mcp_tools._workspace = None
 
     with pytest.raises(ValueError, match="No project open"):
         get_context()

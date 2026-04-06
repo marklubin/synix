@@ -1,0 +1,3 @@
+[workspace]
+name = "batch-build"
+pipeline_path = "pipeline.py"

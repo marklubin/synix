@@ -8,11 +8,33 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
+from synix.server import mcp_tools
 from synix.server.api import api_routes
 from synix.server.config import BucketConfig, BuildQueueConfig, ServerConfig
-from synix.server.mcp_tools import _state, server_mcp
+from synix.server.mcp_tools import server_mcp
+from synix.workspace import BucketConfig as WsBucketConfig
+from synix.workspace import Workspace, WorkspaceConfig
 
 TOY_PIPELINE_DIR = Path(__file__).parent / "toy-pipeline"
+
+
+def _make_workspace_config(config: ServerConfig) -> WorkspaceConfig:
+    """Convert ServerConfig buckets to WorkspaceConfig for tests."""
+    ws_buckets = [
+        WsBucketConfig(
+            name=b.name,
+            dir=b.dir,
+            patterns=b.patterns,
+            description=b.description,
+        )
+        for b in config.buckets
+    ]
+    return WorkspaceConfig(
+        name="test",
+        pipeline_path=config.pipeline_path,
+        buckets=ws_buckets,
+        auto_build=config.auto_build,
+    )
 
 
 @pytest.fixture
@@ -88,9 +110,10 @@ def server_app(server_project):
     if pipeline_path.exists():
         project.load_pipeline(str(pipeline_path))
 
-    # Set global state (same as serve.py does)
-    _state["project"] = project
-    _state["config"] = config
+    # Set global workspace (same as serve.py does)
+    ws_config = _make_workspace_config(config)
+    workspace = Workspace(project, ws_config)
+    mcp_tools._workspace = workspace
 
     app = server_mcp.streamable_http_app()
     app.routes.extend(api_routes)
@@ -98,8 +121,7 @@ def server_app(server_project):
     yield app
 
     # Cleanup
-    _state["project"] = None
-    _state["config"] = None
+    mcp_tools._workspace = None
 
 
 @pytest.fixture
@@ -153,14 +175,14 @@ def built_server(server_project, mock_llm):
     # Re-open to pick up release
     project = synix.open_project(str(project_dir))
 
-    # Set global state
-    _state["project"] = project
-    _state["config"] = config
+    # Set global workspace
+    ws_config = _make_workspace_config(config)
+    workspace = Workspace(project, ws_config)
+    mcp_tools._workspace = workspace
 
     app = server_mcp.streamable_http_app()
     app.routes.extend(api_routes)
 
     yield TestClient(app), project_dir, config
 
-    _state["project"] = None
-    _state["config"] = None
+    mcp_tools._workspace = None

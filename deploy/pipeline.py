@@ -329,8 +329,13 @@ pipeline.add(reference_chunks)
 main_surface = SearchSurface(
     "main",
     sources=[
-        core, work_status, user_model,
-        short_window, long_window, research_threads, open_threads,
+        core,
+        work_status,
+        user_model,
+        short_window,
+        long_window,
+        research_threads,
+        open_threads,
     ],
     modes=["fulltext", "semantic"],
     embedding_config={

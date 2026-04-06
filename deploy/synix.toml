@@ -1,3 +1,7 @@
+[workspace]
+name = "agent-memory"
+pipeline_path = "pipeline.py"
+
 # Synix Knowledge Server — container deployment config
 #
 # Paths are relative to project_dir (/data inside container).

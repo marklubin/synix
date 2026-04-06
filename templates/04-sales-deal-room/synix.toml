@@ -1,0 +1,3 @@
+[workspace]
+name = "sales-deal-room"
+pipeline_path = "pipeline.py"

@@ -80,21 +80,25 @@ class TestState:
     def test_configured_with_pipeline(self, workspace: Workspace, tmp_path: Path) -> None:
         # Write a minimal pipeline
         pipeline_file = workspace.root / "pipeline.py"
-        pipeline_file.write_text(textwrap.dedent("""\
+        pipeline_file.write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test")
             pipeline.add(Source("notes"))
-        """))
+        """)
+        )
         workspace.load_pipeline()
         assert workspace.state == WorkspaceState.CONFIGURED
 
     def test_built(self, workspace: Workspace, mock_llm) -> None:
         pipeline_file = workspace.root / "pipeline.py"
-        pipeline_file.write_text(textwrap.dedent("""\
+        pipeline_file.write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test", source_dir="./sources")
             pipeline.add(Source("notes"))
-        """))
+        """)
+        )
         sources = workspace.root / "sources"
         sources.mkdir(exist_ok=True)
         (sources / "note.md").write_text("hello world")
@@ -104,11 +108,13 @@ class TestState:
 
     def test_released(self, workspace: Workspace, mock_llm) -> None:
         pipeline_file = workspace.root / "pipeline.py"
-        pipeline_file.write_text(textwrap.dedent("""\
+        pipeline_file.write_text(
+            textwrap.dedent("""\
             from synix import Pipeline, Source
             pipeline = Pipeline("test", source_dir="./sources")
             pipeline.add(Source("notes"))
-        """))
+        """)
+        )
         sources = workspace.root / "sources"
         sources.mkdir(exist_ok=True)
         (sources / "note.md").write_text("hello world")
@@ -157,9 +163,7 @@ class TestBuckets:
 
     def test_bucket_dir_absolute(self, tmp_path: Path) -> None:
         abs_path = str(tmp_path / "absolute-bucket")
-        config = WorkspaceConfig(
-            buckets=[BucketConfig(name="abs", dir=abs_path)]
-        )
+        config = WorkspaceConfig(buckets=[BucketConfig(name="abs", dir=abs_path)])
         import synix
 
         project = synix.init(str(tmp_path / "abs-bucket-ws"))
@@ -199,7 +203,8 @@ class TestRuntime:
 class TestConfigParsing:
     def test_parse_full_toml(self, tmp_path: Path) -> None:
         toml = tmp_path / "synix.toml"
-        toml.write_text(textwrap.dedent("""\
+        toml.write_text(
+            textwrap.dedent("""\
             [workspace]
             name = "my-memory"
             pipeline_path = "my_pipeline.py"
@@ -220,7 +225,8 @@ class TestConfigParsing:
             enabled = true
             model = "Qwen/Qwen3.5-2B"
             port = 8100
-        """))
+        """)
+        )
 
         config = _parse_toml(toml, tmp_path)
         assert config.name == "my-memory"
@@ -232,7 +238,7 @@ class TestConfigParsing:
 
     def test_parse_minimal_toml(self, tmp_path: Path) -> None:
         toml = tmp_path / "synix.toml"
-        toml.write_text("[workspace]\nname = \"bare\"\n")
+        toml.write_text('[workspace]\nname = "bare"\n')
 
         config = _parse_toml(toml, tmp_path)
         assert config.name == "bare"
@@ -249,14 +255,16 @@ class TestConfigParsing:
 
     def test_server_bindings(self, tmp_path: Path) -> None:
         toml = tmp_path / "synix.toml"
-        toml.write_text(textwrap.dedent("""\
+        toml.write_text(
+            textwrap.dedent("""\
             [workspace]
             name = "test"
 
             [server]
             mcp_port = 9000
             viewer_port = 9001
-        """))
+        """)
+        )
 
         bindings = load_server_bindings(str(toml))
         assert bindings.mcp_port == 9000
@@ -281,9 +289,7 @@ class TestFactories:
 
     def test_open_workspace_with_toml(self, tmp_path: Path) -> None:
         synix.init(str(tmp_path / "configured-ws"))
-        (tmp_path / "configured-ws" / "synix.toml").write_text(
-            '[workspace]\nname = "my-configured"\n'
-        )
+        (tmp_path / "configured-ws" / "synix.toml").write_text('[workspace]\nname = "my-configured"\n')
         ws = open_workspace(str(tmp_path / "configured-ws"))
         assert ws.name == "my-configured"
 

@@ -1,0 +1,3 @@
+[workspace]
+name = "team-report"
+pipeline_path = "pipeline.py"

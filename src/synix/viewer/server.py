@@ -34,11 +34,27 @@ class ViewerState:
         self.release = release
         self.title = title
         self.project = project
+        self._workspace = None  # set via from_workspace()
         self._layer_cache: dict[str, list[dict]] = {}
         self._children_index: dict[str, list[str]] | None = None
         self._search_cache_key: tuple[str, str | None] = ("", None)
         self._search_cache_results: list = []
         self._last_discovery_attempt: float = 0.0
+
+    @classmethod
+    def from_workspace(cls, workspace, title: str = "Viewer") -> ViewerState:
+        """Create ViewerState from a Workspace, discovering release if available."""
+        release = None
+        try:
+            names = workspace.releases()
+            if names:
+                target = "local" if "local" in names else names[0]
+                release = workspace.release(target)
+        except Exception:
+            logger.debug("Workspace release discovery failed", exc_info=True)
+        state = cls(release, title, project=workspace.project)
+        state._workspace = workspace
+        return state
 
     @property
     def has_release(self) -> bool:
@@ -48,10 +64,11 @@ class ViewerState:
         """Try to discover a release from the project.  Returns True if found.
 
         Attempts at most once every 5 seconds to avoid per-request filesystem churn.
+        If a workspace is bound, uses it for discovery.
         """
         if self.release is not None:
             return True
-        if self.project is None:
+        if self.project is None and self._workspace is None:
             return False
         # Cooldown: don't re-check more than once per 5 seconds
         now = time.monotonic()
@@ -59,9 +76,16 @@ class ViewerState:
             return False
         self._last_discovery_attempt = now
         try:
-            # Re-open to pick up refs created since server start
-            import synix as _synix
-            project = _synix.open_project(str(self.project.project_root))
+            if self._workspace is not None:
+                # Use workspace for discovery
+                import synix as _synix
+
+                project = _synix.open_project(str(self._workspace.root))
+            else:
+                # Re-open to pick up refs created since server start
+                import synix as _synix
+
+                project = _synix.open_project(str(self.project.project_root))
             names = project.releases()
             if names:
                 target = "local" if "local" in names else names[0]
@@ -191,14 +215,16 @@ def create_app(state: ViewerState) -> Flask:
 
     @app.route("/api/status")
     def api_status():
-        return jsonify(
-            {
-                "loaded": state.has_release,
-                "title": state.title,
-                "artifact_count": state.artifact_count,
-                "release": state.release.name if state.has_release else None,
-            }
-        )
+        result = {
+            "loaded": state.has_release,
+            "title": state.title,
+            "artifact_count": state.artifact_count,
+            "release": state.release.name if state.has_release else None,
+        }
+        if state._workspace:
+            result["workspace"] = state._workspace.name
+            result["state"] = state._workspace.state.value
+        return jsonify(result)
 
     @app.route("/api/layers")
     def api_layers():

@@ -243,6 +243,7 @@ class Workspace:
             if head_content.startswith("ref: "):
                 ref_name = head_content[5:]
                 from synix.build.refs import RefStore
+
                 ref_store = RefStore(self.synix_dir)
                 oid = ref_store.read_ref(ref_name)
                 return oid is not None
@@ -291,9 +292,7 @@ def init_workspace(path: str | Path, pipeline: Any = None) -> Workspace:
     toml_path = project_root / "synix.toml"
     if not toml_path.exists():
         name = project_root.name
-        toml_path.write_text(
-            f'[workspace]\nname = "{name}"\npipeline_path = "pipeline.py"\n'
-        )
+        toml_path.write_text(f'[workspace]\nname = "{name}"\npipeline_path = "pipeline.py"\n')
         logger.info("Created %s", toml_path)
 
     # Ensure source directories exist
@@ -355,8 +354,16 @@ def _parse_toml(path: Path, project_root: Path) -> WorkspaceConfig:
     # vLLM — only pass present fields, let dataclass defaults handle the rest
     vllm_raw = raw.get("vllm", {})
     vllm_kwargs: dict = {}
-    _vllm_keys = ("enabled", "model", "gpu_device", "port", "max_model_len",
-                  "gpu_memory_utilization", "extra_args", "startup_timeout")
+    _vllm_keys = (
+        "enabled",
+        "model",
+        "gpu_device",
+        "port",
+        "max_model_len",
+        "gpu_memory_utilization",
+        "extra_args",
+        "startup_timeout",
+    )
     for key in _vllm_keys:
         if key in vllm_raw:
             val = vllm_raw[key]

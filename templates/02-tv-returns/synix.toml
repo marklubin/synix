@@ -1,0 +1,3 @@
+[workspace]
+name = "tv-returns"
+pipeline_path = "pipeline.py"

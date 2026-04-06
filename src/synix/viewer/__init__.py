@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from synix.sdk import Project, Release
+    from synix.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +17,24 @@ def create_app(
     *,
     title: str = "Viewer",
     project: Project | None = None,
+    workspace: Workspace | None = None,
 ):
     """Create a Flask app for browsing a synix release.
 
     Can be started with just a *project* and no release — the viewer
     will show a "waiting for first build" state and discover the release
     once one becomes available.
+
+    If *workspace* is provided, the viewer binds to it, discovers
+    the release automatically, and shows workspace identity in the UI.
     """
     from synix.viewer.server import ViewerState
     from synix.viewer.server import create_app as _create_app
 
-    state = ViewerState(release, title, project=project)
+    if workspace is not None:
+        state = ViewerState.from_workspace(workspace, title)
+    else:
+        state = ViewerState(release, title, project=project)
     return _create_app(state)
 
 
@@ -37,12 +45,16 @@ def serve(
     port: int = 9471,
     title: str = "Viewer",
     project: Project | None = None,
+    workspace: Workspace | None = None,
 ):
     """Start the viewer dev server.
 
     If *release* is None but *project* is provided, the viewer starts
     immediately and discovers the release when the first build completes.
+
+    If *workspace* is provided, the viewer binds to it and shows
+    workspace identity in the UI.
     """
-    app = create_app(release, title=title, project=project)
+    app = create_app(release, title=title, project=project, workspace=workspace)
     logger.info("Viewer starting on http://%s:%d", host, port)
     app.run(host=host, port=port)
