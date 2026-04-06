@@ -48,6 +48,13 @@ def _current_release():
         ) from exc
 
 
+def _get_runtime_service(attr: str):
+    """Get a runtime service by name, or None if not serving."""
+    if _workspace is None or _workspace.runtime is None:
+        return None
+    return getattr(_workspace.runtime, attr, None)
+
+
 def _require_config():
     """Return the current config or raise with a clear message."""
     if _workspace is None:
@@ -109,7 +116,7 @@ def ingest(bucket: str, content: str, filename: str, client_id: str | None = Non
 
     # Enqueue for processing
     content_hash = hashlib.sha256(content.encode()).hexdigest()
-    queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
+    queue = _get_runtime_service("queue")
     doc_id = None
     if queue is not None:
         try:
@@ -133,7 +140,7 @@ def document_status(doc_id: str) -> str:
     Args:
         doc_id: Document ID returned by ingest().
     """
-    queue = _workspace.runtime.queue if _workspace and _workspace.runtime else None
+    queue = _get_runtime_service("queue")
     if queue is None:
         return "Document queue not initialized."
 
@@ -229,7 +236,7 @@ def list_buckets() -> str:
 @server_mcp.tool()
 def list_prompts() -> str:
     """List all prompt template keys with version info."""
-    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
+    store = _get_runtime_service("prompt_store")
     if store is None:
         return "Prompt store not initialized."
 
@@ -253,7 +260,7 @@ def get_prompt(key: str, version: int | None = None) -> str:
         key: Prompt template key.
         version: Specific version number (latest if omitted).
     """
-    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
+    store = _get_runtime_service("prompt_store")
     if store is None:
         return "Prompt store not initialized."
 
@@ -272,7 +279,7 @@ def update_prompt(key: str, content: str) -> str:
         key: Prompt template key.
         content: New prompt content.
     """
-    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
+    store = _get_runtime_service("prompt_store")
     if store is None:
         return "Prompt store not initialized."
 
@@ -287,7 +294,7 @@ def prompt_history(key: str) -> str:
     Args:
         key: Prompt template key.
     """
-    store = _workspace.runtime.prompt_store if _workspace and _workspace.runtime else None
+    store = _get_runtime_service("prompt_store")
     if store is None:
         return "Prompt store not initialized."
 
