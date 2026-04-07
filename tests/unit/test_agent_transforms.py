@@ -16,7 +16,9 @@ from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, Reduce
 class FakeAgent:
     """Test double satisfying the Agent protocol."""
 
-    def __init__(self, response: str = "agent output", fingerprint: str = "test-agent-fp", agent_id: str = "test-agent"):
+    def __init__(
+        self, response: str = "agent output", fingerprint: str = "test-agent-fp", agent_id: str = "test-agent"
+    ):
         self._response = response
         self._fingerprint = fingerprint
         self._agent_id = agent_id
@@ -374,16 +376,22 @@ class TestEmptyFingerprintRejected:
             @property
             def agent_id(self):
                 return "empty"
+
             def fingerprint_value(self):
                 return ""
+
             def map(self, artifact, task_prompt):
                 return "x"
+
             def reduce(self, artifacts, task_prompt):
                 return "x"
+
             def group(self, artifacts, task_prompt):
                 return []
+
             def fold(self, accumulated, artifact, step, total, task_prompt):
                 return "x"
+
         with pytest.raises(ValueError, match="empty fingerprint"):
             MapSynthesis("m", prompt="p", agent=EmptyFpAgent())
 
@@ -392,16 +400,22 @@ class TestEmptyFingerprintRejected:
             @property
             def agent_id(self):
                 return "empty"
+
             def fingerprint_value(self):
                 return ""
+
             def map(self, artifact, task_prompt):
                 return "x"
+
             def reduce(self, artifacts, task_prompt):
                 return "x"
+
             def group(self, artifacts, task_prompt):
                 return []
+
             def fold(self, accumulated, artifact, step, total, task_prompt):
                 return "x"
+
         with pytest.raises(ValueError, match="empty fingerprint"):
             FoldSynthesis("f", prompt="p", label="out", agent=EmptyFpAgent())
 

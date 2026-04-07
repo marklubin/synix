@@ -625,13 +625,15 @@ def create_app(state: ViewerState) -> Flask:
             elif event_type == "llm_call_finish":
                 name = ev.get("layer", "")
                 if name in layers_data:
-                    layers_data[name]["llm_calls"].append({
-                        "artifact": ev.get("artifact_desc", ""),
-                        "duration": ev.get("duration_seconds", 0.0),
-                        "input_tokens": ev.get("input_tokens", 0),
-                        "output_tokens": ev.get("output_tokens", 0),
-                        "model": "",  # model is on llm_call_start, not finish
-                    })
+                    layers_data[name]["llm_calls"].append(
+                        {
+                            "artifact": ev.get("artifact_desc", ""),
+                            "duration": ev.get("duration_seconds", 0.0),
+                            "input_tokens": ev.get("input_tokens", 0),
+                            "output_tokens": ev.get("output_tokens", 0),
+                            "model": "",  # model is on llm_call_start, not finish
+                        }
+                    )
 
             elif event_type == "llm_call_start":
                 # Stash model info — will be paired by the next llm_call_finish
@@ -705,11 +707,13 @@ def create_app(state: ViewerState) -> Flask:
             except (IndexError, ValueError):
                 ts_str = run_id
 
-            logs.append({
-                "run_id": run_id,
-                "timestamp": ts_str,
-                "size_bytes": size,
-            })
+            logs.append(
+                {
+                    "run_id": run_id,
+                    "timestamp": ts_str,
+                    "size_bytes": size,
+                }
+            )
 
         return jsonify({"logs": logs})
 

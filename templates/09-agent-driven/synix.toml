@@ -1,0 +1,13 @@
+[workspace]
+name = "agent-driven"
+pipeline_path = "pipeline.py"
+
+[agents.analyst]
+prompt_key = "analyst"
+instructions_file = "prompts/analyst.txt"
+description = "Concise analytical writer — infers patterns and dynamics"
+
+[agents.reporter]
+prompt_key = "reporter"
+instructions_file = "prompts/reporter.txt"
+description = "Structured report writer — builds documents incrementally"

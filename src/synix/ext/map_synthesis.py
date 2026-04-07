@@ -118,7 +118,9 @@ class MapSynthesis(Transform):
         if self.agent is not None:
             logger.info(
                 "MapSynthesis %r: agent %r executing map on %s",
-                self.name, self.agent.agent_id, inp.label,
+                self.name,
+                self.agent.agent_id,
+                inp.label,
             )
             content = self.agent.map(inp, rendered)
             model_config = None
