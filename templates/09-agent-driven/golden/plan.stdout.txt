@@ -1,1 +1,45 @@
-Error loading pipeline: Agent 'analyst' has no prompt store — bind_prompt_store() before fingerprinting
+╭────────────────────────────────────────────────── Synix Build Plan ──────────────────────────────────────────────────╮
+│ Pipeline: agent-driven-report  │
+│ Source: <CASE_DIR>/sources  │
+│ Build: <CASE_DIR>/build  │
+│ Layers: 5  │
+│ Surfaces: 1  │
+│ Projections: 1  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+             LLM Configuration
+╭─────────────┬───────────────────────────╮
+│ Setting     │ Value  │
+├─────────────┼───────────────────────────┤
+│ Provider    │ anthropic  │
+│ Model       │ claude-haiku-4-5-20251001  │
+│ Temperature │ 0.3  │
+│ Max Tokens  │ 1024  │
+╰─────────────┴───────────────────────────╯
+
+agent-driven-report  claude-haiku-4-5-20251001 (anthropic)
+├── bios  source:parse  <STATS>
+│   └── ← <CASE_DIR>/sources/bios (3 .md files)
+├── brief  source:parse  <STATS>
+│   └── ← <CASE_DIR>/sources/brief (1 .md file)
+├── work_styles  transform:MapSynthesis  <STATS>
+│   └── ← bios
+├── team_dynamics  transform:ReduceSynthesis  <STATS>
+│   └── ← work_styles
+└── final_report  transform:FoldSynthesis  <STATS>
+    ├── ← team_dynamics
+    ├── ← brief
+    ├── ⇢ report-search  search_surface (sqlite)  <MATERIALIZED>  <N> indexed
+    │   ├── ← bios
+    │   ├── ← brief
+    │   ├── ← work_styles
+    │   ├── ← team_dynamics
+    │   └── ← final_report
+    └── → search  synix_search (sqlite)  <MATERIALIZED>  <N> indexed
+        ├── ← bios
+        ├── ← brief
+        ├── ← work_styles
+        ├── ← team_dynamics
+        └── ← final_report
+
+<PLAN_SUMMARY>

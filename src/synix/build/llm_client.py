@@ -130,14 +130,27 @@ class LLMClient:
         """Complete using the Anthropic SDK with retry."""
         import anthropic
 
+        # Extract system message — Anthropic requires system= parameter,
+        # not {"role": "system"} in messages list
+        system_text = None
+        api_messages = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_text = msg["content"]
+            else:
+                api_messages.append(msg)
+
         for attempt in range(2):
             try:
-                response = self._client.messages.create(
-                    model=self.config.model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    messages=messages,
-                )
+                kwargs = {
+                    "model": self.config.model,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": api_messages,
+                }
+                if system_text is not None:
+                    kwargs["system"] = system_text
+                response = self._client.messages.create(**kwargs)
                 return LLMResponse(
                     content=response.content[0].text,
                     model=response.model if hasattr(response, "model") else self.config.model,

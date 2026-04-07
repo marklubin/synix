@@ -20,25 +20,35 @@
 #   uvx synix release HEAD --to local
 #   uvx synix search "collaboration"
 
+# -- Agent setup --------------------------------------------------------------
+# Create a PromptStore and seed instructions from files, then bind to agents.
+# In production with `synix serve`, the server does this automatically.
+from pathlib import Path
+
 from synix import Pipeline, SearchSurface, Source, SynixSearch
 from synix.agents import SynixLLMAgent
+from synix.server.prompt_store import PromptStore
 from synix.transforms import FoldSynthesis, MapSynthesis, ReduceSynthesis
 
-# -- Agent definitions --------------------------------------------------------
-# In production, these would come from synix.toml via load_agents().
-# Here we define them inline for demo portability (no PromptStore needed).
+_here = Path(__file__).parent
+_store = PromptStore(_here / ".synix" / "prompts.db")
+
+# Seed instructions from files (no-op if already seeded)
+_store.seed_from_files(_here / "prompts")
 
 analyst = SynixLLMAgent(
     name="analyst",
     prompt_key="analyst",
     description="Concise analytical writer — infers patterns and dynamics",
 )
+analyst.bind_prompt_store(_store)
 
 reporter = SynixLLMAgent(
     name="reporter",
     prompt_key="reporter",
     description="Structured report writer — builds documents incrementally",
 )
+reporter.bind_prompt_store(_store)
 
 # -- Pipeline definition ------------------------------------------------------
 

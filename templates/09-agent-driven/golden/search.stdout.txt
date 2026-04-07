@@ -1,1 +1,0 @@
-No search index found. Run synix build first, or specify --release <name>.

@@ -50,4 +50,12 @@ case = {
         {"name": "explain", "command": ["synix", "plan", "PIPELINE", "--explain-cache"]},
     ],
     "goldens": {},
+    # Agent-backed transforms hit the real LLM (no cassette support yet).
+    # Content varies between runs, so mask LLM-dependent output lines.
+    "output_masks": {
+        "build": [r"Pipeline failed"],  # mask error details if API varies
+        "rebuild": [r"Pipeline failed"],
+        "release": [r"Released|artifacts"],  # snapshot OIDs vary
+        "search": [r"^\s{2,}"],  # mask content lines in search results
+    },
 }
