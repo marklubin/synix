@@ -2,7 +2,7 @@
 
 __version__ = "0.22.2"
 
-from synix.agents import Agent, AgentRequest, AgentResult  # noqa: F401
+from synix.agents import Agent, Group, SynixLLMAgent  # noqa: F401
 from synix.core.models import (  # noqa: F401
     Artifact,
     FlatFile,

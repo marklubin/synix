@@ -112,30 +112,19 @@ class ReduceSynthesis(Transform):
 
         # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda a: a.artifact_id)
-        artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
-
-        rendered = render_template(
-            self.prompt,
-            artifacts=artifacts_text,
-            count=str(len(inputs)),
-        )
 
         if self.agent is not None:
-            from synix.agents import AgentRequest
-
-            result = self.agent.write(AgentRequest(
-                prompt=rendered,
-                metadata={
-                    "transform_name": self.name,
-                    "shape": "reduce",
-                    "input_labels": [a.label for a in inputs],
-                    "count": len(inputs),
-                },
-            ))
-            content = result.content
+            content = self.agent.reduce(sorted_inputs)  # agent owns rendering + execution
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
+            agent_id_val = self.agent.agent_id
         else:
+            artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
+            rendered = render_template(
+                self.prompt,
+                artifacts=artifacts_text,
+                count=str(len(inputs)),
+            )
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,
@@ -146,6 +135,7 @@ class ReduceSynthesis(Transform):
             content = response.content
             model_config = ctx.llm_config
             agent_fingerprint = None
+            agent_id_val = None
 
         output_metadata = {"input_count": len(inputs)}
         if self.metadata_fn is not None:
@@ -158,6 +148,7 @@ class ReduceSynthesis(Transform):
                 content=content,
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
+                agent_id=agent_id_val,
                 model_config=model_config,
                 agent_fingerprint=agent_fingerprint,
                 metadata=output_metadata,

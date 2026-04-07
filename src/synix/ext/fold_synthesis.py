@@ -148,10 +148,12 @@ class FoldSynthesis(Transform):
             client = _get_llm_client(ctx)
             model_config = ctx.llm_config
             agent_fingerprint = None
+            agent_id_val = None
         else:
             client = None
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
+            agent_id_val = self.agent.agent_id
 
         sorted_inputs = self._sort_inputs(inputs)
         transform_fp = self.compute_fingerprint(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx)
@@ -175,30 +177,17 @@ class FoldSynthesis(Transform):
 
         # --- Main fold loop (over new_inputs only) ---
         for step, inp in enumerate(new_inputs, start_step + 1):
-            rendered = render_template(
-                self.prompt,
-                accumulated=accumulated,
-                artifact=inp.content,
-                label=inp.label,
-                step=str(step),
-                total=str(total),
-            )
-
             if self.agent is not None:
-                from synix.agents import AgentRequest
-
-                result = self.agent.write(AgentRequest(
-                    prompt=rendered,
-                    metadata={
-                        "transform_name": self.name,
-                        "shape": "fold",
-                        "step": step,
-                        "total": total,
-                        "input_label": inp.label,
-                    },
-                ))
-                accumulated = result.content
+                accumulated = self.agent.fold(accumulated, inp, step, total)
             else:
+                rendered = render_template(
+                    self.prompt,
+                    accumulated=accumulated,
+                    artifact=inp.content,
+                    label=inp.label,
+                    step=str(step),
+                    total=str(total),
+                )
                 response = _logged_complete(
                     client,
                     ctx,
@@ -229,6 +218,7 @@ class FoldSynthesis(Transform):
                 content=accumulated,
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
+                agent_id=agent_id_val,
                 model_config=model_config,
                 agent_fingerprint=agent_fingerprint,
                 metadata=output_metadata,

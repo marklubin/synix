@@ -107,29 +107,19 @@ class MapSynthesis(Transform):
         prompt_id = self._make_prompt_id()
 
         inp = inputs[0]
-        rendered = render_template(
-            self.prompt,
-            artifact=inp.content,
-            label=inp.label,
-            artifact_type=inp.artifact_type,
-        )
 
         if self.agent is not None:
-            from synix.agents import AgentRequest
-
-            result = self.agent.write(AgentRequest(
-                prompt=rendered,
-                metadata={
-                    "transform_name": self.name,
-                    "shape": "map",
-                    "input_labels": [inp.label],
-                    "artifact_type": self.artifact_type,
-                },
-            ))
-            content = result.content
+            content = self.agent.map(inp)  # agent owns rendering + execution
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
+            agent_id_val = self.agent.agent_id
         else:
+            rendered = render_template(
+                self.prompt,
+                artifact=inp.content,
+                label=inp.label,
+                artifact_type=inp.artifact_type,
+            )
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,
@@ -140,6 +130,7 @@ class MapSynthesis(Transform):
             content = response.content
             model_config = ctx.llm_config
             agent_fingerprint = None
+            agent_id_val = None
 
         if self.label_fn is not None:
             label = self.label_fn(inp)
@@ -159,6 +150,7 @@ class MapSynthesis(Transform):
                 content=content,
                 input_ids=[inp.artifact_id],
                 prompt_id=prompt_id,
+                agent_id=agent_id_val,
                 model_config=model_config,
                 agent_fingerprint=agent_fingerprint,
                 metadata=output_metadata,

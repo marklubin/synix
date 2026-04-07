@@ -13,7 +13,8 @@ import pytest
 
 import synix
 from synix import Pipeline, Source
-from synix.agents import AgentRequest, AgentResult
+from synix.agents import Group
+from synix.core.models import Artifact
 from synix.sdk import BuildResult
 from synix.transforms import MapSynthesis, ReduceSynthesis
 
@@ -29,11 +30,25 @@ class DeterministicAgent:
         self._prefix = prefix
         self._fingerprint = fingerprint
 
-    def write(self, request: AgentRequest) -> AgentResult:
-        return AgentResult(content=f"{self._prefix} processed {len(request.prompt)} chars")
+    @property
+    def agent_id(self) -> str:
+        return f"deterministic-{self._fingerprint}"
 
     def fingerprint_value(self) -> str:
         return self._fingerprint
+
+    def map(self, artifact: Artifact) -> str:
+        return f"{self._prefix} processed {len(artifact.content)} chars"
+
+    def reduce(self, artifacts: list[Artifact]) -> str:
+        total_chars = sum(len(a.content) for a in artifacts)
+        return f"{self._prefix} reduced {len(artifacts)} artifacts ({total_chars} chars)"
+
+    def group(self, artifacts: list[Artifact]) -> list[Group]:
+        return [Group(key="all", artifacts=artifacts, content=f"{self._prefix} grouped")]
+
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
+        return f"{self._prefix} fold step {step}/{total}"
 
 
 # ---------------------------------------------------------------------------

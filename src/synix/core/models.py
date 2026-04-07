@@ -35,6 +35,7 @@ class Artifact:
     artifact_id: str = ""
     input_ids: list[str] = field(default_factory=list)
     prompt_id: str | None = None
+    agent_id: str | None = None
     agent_fingerprint: str | None = None
     model_config: dict | None = None
     created_at: datetime = field(default_factory=datetime.now)
