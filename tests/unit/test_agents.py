@@ -513,12 +513,11 @@ class TestFingerprintValue:
         assert fp_a != fp_b
         store.close()
 
-    def test_without_store_still_produces_fingerprint(self):
-        """Without a bound store, content_hash is empty but fingerprint still works."""
+    def test_without_store_raises(self):
+        """Without a bound store, fingerprint_value() raises for cache safety."""
         agent = SynixLLMAgent(name="agent", prompt_key="key")
-        fp = agent.fingerprint_value()
-        assert isinstance(fp, str)
-        assert len(fp) > 0
+        with pytest.raises(ValueError, match="no prompt store"):
+            agent.fingerprint_value()
 
     def test_same_config_different_names_same_fingerprint(self, tmp_path):
         """Fingerprint is based on content/config, not agent name."""

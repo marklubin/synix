@@ -100,12 +100,19 @@ class SynixLLMAgent:
         return content
 
     def fingerprint_value(self) -> str:
-        """Hash of prompt content (from store) + llm_config."""
+        """Hash of prompt content (from store) + llm_config.
+
+        Raises ValueError if prompt store is not bound — fingerprinting
+        requires a known prompt state for cache correctness.
+        """
         from synix.build.fingerprint import compute_digest, fingerprint_value
 
-        content_hash = ""
-        if self._prompt_store is not None:
-            content_hash = self._prompt_store.content_hash(self.prompt_key) or ""
+        if self._prompt_store is None:
+            raise ValueError(
+                f"Agent {self.name!r} has no prompt store — "
+                "bind_prompt_store() before fingerprinting"
+            )
+        content_hash = self._prompt_store.content_hash(self.prompt_key) or ""
 
         components = {"prompt_content": content_hash}
         if self.llm_config:
@@ -189,3 +196,8 @@ class SynixLLMAgent:
         agent = cls(name=name, prompt_key=prompt_key, **kwargs)
         agent.bind_prompt_store(prompt_store)
         return agent
+
+
+# Backward compatibility aliases (deprecated, will be removed)
+AgentRequest = type("AgentRequest", (), {"__doc__": "Deprecated. Use typed Agent methods instead."})
+AgentResult = type("AgentResult", (), {"__doc__": "Deprecated. Use typed Agent methods instead."})

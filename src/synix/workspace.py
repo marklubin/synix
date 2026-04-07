@@ -494,6 +494,8 @@ def load_agents(config_path: str | Path | None = None) -> dict:
             llm_config["model"] = ac.model
         if ac.base_url:
             llm_config["base_url"] = ac.base_url
+        if ac.api_key_env:
+            llm_config["api_key_env"] = ac.api_key_env
         if ac.temperature is not None:
             llm_config["temperature"] = ac.temperature
         llm_config["max_tokens"] = ac.max_tokens
