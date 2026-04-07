@@ -198,6 +198,26 @@ class SynixLLMAgent:
         return agent
 
 
-# Backward compatibility aliases (deprecated, will be removed)
-AgentRequest = type("AgentRequest", (), {"__doc__": "Deprecated. Use typed Agent methods instead."})
-AgentResult = type("AgentResult", (), {"__doc__": "Deprecated. Use typed Agent methods instead."})
+# Backward compatibility — these were the v1 generic gateway types.
+# Kept functional so existing code using AgentRequest(prompt=...) still works.
+# Prefer using typed Agent methods (map/reduce/group/fold) instead.
+
+
+@dataclass(frozen=True)
+class AgentRequest:
+    """Deprecated: use typed Agent methods instead.
+
+    Kept for backward compatibility with code that used the v1
+    generic write(AgentRequest) gateway.
+    """
+
+    prompt: str
+    max_tokens: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AgentResult:
+    """Deprecated: use typed Agent methods instead."""
+
+    content: str
