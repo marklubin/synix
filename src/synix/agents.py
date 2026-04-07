@@ -197,27 +197,3 @@ class SynixLLMAgent:
         agent.bind_prompt_store(prompt_store)
         return agent
 
-
-# Backward compatibility — these were the v1 generic gateway types.
-# Kept functional so existing code using AgentRequest(prompt=...) still works.
-# Prefer using typed Agent methods (map/reduce/group/fold) instead.
-
-
-@dataclass(frozen=True)
-class AgentRequest:
-    """Deprecated: use typed Agent methods instead.
-
-    Kept for backward compatibility with code that used the v1
-    generic write(AgentRequest) gateway.
-    """
-
-    prompt: str
-    max_tokens: int | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class AgentResult:
-    """Deprecated: use typed Agent methods instead."""
-
-    content: str
