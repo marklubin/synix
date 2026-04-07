@@ -121,11 +121,16 @@ class ReduceSynthesis(Transform):
         )
 
         if self.agent is not None:
+            logger.info(
+                "ReduceSynthesis %r: agent %r reducing %d artifacts",
+                self.name, self.agent.agent_id, len(sorted_inputs),
+            )
             content = self.agent.reduce(sorted_inputs, rendered)
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
             agent_id_val = self.agent.agent_id
         else:
+            logger.debug("ReduceSynthesis %r: built-in LLM path (%d artifacts)", self.name, len(sorted_inputs))
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,

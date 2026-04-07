@@ -116,11 +116,16 @@ class MapSynthesis(Transform):
         )
 
         if self.agent is not None:
+            logger.info(
+                "MapSynthesis %r: agent %r executing map on %s",
+                self.name, self.agent.agent_id, inp.label,
+            )
             content = self.agent.map(inp, rendered)
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
             agent_id_val = self.agent.agent_id
         else:
+            logger.debug("MapSynthesis %r: built-in LLM path for %s", self.name, inp.label)
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,

@@ -176,6 +176,10 @@ class GroupSynthesis(Transform):
 
         # Agent path: render task prompt, agent owns grouping and execution
         if self.agent is not None:
+            logger.info(
+                "GroupSynthesis %r: agent %r grouping %d artifacts",
+                self.name, self.agent.agent_id, len(inputs),
+            )
             rendered = render_template(self.prompt, artifact_type=self.artifact_type) if self.prompt else ""
             groups = self.agent.group(inputs, rendered)
             results: list[Artifact] = []
