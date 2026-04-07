@@ -172,15 +172,41 @@ class GroupSynthesis(Transform):
 
     def execute(self, inputs: list[Artifact], ctx: TransformContext) -> list[Artifact]:
         ctx = self.get_context(ctx)
+        prompt_id = self._make_prompt_id()
+
+        # Agent path: render task prompt, agent owns grouping and execution
+        if self.agent is not None:
+            logger.info(
+                "GroupSynthesis %r: agent %r grouping %d artifacts",
+                self.name, self.agent.agent_id, len(inputs),
+            )
+            rendered = render_template(self.prompt, artifact_type=self.artifact_type) if self.prompt else ""
+            groups = self.agent.group(inputs, rendered)
+            results: list[Artifact] = []
+            for g in groups:
+                label = f"{self.label_prefix}-{g.key}" if self.label_prefix else g.key
+                meta = {"group_key": g.key, "input_count": len(g.artifacts)}
+                results.append(Artifact(
+                    label=label,
+                    artifact_type=self.artifact_type,
+                    content=g.content,
+                    input_ids=[a.artifact_id for a in g.artifacts],
+                    prompt_id=prompt_id,
+                    agent_id=self.agent.agent_id,
+                    agent_fingerprint=self.agent.fingerprint_value(),
+                    model_config=None,
+                    metadata=meta,
+                ))
+            return results
+
+        # Non-agent path: use split/group logic with LLM
         group_key = ctx.get("_group_key")
         if group_key is None:
             # Called directly without split — process all groups sequentially
-            results: list[Artifact] = []
+            results = []
             for unit_inputs, config_extras in self.split(inputs, ctx):
                 results.extend(self.execute(unit_inputs, ctx.with_updates(config_extras)))
             return results
-
-        prompt_id = self._make_prompt_id()
 
         # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda a: a.artifact_id)
@@ -194,33 +220,14 @@ class GroupSynthesis(Transform):
             artifact_type=self.artifact_type,
         )
 
-        if self.agent is not None:
-            from synix.agents import AgentRequest
-
-            result = self.agent.write(AgentRequest(
-                prompt=rendered,
-                metadata={
-                    "transform_name": self.name,
-                    "shape": "group",
-                    "group_key": group_key,
-                    "input_labels": [a.label for a in inputs],
-                    "count": len(inputs),
-                },
-            ))
-            content = result.content
-            model_config = None
-            agent_fingerprint = self.agent.fingerprint_value()
-        else:
-            client = _get_llm_client(ctx)
-            response = _logged_complete(
-                client,
-                ctx,
-                messages=[{"role": "user", "content": rendered}],
-                artifact_desc=f"{self.name} group-{group_key}",
-            )
-            content = response.content
-            model_config = ctx.llm_config
-            agent_fingerprint = None
+        client = _get_llm_client(ctx)
+        response = _logged_complete(
+            client,
+            ctx,
+            messages=[{"role": "user", "content": rendered}],
+            artifact_desc=f"{self.name} group-{group_key}",
+        )
+        content = response.content
 
         prefix = self.label_prefix or (self.group_by if isinstance(self.group_by, str) else self.name)
         slug = group_key.lower().replace(" ", "-")
@@ -237,8 +244,8 @@ class GroupSynthesis(Transform):
                 content=content,
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
-                model_config=model_config,
-                agent_fingerprint=agent_fingerprint,
+                model_config=ctx.llm_config,
+                agent_fingerprint=None,
                 metadata=output_metadata,
             )
         ]

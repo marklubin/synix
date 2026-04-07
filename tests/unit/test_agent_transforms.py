@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from synix import Artifact
-from synix.agents import Agent, AgentRequest, AgentResult
+from synix.agents import Agent, Group
 from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, ReduceSynthesis
 
 # ---------------------------------------------------------------------------
@@ -16,17 +16,38 @@ from synix.transforms import FoldSynthesis, GroupSynthesis, MapSynthesis, Reduce
 class FakeAgent:
     """Test double satisfying the Agent protocol."""
 
-    def __init__(self, response: str = "agent output", fingerprint: str = "test-agent-fp"):
+    def __init__(self, response: str = "agent output", fingerprint: str = "test-agent-fp", agent_id: str = "test-agent"):
         self._response = response
         self._fingerprint = fingerprint
-        self.calls: list[AgentRequest] = []
+        self._agent_id = agent_id
+        self.map_calls: list[tuple[Artifact, str]] = []
+        self.reduce_calls: list[tuple[list[Artifact], str]] = []
+        self.group_calls: list[tuple[list[Artifact], str]] = []
+        self.fold_calls: list[tuple[str, Artifact, int, int, str]] = []
 
-    def write(self, request: AgentRequest) -> AgentResult:
-        self.calls.append(request)
-        return AgentResult(content=self._response)
+    @property
+    def agent_id(self) -> str:
+        return self._agent_id
 
     def fingerprint_value(self) -> str:
         return self._fingerprint
+
+    def map(self, artifact: Artifact, task_prompt: str) -> str:
+        self.map_calls.append((artifact, task_prompt))
+        return self._response
+
+    def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
+        self.reduce_calls.append((artifacts, task_prompt))
+        return self._response
+
+    def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
+        self.group_calls.append((artifacts, task_prompt))
+        # Return one group per artifact for testing
+        return [Group(key=a.label, artifacts=[a], content=self._response) for a in artifacts]
+
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
+        self.fold_calls.append((accumulated, artifact, step, total, task_prompt))
+        return self._response
 
 
 def _make_artifact(label: str, content: str = "content", **metadata) -> Artifact:
@@ -44,7 +65,7 @@ def _make_artifact(label: str, content: str = "content", **metadata) -> Artifact
 
 
 class TestMapWithAgent:
-    def test_agent_write_called_with_rendered_prompt(self):
+    def test_agent_map_called_with_artifact_and_task_prompt(self):
         agent = FakeAgent()
         t = MapSynthesis(
             "ws",
@@ -55,13 +76,12 @@ class TestMapWithAgent:
         inp = _make_artifact("bio-alice", "Alice is an engineer.")
         t.execute([inp], {"llm_config": {}})
 
-        assert len(agent.calls) == 1
-        req = agent.calls[0]
-        assert "Alice is an engineer." in req.prompt
-        assert req.metadata["transform_name"] == "ws"
-        assert req.metadata["shape"] == "map"
-        assert req.metadata["input_labels"] == ["bio-alice"]
-        assert req.metadata["artifact_type"] == "analysis"
+        assert len(agent.map_calls) == 1
+        artifact, task_prompt = agent.map_calls[0]
+        assert artifact.label == "bio-alice"
+        assert artifact.content == "Alice is an engineer."
+        assert "Alice is an engineer." in task_prompt
+        assert task_prompt == "Analyze: Alice is an engineer."
 
     def test_artifact_has_agent_fingerprint(self):
         agent = FakeAgent(fingerprint="map-fp-123")
@@ -70,6 +90,14 @@ class TestMapWithAgent:
         results = t.execute([inp], {"llm_config": {}})
 
         assert results[0].agent_fingerprint == "map-fp-123"
+
+    def test_artifact_has_agent_id(self):
+        agent = FakeAgent(agent_id="map-agent-1")
+        t = MapSynthesis("ws", prompt="Analyze: {artifact}", agent=agent)
+        inp = _make_artifact("bio-alice")
+        results = t.execute([inp], {"llm_config": {}})
+
+        assert results[0].agent_id == "map-agent-1"
 
     def test_artifact_content_from_agent(self):
         agent = FakeAgent(response="agent-generated analysis")
@@ -103,7 +131,7 @@ class TestMapWithAgent:
 
 
 class TestReduceWithAgent:
-    def test_agent_write_called(self):
+    def test_agent_reduce_called_with_task_prompt(self):
         agent = FakeAgent()
         t = ReduceSynthesis(
             "team",
@@ -115,13 +143,16 @@ class TestReduceWithAgent:
         inputs = [_make_artifact(f"ws-{i}", f"profile {i}") for i in range(3)]
         results = t.execute(inputs, {"llm_config": {}})
 
-        assert len(agent.calls) == 1
-        req = agent.calls[0]
-        assert req.metadata["shape"] == "reduce"
-        assert req.metadata["count"] == 3
-        assert len(req.metadata["input_labels"]) == 3
+        assert len(agent.reduce_calls) == 1
+        artifacts, task_prompt = agent.reduce_calls[0]
+        # Reduce receives sorted artifacts
+        assert len(artifacts) == 3
         assert results[0].agent_fingerprint == "test-agent-fp"
+        assert results[0].agent_id == "test-agent"
         assert results[0].model_config is None
+        # task_prompt contains rendered artifacts text
+        assert "profile" in task_prompt
+        assert task_prompt.startswith("Analyze: ")
 
     def test_artifact_content_from_agent(self):
         agent = FakeAgent(response="reduced output")
@@ -131,6 +162,14 @@ class TestReduceWithAgent:
 
         assert results[0].content == "reduced output"
 
+    def test_artifact_has_agent_id(self):
+        agent = FakeAgent(agent_id="reduce-agent-1")
+        t = ReduceSynthesis("r", prompt="{artifacts}", label="out", agent=agent)
+        inputs = [_make_artifact(f"a-{i}") for i in range(2)]
+        results = t.execute(inputs, {"llm_config": {}})
+
+        assert results[0].agent_id == "reduce-agent-1"
+
 
 # ---------------------------------------------------------------------------
 # GroupSynthesis + Agent
@@ -138,7 +177,7 @@ class TestReduceWithAgent:
 
 
 class TestGroupWithAgent:
-    def test_agent_called_per_group(self):
+    def test_agent_group_called_with_all_inputs_and_task_prompt(self):
         agent = FakeAgent()
         inputs = [
             _make_artifact("ep-1", "content 1", team="alpha"),
@@ -154,19 +193,17 @@ class TestGroupWithAgent:
         )
         results = t.execute(inputs, {"llm_config": {}})
 
-        # Two groups -> two agent calls
-        assert len(agent.calls) == 2
-        assert len(results) == 2
+        # Agent.group() called once with all inputs and task_prompt
+        assert len(agent.group_calls) == 1
+        artifacts, task_prompt = agent.group_calls[0]
+        assert len(artifacts) == 3
+        # task_prompt is rendered from the prompt template
+        assert isinstance(task_prompt, str)
+        # FakeAgent returns one group per artifact -> 3 results
+        assert len(results) == 3
 
-        # Check metadata on each call
-        shapes = {call.metadata["group_key"] for call in agent.calls}
-        assert shapes == {"alpha", "beta"}
-        for call in agent.calls:
-            assert call.metadata["shape"] == "group"
-            assert call.metadata["transform_name"] == "team-summaries"
-
-    def test_artifacts_have_agent_fingerprint(self):
-        agent = FakeAgent(fingerprint="group-fp")
+    def test_artifacts_have_agent_fingerprint_and_id(self):
+        agent = FakeAgent(fingerprint="group-fp", agent_id="group-agent-1")
         inputs = [_make_artifact("ep-1", team="alpha")]
         t = GroupSynthesis(
             "s",
@@ -177,7 +214,47 @@ class TestGroupWithAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert results[0].agent_fingerprint == "group-fp"
+        assert results[0].agent_id == "group-agent-1"
         assert results[0].model_config is None
+
+    def test_group_label_uses_prefix(self):
+        agent = FakeAgent()
+        inputs = [_make_artifact("ep-1", team="alpha")]
+        t = GroupSynthesis(
+            "s",
+            group_by="team",
+            prompt="{artifacts}",
+            agent=agent,
+            label_prefix="team",
+        )
+        results = t.execute(inputs, {"llm_config": {}})
+        assert results[0].label == "team-ep-1"
+
+    def test_group_label_without_prefix_uses_key(self):
+        agent = FakeAgent()
+        inputs = [_make_artifact("ep-1", team="alpha")]
+        t = GroupSynthesis(
+            "s",
+            group_by="team",
+            prompt="{artifacts}",
+            agent=agent,
+        )
+        results = t.execute(inputs, {"llm_config": {}})
+        # FakeAgent returns group key = artifact label
+        assert results[0].label == "ep-1"
+
+    def test_group_metadata_contains_key_and_count(self):
+        agent = FakeAgent()
+        inputs = [_make_artifact("ep-1", team="alpha")]
+        t = GroupSynthesis(
+            "s",
+            group_by="team",
+            prompt="{artifacts}",
+            agent=agent,
+        )
+        results = t.execute(inputs, {"llm_config": {}})
+        assert results[0].metadata["group_key"] == "ep-1"
+        assert results[0].metadata["input_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +263,7 @@ class TestGroupWithAgent:
 
 
 class TestFoldWithAgent:
-    def test_agent_called_per_step(self):
+    def test_agent_called_per_step_with_task_prompt(self):
         agent = FakeAgent(response="accumulated")
         inputs = [_make_artifact(f"ep-{i}", f"event {i}") for i in range(3)]
         t = FoldSynthesis(
@@ -200,19 +277,19 @@ class TestFoldWithAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         # One call per input
-        assert len(agent.calls) == 3
+        assert len(agent.fold_calls) == 3
         assert len(results) == 1
         assert results[0].content == "accumulated"
 
-        # Verify step metadata
-        steps = [call.metadata["step"] for call in agent.calls]
-        assert steps == [1, 2, 3]
-        for call in agent.calls:
-            assert call.metadata["shape"] == "fold"
-            assert call.metadata["total"] == 3
+        # Verify step/total and task_prompt in each call
+        for i, (acc, art, step, total, task_prompt) in enumerate(agent.fold_calls):
+            assert step == i + 1
+            assert total == 3
+            assert "Current:" in task_prompt
+            assert "New:" in task_prompt
 
-    def test_artifact_has_agent_fingerprint(self):
-        agent = FakeAgent(fingerprint="fold-fp")
+    def test_artifact_has_agent_fingerprint_and_id(self):
+        agent = FakeAgent(fingerprint="fold-fp", agent_id="fold-agent-1")
         inputs = [_make_artifact("ep-0")]
         t = FoldSynthesis(
             "fold",
@@ -223,6 +300,7 @@ class TestFoldWithAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert results[0].agent_fingerprint == "fold-fp"
+        assert results[0].agent_id == "fold-agent-1"
         assert results[0].model_config is None
 
     def test_fold_checkpoint_still_written(self):
@@ -240,6 +318,25 @@ class TestFoldWithAgent:
         cp = results[0].metadata["_fold_checkpoint"]
         assert cp["version"] == 1
         assert len(cp["seen_inputs"]) == 2
+
+    def test_fold_initial_passed_to_first_step(self):
+        agent = FakeAgent(response="step-result")
+        inputs = [_make_artifact("ep-0")]
+        t = FoldSynthesis(
+            "fold",
+            prompt="{accumulated}\n{artifact}",
+            initial="INITIAL VALUE",
+            label="out",
+            agent=agent,
+        )
+        t.execute(inputs, {"llm_config": {}})
+
+        # First call should receive the initial value as accumulated
+        acc, _art, step, total, task_prompt = agent.fold_calls[0]
+        assert acc == "INITIAL VALUE"
+        assert step == 1
+        assert total == 1
+        assert "INITIAL VALUE" in task_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -274,19 +371,37 @@ class TestEmptyFingerprintRejected:
 
     def test_map_rejects_empty_fingerprint(self):
         class EmptyFpAgent:
-            def write(self, request):
-                return AgentResult(content="x")
+            @property
+            def agent_id(self):
+                return "empty"
             def fingerprint_value(self):
                 return ""
+            def map(self, artifact, task_prompt):
+                return "x"
+            def reduce(self, artifacts, task_prompt):
+                return "x"
+            def group(self, artifacts, task_prompt):
+                return []
+            def fold(self, accumulated, artifact, step, total, task_prompt):
+                return "x"
         with pytest.raises(ValueError, match="empty fingerprint"):
             MapSynthesis("m", prompt="p", agent=EmptyFpAgent())
 
     def test_fold_rejects_empty_fingerprint(self):
         class EmptyFpAgent:
-            def write(self, request):
-                return AgentResult(content="x")
+            @property
+            def agent_id(self):
+                return "empty"
             def fingerprint_value(self):
                 return ""
+            def map(self, artifact, task_prompt):
+                return "x"
+            def reduce(self, artifacts, task_prompt):
+                return "x"
+            def group(self, artifacts, task_prompt):
+                return []
+            def fold(self, accumulated, artifact, step, total, task_prompt):
+                return "x"
         with pytest.raises(ValueError, match="empty fingerprint"):
             FoldSynthesis("f", prompt="p", label="out", agent=EmptyFpAgent())
 
@@ -304,6 +419,7 @@ class TestBackwardCompatNoAgent:
 
         assert len(results) == 1
         assert results[0].agent_fingerprint is None
+        assert results[0].agent_id is None
         assert len(mock_llm) == 1
 
     def test_reduce_without_agent(self, mock_llm):
@@ -312,6 +428,7 @@ class TestBackwardCompatNoAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert results[0].agent_fingerprint is None
+        assert results[0].agent_id is None
         assert len(mock_llm) == 1
 
     def test_group_without_agent(self, mock_llm):
@@ -320,6 +437,7 @@ class TestBackwardCompatNoAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert results[0].agent_fingerprint is None
+        assert results[0].agent_id is None
         assert len(mock_llm) == 1
 
     def test_fold_without_agent(self, mock_llm):
@@ -328,6 +446,7 @@ class TestBackwardCompatNoAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert results[0].agent_fingerprint is None
+        assert results[0].agent_id is None
         assert len(mock_llm) == 1
 
 
@@ -419,6 +538,42 @@ class TestAgentFingerprintOnArtifact:
 
 
 # ---------------------------------------------------------------------------
+# Agent ID on artifact
+# ---------------------------------------------------------------------------
+
+
+class TestAgentIdOnArtifact:
+    def test_map_artifact_agent_id(self):
+        agent = FakeAgent(agent_id="map-agent")
+        t = MapSynthesis("ws", prompt="{artifact}", agent=agent)
+        results = t.execute([_make_artifact("a")], {"llm_config": {}})
+        assert results[0].agent_id == "map-agent"
+
+    def test_reduce_artifact_agent_id(self):
+        agent = FakeAgent(agent_id="reduce-agent")
+        t = ReduceSynthesis("r", prompt="{artifacts}", label="out", agent=agent)
+        results = t.execute([_make_artifact("a")], {"llm_config": {}})
+        assert results[0].agent_id == "reduce-agent"
+
+    def test_group_artifact_agent_id(self):
+        agent = FakeAgent(agent_id="group-agent")
+        t = GroupSynthesis("g", group_by="team", prompt="{artifacts}", agent=agent)
+        results = t.execute([_make_artifact("a", team="alpha")], {"llm_config": {}})
+        assert results[0].agent_id == "group-agent"
+
+    def test_fold_artifact_agent_id(self):
+        agent = FakeAgent(agent_id="fold-agent")
+        t = FoldSynthesis("f", prompt="{accumulated}\n{artifact}", label="out", agent=agent)
+        results = t.execute([_make_artifact("a")], {"llm_config": {}})
+        assert results[0].agent_id == "fold-agent"
+
+    def test_no_agent_id_when_no_agent(self, mock_llm):
+        t = MapSynthesis("ws", prompt="{artifact}")
+        results = t.execute([_make_artifact("a")], {"llm_config": {}})
+        assert results[0].agent_id is None
+
+
+# ---------------------------------------------------------------------------
 # model_config=None when agent handles execution
 # ---------------------------------------------------------------------------
 
@@ -459,11 +614,24 @@ class TestCustomAgentImplementation:
         """A minimal class satisfying the Agent protocol works with transforms."""
 
         class MinimalAgent:
-            def write(self, request: AgentRequest) -> AgentResult:
-                return AgentResult(content=f"processed: {request.prompt[:20]}")
+            @property
+            def agent_id(self) -> str:
+                return "minimal"
 
             def fingerprint_value(self) -> str:
                 return "minimal-v1"
+
+            def map(self, artifact: Artifact, task_prompt: str) -> str:
+                return f"processed: {artifact.content[:20]}"
+
+            def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
+                return "reduced"
+
+            def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
+                return [Group(key="all", artifacts=artifacts, content="grouped")]
+
+            def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
+                return f"{accumulated}+{artifact.label}"
 
         assert isinstance(MinimalAgent(), Agent)
 
@@ -473,3 +641,4 @@ class TestCustomAgentImplementation:
 
         assert results[0].content.startswith("processed:")
         assert results[0].agent_fingerprint == "minimal-v1"
+        assert results[0].agent_id == "minimal"

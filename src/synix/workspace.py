@@ -57,12 +57,29 @@ class VLLMConfig:
 
 
 @dataclass
+class AgentConfig:
+    """Agent definition from synix.toml [agents.*] section."""
+
+    name: str
+    prompt_key: str = ""  # key in PromptStore; defaults to name
+    instructions_file: str = ""  # path to seed instructions from
+    provider: str = ""
+    model: str = ""
+    base_url: str | None = None
+    api_key_env: str | None = None
+    temperature: float | None = 0.3
+    max_tokens: int = 4096
+    description: str = ""
+
+
+@dataclass
 class WorkspaceConfig:
     """Parsed workspace configuration from synix.toml."""
 
     name: str = ""
     pipeline_path: str = "pipeline.py"
     buckets: list[BucketConfig] = field(default_factory=list)
+    agents: dict[str, AgentConfig] = field(default_factory=dict)
     auto_build: BuildQueueConfig = field(default_factory=BuildQueueConfig)
     vllm: VLLMConfig = field(default_factory=VLLMConfig)
 
@@ -207,6 +224,53 @@ class Workspace:
     @property
     def buckets(self) -> list[BucketConfig]:
         return self._config.buckets
+
+    @property
+    def agents(self) -> dict[str, AgentConfig]:
+        return self._config.agents
+
+    def get_agent(self, name: str):
+        """Load a configured agent by name, bound to the workspace's PromptStore."""
+        from synix.agents import SynixLLMAgent
+
+        if name not in self._config.agents:
+            available = list(self._config.agents.keys())
+            raise ValueError(f"Agent {name!r} not found. Available: {available}")
+
+        ac = self._config.agents[name]
+        llm_config = {}
+        if ac.provider:
+            llm_config["provider"] = ac.provider
+        if ac.model:
+            llm_config["model"] = ac.model
+        if ac.base_url:
+            llm_config["base_url"] = ac.base_url
+        if ac.api_key_env:
+            llm_config["api_key_env"] = ac.api_key_env
+        if ac.temperature is not None:
+            llm_config["temperature"] = ac.temperature
+        llm_config["max_tokens"] = ac.max_tokens
+
+        agent = SynixLLMAgent(
+            name=ac.name,
+            prompt_key=ac.prompt_key or ac.name,
+            llm_config=llm_config or None,
+            description=ac.description,
+        )
+
+        # Bind prompt store if runtime is active
+        if self._runtime and self._runtime.prompt_store:
+            agent.bind_prompt_store(self._runtime.prompt_store)
+
+            # Seed instructions from file if specified and not already in store
+            if ac.instructions_file:
+                instructions_path = self.root / ac.instructions_file
+                if instructions_path.exists():
+                    store = self._runtime.prompt_store
+                    if store.get(agent.prompt_key) is None:
+                        store.put(agent.prompt_key, instructions_path.read_text())
+
+        return agent
 
     def bucket_dir(self, name: str) -> Path:
         """Resolve a bucket's directory to an absolute path."""
@@ -374,13 +438,86 @@ def _parse_toml(path: Path, project_root: Path) -> WorkspaceConfig:
             vllm_kwargs[key] = val
     vllm = VLLMConfig(**vllm_kwargs)
 
+    # Agents
+    agents: dict[str, AgentConfig] = {}
+    for aname, agent_raw in raw.get("agents", {}).items():
+        agents[aname] = AgentConfig(
+            name=aname,
+            prompt_key=agent_raw.get("prompt_key", aname),
+            instructions_file=agent_raw.get("instructions_file", ""),
+            provider=agent_raw.get("provider", ""),
+            model=agent_raw.get("model", ""),
+            base_url=agent_raw.get("base_url"),
+            api_key_env=agent_raw.get("api_key_env"),
+            temperature=agent_raw.get("temperature", 0.3),
+            max_tokens=int(agent_raw.get("max_tokens", 4096)),
+            description=agent_raw.get("description", ""),
+        )
+
     return WorkspaceConfig(
         name=name,
         pipeline_path=pipeline_path,
         buckets=buckets,
+        agents=agents,
         auto_build=auto_build,
         vllm=vllm,
     )
+
+
+def load_agents(config_path: str | Path | None = None) -> dict:
+    """Load agents from synix.toml. For use in pipeline.py files.
+
+    Returns a dict of agent_name → SynixLLMAgent, with PromptStore
+    bound if .synix/prompts.db exists alongside the config file.
+    """
+    from synix.agents import SynixLLMAgent
+    from synix.server.prompt_store import PromptStore
+
+    path = Path(config_path) if config_path else Path("synix.toml")
+    if not path.exists():
+        return {}
+
+    config = _parse_toml(path, path.parent)
+    if not config or not config.agents:
+        return {}
+
+    # Try to bind prompt store from .synix/prompts.db
+    prompts_db = path.parent / ".synix" / "prompts.db"
+    store = PromptStore(prompts_db) if prompts_db.exists() else None
+
+    agents: dict[str, SynixLLMAgent] = {}
+    for name, ac in config.agents.items():
+        llm_config = {}
+        if ac.provider:
+            llm_config["provider"] = ac.provider
+        if ac.model:
+            llm_config["model"] = ac.model
+        if ac.base_url:
+            llm_config["base_url"] = ac.base_url
+        if ac.api_key_env:
+            llm_config["api_key_env"] = ac.api_key_env
+        if ac.temperature is not None:
+            llm_config["temperature"] = ac.temperature
+        llm_config["max_tokens"] = ac.max_tokens
+
+        agent = SynixLLMAgent(
+            name=name,
+            prompt_key=ac.prompt_key or name,
+            llm_config=llm_config or None,
+            description=ac.description,
+        )
+
+        if store:
+            agent.bind_prompt_store(store)
+            # Seed from file if instructions_file specified
+            if ac.instructions_file:
+                instructions_path = path.parent / ac.instructions_file
+                if instructions_path.exists() and store.get(agent.prompt_key) is None:
+                    store.put(agent.prompt_key, instructions_path.read_text())
+
+        agents[name] = agent
+
+    return agents
 
 
 def load_server_bindings(path: str | Path) -> ServerBindings:

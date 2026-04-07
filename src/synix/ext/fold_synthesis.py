@@ -148,10 +148,12 @@ class FoldSynthesis(Transform):
             client = _get_llm_client(ctx)
             model_config = ctx.llm_config
             agent_fingerprint = None
+            agent_id_val = None
         else:
             client = None
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
+            agent_id_val = self.agent.agent_id
 
         sorted_inputs = self._sort_inputs(inputs)
         transform_fp = self.compute_fingerprint(ctx.to_dict() if hasattr(ctx, "to_dict") else ctx)
@@ -185,19 +187,11 @@ class FoldSynthesis(Transform):
             )
 
             if self.agent is not None:
-                from synix.agents import AgentRequest
-
-                result = self.agent.write(AgentRequest(
-                    prompt=rendered,
-                    metadata={
-                        "transform_name": self.name,
-                        "shape": "fold",
-                        "step": step,
-                        "total": total,
-                        "input_label": inp.label,
-                    },
-                ))
-                accumulated = result.content
+                logger.info(
+                    "FoldSynthesis %r: agent %r fold step %d/%d (input: %s)",
+                    self.name, self.agent.agent_id, step, total, inp.label,
+                )
+                accumulated = self.agent.fold(accumulated, inp, step, total, rendered)
             else:
                 response = _logged_complete(
                     client,
@@ -229,6 +223,7 @@ class FoldSynthesis(Transform):
                 content=accumulated,
                 input_ids=[a.artifact_id for a in inputs],
                 prompt_id=prompt_id,
+                agent_id=agent_id_val,
                 model_config=model_config,
                 agent_fingerprint=agent_fingerprint,
                 metadata=output_metadata,
