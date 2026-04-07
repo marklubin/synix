@@ -113,9 +113,7 @@ class SynixLLMAgent:
     def instructions(self) -> str:
         """Load current instructions from PromptStore."""
         if self._prompt_store is None:
-            raise ValueError(
-                f"Agent {self.name!r} has no prompt store — call bind_prompt_store() first"
-            )
+            raise ValueError(f"Agent {self.name!r} has no prompt store — call bind_prompt_store() first")
         content = self._prompt_store.get(self.prompt_key)
         if content is None:
             raise ValueError(f"Prompt key {self.prompt_key!r} not found in store")
@@ -130,10 +128,7 @@ class SynixLLMAgent:
         from synix.build.fingerprint import compute_digest, fingerprint_value
 
         if self._prompt_store is None:
-            raise ValueError(
-                f"Agent {self.name!r} has no prompt store — "
-                "bind_prompt_store() before fingerprinting"
-            )
+            raise ValueError(f"Agent {self.name!r} has no prompt store — bind_prompt_store() before fingerprinting")
         content_hash = self._prompt_store.content_hash(self.prompt_key) or ""
 
         components = {"prompt_content": content_hash}
@@ -154,8 +149,7 @@ class SynixLLMAgent:
 
     def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
         raise NotImplementedError(
-            f"SynixLLMAgent {self.name!r} does not implement group(). "
-            "See issue #127 for agent-driven grouping."
+            f"SynixLLMAgent {self.name!r} does not implement group(). See issue #127 for agent-driven grouping."
         )
 
     def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:

@@ -123,7 +123,9 @@ class ReduceSynthesis(Transform):
         if self.agent is not None:
             logger.info(
                 "ReduceSynthesis %r: agent %r reducing %d artifacts",
-                self.name, self.agent.agent_id, len(sorted_inputs),
+                self.name,
+                self.agent.agent_id,
+                len(sorted_inputs),
             )
             content = self.agent.reduce(sorted_inputs, rendered)
             model_config = None

@@ -1,0 +1,1 @@
+Error loading pipeline: ValueError: Agent 'analyst' has no prompt store — bind_prompt_store() before fingerprinting

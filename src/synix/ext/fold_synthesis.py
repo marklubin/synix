@@ -189,7 +189,11 @@ class FoldSynthesis(Transform):
             if self.agent is not None:
                 logger.info(
                     "FoldSynthesis %r: agent %r fold step %d/%d (input: %s)",
-                    self.name, self.agent.agent_id, step, total, inp.label,
+                    self.name,
+                    self.agent.agent_id,
+                    step,
+                    total,
+                    inp.label,
                 )
                 accumulated = self.agent.fold(accumulated, inp, step, total, rendered)
             else:

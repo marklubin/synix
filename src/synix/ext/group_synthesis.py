@@ -178,7 +178,9 @@ class GroupSynthesis(Transform):
         if self.agent is not None:
             logger.info(
                 "GroupSynthesis %r: agent %r grouping %d artifacts",
-                self.name, self.agent.agent_id, len(inputs),
+                self.name,
+                self.agent.agent_id,
+                len(inputs),
             )
             rendered = render_template(self.prompt, artifact_type=self.artifact_type) if self.prompt else ""
             groups = self.agent.group(inputs, rendered)
@@ -186,17 +188,19 @@ class GroupSynthesis(Transform):
             for g in groups:
                 label = f"{self.label_prefix}-{g.key}" if self.label_prefix else g.key
                 meta = {"group_key": g.key, "input_count": len(g.artifacts)}
-                results.append(Artifact(
-                    label=label,
-                    artifact_type=self.artifact_type,
-                    content=g.content,
-                    input_ids=[a.artifact_id for a in g.artifacts],
-                    prompt_id=prompt_id,
-                    agent_id=self.agent.agent_id,
-                    agent_fingerprint=self.agent.fingerprint_value(),
-                    model_config=None,
-                    metadata=meta,
-                ))
+                results.append(
+                    Artifact(
+                        label=label,
+                        artifact_type=self.artifact_type,
+                        content=g.content,
+                        input_ids=[a.artifact_id for a in g.artifacts],
+                        prompt_id=prompt_id,
+                        agent_id=self.agent.agent_id,
+                        agent_fingerprint=self.agent.fingerprint_value(),
+                        model_config=None,
+                        metadata=meta,
+                    )
+                )
             return results
 
         # Non-agent path: use split/group logic with LLM

@@ -216,9 +216,7 @@ class TestSynixLLMAgent:
         assert agent.llm_config["model"] == "claude-sonnet-4-20250514"
 
     def test_with_description(self):
-        agent = SynixLLMAgent(
-            name="agent", prompt_key="key", description="Does stuff"
-        )
+        agent = SynixLLMAgent(name="agent", prompt_key="key", description="Does stuff")
         assert agent.description == "Does stuff"
 
 
@@ -492,9 +490,7 @@ class TestFingerprintValue:
         agent1 = SynixLLMAgent(name="agent", prompt_key="key")
         agent1.bind_prompt_store(store)
 
-        agent2 = SynixLLMAgent(
-            name="agent", prompt_key="key", llm_config={"model": "gpt-4"}
-        )
+        agent2 = SynixLLMAgent(name="agent", prompt_key="key", llm_config={"model": "gpt-4"})
         agent2.bind_prompt_store(store)
 
         assert agent1.fingerprint_value() != agent2.fingerprint_value()
