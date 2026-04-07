@@ -1,320 +1,223 @@
-# Agent Gateway Interface for Synix Transforms
+# Typed Agent Protocol + SynixLLMAgent
 
 ## Context
 
-Today the generic synthesis transforms are coupled to Synix's built-in LLM execution path:
+PR #126 shipped a generic `write(AgentRequest) → AgentResult` gateway. Too generic — it doesn't know about transform shapes, and the agent doesn't own rendering or execution. The original intent was typed operations matching pipeline transforms, with agents that have identity, own their execution, and can be configured in workspaces.
 
-- The transform owns prompt rendering.
-- The transform calls `LLMClient` through `_logged_complete()`.
-- The transform records prompt/model provenance and participates in fingerprint-based caching.
+This replaces the generic gateway with a typed protocol and adds `SynixLLMAgent` as the built-in implementation.
 
-That coupling makes it hard to use the same transform abstractions with an externally managed agent or generation service. But the thing we want to decouple is the **execution gateway**, not the transform semantics.
-
-## Goal
-
-Define a minimal `Agent` interface that generic transforms can call to obtain output text.
-
-The external agent implementation is **managed outside Synix**. Synix does not own its lifecycle, registry, config, or runtime surface. Synix only knows:
-
-1. how to render the transform prompt
-2. how to pass that rendered prompt to an injected agent
-3. how to fingerprint that agent for cache correctness
-
-## Non-Goals
-
-- Synix does **not** become an agent framework.
-- No agent registry in config or TOML.
-- No `run_agent`, `list_agents`, or standalone agent MCP surface.
-- No transform-shape-specific callbacks like `for_map()` or `for_reduce()`.
-- No movement of grouping, sorting, fold checkpointing, search-surface access, or `context_budget` logic out of Synix transforms.
-- No overloading of `prompt_id` to mean agent identity.
-
----
-
-## Design
-
-### Boundary
-
-Synix continues to own transform behavior. The injected agent is just a writer:
-
-```
-Artifact inputs
-    |
-    v
-Transform
-  - sort/group/fold logic
-  - prompt rendering
-  - context_budget
-  - provenance bookkeeping
-    |
-    v
-Agent.write(request)
-    |
-    v
-text output
-    |
-    v
-Artifact output
-```
-
-This preserves the current architecture: Synix remains an offline build system with explicit transform semantics. The new interface only decouples the final execution step from the built-in LLM client.
-
-### New: `src/synix/agents.py`
+## Agent Protocol (replaces current `agents.py`)
 
 ```python
-from __future__ import annotations
-
-from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
-
-
-@dataclass(frozen=True)
-class AgentRequest:
-    prompt: str
-    max_tokens: int | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class AgentResult:
+@dataclass
+class Group:
+    """Result of a group operation — key, member artifacts, and synthesized content."""
+    key: str
+    artifacts: list[Artifact]
     content: str
-
 
 @runtime_checkable
 class Agent(Protocol):
-    def write(self, request: AgentRequest) -> AgentResult:
-        """Execute a rendered synthesis request and return output text."""
+    """Named execution agent for Synix pipeline operations.
+    
+    agent_id is stable identity (who). fingerprint_value() is config
+    snapshot (how it behaves now). Separate lifecycles.
+    """
+
+    @property
+    def agent_id(self) -> str:
+        """Stable identity — who this agent is. For lineage/provenance.
+        Changes only when the agent is fundamentally replaced."""
 
     def fingerprint_value(self) -> str:
-        """Return a deterministic fingerprint for output-affecting behavior."""
+        """Config snapshot — current behavior hash. For cache invalidation.
+        Changes when instructions/model/temperature change."""
+
+    def map(self, artifact: Artifact) -> str:
+        """1:1 — process single artifact. Used by MapSynthesis."""
+
+    def reduce(self, artifacts: list[Artifact]) -> str:
+        """N:1 — combine artifacts into one. Used by ReduceSynthesis."""
+
+    def group(self, artifacts: list[Artifact]) -> list[Group]:
+        """N:M — assign artifacts to groups and synthesize each.
+        Returns list of Group(key, artifacts, content).
+        Used by GroupSynthesis.
+        Note: parallel feed-forward variant tracked in #127."""
+
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
+        """Sequential — one fold step. Used by FoldSynthesis."""
 ```
 
-### Why this shape
-
-- `prompt` is plain text, not chat-message dicts. That keeps the interface transport-neutral.
-- `metadata` gives the external implementation optional context without forcing Synix to expose transform-shape-specific methods.
-- `write()` is generic. Synix transforms keep owning their own shape semantics.
-- `fingerprint_value()` is the cache/provenance contract between Synix and the external implementation.
-
-### Metadata passed in `AgentRequest`
-
-Synix may populate `metadata` with execution context such as:
-
-- `transform_name`
-- `artifact_type`
-- `input_labels`
-- `group_key`
-- `step`
-- `total`
-
-This metadata is advisory only. It does not replace prompt rendering and it does not become part of the public transform API.
-
----
-
-## Fingerprint Contract
-
-The injected agent implementation supplies its own fingerprint logic.
-
-That fingerprint is not a hint. It is a **cache-correctness contract**.
-
-Requirements:
-
-- Deterministic for the same effective behavior.
-- Changes whenever output-affecting behavior changes.
-- Safe to use as part of transform fingerprinting.
-
-Examples of things an external implementation may include:
-
-- model/version
-- instructions owned by the external agent
-- tool set or tool schema revision
-- endpoint revision
-- decoding parameters
-- externally managed prompt/template version
-
-If an implementation cannot provide a trustworthy fingerprint, Synix should not treat it as cache-safe.
-
-Recommended v1 behavior:
-
-- `fingerprint_value()` is required for any agent-backed transform.
-- If it is missing or empty, transform construction raises `ValueError`.
-
----
-
-## Artifact Provenance
-
-### Recommended: modify `src/synix/core/models.py`
-
-Add a separate field:
+## SynixLLMAgent (built-in implementation)
 
 ```python
-agent_fingerprint: str | None = None
+@dataclass
+class SynixLLMAgent:
+    """Built-in agent backed by PromptStore + LLMClient."""
+    name: str                          # stable identity (= agent_id)
+    prompt_key: str                    # key in PromptStore for instructions
+    llm_config: dict | None = None     # provider/model/temperature
+    description: str = ""
+    _prompt_store: Any = None          # injected at runtime (PromptStore)
+
+    @property
+    def agent_id(self) -> str:
+        return self.name
+
+    @property
+    def instructions(self) -> str:
+        """Load current instructions from PromptStore."""
+        if self._prompt_store is None:
+            raise ValueError(f"Agent {self.name!r} has no prompt store — call bind_prompt_store() first")
+        content = self._prompt_store.get(self.prompt_key)
+        if content is None:
+            raise ValueError(f"Prompt key {self.prompt_key!r} not found in store")
+        return content
+
+    def fingerprint_value(self) -> str:
+        """Hash of prompt content (from store) + llm_config.
+        Auto-invalidates when prompt is edited in viewer."""
+        content_hash = self._prompt_store.content_hash(self.prompt_key) if self._prompt_store else ""
+        # hash content_hash + llm_config
+
+    def bind_prompt_store(self, store) -> SynixLLMAgent:
+        """Bind a PromptStore to this agent. Returns self for chaining."""
+        self._prompt_store = store
+        return self
+
+    def map(self, artifact) -> str:
+        rendered = render_template(self.instructions,
+            artifact=artifact.content, label=artifact.label,
+            artifact_type=artifact.artifact_type)
+        return self._call(rendered)
+
+    def reduce(self, artifacts) -> str:
+        joined = "\n---\n".join(f"### {a.label}\n{a.content}" for a in artifacts)
+        rendered = render_template(self.instructions,
+            artifacts=joined, count=str(len(artifacts)))
+        return self._call(rendered)
+
+    def group(self, artifacts) -> list[Group]:
+        # Not yet implemented for SynixLLMAgent (tracked in #127)
+        raise NotImplementedError("SynixLLMAgent.group() not yet implemented")
+
+    def fold(self, accumulated, artifact, step, total) -> str:
+        rendered = render_template(self.instructions,
+            accumulated=accumulated, artifact=artifact.content,
+            label=artifact.label, step=str(step), total=str(total))
+        return self._call(rendered)
+
+    def _call(self, user_content: str) -> str:
+        messages = [
+            {"role": "system", "content": self.instructions},
+            {"role": "user", "content": user_content},
+        ]
+        return self._get_client().complete(messages=messages).content
+
+    def _get_client(self):
+        from synix.build.llm_client import LLMClient
+        from synix.core.config import LLMConfig
+        return LLMClient(LLMConfig.from_dict(self.llm_config or {}))
 ```
 
-This field is distinct from `prompt_id`.
+**Prompt Store integration:**
+- Instructions loaded from `PromptStore.get(prompt_key)` at call time (not cached — picks up edits)
+- `fingerprint_value()` uses `PromptStore.content_hash(prompt_key)` — auto-invalidates cache when prompt is edited in the viewer
+- `bind_prompt_store()` injects the store at runtime (during workspace/server startup)
+- Workspace `load_agents()` auto-binds the workspace's PromptStore to each agent
 
-- `prompt_id` remains prompt/template provenance.
-- `agent_fingerprint` records the execution backend identity used for this artifact.
+## Artifact provenance (already on Artifact from PR #126)
 
-We should **not** set `prompt_id = agent_fingerprint`. Those are different provenance dimensions and they are already used separately in diffing, snapshots, and artifact storage.
+- `agent_id: str | None` — from `agent.agent_id` (stable: "summarizer")
+- `agent_fingerprint: str | None` — from `agent.fingerprint_value()` (config snapshot hash)
 
-Because this is a persisted field, the RFC implementation must update all artifact serialization paths, snapshot/object-store payloads, and any SDK/viewer shims that materialize `Artifact`.
-
----
-
-## Phase 1: Generic transform integration
-
-All four generic synthesis transforms gain:
+## Transform integration (replace write() with typed calls)
 
 ```python
-agent: Agent | None = None
-```
-
-### Constructor
-
-- `prompt` stays required.
-- `agent` is optional.
-
-This is the key design difference from the earlier draft: using an injected agent does **not** make prompt ownership leave the transform.
-
-### Execution
-
-When `agent is None`:
-
-- Existing behavior is unchanged.
-- The transform uses the built-in LLM client path.
-
-When `agent is not None`:
-
-1. The transform renders the prompt exactly as it does today.
-2. The transform builds an `AgentRequest`.
-3. The transform calls `agent.write(request)`.
-4. The returned `content` becomes the artifact body.
-
-Example for `MapSynthesis`:
-
-```python
-rendered = render_template(
-    self.prompt,
-    artifact=inp.content,
-    label=inp.label,
-    artifact_type=inp.artifact_type,
-)
-
-if self.agent is None:
-    response = _logged_complete(...)
-    content = response.content
+# MapSynthesis.execute():
+if self.agent is not None:
+    content = self.agent.map(inp)
+    agent_id_val = self.agent.agent_id
+    agent_fp = self.agent.fingerprint_value()
+    model_config = None
 else:
-    result = self.agent.write(
-        AgentRequest(
-            prompt=rendered,
-            metadata={
-                "transform_name": self.name,
-                "shape": "map",
-                "input_labels": [inp.label],
-                "artifact_type": self.artifact_type,
-            },
-        )
-    )
-    content = result.content
+    # existing _logged_complete() path unchanged
+
+# ReduceSynthesis.execute():
+if self.agent is not None:
+    content = self.agent.reduce(sorted_inputs)
+
+# GroupSynthesis.execute():
+if self.agent is not None:
+    groups = self.agent.group(inputs)
+    # create one artifact per Group
+
+# FoldSynthesis fold loop:
+if self.agent is not None:
+    accumulated = self.agent.fold(accumulated, inp, step, total)
 ```
 
-The same pattern applies to Reduce, Group, and Fold.
+## Workspace config + load_agents()
 
-### Fingerprinting
+```toml
+# synix.toml
+[agents.writer]
+instructions_file = "prompts/writer.txt"
+provider = "openai-compatible"
+model = "Qwen/Qwen3.5-2B"
+base_url = "http://localhost:8100/v1"
+temperature = 0.3
+max_tokens = 2048
+```
 
-When `agent is None`:
+```python
+# In workspace.py
+def load_agents(config_path=None) -> dict[str, SynixLLMAgent]:
+    """Load agents from synix.toml. For use in pipeline.py."""
+```
 
-- existing fingerprint behavior remains unchanged
+## Implementation — 3 parallel agents
 
-When `agent is not None`:
+### Agent 1: Rewrite agents.py + tests
+- Replace AgentRequest/AgentResult/write() with Group + typed protocol
+- Add SynixLLMAgent with map/reduce/fold/_call/_get_client
+- Update __init__.py exports
+- Rewrite tests/unit/test_agents.py
 
-- `compute_fingerprint()` adds an `"agent"` component from `agent.fingerprint_value()`
-- `get_cache_key()` includes `agent.fingerprint_value()`
-- the built-in `"model"` fingerprint component from `llm_config` is omitted for that transform, because Synix did not execute the call
+### Agent 2: Update all 4 transforms + tests
+- Replace agent.write(AgentRequest(...)) with typed calls
+- Remove prompt rendering from agent path (agent owns it)
+- Set agent_id on artifacts from agent.agent_id
+- Update tests/unit/test_agent_transforms.py
 
-Prompt hashing and other transform-owned config hashing remain intact.
+### Agent 3: Workspace config + e2e
+- Add [agents.*] parsing to workspace.py
+- Add load_agents() convenience
+- Update tests/e2e/test_agent_pipeline.py
+- New tests/unit/test_workspace_agents.py
 
-### Artifact output
+## Files
 
-When `agent is not None`:
-
-- set `agent_fingerprint = agent.fingerprint_value()`
-- keep `prompt_id` as the transform prompt version/hash
-- leave `model_config` as `None` unless Synix itself performed the LLM call
-
-This preserves provenance meaning:
-
-- prompt provenance says what Synix rendered
-- agent fingerprint says what external executor produced the text
-
-### Files modified
-
-- `src/synix/agents.py`
-- `src/synix/ext/map_synthesis.py`
-- `src/synix/ext/reduce_synthesis.py`
-- `src/synix/ext/group_synthesis.py`
-- `src/synix/ext/fold_synthesis.py`
-- `src/synix/core/models.py`
-- artifact persistence/snapshot/diff layers that serialize `Artifact`
-
----
-
-## Phase 2: Tests
-
-### New: `tests/unit/test_agents.py`
-
-- Protocol compliance with a fake external agent
-- `AgentRequest` and `AgentResult` construction
-- `fingerprint_value()` determinism requirement documented via tests
-
-### New: `tests/unit/test_agent_transforms.py`
-
-- Each generic synthesis transform with `agent=` calls `agent.write()`
-- Rendered prompt remains transform-owned
-- Fingerprint changes when agent fingerprint changes
-- Prompt remains required even when `agent=` is set
-- Backward compatibility: existing `prompt=` path behaves identically
-
-### Update existing artifact/snapshot tests
-
-- `agent_fingerprint` persists through artifact store and snapshot/object store
-- diffing does not confuse `prompt_id` and `agent_fingerprint`
-
-### Optional e2e
-
-- Small pipeline using `MapSynthesis(..., agent=fake_agent)` and `ReduceSynthesis(..., agent=fake_agent)`
-
----
-
-## Deliberately Out of Scope
-
-These ideas are explicitly removed from this RFC:
-
-- `SynixLLMAgent` as a first-class public runtime persona
-- standalone `agent.run()`
-- `agents_config.py`
-- `[agents.*]` config sections
-- `ServerConfig` changes
-- MCP tools for agent lifecycle
-- template/docs changes that imply Synix now manages agents
-
-If we later want a convenience adapter that wraps `LLMClient` behind the `Agent` protocol, that can be a separate follow-on RFC. It is not needed to establish the boundary.
-
----
-
-## Open Questions
-
-1. Should `agent_fingerprint` be a first-class `Artifact` field in v1, or should we stage it in `metadata` first to reduce schema churn?
-2. Should bundled transforms in `src/synix/build/llm_transforms.py` gain the same `agent=` escape hatch in the initial slice, or only the generic transforms?
-3. Do we want a tiny internal adapter like `LLMClientAgent` for testability, or is `agent=None` enough for the built-in path?
-
----
+| File | Change |
+|------|--------|
+| `src/synix/agents.py` | Rewrite — Group, Agent Protocol, SynixLLMAgent |
+| `src/synix/__init__.py` | Update exports |
+| `src/synix/ext/map_synthesis.py` | agent.map(inp) |
+| `src/synix/ext/reduce_synthesis.py` | agent.reduce(inputs) |
+| `src/synix/ext/group_synthesis.py` | agent.group(inputs) → list[Group] |
+| `src/synix/ext/fold_synthesis.py` | agent.fold(accumulated, inp, step, total) |
+| `src/synix/workspace.py` | [agents.*] config, load_agents() |
+| `tests/unit/test_agents.py` | Rewrite |
+| `tests/unit/test_agent_transforms.py` | Update |
+| `tests/e2e/test_agent_pipeline.py` | Update |
+| `tests/unit/test_workspace_agents.py` | NEW |
 
 ## Verification
 
 1. `uv run pytest tests/unit/test_agents.py -v`
 2. `uv run pytest tests/unit/test_agent_transforms.py -v`
-3. `uv run pytest tests/unit/test_ext_transforms.py -v`
-4. `uv run pytest tests/unit/test_diff.py -v`
-5. `uv run release`
+3. `uv run pytest tests/e2e/test_agent_pipeline.py -v`
+4. `uv run pytest tests/unit/test_workspace_agents.py -v`
+5. `uv run pytest tests/unit/test_ext_transforms.py -v` — backward compat
+6. `uv run release` — full gate
