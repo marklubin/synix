@@ -20,10 +20,10 @@ class FakeAgent:
         self._response = response
         self._fingerprint = fingerprint
         self._agent_id = agent_id
-        self.map_calls: list[Artifact] = []
-        self.reduce_calls: list[list[Artifact]] = []
-        self.group_calls: list[list[Artifact]] = []
-        self.fold_calls: list[tuple[str, Artifact, int, int]] = []
+        self.map_calls: list[tuple[Artifact, str]] = []
+        self.reduce_calls: list[tuple[list[Artifact], str]] = []
+        self.group_calls: list[tuple[list[Artifact], str]] = []
+        self.fold_calls: list[tuple[str, Artifact, int, int, str]] = []
 
     @property
     def agent_id(self) -> str:
@@ -32,21 +32,21 @@ class FakeAgent:
     def fingerprint_value(self) -> str:
         return self._fingerprint
 
-    def map(self, artifact: Artifact) -> str:
-        self.map_calls.append(artifact)
+    def map(self, artifact: Artifact, task_prompt: str) -> str:
+        self.map_calls.append((artifact, task_prompt))
         return self._response
 
-    def reduce(self, artifacts: list[Artifact]) -> str:
-        self.reduce_calls.append(artifacts)
+    def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
+        self.reduce_calls.append((artifacts, task_prompt))
         return self._response
 
-    def group(self, artifacts: list[Artifact]) -> list[Group]:
-        self.group_calls.append(artifacts)
+    def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
+        self.group_calls.append((artifacts, task_prompt))
         # Return one group per artifact for testing
         return [Group(key=a.label, artifacts=[a], content=self._response) for a in artifacts]
 
-    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
-        self.fold_calls.append((accumulated, artifact, step, total))
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
+        self.fold_calls.append((accumulated, artifact, step, total, task_prompt))
         return self._response
 
 
@@ -65,7 +65,7 @@ def _make_artifact(label: str, content: str = "content", **metadata) -> Artifact
 
 
 class TestMapWithAgent:
-    def test_agent_map_called_with_artifact(self):
+    def test_agent_map_called_with_artifact_and_task_prompt(self):
         agent = FakeAgent()
         t = MapSynthesis(
             "ws",
@@ -77,8 +77,11 @@ class TestMapWithAgent:
         t.execute([inp], {"llm_config": {}})
 
         assert len(agent.map_calls) == 1
-        assert agent.map_calls[0].label == "bio-alice"
-        assert agent.map_calls[0].content == "Alice is an engineer."
+        artifact, task_prompt = agent.map_calls[0]
+        assert artifact.label == "bio-alice"
+        assert artifact.content == "Alice is an engineer."
+        assert "Alice is an engineer." in task_prompt
+        assert task_prompt == "Analyze: Alice is an engineer."
 
     def test_artifact_has_agent_fingerprint(self):
         agent = FakeAgent(fingerprint="map-fp-123")
@@ -128,7 +131,7 @@ class TestMapWithAgent:
 
 
 class TestReduceWithAgent:
-    def test_agent_reduce_called(self):
+    def test_agent_reduce_called_with_task_prompt(self):
         agent = FakeAgent()
         t = ReduceSynthesis(
             "team",
@@ -141,11 +144,15 @@ class TestReduceWithAgent:
         results = t.execute(inputs, {"llm_config": {}})
 
         assert len(agent.reduce_calls) == 1
+        artifacts, task_prompt = agent.reduce_calls[0]
         # Reduce receives sorted artifacts
-        assert len(agent.reduce_calls[0]) == 3
+        assert len(artifacts) == 3
         assert results[0].agent_fingerprint == "test-agent-fp"
         assert results[0].agent_id == "test-agent"
         assert results[0].model_config is None
+        # task_prompt contains rendered artifacts text
+        assert "profile" in task_prompt
+        assert task_prompt.startswith("Analyze: ")
 
     def test_artifact_content_from_agent(self):
         agent = FakeAgent(response="reduced output")
@@ -170,7 +177,7 @@ class TestReduceWithAgent:
 
 
 class TestGroupWithAgent:
-    def test_agent_group_called_with_all_inputs(self):
+    def test_agent_group_called_with_all_inputs_and_task_prompt(self):
         agent = FakeAgent()
         inputs = [
             _make_artifact("ep-1", "content 1", team="alpha"),
@@ -186,9 +193,12 @@ class TestGroupWithAgent:
         )
         results = t.execute(inputs, {"llm_config": {}})
 
-        # Agent.group() called once with all inputs
+        # Agent.group() called once with all inputs and task_prompt
         assert len(agent.group_calls) == 1
-        assert len(agent.group_calls[0]) == 3
+        artifacts, task_prompt = agent.group_calls[0]
+        assert len(artifacts) == 3
+        # task_prompt is rendered from the prompt template
+        assert isinstance(task_prompt, str)
         # FakeAgent returns one group per artifact -> 3 results
         assert len(results) == 3
 
@@ -253,7 +263,7 @@ class TestGroupWithAgent:
 
 
 class TestFoldWithAgent:
-    def test_agent_called_per_step(self):
+    def test_agent_called_per_step_with_task_prompt(self):
         agent = FakeAgent(response="accumulated")
         inputs = [_make_artifact(f"ep-{i}", f"event {i}") for i in range(3)]
         t = FoldSynthesis(
@@ -271,10 +281,12 @@ class TestFoldWithAgent:
         assert len(results) == 1
         assert results[0].content == "accumulated"
 
-        # Verify step/total in each call
-        for i, (acc, art, step, total) in enumerate(agent.fold_calls):
+        # Verify step/total and task_prompt in each call
+        for i, (acc, art, step, total, task_prompt) in enumerate(agent.fold_calls):
             assert step == i + 1
             assert total == 3
+            assert "Current:" in task_prompt
+            assert "New:" in task_prompt
 
     def test_artifact_has_agent_fingerprint_and_id(self):
         agent = FakeAgent(fingerprint="fold-fp", agent_id="fold-agent-1")
@@ -320,10 +332,11 @@ class TestFoldWithAgent:
         t.execute(inputs, {"llm_config": {}})
 
         # First call should receive the initial value as accumulated
-        acc, _art, step, total = agent.fold_calls[0]
+        acc, _art, step, total, task_prompt = agent.fold_calls[0]
         assert acc == "INITIAL VALUE"
         assert step == 1
         assert total == 1
+        assert "INITIAL VALUE" in task_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -363,13 +376,13 @@ class TestEmptyFingerprintRejected:
                 return "empty"
             def fingerprint_value(self):
                 return ""
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return "x"
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return "x"
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return "x"
         with pytest.raises(ValueError, match="empty fingerprint"):
             MapSynthesis("m", prompt="p", agent=EmptyFpAgent())
@@ -381,13 +394,13 @@ class TestEmptyFingerprintRejected:
                 return "empty"
             def fingerprint_value(self):
                 return ""
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return "x"
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return "x"
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return "x"
         with pytest.raises(ValueError, match="empty fingerprint"):
             FoldSynthesis("f", prompt="p", label="out", agent=EmptyFpAgent())
@@ -608,16 +621,16 @@ class TestCustomAgentImplementation:
             def fingerprint_value(self) -> str:
                 return "minimal-v1"
 
-            def map(self, artifact: Artifact) -> str:
+            def map(self, artifact: Artifact, task_prompt: str) -> str:
                 return f"processed: {artifact.content[:20]}"
 
-            def reduce(self, artifacts: list[Artifact]) -> str:
+            def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
                 return "reduced"
 
-            def group(self, artifacts: list[Artifact]) -> list[Group]:
+            def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
                 return [Group(key="all", artifacts=artifacts, content="grouped")]
 
-            def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
+            def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
                 return f"{accumulated}+{artifact.label}"
 
         assert isinstance(MinimalAgent(), Agent)

@@ -24,16 +24,16 @@ class FakeAgent:
     def fingerprint_value(self):
         return "fp"
 
-    def map(self, artifact):
+    def map(self, artifact, task_prompt):
         return "mapped"
 
-    def reduce(self, artifacts):
+    def reduce(self, artifacts, task_prompt):
         return "reduced"
 
-    def group(self, artifacts):
+    def group(self, artifacts, task_prompt):
         return [Group(key="g", artifacts=artifacts, content="grouped")]
 
-    def fold(self, accumulated, artifact, step, total):
+    def fold(self, accumulated, artifact, step, total, task_prompt):
         return "folded"
 
 
@@ -74,10 +74,10 @@ class TestAgentProtocol:
         art = _make_artifact()
         assert agent.agent_id == "fake"
         assert agent.fingerprint_value() == "fp"
-        assert agent.map(art) == "mapped"
-        assert agent.reduce([art]) == "reduced"
-        assert agent.fold("acc", art, 1, 5) == "folded"
-        groups = agent.group([art])
+        assert agent.map(art, "task") == "mapped"
+        assert agent.reduce([art], "task") == "reduced"
+        assert agent.fold("acc", art, 1, 5, "task") == "folded"
+        groups = agent.group([art], "task")
         assert len(groups) == 1
         assert groups[0].key == "g"
 
@@ -90,13 +90,13 @@ class TestAgentProtocol:
             def fingerprint_value(self):
                 return "x"
 
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return ""
 
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
 
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return ""
 
         assert not isinstance(NoMap(), Agent)
@@ -107,16 +107,16 @@ class TestAgentProtocol:
             def agent_id(self):
                 return "x"
 
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return ""
 
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return ""
 
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
 
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return ""
 
         assert not isinstance(NoFingerprint(), Agent)
@@ -130,13 +130,13 @@ class TestAgentProtocol:
             def fingerprint_value(self):
                 return "x"
 
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return ""
 
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
 
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return ""
 
         assert not isinstance(NoReduce(), Agent)
@@ -150,13 +150,13 @@ class TestAgentProtocol:
             def fingerprint_value(self):
                 return "x"
 
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return ""
 
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return ""
 
-            def fold(self, accumulated, artifact, step, total):
+            def fold(self, accumulated, artifact, step, total, task_prompt):
                 return ""
 
         assert not isinstance(NoGroup(), Agent)
@@ -170,13 +170,13 @@ class TestAgentProtocol:
             def fingerprint_value(self):
                 return "x"
 
-            def map(self, artifact):
+            def map(self, artifact, task_prompt):
                 return ""
 
-            def reduce(self, artifacts):
+            def reduce(self, artifacts, task_prompt):
                 return ""
 
-            def group(self, artifacts):
+            def group(self, artifacts, task_prompt):
                 return []
 
         assert not isinstance(NoFold(), Agent)
@@ -291,7 +291,7 @@ class TestSynixLLMAgentMap:
         from synix.server.prompt_store import PromptStore
 
         store = PromptStore(tmp_path / "test.db")
-        store.put("map-prompt", "Summarize: {artifact}")
+        store.put("map-prompt", "You are a summarizer.")
         agent = SynixLLMAgent(name="mapper", prompt_key="map-prompt")
         agent.bind_prompt_store(store)
 
@@ -302,7 +302,7 @@ class TestSynixLLMAgentMap:
             instance = MockClient.return_value
             instance.complete.return_value = mock_response
 
-            result = agent.map(_make_artifact(content="raw text"))
+            result = agent.map(_make_artifact(content="raw text"), task_prompt="Summarize: raw text")
 
         assert result == "Summary output"
         # Verify LLM was called with system + user messages
@@ -311,7 +311,8 @@ class TestSynixLLMAgentMap:
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
-        assert "raw text" in messages[1]["content"]
+        # task_prompt is the user message now
+        assert "Summarize: raw text" in messages[1]["content"]
         store.close()
 
 
@@ -321,11 +322,11 @@ class TestSynixLLMAgentMap:
 
 
 class TestSynixLLMAgentReduce:
-    def test_reduce_joins_artifacts_and_calls_llm(self, tmp_path):
+    def test_reduce_passes_task_prompt_to_llm(self, tmp_path):
         from synix.server.prompt_store import PromptStore
 
         store = PromptStore(tmp_path / "test.db")
-        store.put("reduce-prompt", "Combine these {count} items:\n{artifacts}")
+        store.put("reduce-prompt", "You are a reducer agent.")
         agent = SynixLLMAgent(name="reducer", prompt_key="reduce-prompt")
         agent.bind_prompt_store(store)
 
@@ -341,15 +342,17 @@ class TestSynixLLMAgentReduce:
             instance = MockClient.return_value
             instance.complete.return_value = mock_response
 
-            result = agent.reduce(arts)
+            task_prompt = "Combine these 2 items:\nfirst\nsecond"
+            result = agent.reduce(arts, task_prompt)
 
         assert result == "Combined output"
         call_args = instance.complete.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages") or call_args[0][0]
-        user_content = messages[1]["content"]
-        assert "first" in user_content
-        assert "second" in user_content
-        assert "2" in user_content  # count
+        # System message is agent instructions, user message is task_prompt
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == "You are a reducer agent."
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == task_prompt
         store.close()
 
 
@@ -359,14 +362,11 @@ class TestSynixLLMAgentReduce:
 
 
 class TestSynixLLMAgentFold:
-    def test_fold_renders_with_accumulated_and_step(self, tmp_path):
+    def test_fold_passes_task_prompt_to_llm(self, tmp_path):
         from synix.server.prompt_store import PromptStore
 
         store = PromptStore(tmp_path / "test.db")
-        store.put(
-            "fold-prompt",
-            "Step {step}/{total}. So far: {accumulated}. New: {artifact}",
-        )
+        store.put("fold-prompt", "You are a fold agent.")
         agent = SynixLLMAgent(name="folder", prompt_key="fold-prompt")
         agent.bind_prompt_store(store)
 
@@ -377,21 +377,23 @@ class TestSynixLLMAgentFold:
             instance = MockClient.return_value
             instance.complete.return_value = mock_response
 
+            task_prompt = "Step 3/10. So far: previous state. New: new item"
             result = agent.fold(
                 accumulated="previous state",
                 artifact=_make_artifact(content="new item"),
                 step=3,
                 total=10,
+                task_prompt=task_prompt,
             )
 
         assert result == "Folded result"
         call_args = instance.complete.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages") or call_args[0][0]
-        user_content = messages[1]["content"]
-        assert "3" in user_content
-        assert "10" in user_content
-        assert "previous state" in user_content
-        assert "new item" in user_content
+        # System message is agent instructions, user message is the task_prompt
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == "You are a fold agent."
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == task_prompt
         store.close()
 
 
@@ -410,7 +412,7 @@ class TestSynixLLMAgentGroup:
         agent.bind_prompt_store(store)
 
         with pytest.raises(NotImplementedError, match="does not implement group"):
-            agent.group([_make_artifact()])
+            agent.group([_make_artifact()], "Group these artifacts")
         store.close()
 
 

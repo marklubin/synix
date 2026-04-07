@@ -113,18 +113,19 @@ class ReduceSynthesis(Transform):
         # Sort inputs by artifact_id for deterministic prompt -> stable cassette key
         sorted_inputs = sorted(inputs, key=lambda a: a.artifact_id)
 
+        artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
+        rendered = render_template(
+            self.prompt,
+            artifacts=artifacts_text,
+            count=str(len(sorted_inputs)),
+        )
+
         if self.agent is not None:
-            content = self.agent.reduce(sorted_inputs)  # agent owns rendering + execution
+            content = self.agent.reduce(sorted_inputs, rendered)
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
             agent_id_val = self.agent.agent_id
         else:
-            artifacts_text = "\n\n---\n\n".join(f"### {a.label}\n{a.content}" for a in sorted_inputs)
-            rendered = render_template(
-                self.prompt,
-                artifacts=artifacts_text,
-                count=str(len(inputs)),
-            )
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,

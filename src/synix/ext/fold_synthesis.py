@@ -177,17 +177,18 @@ class FoldSynthesis(Transform):
 
         # --- Main fold loop (over new_inputs only) ---
         for step, inp in enumerate(new_inputs, start_step + 1):
+            rendered = render_template(
+                self.prompt,
+                accumulated=accumulated,
+                artifact=inp.content,
+                label=inp.label,
+                step=str(step),
+                total=str(total),
+            )
+
             if self.agent is not None:
-                accumulated = self.agent.fold(accumulated, inp, step, total)
+                accumulated = self.agent.fold(accumulated, inp, step, total, rendered)
             else:
-                rendered = render_template(
-                    self.prompt,
-                    accumulated=accumulated,
-                    artifact=inp.content,
-                    label=inp.label,
-                    step=str(step),
-                    total=str(total),
-                )
                 response = _logged_complete(
                     client,
                     ctx,

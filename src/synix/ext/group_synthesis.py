@@ -174,9 +174,10 @@ class GroupSynthesis(Transform):
         ctx = self.get_context(ctx)
         prompt_id = self._make_prompt_id()
 
-        # Agent path: agent owns grouping, rendering, and execution
+        # Agent path: render task prompt, agent owns grouping and execution
         if self.agent is not None:
-            groups = self.agent.group(inputs)
+            rendered = render_template(self.prompt, artifact_type=self.artifact_type) if self.prompt else ""
+            groups = self.agent.group(inputs, rendered)
             results: list[Artifact] = []
             for g in groups:
                 label = f"{self.label_prefix}-{g.key}" if self.label_prefix else g.key

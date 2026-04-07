@@ -108,18 +108,19 @@ class MapSynthesis(Transform):
 
         inp = inputs[0]
 
+        rendered = render_template(
+            self.prompt,
+            artifact=inp.content,
+            label=inp.label,
+            artifact_type=inp.artifact_type,
+        )
+
         if self.agent is not None:
-            content = self.agent.map(inp)  # agent owns rendering + execution
+            content = self.agent.map(inp, rendered)
             model_config = None
             agent_fingerprint = self.agent.fingerprint_value()
             agent_id_val = self.agent.agent_id
         else:
-            rendered = render_template(
-                self.prompt,
-                artifact=inp.content,
-                label=inp.label,
-                artifact_type=inp.artifact_type,
-            )
             client = _get_llm_client(ctx)
             response = _logged_complete(
                 client,

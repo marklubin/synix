@@ -37,17 +37,17 @@ class DeterministicAgent:
     def fingerprint_value(self) -> str:
         return self._fingerprint
 
-    def map(self, artifact: Artifact) -> str:
+    def map(self, artifact: Artifact, task_prompt: str) -> str:
         return f"{self._prefix} processed {len(artifact.content)} chars"
 
-    def reduce(self, artifacts: list[Artifact]) -> str:
+    def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
         total_chars = sum(len(a.content) for a in artifacts)
         return f"{self._prefix} reduced {len(artifacts)} artifacts ({total_chars} chars)"
 
-    def group(self, artifacts: list[Artifact]) -> list[Group]:
+    def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
         return [Group(key="all", artifacts=artifacts, content=f"{self._prefix} grouped")]
 
-    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
         return f"{self._prefix} fold step {step}/{total}"
 
 

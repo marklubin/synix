@@ -4,6 +4,11 @@ Agents are named execution units with typed methods matching transform
 shapes (map, reduce, group, fold). Each agent has stable identity
 (agent_id) and a config snapshot fingerprint for cache invalidation.
 
+The transform renders its prompt (task structure) and passes it as
+task_prompt. The agent provides persona/semantic instructions and
+executes the LLM call. Both compose: transform defines WHAT to do,
+agent defines HOW to do it.
+
 SynixLLMAgent is the built-in implementation backed by PromptStore
 for versioned instructions and LLMClient for execution.
 """
@@ -30,6 +35,10 @@ class Group:
 class Agent(Protocol):
     """Named execution agent for Synix pipeline operations.
 
+    Each method receives typed transform inputs plus a task_prompt
+    rendered by the transform. The agent composes its own instructions
+    (persona/semantics) with the task prompt and executes.
+
     agent_id is stable identity (who this agent is).
     fingerprint_value() is config snapshot (how it behaves now).
     These have separate lifecycles.
@@ -45,20 +54,32 @@ class Agent(Protocol):
         Drives cache invalidation."""
         ...
 
-    def map(self, artifact: Artifact) -> str:
-        """1:1 — process single artifact."""
+    def map(self, artifact: Artifact, task_prompt: str) -> str:
+        """1:1 — process single artifact.
+
+        task_prompt: rendered by the transform with {artifact}, {label}, etc.
+        """
         ...
 
-    def reduce(self, artifacts: list[Artifact]) -> str:
-        """N:1 — combine artifacts into one."""
+    def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
+        """N:1 — combine artifacts into one.
+
+        task_prompt: rendered by the transform with {artifacts}, {count}, etc.
+        """
         ...
 
-    def group(self, artifacts: list[Artifact]) -> list[Group]:
-        """N:M — assign artifacts to groups and synthesize each."""
+    def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
+        """N:M — assign artifacts to groups and synthesize each.
+
+        task_prompt: rendered by the transform (may be used per-group).
+        """
         ...
 
-    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
-        """Sequential — one fold step."""
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
+        """Sequential — one fold step.
+
+        task_prompt: rendered by the transform with {accumulated}, {artifact}, {step}, {total}, etc.
+        """
         ...
 
 
@@ -66,9 +87,10 @@ class Agent(Protocol):
 class SynixLLMAgent:
     """Built-in agent backed by PromptStore + LLMClient.
 
-    Instructions are loaded from PromptStore by prompt_key at call time,
-    so edits in the viewer are picked up automatically. fingerprint_value()
-    uses the prompt store's content hash, so cache invalidates on edit.
+    Instructions (persona/semantics) are loaded from PromptStore by
+    prompt_key at call time, so edits in the viewer are picked up
+    automatically. The transform's task_prompt becomes the user message,
+    agent instructions become the system message.
     """
 
     name: str
@@ -124,49 +146,23 @@ class SynixLLMAgent:
         self._prompt_store = store
         return self
 
-    def map(self, artifact: Artifact) -> str:
-        from synix.ext._render import render_template
+    def map(self, artifact: Artifact, task_prompt: str) -> str:
+        return self._call(task_prompt)
 
-        rendered = render_template(
-            self.instructions,
-            artifact=artifact.content,
-            label=artifact.label,
-            artifact_type=artifact.artifact_type,
-        )
-        return self._call(rendered)
+    def reduce(self, artifacts: list[Artifact], task_prompt: str) -> str:
+        return self._call(task_prompt)
 
-    def reduce(self, artifacts: list[Artifact]) -> str:
-        from synix.ext._render import render_template
-
-        joined = "\n---\n".join(f"### {a.label}\n{a.content}" for a in artifacts)
-        rendered = render_template(
-            self.instructions,
-            artifacts=joined,
-            count=str(len(artifacts)),
-        )
-        return self._call(rendered)
-
-    def group(self, artifacts: list[Artifact]) -> list[Group]:
+    def group(self, artifacts: list[Artifact], task_prompt: str) -> list[Group]:
         raise NotImplementedError(
             f"SynixLLMAgent {self.name!r} does not implement group(). "
             "See issue #127 for agent-driven grouping."
         )
 
-    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int) -> str:
-        from synix.ext._render import render_template
+    def fold(self, accumulated: str, artifact: Artifact, step: int, total: int, task_prompt: str) -> str:
+        return self._call(task_prompt)
 
-        rendered = render_template(
-            self.instructions,
-            accumulated=accumulated,
-            artifact=artifact.content,
-            label=artifact.label,
-            step=str(step),
-            total=str(total),
-        )
-        return self._call(rendered)
-
-    def _call(self, user_content: str) -> str:
-        """Execute an LLM call with instructions as system prompt."""
+    def _call(self, task_prompt: str) -> str:
+        """Execute LLM call: instructions as system, task_prompt as user."""
         from synix.build.llm_client import LLMClient
         from synix.core.config import LLMConfig
 
@@ -175,7 +171,7 @@ class SynixLLMAgent:
         response = client.complete(
             messages=[
                 {"role": "system", "content": self.instructions},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": task_prompt},
             ],
             artifact_desc=f"agent:{self.name}",
         )
@@ -196,4 +192,3 @@ class SynixLLMAgent:
         agent = cls(name=name, prompt_key=prompt_key, **kwargs)
         agent.bind_prompt_store(prompt_store)
         return agent
-
