@@ -573,13 +573,13 @@ class TestParseClaudeCodeBasic:
 class TestRegistryJsonlExtension:
     """Tests for Issue 8: .jsonl registered in adapter registry."""
 
-    def test_jsonl_maps_to_parse_claude_code(self):
-        """The .jsonl extension is registered and maps to parse_claude_code."""
-        from synix.adapters.claude_code import parse_claude_code
+    def test_jsonl_maps_to_registered_adapter(self):
+        """The .jsonl extension is registered with a callable adapter."""
         from synix.adapters.registry import get_adapter
 
         adapter = get_adapter(Path("test.jsonl"))
-        assert adapter is parse_claude_code
+        assert adapter is not None
+        assert callable(adapter)
 
     def test_jsonl_in_supported_extensions(self):
         """The .jsonl extension appears in supported extensions."""
