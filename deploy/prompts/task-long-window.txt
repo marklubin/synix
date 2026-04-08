@@ -1,7 +1,0 @@
-Current summary:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update the summary. Focus on recurring themes and patterns across weeks, how projects and priorities have evolved, strategic direction shifts, relationships developing. Drop granular daily details — keep the arc, not the events. 300-500 words.

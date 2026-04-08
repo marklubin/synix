@@ -1,0 +1,3 @@
+Synthesize the builder state and operator state into a working memory document — what's active right now, what needs attention, and what's next:
+
+{artifacts}

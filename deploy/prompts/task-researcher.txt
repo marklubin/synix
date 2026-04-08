@@ -1,0 +1,7 @@
+Current state:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+Update the research document with any hypotheses, findings, comparisons, or open questions from this content.

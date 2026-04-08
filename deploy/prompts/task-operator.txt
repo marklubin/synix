@@ -1,0 +1,7 @@
+Current state:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+Update the operator document with any action items, blockers, pending decisions, or configuration changes from this content.

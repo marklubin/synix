@@ -1,0 +1,3 @@
+Build a self-model from these analysis documents — who is this person, how do they work, what do they value, what are their patterns and preferences. Write as structured observations that an agent can use to calibrate its behavior:
+
+{artifacts}

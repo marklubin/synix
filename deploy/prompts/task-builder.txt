@@ -1,0 +1,7 @@
+Current state:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+Update the builder document with any technical decisions, architecture changes, features shipped, or implementation progress from this content.

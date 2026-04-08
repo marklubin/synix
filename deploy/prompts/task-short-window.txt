@@ -1,7 +1,0 @@
-Current status:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update the status. Focus on what was worked on in the last few days, decisions made, outcomes reached, current momentum and direction. Drop anything older than ~a week. Keep it 200-400 words.

@@ -1,0 +1,7 @@
+Current state:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+Update the idea garden with any speculative directions, what-if thinking, creative connections, or unexplored possibilities from this content.

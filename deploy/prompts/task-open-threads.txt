@@ -1,7 +1,0 @@
-Current open threads:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update: add new unresolved items, blockers, or pending actions. Remove or mark items that this content resolves. Keep each item as one line with what it's waiting on. Format as a clean bullet list. Drop stale items (no mention in weeks).

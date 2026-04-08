@@ -1,0 +1,3 @@
+Synthesize working memory, idea garden, and self-model into a single core memory document. This is the stable context an agent receives. It should cover: who the user is, what they're working on, what ideas are developing, and how to work with them effectively:
+
+{artifacts}
