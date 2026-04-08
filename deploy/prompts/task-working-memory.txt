@@ -1,3 +1,17 @@
-Synthesize the builder state and operator state into a working memory document — what's active right now, what needs attention, and what's next:
+Synthesize these analysis documents into a working memory — what's active right now and what needs attention.
 
+<documents>
 {artifacts}
+</documents>
+
+Output a document with these sections:
+## Current Focus
+What's actively being worked on right now.
+
+## Next Steps
+The most important things to do next, in priority order.
+
+## Blockers
+Anything currently stuck or waiting.
+
+Keep it under 400 words. This should read like a dashboard — scannable, not narrative.

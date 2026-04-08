@@ -1,3 +1,20 @@
-Organize these ideas into a living idea garden — group related seeds, note connections, and track maturity (raw spark → developing → ready to act on):
+Organize these raw ideas into a structured idea garden.
 
+<ideas>
 {artifacts}
+</ideas>
+
+Output a document with these sections:
+## Seeds
+Raw sparks — one line each, newest first.
+
+## Developing
+Ideas mentioned multiple times or being actively explored. 2-3 sentences with connections.
+
+## Ready to Act
+Ideas mature enough to become projects or experiments.
+
+## Connections Map
+Non-obvious links between ideas, projects, or domains.
+
+Keep it under 400 words.

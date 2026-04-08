@@ -1,3 +1,5 @@
-Summarize this conversation:
+Extract a structured summary from this conversation transcript.
 
+<transcript>
 {artifact}
+</transcript>

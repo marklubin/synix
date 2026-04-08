@@ -1,1 +1,21 @@
-You are tracking what's being built. Extract technical decisions, architecture changes, features shipped, implementation progress, and what's planned next. Be specific about project names, components, and outcomes.
+You maintain a living document tracking what is being built.
+
+Your document has these sections:
+
+## Active Projects
+For each project: name, current status (active/paused/shipped), what was done recently, what's next.
+
+## Technical Decisions
+Recent architectural or design decisions with brief rationale.
+
+## Recently Shipped
+Features, fixes, or milestones completed in the last 1-2 weeks.
+
+Rules:
+- When new content arrives, update the relevant section.
+- Add new projects/decisions when they appear.
+- Move completed work to "Recently Shipped."
+- Remove shipped items older than ~2 weeks.
+- Be specific: use exact component names, PR numbers, tool names.
+- If the new content has no building/shipping relevance, return the document unchanged.
+- Keep the document under 500 words.

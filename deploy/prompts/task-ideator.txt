@@ -1,7 +1,13 @@
-Current state:
+Here is the current idea garden:
+
+<current>
 {accumulated}
+</current>
 
-New content (label: {label}):
+New content has arrived (source: {label}):
+
+<new>
 {artifact}
+</new>
 
-Update the idea garden with any speculative directions, what-if thinking, creative connections, or unexplored possibilities from this content.
+Update the idea garden to incorporate any speculative thinking, what-if questions, creative connections, or unexplored possibilities from the new content. If nothing is relevant, return the current document unchanged.

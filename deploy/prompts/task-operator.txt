@@ -1,7 +1,13 @@
-Current state:
+Here is the current operator document:
+
+<current>
 {accumulated}
+</current>
 
-New content (label: {label}):
+New content has arrived (source: {label}):
+
+<new>
 {artifact}
+</new>
 
-Update the operator document with any action items, blockers, pending decisions, or configuration changes from this content.
+Update the operator document to incorporate any action items, blockers, deployment changes, or operational state from the new content. If nothing is relevant, return the current document unchanged.

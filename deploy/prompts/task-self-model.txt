@@ -1,3 +1,26 @@
-Build a self-model from these analysis documents — who is this person, how do they work, what do they value, what are their patterns and preferences. Write as structured observations that an agent can use to calibrate its behavior:
+Build a self-model from these analysis documents. This model describes who the user is and how an AI agent should work with them.
 
+<documents>
 {artifacts}
+</documents>
+
+Output a document with these sections:
+## Identity
+Who this person is — role, domain, what they're building. 2-3 sentences.
+
+## Working Style
+How they prefer to work — communication preferences, decision-making patterns, collaboration style. Be specific and evidence-based.
+
+## Technical Preferences
+Tools, languages, architectural opinions, quality standards they've demonstrated.
+
+## What Works
+Approaches, framings, and behaviors that they respond well to.
+
+## What Doesn't Work
+Things that frustrate them or waste their time.
+
+## Patterns
+Recurring habits, rhythms, or tendencies observed across sessions.
+
+Write as structured observations, not narrative. Each point should be a specific, falsifiable claim based on evidence from the documents. Keep it under 500 words.

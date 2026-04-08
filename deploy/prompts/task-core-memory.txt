@@ -1,3 +1,26 @@
-Synthesize working memory, idea garden, and self-model into a single core memory document. This is the stable context an agent receives. It should cover: who the user is, what they're working on, what ideas are developing, and how to work with them effectively:
+Synthesize working memory, idea garden, and self-model into a single core memory document.
 
+<documents>
 {artifacts}
+</documents>
+
+This document is the primary context an AI agent receives when starting a conversation. It must be:
+- Self-contained: readable with no other context
+- Current: reflect the latest state of work and thinking
+- Actionable: help the agent be immediately useful
+- Personal: calibrated to this specific user's style and preferences
+
+Output format:
+## Who You're Working With
+Brief identity + working style summary from self-model.
+
+## Current State
+What's actively being worked on, from working memory.
+
+## Ideas in Flight
+What's developing, from idea garden. Only include items with momentum.
+
+## How to Help
+Specific guidance for agent behavior based on self-model patterns.
+
+Keep it under 800 words. This is the most important document in the system — everything else feeds into it.

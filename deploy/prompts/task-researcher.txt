@@ -1,7 +1,13 @@
-Current state:
+Here is the current research document:
+
+<current>
 {accumulated}
+</current>
 
-New content (label: {label}):
+New content has arrived (source: {label}):
+
+<new>
 {artifact}
+</new>
 
-Update the research document with any hypotheses, findings, comparisons, or open questions from this content.
+Update the research document to incorporate any investigation, findings, comparisons, or hypotheses from the new content. If nothing is relevant, return the current document unchanged.

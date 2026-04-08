@@ -1,7 +1,13 @@
-Current state:
+Here is the current builder document:
+
+<current>
 {accumulated}
+</current>
 
-New content (label: {label}):
+New content has arrived (source: {label}):
+
+<new>
 {artifact}
+</new>
 
-Update the builder document with any technical decisions, architecture changes, features shipped, or implementation progress from this content.
+Update the builder document to incorporate any building, shipping, or technical decision information from the new content. If nothing is relevant, return the current document unchanged.
