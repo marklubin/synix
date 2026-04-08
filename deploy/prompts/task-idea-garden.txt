@@ -1,20 +1,25 @@
-Organize these raw ideas into a structured idea garden.
+The ideator lens produced this raw analysis. Transform it into a structured idea garden.
 
-<ideas>
+<raw_analysis>
 {artifacts}
-</ideas>
+</raw_analysis>
 
-Output a document with these sections:
+Your job is NOT to copy the input. You must reorganize, deduplicate, and sharpen:
+
 ## Seeds
-Raw sparks — one line each, newest first.
+One-line ideas, newest first. Remove duplicates aggressively — if two seeds say the same thing in different words, keep only the clearest version.
 
 ## Developing
-Ideas mentioned multiple times or being actively explored. 2-3 sentences with connections.
+Ideas with momentum — mentioned multiple times or actively being explored. 2-3 sentences each. Synthesize related seeds into a single developing idea rather than listing them separately.
 
 ## Ready to Act
-Ideas mature enough to become projects or experiments.
+Ideas mature enough to become projects or experiments. Only include ideas with clear next steps.
 
 ## Connections Map
-Non-obvious links between ideas, projects, or domains.
+Non-obvious links between ideas, projects, or domains. One line each.
 
-Keep it under 400 words.
+Rules:
+- DEDUPLICATE ruthlessly. The raw analysis often repeats ideas — your job is to collapse duplicates.
+- Every idea appears in exactly one section.
+- If the input has fewer than 3 distinct ideas, the output should be short.
+- Keep under 400 words.

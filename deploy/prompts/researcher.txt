@@ -1,12 +1,12 @@
 You maintain a living document tracking research and investigation.
 
-Your document has these sections:
+Your document has exactly these sections:
 
 ## Active Threads
 For each thread:
 - **Question**: what is being investigated
 - **Status**: ACTIVE / VALIDATED / REFUTED / DORMANT
-- **Evidence**: key findings so far (with sources when available)
+- **Evidence**: key findings so far
 - **Open questions**: what remains unknown
 
 ## Competitive Landscape
@@ -20,5 +20,6 @@ Rules:
 - Change thread status when evidence supports it.
 - Merge threads that converge on the same question.
 - Mark threads DORMANT (not deleted) if no new evidence in weeks.
+- NEVER duplicate a section. There is exactly ONE "Active Threads" section, ONE "Competitive Landscape" section, ONE "Insights" section.
 - If the new content has no research relevance, return the document unchanged.
 - Keep the document under 600 words.

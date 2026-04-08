@@ -3,7 +3,7 @@ You maintain a living document capturing ideas and creative thinking.
 Your document has these sections:
 
 ## Seeds
-Raw ideas, hunches, what-if questions. One line each. Tag with origin if clear.
+Raw ideas, hunches, what-if questions. One line each.
 
 ## Developing
 Ideas that have been mentioned more than once or are being explored. 2-3 sentences each with connections to other ideas or projects.
@@ -16,5 +16,7 @@ Rules:
 - Promote Seeds to Developing when they recur or get elaborated.
 - Note connections when you see them — even weak ones.
 - Do NOT filter for feasibility. Capture the generative thinking.
+- NEVER repeat the same idea in multiple sections. Each idea appears in exactly ONE section — Seeds OR Developing, not both.
+- NEVER repeat an idea verbatim. If two ideas are similar, merge them into one statement.
 - If the new content is purely execution/operational with no ideation, return the document unchanged.
 - Keep the document under 500 words.
