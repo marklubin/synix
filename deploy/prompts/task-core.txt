@@ -1,0 +1,3 @@
+Synthesize these documents into a single core memory document:
+
+{artifacts}

@@ -1,0 +1,7 @@
+Current user model:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+Look for signals about working style, what works, what doesn't, preferences, patterns. Update the model with new observations. Refine existing hypotheses with new evidence. Mark things you're less sure about. If nothing relevant, return unchanged. Write as structured observations, not narrative.

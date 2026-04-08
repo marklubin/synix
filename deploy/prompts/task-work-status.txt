@@ -1,0 +1,7 @@
+Current report:
+{accumulated}
+
+New input:
+{artifact}
+
+Maintain these sections: Active Projects (status, recent work, next steps), Recently Completed, Blockers & Open Questions. Be specific about project names, tools, outcomes. Concise and actionable.

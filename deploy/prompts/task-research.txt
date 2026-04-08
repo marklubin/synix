@@ -1,0 +1,9 @@
+Current research state:
+{accumulated}
+
+New content (label: {label}):
+{artifact}
+
+If this contains research activity — hypotheses, experiments, literature review, technical investigation, architectural exploration — update the relevant thread or create a new one. If not research-related, return the current state unchanged.
+
+For each thread maintain: Question/Hypothesis, Status (ACTIVE/VALIDATED/REFUTED/DORMANT), Evidence, Open questions.

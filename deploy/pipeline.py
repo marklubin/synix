@@ -1,81 +1,44 @@
-"""Knowledge server pipeline.
+"""Knowledge server pipeline — agent-driven.
 
 5 buckets → content pool → 5 fold layers → core + work-status → search + projections
 
-Sessions and exports go through EpisodeSummary.
-Documents and reports pass through as-is.
-Reference bypasses everything — search only.
+All transforms use named agents. Agent instructions (persona/semantics) and task
+prompts (structure/placeholders) are both managed in the PromptStore, editable
+via the viewer's Prompts tab.
 
-All rollup layers are FoldSynthesis — same mechanism, differentiated by prompt.
+Agents:
+  summarizer  — episode summaries from conversations (map)
+  writer      — short-window, long-window, work-status (fold)
+  tracker     — research threads, open threads, user model (fold)
+  synthesizer — core memory from rollups (reduce)
 """
 
 from __future__ import annotations
 
-import gzip
-import hashlib
-import re
-import shutil
-import tempfile
 from pathlib import Path
 
 from synix import FlatFile, Pipeline, SearchSurface, Source, SynixSearch
-from synix.adapters.registry import parse_claude_code, register_adapter
-from synix.core.models import Artifact
-from synix.transforms import Chunk, CoreSynthesis, EpisodeSummary, FoldSynthesis
+from synix.server.prompt_store import PromptStore
+from synix.transforms import Chunk, FoldSynthesis, MapSynthesis, ReduceSynthesis
+from synix.workspace import load_agents as _load_agents
 
 # ---------------------------------------------------------------------------
-# Adapters — session/export format handling
+# Prompt + Agent setup
 # ---------------------------------------------------------------------------
 
-_INVALID_JSON_CHARS = re.compile(r"[\ud800-\udfff\x00-\x08\x0b\x0c\x0e-\x1f]")
-_SUBSESSION_RE = re.compile(r"^(.+)_sub\d{4}\.jsonl\.gz$")
+_here = Path(__file__).parent
+_store = PromptStore(_here / ".synix" / "prompts.db")
+_store.seed_from_files(_here / "prompts")
 
+_agents = _load_agents(str(_here / "synix.toml"))
 
-def _sanitize_for_json(text: str) -> str:
-    return _INVALID_JSON_CHARS.sub("", text)
+summarizer = _agents["summarizer"]
+writer = _agents["writer"]
+tracker = _agents["tracker"]
+synthesizer = _agents["synthesizer"]
 
-
-def _sanitize_artifacts(artifacts: list[Artifact]) -> list[Artifact]:
-    for a in artifacts:
-        sanitized = _sanitize_for_json(a.content)
-        if sanitized != a.content:
-            a.content = sanitized
-            a.artifact_id = f"sha256:{hashlib.sha256(sanitized.encode()).hexdigest()}"
-    return artifacts
-
-
-@register_adapter([".jsonl.gz"])
-def parse_claude_code_gz(filepath: str | Path) -> list[Artifact]:
-    """Decompress, merge subsessions, sanitize, parse."""
-    filepath = Path(filepath)
-    if _SUBSESSION_RE.match(filepath.name):
-        return []
-
-    base_stem = filepath.name.removesuffix(".jsonl.gz")
-    parent = filepath.parent
-    files = []
-    base = parent / f"{base_stem}.jsonl.gz"
-    if base.exists():
-        files.append(base)
-    files.extend(sorted(parent.glob(f"{base_stem}_sub*.jsonl.gz")))
-
-    tmp_dir = tempfile.mkdtemp()
-    tmp_path = Path(tmp_dir) / f"{base_stem}.jsonl"
-    try:
-        with open(tmp_path, "wb") as out:
-            for gz_file in files:
-                with gzip.open(gz_file, "rb") as gz:
-                    shutil.copyfileobj(gz, out)
-        return _sanitize_artifacts(parse_claude_code(tmp_path))
-    finally:
-        tmp_path.unlink(missing_ok=True)
-        Path(tmp_dir).rmdir()
-
-
-@register_adapter([".jsonl"])
-def parse_claude_code_sanitized(filepath: str | Path) -> list[Artifact]:
-    return _sanitize_artifacts(parse_claude_code(filepath))
-
+# Task prompts from PromptStore (editable in viewer)
+_t = lambda key, fallback="": _store.get(key) or fallback  # noqa: E731
 
 # ---------------------------------------------------------------------------
 # Sources (5 buckets)
@@ -88,22 +51,21 @@ reports = Source("reports", dir="./sources/reports")
 reference = Source("reference", dir="./sources/reference")
 
 # ---------------------------------------------------------------------------
-# Level 1 — Episode Summary (sessions + exports only)
+# Level 1 — Episode summaries (sessions + exports → summarizer agent)
 # ---------------------------------------------------------------------------
 
-episodes = EpisodeSummary(
+episodes = MapSynthesis(
     "episodes",
     depends_on=[sessions, exports],
+    prompt=_t("task-episode", "Summarize this conversation:\n\n{artifact}"),
+    agent=summarizer,
+    artifact_type="episode",
 )
 
 # ---------------------------------------------------------------------------
-# Level 2 — Rollups (all FoldSynthesis, same mechanism, different prompts)
-#
-# Each reads from the content pool: episodes + documents + reports
-# Reference is NOT in the content pool — it bypasses to search only.
+# Level 2 — Rollups (content pool → fold agents)
 # ---------------------------------------------------------------------------
 
-# Content pool sources for rollups
 _content_pool = [episodes, documents, reports]
 
 short_window = FoldSynthesis(
@@ -112,23 +74,8 @@ short_window = FoldSynthesis(
     sort_by="date",
     label="short-window",
     artifact_type="rollup",
-    prompt="""\
-You are maintaining a short-window status document — what's been happening in the last few days.
-
-Current status:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update the status to incorporate this. Focus on:
-- What was worked on in the last few days
-- Decisions made, outcomes reached
-- Conversations had, people talked to
-- Current momentum and direction
-
-Drop anything older than ~a week. Keep it 200-400 words, factual, status-report style. \
-Use specific project names, people, and outcomes.""",
+    prompt=_t("task-short-window"),
+    agent=writer,
     initial="# Recent Activity\n\nNo recent activity recorded.",
 )
 
@@ -138,23 +85,8 @@ long_window = FoldSynthesis(
     sort_by="date",
     label="long-window",
     artifact_type="rollup",
-    prompt="""\
-You are maintaining a long-window summary — trends and trajectory over the last couple months.
-
-Current summary:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update the summary. Focus on:
-- Recurring themes and patterns across weeks
-- How projects and priorities have evolved
-- Strategic direction and trajectory shifts
-- Relationships and collaborations developing
-
-Drop granular daily details — keep the arc, not the events. Compress older material \
-into higher-level observations. 300-500 words.""",
+    prompt=_t("task-long-window"),
+    agent=writer,
     initial="# Long-Window Summary\n\nNo activity recorded yet.",
 )
 
@@ -164,28 +96,8 @@ research_threads = FoldSynthesis(
     sort_by="date",
     label="research-threads",
     artifact_type="rollup",
-    prompt="""\
-You are maintaining a research thread tracker.
-
-Current research state:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-If this contains research activity — hypotheses, experiments, literature review, \
-technical investigation, architectural exploration, analysis — update the relevant \
-thread or create a new one.
-
-If it's not research-related, return the current state unchanged.
-
-For each thread, maintain:
-- **Question/Hypothesis**: what's being investigated
-- **Status**: ACTIVE / VALIDATED / REFUTED / DORMANT
-- **Evidence**: key findings, data points, results
-- **Open questions**: what's still unknown
-
-Keep it structured. One thread per section.""",
+    prompt=_t("task-research"),
+    agent=tracker,
     initial="# Research Threads\n\nNo active research threads.",
 )
 
@@ -195,23 +107,8 @@ open_threads = FoldSynthesis(
     sort_by="date",
     label="open-threads",
     artifact_type="rollup",
-    prompt="""\
-You are maintaining a list of open threads — unresolved items, blockers, \
-pending actions, and follow-ups.
-
-Current open threads:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Update:
-- Add new unresolved items, blockers, or pending actions
-- Remove or mark items that this content resolves
-- Keep each item as one line with what it's waiting on
-
-Format as a clean bullet list. Be specific about what's pending and who/what \
-it's blocked on. Drop items that seem stale (no mention in weeks).""",
+    prompt=_t("task-open-threads"),
+    agent=tracker,
     initial="# Open Threads\n\nNo open items.",
 )
 
@@ -221,28 +118,8 @@ user_model = FoldSynthesis(
     sort_by="date",
     label="user-model",
     artifact_type="rollup",
-    prompt="""\
-You are building and maintaining a model of the user — hypotheses about what \
-works for them, what doesn't, their preferences, working style, and patterns.
-
-Current user model:
-{accumulated}
-
-New content (label: {label}):
-{artifact}
-
-Look for signals about:
-- **Working style**: how they prefer to collaborate, communicate, make decisions
-- **What works**: approaches, tools, framings that they respond well to
-- **What doesn't work**: things that frustrate them, waste time, or miss the mark
-- **Preferences**: technical opinions, aesthetic choices, recurring standards
-- **Patterns**: habits, rhythms, tendencies that repeat across sessions
-
-Update the model. Add new observations. Refine existing hypotheses with new evidence. \
-Mark things you're less sure about. If nothing in this content is relevant to the \
-user model, return the current state unchanged.
-
-Write as structured observations, not a narrative.""",
+    prompt=_t("task-user-model"),
+    agent=tracker,
     initial="# User Model\n\nNo observations yet.",
 )
 
@@ -250,10 +127,13 @@ Write as structured observations, not a narrative.""",
 # Level 3 — Synthesis
 # ---------------------------------------------------------------------------
 
-core = CoreSynthesis(
+core = ReduceSynthesis(
     "core",
     depends_on=[long_window, research_threads, open_threads, user_model],
-    context_budget=10000,
+    prompt=_t("task-core", "Synthesize these documents into a single core memory document:\n\n{artifacts}"),
+    agent=synthesizer,
+    label="core-memory",
+    artifact_type="core_memory",
 )
 
 work_status = FoldSynthesis(
@@ -262,27 +142,8 @@ work_status = FoldSynthesis(
     sort_by="date",
     label="work-status",
     artifact_type="report",
-    prompt="""\
-You are generating a structured work status report.
-
-Current report:
-{accumulated}
-
-New input:
-{artifact}
-
-Maintain these sections:
-
-## Active Projects
-For each: status (active/stalled/wrapping up), recent work, next steps.
-
-## Recently Completed
-Projects or tasks finished recently.
-
-## Blockers & Open Questions
-Unresolved issues, decisions needed, external dependencies.
-
-Be specific about project names, tools, outcomes. Concise and actionable.""",
+    prompt=_t("task-work-status"),
+    agent=writer,
     initial="# Work Status\n\nNo status information yet.",
 )
 
@@ -295,8 +156,10 @@ pipeline = Pipeline(
     source_dir="./sources",
     build_dir="./build",
     llm_config={
-        "provider": "anthropic",
-        "model": "claude-haiku-4-5-20251001",
+        "provider": "openai-compatible",
+        "model": "Qwen/Qwen3.5-2B",
+        "base_url": "http://localhost:8100/v1",
+        "api_key": "not-needed",
         "temperature": 0.3,
         "max_tokens": 4096,
     },
@@ -308,13 +171,13 @@ pipeline.add(sessions, exports, documents, reports, reference)
 # Level 1
 pipeline.add(episodes)
 
-# Level 2 — rollups (read from content pool)
+# Level 2 — rollups
 pipeline.add(short_window, long_window, research_threads, open_threads, user_model)
 
 # Level 3 — synthesis
 pipeline.add(core, work_status)
 
-# Chunk reference docs for useful semantic search
+# Chunk reference docs for search
 reference_chunks = Chunk(
     "reference-chunks",
     depends_on=[reference],
@@ -324,24 +187,12 @@ reference_chunks = Chunk(
 )
 pipeline.add(reference_chunks)
 
-# Search — rollups + synthesis (default), reference chunks (opt-in)
-# Raw episodes and documents are NOT in search by default.
+# Search surfaces
 main_surface = SearchSurface(
     "main",
-    sources=[
-        core,
-        work_status,
-        user_model,
-        short_window,
-        long_window,
-        research_threads,
-        open_threads,
-    ],
+    sources=[core, work_status, user_model, short_window, long_window, research_threads, open_threads],
     modes=["fulltext", "semantic"],
-    embedding_config={
-        "provider": "fastembed",
-        "model": "BAAI/bge-small-en-v1.5",
-    },
+    embedding_config={"provider": "fastembed", "model": "BAAI/bge-small-en-v1.5"},
 )
 
 reference_surface = SearchSurface(

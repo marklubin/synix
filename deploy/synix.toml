@@ -2,16 +2,57 @@
 name = "agent-memory"
 pipeline_path = "pipeline.py"
 
-# Synix Knowledge Server — container deployment config
-#
-# Paths are relative to project_dir (/data inside container).
-# Source buckets and .synix/ are volume-mounted from the host.
+# -- Agents -------------------------------------------------------------------
+
+[agents.summarizer]
+prompt_key = "summarizer"
+instructions_file = "prompts/summarizer.txt"
+description = "Summarizes conversations into episode summaries"
+provider = "openai-compatible"
+model = "Qwen/Qwen3.5-2B"
+base_url = "http://localhost:8100/v1"
+temperature = 0.3
+max_tokens = 2048
+
+[agents.writer]
+prompt_key = "writer"
+instructions_file = "prompts/writer.txt"
+description = "Status writer — short-window, long-window, work-status"
+provider = "openai-compatible"
+model = "Qwen/Qwen3.5-2B"
+base_url = "http://localhost:8100/v1"
+temperature = 0.3
+max_tokens = 2048
+
+[agents.tracker]
+prompt_key = "tracker"
+instructions_file = "prompts/tracker.txt"
+description = "Structured document maintainer — research, open threads, user model"
+provider = "openai-compatible"
+model = "Qwen/Qwen3.5-2B"
+base_url = "http://localhost:8100/v1"
+temperature = 0.3
+max_tokens = 2048
+
+[agents.synthesizer]
+prompt_key = "synthesizer"
+instructions_file = "prompts/synthesizer.txt"
+description = "Distills rollups into core memory"
+provider = "openai-compatible"
+model = "Qwen/Qwen3.5-2B"
+base_url = "http://localhost:8100/v1"
+temperature = 0.3
+max_tokens = 4096
+
+# -- Server -------------------------------------------------------------------
 
 [server]
 project_dir = "/data"
 pipeline_path = "pipeline.py"
 mcp_port = 8200
 viewer_port = 9471
+
+# -- Buckets ------------------------------------------------------------------
 
 [buckets.sessions]
 dir = "sources/sessions"
