@@ -158,6 +158,18 @@ sensor readings + maintenance logs + incident reports
 
 The pattern is always the same: raw data → structured knowledge → searchable artifacts, with incremental rebuilds and full provenance. The agent memory template is where most people start, but the architecture doesn't care what your sources are.
 
+## Known Limitations
+
+Synix provenance is retrospective: it tracks which inputs and prompts
+produced each artifact. However, it cannot answer forward-looking
+questions such as:
+
+> "If I change this transcript, what downstream artifacts would be affected?"
+
+Answering this requires re-running `synix plan`.
+
+This is a known limitation of the content-addressed caching model.
+
 ## Where Synix fits
 
 |                          | Mem0    | Letta   | Graphiti | LangMem | **Synix**       |
